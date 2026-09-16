@@ -1,0 +1,37 @@
+name: Build and test
+
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          git --version
+      - name: Resolve locked dependencies
+        run: swift package resolve --force-resolved-versions
+      - name: Test
+        run: swift test --build-system native
+      - name: Package and verify local app
+        run: bash scripts/build-app.sh release
+      - name: Check bundle metadata
+        run: plutil -lint dist/NiceGit.app/Contents/Info.plist
