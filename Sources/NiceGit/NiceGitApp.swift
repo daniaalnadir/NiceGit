@@ -3,6 +3,7 @@ import SwiftUI
 @main
 @MainActor
 struct NiceGitApp: App {
+    @NSApplicationDelegateAdaptor(NiceGitApplicationDelegate.self) private var applicationDelegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
@@ -49,5 +50,16 @@ struct NiceGitApp: App {
                 .disabled(model.snapshot == nil)
             }
         }
+    }
+}
+
+@MainActor
+final class NiceGitApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Xcode runs the Swift package as a bare executable, without an app bundle's activation policy.
+        guard Bundle.main.bundleURL.pathExtension != "app" else { return }
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate()
+        NSApplication.shared.windows.first(where: { $0.canBecomeKey })?.makeKeyAndOrderFront(nil)
     }
 }

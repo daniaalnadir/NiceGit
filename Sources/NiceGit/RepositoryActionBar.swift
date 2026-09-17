@@ -19,7 +19,9 @@ struct RepositoryActionBar: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 selectors
-                actions
+                ScrollView(.horizontal) {
+                    actions
+                }.fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14).padding(.vertical, 6)

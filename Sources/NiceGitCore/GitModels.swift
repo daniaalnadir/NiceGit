@@ -170,6 +170,7 @@ public struct GitCommit: Identifiable, Equatable, Sendable {
     public var authorName: String
     public var authorEmail: String
     public var relativeDate: String
+    public var commitDate: Date?
 
     public init(
         hash: String,
@@ -179,7 +180,8 @@ public struct GitCommit: Identifiable, Equatable, Sendable {
         subject: String,
         authorName: String,
         authorEmail: String,
-        relativeDate: String
+        relativeDate: String,
+        commitDate: Date? = nil
     ) {
         self.hash = hash
         self.shortHash = shortHash
@@ -189,6 +191,7 @@ public struct GitCommit: Identifiable, Equatable, Sendable {
         self.authorName = authorName
         self.authorEmail = authorEmail
         self.relativeDate = relativeDate
+        self.commitDate = commitDate
     }
 
     public var id: String {

@@ -7,6 +7,42 @@ import Testing
 @Suite(.serialized)
 struct AppModelTests {
 
+@Test @MainActor func stagingRefreshesStatusWithoutReloadingHistory() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try "example\n".write(to: root.appendingPathComponent("example.txt"), atomically: true, encoding: .utf8)
+    let clock = ContinuousClock()
+    let fullStart = clock.now
+    let initial = try git.loadSnapshot(at: root)
+    let fullDuration = fullStart.duration(to: clock.now)
+    let statusStart = clock.now
+    #expect(try git.loadStatus(in: root) == initial.status)
+    print("Refresh timing: full snapshot \(fullDuration), status only \(statusStart.duration(to: clock.now))")
+    let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in
+        throw GitClientError.commandFailed(command: "test", message: "Unexpected full history refresh")
+    })
+    model.snapshot = initial
+    for stage in [true, false] {
+        let start = clock.now
+        if stage { model.stageAll() } else { model.unstageAll() }
+        let deadline = clock.now.advanced(by: .seconds(10))
+        while model.isLoading && clock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!model.isLoading)
+        #expect(model.errorMessage == nil)
+        #expect(model.snapshot?.stagedCount == (stage ? 1 : 0))
+        #expect(model.snapshot?.commits == initial.commits)
+        #expect(model.snapshot?.branches == initial.branches)
+        #expect(try String(contentsOf: root.appendingPathComponent("example.txt"), encoding: .utf8) == "example\n")
+        print("\(stage ? "Stage" : "Unstage") including UI status update: \(start.duration(to: clock.now))")
+    }
+}
+
 @Test @MainActor func terminalToggleRefreshesChangesAndRespectsBusyState() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -223,6 +259,7 @@ struct AppModelTests {
     let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in throw RefreshFailure.injected })
     model.snapshot = try git.loadSnapshot(at: root)
     var draft = "Successful commit"
+    model.fileReviewSelection = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt", staged: true)
     var successes = 0
 
     model.commit(message: draft) { draft = ""; successes += 1 }
@@ -233,6 +270,7 @@ struct AppModelTests {
 
     #expect(!model.isLoading)
     #expect(draft.isEmpty)
+    #expect(model.fileReviewSelection == nil)
     #expect(successes == 1)
     #expect(model.errorMessage?.contains("The Git action completed") == true)
     let actual = try git.loadSnapshot(at: root)
@@ -326,7 +364,18 @@ private enum RefreshFailure: Error { case injected }
     let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in throw RefreshFailure.injected })
     model.snapshot = try git.loadSnapshot(at: root)
     var draft = "Keep this draft"
+    let review = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt", staged: true)
+    model.fileReviewSelection = review
     var successes = 0
+
+    model.fileReviewHasEdits = true
+    model.commit(message: draft) { successes += 1 }
+    #expect(!model.isLoading)
+    #expect(model.fileReviewSelection?.id == review.id)
+    #expect(model.fileReviewHasEdits)
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(successes == 0)
+    model.fileReviewHasEdits = false
 
     model.commit(message: draft) { draft = ""; successes += 1 }
     let deadline = ContinuousClock.now.advanced(by: .seconds(15))
@@ -336,6 +385,7 @@ private enum RefreshFailure: Error { case injected }
 
     #expect(!model.isLoading)
     #expect(draft == "Keep this draft")
+    #expect(model.fileReviewSelection?.id == review.id)
     #expect(successes == 0)
     #expect(model.errorMessage != nil)
     #expect(model.errorMessage?.contains("The Git action completed") == false)

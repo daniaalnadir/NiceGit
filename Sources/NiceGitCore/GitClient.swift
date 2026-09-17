@@ -236,7 +236,7 @@ public struct GitClient: Sendable {
             "--date=relative",
             "-n",
             String(max(1, historyLimit) + 1),
-            "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1e"
+            "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
         ] + head + ["--"], in: rootURL))
         let remotes = GitRemoteParser.parse(try run(["remote", "-v"], in: rootURL))
 
@@ -265,6 +265,10 @@ public struct GitClient: Sendable {
         snapshot.hasMoreCommits = commits.count > max(1, historyLimit)
         snapshot.operation = try currentOperation(in: rootURL)
         return snapshot
+    }
+
+    public func loadStatus(in repositoryURL: URL) throws -> [GitStatusEntry] {
+        try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: repositoryURL))
     }
 
     public func stage(path: String, in repositoryURL: URL) throws {
@@ -421,7 +425,7 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    private func run(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0]) throws -> String {
+    func run(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0]) throws -> String {
         guard control?.isCancelled != true else { throw CancellationError() }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")

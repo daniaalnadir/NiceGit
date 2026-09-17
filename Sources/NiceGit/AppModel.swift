@@ -58,6 +58,25 @@ final class AppModel: ObservableObject {
         }, onSuccess: { self.commitHistoryStep?.undone = !redo })
     }
     @Published var diffSelection: DiffSelection?
+    @Published var fileReviewSelection: DiffSelection?
+    @Published var fileReviewHasEdits = false
+
+    func confirmDiscardFileEdits() -> Bool {
+        guard fileReviewHasEdits else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Discard unsaved file edits?"
+        alert.informativeText = "Your changes in the code editor have not been saved to disk."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Discard edits")
+        guard alert.runModal() == .alertSecondButtonReturn else { return false }
+        fileReviewHasEdits = false
+        return true
+    }
+
+    func closeFileReview() {
+        guard confirmDiscardFileEdits() else { return }
+        fileReviewSelection = nil
+    }
     @Published var showingClone = false
     @Published var showingStashes = false
     @Published var showingPublish = false
@@ -198,7 +217,10 @@ final class AppModel: ObservableObject {
 
     func inspect(_ entry: GitStatusEntry, staged: Bool) {
         guard let repositoryURL else { return }
-        diffSelection = DiffSelection(title: entry.path, repositoryURL: repositoryURL, path: entry.path, staged: staged, untracked: entry.kind == .untracked, conflicted: entry.kind == .conflicted, originalPath: entry.originalPath)
+        guard confirmDiscardFileEdits() else { return }
+        let selection = DiffSelection(title: entry.path, repositoryURL: repositoryURL, path: entry.path, staged: staged, untracked: entry.kind == .untracked, conflicted: entry.kind == .conflicted, originalPath: entry.originalPath)
+        if selection.conflicted { diffSelection = selection }
+        else { fileReviewSelection = selection }
     }
 
     func importPatch() {
@@ -282,6 +304,10 @@ final class AppModel: ObservableObject {
 
     func closeRepository(path: String) {
         guard !isLoading, let index = openRepositories.firstIndex(where: { $0.path == path }) else { return }
+        if snapshot?.rootPath == path {
+            guard confirmDiscardFileEdits() else { return }
+            fileReviewSelection = nil
+        }
         openRepositories.remove(at: index)
         saveOpenTabs()
         if defaults.string(forKey: activeTabKey) == path { defaults.removeObject(forKey: activeTabKey) }
@@ -309,7 +335,11 @@ final class AppModel: ObservableObject {
     }
 
     func loadRepository(at url: URL) {
-        if url.standardizedFileURL.path != repositoryURL?.standardizedFileURL.path { historyLimit = 200 }
+        if url.standardizedFileURL.path != repositoryURL?.standardizedFileURL.path {
+            guard confirmDiscardFileEdits() else { return }
+            historyLimit = 200
+            fileReviewSelection = nil
+        }
         perform(at: url) { _, _ in }
     }
 
@@ -336,41 +366,51 @@ final class AppModel: ObservableObject {
     }
 
     func stage(_ entry: GitStatusEntry) {
-        runRepositoryAction { git, url in
+        runWorkingTreeAction { git, url in
             try git.stage(path: entry.path, in: url)
         }
     }
 
     func stageAll() {
-        runRepositoryAction { git, url in
+        runWorkingTreeAction { git, url in
             try git.stageAll(in: url)
         }
     }
 
     func unstage(_ entry: GitStatusEntry) {
-        runRepositoryAction { git, url in
+        runWorkingTreeAction { git, url in
             try git.unstage(path: entry.path, originalPath: entry.originalPath, in: url)
         }
     }
 
     func unstageAll() {
-        runRepositoryAction { git, url in
+        runWorkingTreeAction { git, url in
             try git.unstageAll(in: url)
         }
     }
 
     func discard(_ entry: GitStatusEntry) {
-        runRepositoryAction { git, url in
+        runWorkingTreeAction { git, url in
             try git.discard(path: entry.path, in: url)
         }
     }
 
     func commit(message: String, onSuccess: @escaping () -> Void) {
-        guard let url = repositoryURL else { return }
+        guard !isLoading, let url = repositoryURL else { return }
+        guard !fileReviewHasEdits else {
+            errorMessage = "Save or discard your unsaved file edits before committing."
+            return
+        }
+        let reviewID = fileReviewSelection?.id
         let previous = snapshot
         perform(at: url, action: { git, url in
             try git.commit(message: message, in: url)
-        }, onActionSuccess: onSuccess, onSuccess: {
+        }, onActionSuccess: {
+            if self.fileReviewSelection?.id == reviewID && !self.fileReviewHasEdits {
+                self.fileReviewSelection = nil
+            }
+            onSuccess()
+        }, onSuccess: {
             self.commitHistoryStep = nil
             if let previous, previous.operation == nil, let before = previous.headHash,
                let updated = self.snapshot, updated.currentBranch == previous.currentBranch,
@@ -459,17 +499,27 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func refreshWorkingTree() {
+        runWorkingTreeAction { _, _ in }
+    }
+
+    private func runWorkingTreeAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void) {
+        guard let repositoryURL else { return }
+        perform(at: repositoryURL, action: action, statusOnly: true)
+    }
+
     private func runRepositoryAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void, onSuccess: @escaping () -> Void = {}) {
         guard let repositoryURL else { return }
         perform(at: repositoryURL, action: action, onActionSuccess: onSuccess)
     }
 
-    private func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
+    private func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         let limit = historyLimit
         let loadSnapshot = snapshotLoader
+        let previous = snapshot
         let control = GitCommandControl()
         commandControl = control
         Task {
@@ -483,13 +533,19 @@ final class AppModel: ObservableObject {
                 actionCompleted = true
                 onActionSuccess?()
                 let updated = try await Task.detached {
-                    try loadSnapshot(GitClient(control: control), url, limit)
+                    let git = GitClient(control: control)
+                    if statusOnly, var cached = previous, cached.rootPath == url.path {
+                        cached.status = try git.loadStatus(in: url)
+                        cached.lastUpdated = Date()
+                        return cached
+                    }
+                    return try loadSnapshot(git, url, limit)
                 }.value
                 snapshot = updated
-                rememberRepository(path: updated.rootPath)
+                if !statusOnly { rememberRepository(path: updated.rootPath) }
                 onSuccess()
             } catch {
-                errorMessage = actionCompleted && onActionSuccess != nil
+                errorMessage = actionCompleted && (onActionSuccess != nil || statusOnly)
                     ? "The Git action completed, but the repository could not be refreshed. Refresh before repeating the action.\n\n\(error.localizedDescription)"
                     : error.localizedDescription
                 // Failed operations such as stash apply may still change files.
