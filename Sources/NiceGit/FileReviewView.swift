@@ -111,6 +111,13 @@ struct FileReviewView: View {
 
     private var diffBody: some View {
         let editable = canEditDiff
+        let hunks = GitDiffHunk.grouped(review?.lines ?? [])
+        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let textWidth = hunks.flatMap(\.lineIndices).map { index -> CGFloat in
+            guard let line = review?.lines[index] else { return 0 }
+            let content = line.newNumber.flatMap { lineEdits[$0] } ?? line.text
+            return (content as NSString).size(withAttributes: [.font: font]).width
+        }.max() ?? 0
         return VStack(spacing: 0) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -126,24 +133,31 @@ struct FileReviewView: View {
             }
             Divider()
             GeometryReader { geometry in
+                let contentWidth = max(geometry.size.width, ceil(textWidth) + 180)
                 ScrollView([.horizontal, .vertical]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let review {
-                            ForEach(GitDiffHunk.grouped(review.lines)) { hunk in
+                            ForEach(hunks) { hunk in
+                                Color.clear.frame(height: hunk.id == hunks.first?.id ? 12 : 30)
                                 HStack {
-                                    let first = review.lines[hunk.lineIndices.lowerBound]
-                                    Text("@@ Line \(first.newNumber ?? first.oldNumber ?? 1) @@")
-                                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                                    Text(hunk.header(in: review.lines))
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(.secondary).lineLimit(1)
                                     Spacer()
                                     Button {
                                         changeIndex(indexes: hunk.changedIndices)
                                     } label: {
                                         Label(selection.staged ? "Unstage Hunk" : "Stage Hunk", systemImage: selection.staged ? "minus.circle" : "plus.circle")
-                                    }.controlSize(.small)
+                                    }.controlSize(.small).buttonStyle(.plain)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .padding(.horizontal, 9).padding(.vertical, 5)
+                                        .background(AppPalette.signal.opacity(0.1))
+                                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(AppPalette.signal.opacity(0.7)))
                                         .disabled(review.lineStagingUnavailable != nil || dirty)
-                                }.padding(.horizontal, 10).frame(height: 32)
+                                }.padding(.horizontal, 12).frame(height: 40)
                                     .frame(width: geometry.size.width)
                                     .background(AppPalette.toolbar)
+                                Rectangle().fill(AppPalette.line).frame(height: 1)
                             ForEach(hunk.lineIndices, id: \.self) { index in
                                 let line = review.lines[index]
                                 HStack(spacing: 0) {
@@ -166,7 +180,7 @@ struct FileReviewView: View {
                                         Text(line.kind == .addition ? "+" : " ").padding(.leading, 12)
                                         TextField("", text: lineBinding(number), axis: .vertical)
                                             .textFieldStyle(.plain)
-                                            .frame(minWidth: max(240, geometry.size.width - 160), alignment: .leading)
+                                            .frame(width: contentWidth - 160, alignment: .leading)
                                             .padding(.trailing, 12)
                                             .accessibilityLabel("Edit working line \(number)")
                                     } else {
@@ -174,23 +188,29 @@ struct FileReviewView: View {
                                     }
                                 }
                                 .font(.system(size: 12, design: .monospaced))
-                                .fixedSize(horizontal: true, vertical: false)
-                                .frame(minWidth: geometry.size.width, alignment: .leading)
+                                .frame(minHeight: 24)
+                                .frame(width: contentWidth, alignment: .leading)
                                 .background(line.newNumber.flatMap { lineEdits[$0] } != nil ? Color.green.opacity(0.18) : color(line))
+                                .overlay(alignment: .leading) {
+                                    Rectangle().fill(AppPalette.line).frame(width: 1).offset(x: 119)
+                                }
                                 .overlay(alignment: .leading) {
                                     if !query.isEmpty && line.text.localizedCaseInsensitiveContains(query) {
                                         Rectangle().fill(.yellow).frame(width: 3)
                                     }
                                 }
                             }
+                                Rectangle().fill(AppPalette.line.opacity(0.5)).frame(height: 1)
                             }
-                            if GitDiffHunk.grouped(review.lines).isEmpty {
+                            if hunks.isEmpty {
                                 Text(review.patch.isEmpty ? "No differences" : "No text changes. Stage or unstage this file from the file list.")
                                     .foregroundStyle(.secondary).padding()
                             }
                         }
-                    }.frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
+                    }.frame(width: contentWidth, alignment: .leading)
+                        .frame(minHeight: geometry.size.height, alignment: .topLeading)
                 }
+                .scrollIndicators(.visible, axes: .horizontal)
             }
         }
     }

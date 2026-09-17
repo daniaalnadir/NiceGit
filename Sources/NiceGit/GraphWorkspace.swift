@@ -6,6 +6,7 @@ struct GraphWorkspace: View {
     @Binding var selectedCommit: GitCommit?
     @EnvironmentObject private var model: AppModel
     @State private var query = ""
+    @State private var hoveredCommitHash: String?
     @State private var commitToRevert: GitCommit?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
@@ -20,7 +21,10 @@ struct GraphWorkspace: View {
     }
 
     var body: some View {
-        let rows = GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash)
+        let hasChanges = !snapshot.status.isEmpty
+        let rows = hasChanges
+            ? GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash)
+            : GitGraph.layout(snapshot.commits)
         let railWidth = max(92, CGFloat(rows.map(\.laneCount).max() ?? 1) * 22 + 26)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -45,6 +49,7 @@ struct GraphWorkspace: View {
                         .foregroundStyle(.secondary).padding(.leading, 12).frame(height: 30)
                         .background(AppPalette.toolbar)
 
+                        if hasChanges {
                         Button { selectedCommit = nil } label: {
                             HStack(spacing: 0) {
                                 HStack(spacing: 5) {
@@ -66,15 +71,23 @@ struct GraphWorkspace: View {
                             }.padding(.leading, 12).frame(height: rowHeight)
                                 .background(selectedCommit == nil ? AppPalette.signal.opacity(0.12) : AppPalette.signal.opacity(0.035))
                         }.buttonStyle(.plain).help("Show working-tree files and staging")
+                        }
 
                         LazyVStack(spacing: 0) {
                             ForEach(Array(snapshot.commits.enumerated()), id: \.element.hash) { index, commit in
                                 if matches(commit) {
-                                    Button { selectedCommit = commit } label: {
-                                        HStack(spacing: 0) {
-                                            CommitReferences(refs: commit.refs)
+                                    HStack(spacing: 0) {
+                                            CommitReferences(refs: commit.refs, showingReferences: Binding(
+                                                get: { hoveredCommitHash == commit.hash },
+                                                set: { visible in
+                                                    if visible { hoveredCommitHash = commit.hash }
+                                                    else if hoveredCommitHash == commit.hash { hoveredCommitHash = nil }
+                                                }
+                                            ))
                                                 .frame(width: referenceWidth, alignment: .leading)
-                                            GraphRail(row: rows[index + 1], workingTree: false, connected: query.isEmpty)
+                                        Button { selectedCommit = commit } label: {
+                                        HStack(spacing: 0) {
+                                            GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty)
                                                 .frame(width: railWidth, height: rowHeight)
                                             Text(commit.subject).font(.system(size: 13)).lineLimit(1)
                                                 .frame(width: messageWidth, alignment: .leading).help(commit.subject)
@@ -84,12 +97,12 @@ struct GraphWorkspace: View {
                                                 .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                                                 .frame(width: dateWidth, alignment: .leading)
                                         }
-                                        .padding(.leading, 12).frame(height: rowHeight)
-                                        .background(selectedCommit?.hash == commit.hash ? AppPalette.signal.opacity(0.14) : (index.isMultiple(of: 2) ? Color.clear : AppPalette.rowStripe))
+                                        .frame(height: rowHeight)
                                         .contentShape(Rectangle())
+                                        }.buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
-                                    .help(commit.subject)
+                                    .padding(.leading, 12).frame(height: rowHeight)
+                                    .background(selectedCommit?.hash == commit.hash ? AppPalette.signal.opacity(0.14) : (index.isMultiple(of: 2) ? Color.clear : AppPalette.rowStripe))
                                     .contextMenu {
                                         Button("View patch") { model.inspect(commit) }
                                         Button("Create patch from commit...") { model.exportPatch(commit) }
@@ -130,6 +143,8 @@ struct GraphWorkspace: View {
             }.font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                 .padding(10).background(AppPalette.toolbar)
         }.background(AppPalette.canvas)
+        .onChange(of: snapshot.commits) { hoveredCommitHash = nil }
+        .onChange(of: query) { hoveredCommitHash = nil }
         .modifier(ResetConfirmation(request: $resetRequest))
         .confirmationDialog("Cherry-pick \(cherryPickRequest?.commit.shortHash ?? "") onto \(cherryPickRequest?.branch ?? "")?", isPresented: Binding(get: { cherryPickRequest != nil }, set: { if !$0 { cherryPickRequest = nil } })) {
             if let request = cherryPickRequest {
@@ -168,7 +183,7 @@ struct GraphWorkspace: View {
 
 private struct CommitReferences: View {
     let refs: [String]
-    @State private var showingReferences = false
+    @Binding var showingReferences: Bool
     @State private var closeTask: Task<Void, Never>?
 
     private func hover(_ inside: Bool) {
@@ -214,9 +229,9 @@ private struct CommitReferences: View {
             .padding(.trailing, 8)
             .contentShape(Rectangle())
             .onHover(perform: hover)
-            .onDisappear { closeTask?.cancel() }
+            .onDisappear { closeTask?.cancel(); showingReferences = false }
             .onTapGesture { if refs.count > 1 { showingReferences.toggle() } }
-            .help(ordered.joined(separator: "\n"))
+            .accessibilityLabel(ordered.joined(separator: ", "))
             .popover(isPresented: $showingReferences, arrowEdge: .bottom) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -225,7 +240,10 @@ private struct CommitReferences: View {
                         }
                     }
                 }.frame(width: 340, height: min(CGFloat(refs.count) * 36, 300))
-                    .onHover(perform: hover)
+                    .onHover { inside in
+                        if inside { closeTask?.cancel() }
+                        else { hover(false) }
+                    }
             }
         }
     }

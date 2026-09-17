@@ -480,19 +480,21 @@ private struct WorkbenchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RepositoryActionBar(snapshot: snapshot)
-            if let operation = snapshot.operation {
-                OperationBar(operation: operation, hasConflicts: snapshot.status.contains { $0.kind == .conflicted })
-            }
-            Divider()
             VSplitView {
             HSplitView {
+                VStack(spacing: 0) {
+                    RepositoryActionBar(snapshot: snapshot)
+                    if let operation = snapshot.operation {
+                        OperationBar(operation: operation, hasConflicts: snapshot.status.contains { $0.kind == .conflicted })
+                    }
+                    Divider()
                 Group {
                     if let selection = model.fileReviewSelection {
                         FileReviewView(selection: selection).id(selection.id)
                     } else {
                         GraphWorkspace(snapshot: snapshot, selectedCommit: $selectedCommit)
                     }
+                }
                 }.frame(minWidth: 450)
                 Group {
                     if let selectedCommit, model.fileReviewSelection == nil {

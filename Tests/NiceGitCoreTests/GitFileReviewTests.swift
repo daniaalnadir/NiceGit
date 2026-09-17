@@ -34,6 +34,8 @@ import Testing
         let review = try git.fileReview(path: "hunks.txt", staged: false, in: root)
         let hunks = GitDiffHunk.grouped(review.lines)
         #expect(hunks.count == 2)
+        #expect(hunks.first?.header(in: review.lines) == "@@ -1,6 +1,6 @@")
+        #expect(hunks.last?.header(in: review.lines) == "@@ -22,7 +22,7 @@")
         #expect(!hunks.flatMap(\.lineIndices).contains { review.lines[$0].text == " line 15" })
         try git.stageLines(try #require(hunks.first).changedIndices, from: review, in: root)
         #expect(try git.run(["show", ":hunks.txt"], in: root) == original.replacingOccurrences(of: "line 3\n", with: "changed 3\n"))

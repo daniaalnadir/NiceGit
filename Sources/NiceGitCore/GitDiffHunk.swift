@@ -5,6 +5,15 @@ public struct GitDiffHunk: Identifiable, Sendable {
     public let changedIndices: Set<Int>
     public var id: Int { lineIndices.lowerBound }
 
+    public func header(in lines: [GitDiffLine]) -> String {
+        let old = lines[lineIndices].compactMap(\.oldNumber)
+        let new = lines[lineIndices].compactMap(\.newNumber)
+        let before = lines.prefix(lineIndices.lowerBound)
+        let oldStart = old.first ?? before.compactMap(\.oldNumber).last ?? 0
+        let newStart = new.first ?? before.compactMap(\.newNumber).last ?? 0
+        return "@@ -\(oldStart),\(old.count) +\(newStart),\(new.count) @@"
+    }
+
     public static func grouped(_ lines: [GitDiffLine], context: Int = 3) -> [Self] {
         let context = max(0, context)
         var ranges: [Range<Int>] = []
