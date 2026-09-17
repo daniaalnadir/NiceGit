@@ -245,6 +245,9 @@ private struct CommitReferences: View {
                         else { hover(false) }
                     }
             }
+        } else {
+            Color.clear.frame(height: 27)
+                .accessibilityHidden(true)
         }
     }
 }

@@ -396,11 +396,21 @@ final class AppModel: ObservableObject {
     }
 
     func commit(message: String, onSuccess: @escaping () -> Void) {
-        guard let url = repositoryURL else { return }
+        guard !isLoading, let url = repositoryURL else { return }
+        guard !fileReviewHasEdits else {
+            errorMessage = "Save or discard your unsaved file edits before committing."
+            return
+        }
+        let reviewID = fileReviewSelection?.id
         let previous = snapshot
         perform(at: url, action: { git, url in
             try git.commit(message: message, in: url)
-        }, onActionSuccess: onSuccess, onSuccess: {
+        }, onActionSuccess: {
+            if self.fileReviewSelection?.id == reviewID && !self.fileReviewHasEdits {
+                self.fileReviewSelection = nil
+            }
+            onSuccess()
+        }, onSuccess: {
             self.commitHistoryStep = nil
             if let previous, previous.operation == nil, let before = previous.headHash,
                let updated = self.snapshot, updated.currentBranch == previous.currentBranch,

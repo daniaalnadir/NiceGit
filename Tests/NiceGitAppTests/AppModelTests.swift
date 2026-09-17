@@ -259,6 +259,7 @@ struct AppModelTests {
     let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in throw RefreshFailure.injected })
     model.snapshot = try git.loadSnapshot(at: root)
     var draft = "Successful commit"
+    model.fileReviewSelection = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt", staged: true)
     var successes = 0
 
     model.commit(message: draft) { draft = ""; successes += 1 }
@@ -269,6 +270,7 @@ struct AppModelTests {
 
     #expect(!model.isLoading)
     #expect(draft.isEmpty)
+    #expect(model.fileReviewSelection == nil)
     #expect(successes == 1)
     #expect(model.errorMessage?.contains("The Git action completed") == true)
     let actual = try git.loadSnapshot(at: root)
@@ -362,7 +364,18 @@ private enum RefreshFailure: Error { case injected }
     let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in throw RefreshFailure.injected })
     model.snapshot = try git.loadSnapshot(at: root)
     var draft = "Keep this draft"
+    let review = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt", staged: true)
+    model.fileReviewSelection = review
     var successes = 0
+
+    model.fileReviewHasEdits = true
+    model.commit(message: draft) { successes += 1 }
+    #expect(!model.isLoading)
+    #expect(model.fileReviewSelection?.id == review.id)
+    #expect(model.fileReviewHasEdits)
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(successes == 0)
+    model.fileReviewHasEdits = false
 
     model.commit(message: draft) { draft = ""; successes += 1 }
     let deadline = ContinuousClock.now.advanced(by: .seconds(15))
@@ -372,6 +385,7 @@ private enum RefreshFailure: Error { case injected }
 
     #expect(!model.isLoading)
     #expect(draft == "Keep this draft")
+    #expect(model.fileReviewSelection?.id == review.id)
     #expect(successes == 0)
     #expect(model.errorMessage != nil)
     #expect(model.errorMessage?.contains("The Git action completed") == false)
