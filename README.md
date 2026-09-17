@@ -18,7 +18,7 @@ Built with SwiftUI and AppKit. Released under the [MIT License](LICENSE).
 | Visual history | Follow a parent-linked branch and merge graph, inspect commits, and see the working tree connected to HEAD. |
 | Repositories | Open, initialize, or clone repositories; switch between saved tabs in a separate collapsible sidebar. |
 | Branches and worktrees | Browse local and remote branches, create linked worktrees, switch checkouts, and use context menus for branch actions. |
-| Changes and commits | Review highlighted diffs, browse files as a tree or list, stage and unstage changes, and keep per-checkout commit drafts. |
+| Changes and commits | Separate resizable Unstaged and Staged panes, inline red/green diffs, editable working-file lines, individual-line staging and unstaging, and per-checkout commit drafts. |
 | Everyday Git | Fetch, pull, push, publish branches, manage stashes and tags, and import or export patches. |
 | History and conflicts | Merge, rebase, cherry-pick, revert, reset with confirmation, and resolve text or binary conflicts. |
 | Embedded terminal | Open a resizable bottom panel with a separate shell for each checkout. Toggle with Control-backtick. |
@@ -59,7 +59,15 @@ Building the source locally is the currently documented installation route.
 Publishing source on GitHub does not require Apple signing.
 
 The native SwiftPM build backend avoids a SwiftTerm shader-build issue encountered
-with Xcode 27's default backend. It currently emits a deprecation warning.
+with the command-line SwiftPM default backend in Xcode 27. It currently emits a deprecation warning.
+
+### Run in Xcode
+
+Open `Package.swift`, select the **NiceGit** scheme and **My Mac**, then press
+**Command-R**. Select the executable scheme, not `NiceGitCore` or `NiceGit-Package`.
+Xcode runs a bare executable rather than the packaged `.app`; NiceGit explicitly
+activates its desktop interface for this launch mode. Use **Command-.** to stop an
+older run before restarting. Use the packaging script above for the distributable app.
 
 ### Optional GitHub Integration
 

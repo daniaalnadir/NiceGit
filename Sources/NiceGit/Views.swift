@@ -487,10 +487,15 @@ private struct WorkbenchView: View {
             Divider()
             VSplitView {
             HSplitView {
-                GraphWorkspace(snapshot: snapshot, selectedCommit: $selectedCommit)
-                    .frame(minWidth: 450)
                 Group {
-                    if let selectedCommit {
+                    if let selection = model.fileReviewSelection {
+                        FileReviewView(selection: selection).id(selection.id)
+                    } else {
+                        GraphWorkspace(snapshot: snapshot, selectedCommit: $selectedCommit)
+                    }
+                }.frame(minWidth: 450)
+                Group {
+                    if let selectedCommit, model.fileReviewSelection == nil {
                         CommitInspector(commit: selectedCommit, repositoryURL: URL(fileURLWithPath: snapshot.rootPath)) {
                             self.selectedCommit = nil
                         }
@@ -578,88 +583,119 @@ private struct ChangesPanel: View {
     @EnvironmentObject private var model: AppModel
     let snapshot: RepositorySnapshot
     @Binding var commitMessage: String
-    @State private var treeMode = true
+    @State private var treeMode = false
+    @State private var ascending = true
+
+    private var summary: Binding<String> {
+        Binding(get: { commitMessage.components(separatedBy: "\n").first ?? "" }, set: {
+            let body = description.wrappedValue
+            commitMessage = $0 + (body.isEmpty ? "" : "\n\n" + body)
+        })
+    }
+
+    private var description: Binding<String> {
+        Binding(get: {
+            var lines = commitMessage.components(separatedBy: "\n").dropFirst()
+            if lines.first == "" { lines = lines.dropFirst() }
+            return lines.joined(separator: "\n")
+        }, set: { commitMessage = summary.wrappedValue + ($0.isEmpty ? "" : "\n\n" + $0) })
+    }
+
+    private func sorted(_ entries: [GitStatusEntry]) -> [GitStatusEntry] {
+        entries.sorted { ascending ? $0.path.localizedStandardCompare($1.path) == .orderedAscending : $0.path.localizedStandardCompare($1.path) == .orderedDescending }
+    }
 
     private var staged: [GitStatusEntry] {
-        snapshot.status.filter(\.isStaged)
+        sorted(snapshot.status.filter(\.isStaged))
     }
 
     private var unstaged: [GitStatusEntry] {
-        snapshot.status.filter(\.isUnstaged)
+        sorted(snapshot.status.filter(\.isUnstaged))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Working tree")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                Spacer()
-                Button {
-                    model.stageAll()
-                } label: {
-                    Label("Stage all", systemImage: "plus.square.on.square")
-                }
-                .disabled(unstaged.isEmpty)
+                Text("\(snapshot.status.count) file changes on")
+                    .font(.system(size: 12, weight: .medium))
+                    .fixedSize()
+                Text(snapshot.currentBranch)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1).truncationMode(.middle)
+                    .padding(.horizontal, 6).padding(.vertical, 4)
+                    .background(AppPalette.branchTag, in: RoundedRectangle(cornerRadius: 3))
+                    .help(snapshot.currentBranch)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
 
-            Picker("File view", selection: $treeMode) {
-                Label("Tree", systemImage: "list.bullet.indent").tag(true)
-                Label("Paths", systemImage: "list.bullet").tag(false)
-            }
-            .pickerStyle(.segmented).padding(.horizontal, 18).padding(.bottom, 12)
-
             Divider()
+            HStack {
+                Button { ascending.toggle() } label: {
+                    Image(systemName: ascending ? "arrow.down" : "arrow.up")
+                }.buttonStyle(.plain).help(ascending ? "Sort paths Z to A" : "Sort paths A to Z")
+                    .disabled(treeMode)
+                Spacer()
+                Picker("File view", selection: $treeMode) {
+                    Label("Path", systemImage: "list.bullet").tag(false)
+                    Label("Tree", systemImage: "folder").tag(true)
+                }.pickerStyle(.segmented).frame(width: 180)
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    ChangeSection(title: "Staged", entries: staged, emptyText: "Nothing staged", treeMode: treeMode) { entry in
-                        FileChangeRow(entry: entry, primarySystemImage: "minus.circle", primaryHelp: "Unstage file") {
-                            model.unstage(entry)
-                        } discard: {
-                            model.discard(entry)
-                        }
-                    }
-
-                    ChangeSection(title: "Unstaged", entries: unstaged, emptyText: "No local changes", treeMode: treeMode) { entry in
-                        FileChangeRow(entry: entry, primarySystemImage: "plus.circle", primaryHelp: "Stage file") {
+            VSplitView {
+                    ChangeSection(title: "Unstaged Files", entries: unstaged, emptyText: "No local changes", treeMode: treeMode, actionTitle: "Stage All Changes", actionColor: AppPalette.signal, action: { model.stageAll() }) { entry in
+                        FileChangeRow(entry: entry, treeMode: treeMode, primarySystemImage: "plus.circle", primaryHelp: "Stage file") {
                             model.stage(entry)
                         } discard: {
                             model.discard(entry)
                         }
-                    }
-                }
-                .padding(18)
+                    }.frame(minHeight: 110, maxHeight: .infinity)
+                    ChangeSection(title: "Staged Files", entries: staged, emptyText: "Nothing staged", treeMode: treeMode, actionTitle: "Unstage All Changes", actionColor: AppPalette.conflict, action: { model.unstageAll() }) { entry in
+                        FileChangeRow(entry: entry, treeMode: treeMode, primarySystemImage: "minus.circle", primaryHelp: "Unstage file") {
+                            model.unstage(entry)
+                        } discard: {
+                            model.discard(entry)
+                        }
+                    }.frame(minHeight: 110, maxHeight: .infinity)
             }
 
             Divider()
 
             VStack(alignment: .leading, spacing: 10) {
-                TextField("Commit message", text: $commitMessage, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
-
                 HStack {
-                    Button {
-                        model.unstageAll()
-                    } label: {
-                        Label("Unstage all", systemImage: "minus.square")
-                    }
-                    .disabled(staged.isEmpty)
-
+                    Label("Commit", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.system(size: 14, weight: .semibold))
                     Spacer()
-
-                    Button {
-                        model.commit(message: commitMessage) { commitMessage = "" }
-                    } label: {
-                        Label("Commit", systemImage: "checkmark.circle.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(staged.isEmpty || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        TextField("Commit summary", text: summary, axis: .vertical)
+                            .font(.system(size: 14)).lineLimit(1...3)
+                        Text("\(72 - summary.wrappedValue.count)")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(summary.wrappedValue.count > 72 ? Color.orange : Color.secondary)
+                            .help("Characters remaining in the recommended 72-character summary")
+                    }
+                    TextField("Description", text: description, axis: .vertical)
+                        .font(.system(size: 13)).lineLimit(4...6)
+                }
+                .textFieldStyle(.plain).padding(12)
+                .background(AppPalette.canvas, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(AppPalette.line))
+
+                Button {
+                    model.commit(message: commitMessage) { commitMessage = "" }
+                } label: {
+                    Label(summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Type a Message to Commit" : "Commit Changes", systemImage: "checkmark.circle")
+                        .frame(maxWidth: .infinity).padding(.vertical, 7)
+                }
+                .buttonStyle(.borderedProminent).tint(AppPalette.signal)
+                .disabled(staged.isEmpty || summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(18)
+            .padding(14)
             .background(AppPalette.toolbar)
         }
         .background(AppPalette.panel)
@@ -671,28 +707,40 @@ private struct ChangeSection<Content: View>: View {
     var entries: [GitStatusEntry]
     var emptyText: String
     var treeMode: Bool
+    var actionTitle: String
+    var actionColor: Color
+    var action: () -> Void
+    @State private var expanded = true
     @ViewBuilder var row: (GitStatusEntry) -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Button { expanded.toggle() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .bold))
+                        Text("\(title) (\(entries.count))").font(.system(size: 12, weight: .medium))
+                    }
+                }.buttonStyle(.plain).help(expanded ? "Collapse \(title)" : "Expand \(title)")
                 Spacer()
-                Text("\(entries.count)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-
+                Button(actionTitle, action: action)
+                    .font(.system(size: 11, weight: .semibold))
+                    .buttonStyle(.plain).padding(.horizontal, 7).padding(.vertical, 5)
+                    .background(actionColor.opacity(0.1))
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(actionColor.opacity(entries.isEmpty ? 0.3 : 0.8)))
+                    .disabled(entries.isEmpty)
+            }.padding(.horizontal, 14).padding(.vertical, 10)
+            Divider()
+            if expanded {
+            ScrollView {
             if entries.isEmpty {
                 Text(emptyText)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12)
+                    .padding(14)
             } else {
-                VStack(spacing: 6) {
+                LazyVStack(spacing: 0) {
                     if treeMode {
                         FileChangeTree(entries: entries, row: row)
                     } else {
@@ -700,8 +748,10 @@ private struct ChangeSection<Content: View>: View {
                         row(entry)
                     }
                     }
-                }
+                }.padding(.horizontal, 8).padding(.vertical, 5)
             }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else { Spacer(minLength: 0) }
         }
     }
 }
@@ -710,6 +760,7 @@ private struct FileChangeRow: View {
     @EnvironmentObject private var model: AppModel
     @State private var confirmingDiscard = false
     var entry: GitStatusEntry
+    var treeMode: Bool
     var primarySystemImage: String
     var primaryHelp: String
     var primaryAction: () -> Void
@@ -717,29 +768,19 @@ private struct FileChangeRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            statusColor
-                .frame(width: 7)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+            Image(systemName: statusSymbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 18, height: 18)
+                .accessibilityLabel(statusKind.rawValue)
+                .help(statusKind.rawValue)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.fileName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Text(entry.path)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                model.inspect(entry, staged: primaryHelp == "Unstage file")
-            } label: {
-                Image(systemName: "doc.text.magnifyingglass")
-            }
-            .buttonStyle(.plain)
-            .help("View diff")
+            Button { model.inspect(entry, staged: primaryHelp == "Unstage file") } label: {
+                Text(treeMode ? entry.fileName : entry.path)
+                    .font(.system(size: 13)).lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .help(entry.path)
 
             Button(action: primaryAction) {
                 Image(systemName: primarySystemImage)
@@ -754,10 +795,8 @@ private struct FileChangeRow: View {
             .disabled(entry.kind == .untracked || primaryHelp == "Unstage file")
             .help("Discard local change")
         }
-        .padding(10)
-        .frame(minHeight: 54)
-        .background(AppPalette.changeRow)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 6).padding(.vertical, 7)
+        .frame(minHeight: 34)
         .confirmationDialog("Discard changes to \(entry.fileName)?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive, action: discard)
         } message: {
@@ -765,12 +804,33 @@ private struct FileChangeRow: View {
         }
     }
 
+    private var statusKind: GitStatusKind {
+        if entry.kind == .conflicted || entry.kind == .untracked { return entry.kind }
+        let status = primaryHelp == "Unstage file" ? entry.indexStatus : entry.workTreeStatus
+        switch status {
+        case "A", "C": return .added
+        case "D": return .deleted
+        case "M", "T": return .modified
+        case "R": return .renamed
+        default: return entry.kind
+        }
+    }
+
+    private var statusSymbol: String {
+        switch statusKind {
+        case .added, .untracked: "plus"
+        case .modified, .renamed: "pencil"
+        case .deleted: "minus"
+        case .conflicted: "exclamationmark.triangle"
+        }
+    }
+
     private var statusColor: Color {
-        switch entry.kind {
+        switch statusKind {
         case .added, .untracked:
             AppPalette.signal
         case .modified, .renamed:
-            AppPalette.merge
+            .yellow
         case .deleted, .conflicted:
             AppPalette.conflict
         }

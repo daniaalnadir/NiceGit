@@ -72,4 +72,7 @@ import Testing
     #expect(commits[0].parents == ["bbbb", "cccc"])
     #expect(commits[0].refs == ["HEAD -> main", "origin/main"])
     #expect(commits[0].subject == "Ship MVP")
+    #expect(commits[0].commitDate == nil)
+    let dated = output.replacingOccurrences(of: "\u{1e}", with: "\u{1f}1700000000\u{1e}")
+    #expect(GitLogParser.parse(dated).first?.commitDate?.timeIntervalSince1970 == 1_700_000_000)
 }

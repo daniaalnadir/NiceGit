@@ -9,8 +9,10 @@ struct GraphWorkspace: View {
     @State private var commitToRevert: GitCommit?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
-    private let referenceWidth: CGFloat = 138
-    private let rowHeight: CGFloat = 52
+    private let referenceWidth: CGFloat = 220
+    private let authorWidth: CGFloat = 140
+    private let dateWidth: CGFloat = 165
+    private let rowHeight: CGFloat = 36
 
     private func matches(_ commit: GitCommit) -> Bool {
         query.isEmpty || [commit.subject, commit.hash, commit.authorName, commit.refs.joined(separator: " ")]
@@ -29,13 +31,15 @@ struct GraphWorkspace: View {
             TextField("Filter loaded commits", text: $query)
                 .textFieldStyle(.roundedBorder).padding(.horizontal, 16).padding(.bottom, 12)
             GeometryReader { geometry in
+                let messageWidth = max(260, geometry.size.width - referenceWidth - railWidth - authorWidth - dateWidth - 12)
                 ScrollView([.horizontal, .vertical]) {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 0) {
-                            Text("REFERENCES").frame(width: referenceWidth, alignment: .leading)
-                            Text("GRAPH").frame(width: railWidth, alignment: .leading)
-                            Text("COMMIT")
-                            Spacer()
+                            Text("Branch/Tag").frame(width: referenceWidth, alignment: .leading)
+                            Text("Graph").frame(width: railWidth, alignment: .leading)
+                            Text("Commit Message").frame(width: messageWidth, alignment: .leading)
+                            Text("Author").frame(width: authorWidth, alignment: .leading)
+                            Text("Commit Date").frame(width: dateWidth, alignment: .leading)
                         }
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.secondary).padding(.leading, 12).frame(height: 30)
@@ -50,16 +54,15 @@ struct GraphWorkspace: View {
                                     .frame(width: referenceWidth, alignment: .leading)
                                 GraphRail(row: rows[0], workingTree: true, connected: query.isEmpty)
                                     .frame(width: railWidth, height: rowHeight)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(snapshot.status.isEmpty ? "Working tree clean" : "\(snapshot.status.count) changed files")
-                                        .font(.system(size: 13, weight: .semibold))
-                                    Text("\(snapshot.stagedCount) staged  ·  \(snapshot.unstagedCount) unstaged")
-                                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 12)
-                                Image(systemName: snapshot.status.isEmpty ? "checkmark.circle" : "pencil.circle")
-                                    .foregroundStyle(snapshot.status.isEmpty ? AppPalette.signal : AppPalette.merge)
-                                    .padding(.trailing, 14)
+                                HStack(spacing: 12) {
+                                    Text(snapshot.status.isEmpty ? "Working tree clean" : "// WIP").foregroundStyle(.secondary)
+                                    Label("\(snapshot.status.filter { $0.kind == .modified || $0.kind == .renamed }.count)", systemImage: "pencil").foregroundStyle(.yellow)
+                                    Label("\(snapshot.status.filter { $0.kind == .added || $0.kind == .untracked }.count)", systemImage: "plus").foregroundStyle(AppPalette.signal)
+                                    if snapshot.status.contains(where: { $0.kind == .deleted }) {
+                                        Label("\(snapshot.status.filter { $0.kind == .deleted }.count)", systemImage: "minus").foregroundStyle(AppPalette.conflict)
+                                    }
+                                }.font(.system(size: 12)).frame(width: messageWidth, alignment: .leading)
+                                Color.clear.frame(width: authorWidth + dateWidth)
                             }.padding(.leading, 12).frame(height: rowHeight)
                                 .background(selectedCommit == nil ? AppPalette.signal.opacity(0.12) : AppPalette.signal.opacity(0.035))
                         }.buttonStyle(.plain).help("Show working-tree files and staging")
@@ -69,25 +72,17 @@ struct GraphWorkspace: View {
                                 if matches(commit) {
                                     Button { selectedCommit = commit } label: {
                                         HStack(spacing: 0) {
-                                            VStack(alignment: .leading, spacing: 3) {
-                                                ForEach(commit.refs.prefix(2), id: \.self) { ref in
-                                                    Text(ref).font(.system(size: 10, weight: .medium, design: .monospaced))
-                                                        .lineLimit(1).padding(.horizontal, 6).padding(.vertical, 3)
-                                                        .background(ref.contains("HEAD") ? AppPalette.signal.opacity(0.18) : AppPalette.branchTag)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 4)).help(ref)
-                                                }
-                                            }.frame(width: referenceWidth, alignment: .leading)
+                                            CommitReferences(refs: commit.refs)
+                                                .frame(width: referenceWidth, alignment: .leading)
                                             GraphRail(row: rows[index + 1], workingTree: false, connected: query.isEmpty)
                                                 .frame(width: railWidth, height: rowHeight)
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(commit.subject).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                                HStack(spacing: 9) {
-                                                    Text(commit.shortHash).foregroundStyle(AppPalette.signal)
-                                                    Text(commit.authorName).lineLimit(1)
-                                                    Text(commit.relativeDate).lineLimit(1)
-                                                }.font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
-                                            }
-                                            Spacer(minLength: 12)
+                                            Text(commit.subject).font(.system(size: 13)).lineLimit(1)
+                                                .frame(width: messageWidth, alignment: .leading).help(commit.subject)
+                                            Text(commit.authorName).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                                                .frame(width: authorWidth, alignment: .leading).help(commit.authorName)
+                                            Text(commit.commitDate.map { $0.formatted(date: .numeric, time: .shortened) } ?? commit.relativeDate)
+                                                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                                .frame(width: dateWidth, alignment: .leading)
                                         }
                                         .padding(.leading, 12).frame(height: rowHeight)
                                         .background(selectedCommit?.hash == commit.hash ? AppPalette.signal.opacity(0.14) : (index.isMultiple(of: 2) ? Color.clear : AppPalette.rowStripe))
@@ -123,7 +118,7 @@ struct GraphWorkspace: View {
                             Button("Load older commits") { model.loadOlderCommits() }.padding(16)
                         }
                     }
-                    .frame(width: max(geometry.size.width, referenceWidth + railWidth + 300), alignment: .leading)
+                    .frame(width: referenceWidth + railWidth + messageWidth + authorWidth + dateWidth + 12, alignment: .leading)
                     .frame(minHeight: geometry.size.height, alignment: .topLeading)
                 }
             }
@@ -167,6 +162,71 @@ struct GraphWorkspace: View {
             }
         } message: {
             Text("Creates a new commit reversing this change. Original history is retained. For a merge, select the parent whose side should be kept.")
+        }
+    }
+}
+
+private struct CommitReferences: View {
+    let refs: [String]
+    @State private var showingReferences = false
+    @State private var closeTask: Task<Void, Never>?
+
+    private func hover(_ inside: Bool) {
+        closeTask?.cancel()
+        if inside {
+            if refs.count > 1 { showingReferences = true }
+        } else {
+            closeTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                showingReferences = false
+            }
+        }
+    }
+
+    private var ordered: [String] {
+        refs.sorted { left, right in
+            let leftHead = left == "HEAD" || left.hasPrefix("HEAD -> ")
+            let rightHead = right == "HEAD" || right.hasPrefix("HEAD -> ")
+            if leftHead != rightHead { return leftHead }
+            return left.localizedStandardCompare(right) == .orderedAscending
+        }
+    }
+
+    private func label(_ ref: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: ref.hasPrefix("HEAD") ? "checkmark" : ref.hasPrefix("tag: ") ? "tag" : "arrow.triangle.branch")
+            Text(ref.hasPrefix("HEAD -> ") ? String(ref.dropFirst(8)) : ref)
+                .lineLimit(1).truncationMode(.middle)
+        }.font(.system(size: 12, weight: .medium))
+    }
+
+    var body: some View {
+        if let first = ordered.first {
+            HStack(spacing: 5) {
+                label(first)
+                if refs.count > 1 {
+                    Text("+\(refs.count - 1)").font(.system(size: 10, weight: .semibold)).fixedSize()
+                }
+            }
+            .padding(.horizontal, 7).frame(height: 27)
+            .background(AppPalette.signal.opacity(0.23), in: RoundedRectangle(cornerRadius: 3))
+            .padding(.trailing, 8)
+            .contentShape(Rectangle())
+            .onHover(perform: hover)
+            .onDisappear { closeTask?.cancel() }
+            .onTapGesture { if refs.count > 1 { showingReferences.toggle() } }
+            .help(ordered.joined(separator: "\n"))
+            .popover(isPresented: $showingReferences, arrowEdge: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(ordered, id: \.self) { ref in
+                            label(ref).padding(9).frame(maxWidth: .infinity, alignment: .leading).help(ref)
+                        }
+                    }
+                }.frame(width: 340, height: min(CGFloat(refs.count) * 36, 300))
+                    .onHover(perform: hover)
+            }
         }
     }
 }

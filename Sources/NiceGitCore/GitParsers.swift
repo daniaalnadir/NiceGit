@@ -130,7 +130,8 @@ public enum GitLogParser {
                     subject: fields[4],
                     authorName: fields[5],
                     authorEmail: fields[6],
-                    relativeDate: fields[7]
+                    relativeDate: fields[7],
+                    commitDate: fields.count > 8 ? TimeInterval(fields[8]).map { Date(timeIntervalSince1970: $0) } : nil
                 )
             }
     }
