@@ -477,6 +477,8 @@ private struct WorkbenchView: View {
     @EnvironmentObject private var model: AppModel
     let snapshot: RepositorySnapshot
     @State private var selectedCommit: GitCommit?
+    @State private var commitDiff: DiffSelection?
+    @State private var selectedStash: GitStash?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -491,15 +493,22 @@ private struct WorkbenchView: View {
                 Group {
                     if let selection = model.fileReviewSelection {
                         FileReviewView(selection: selection).id(selection.id)
+                    } else if let commitDiff {
+                        DiffView(selection: commitDiff, onClose: { self.commitDiff = nil }).id(commitDiff.id)
                     } else {
-                        GraphWorkspace(snapshot: snapshot, selectedCommit: $selectedCommit)
+                        GraphWorkspace(snapshot: snapshot, selectedCommit: $selectedCommit, selectedStash: $selectedStash)
                     }
                 }
                 }.frame(minWidth: 450)
                 Group {
-                    if let selectedCommit, model.fileReviewSelection == nil {
-                        CommitInspector(commit: selectedCommit, repositoryURL: URL(fileURLWithPath: snapshot.rootPath)) {
+                    if let selectedStash, model.fileReviewSelection == nil {
+                        StashInspector(stash: selectedStash, repositoryURL: URL(fileURLWithPath: snapshot.rootPath)) {
+                            self.selectedStash = nil
+                        }
+                    } else if let selectedCommit, model.fileReviewSelection == nil {
+                        CommitInspector(commit: selectedCommit, repositoryURL: URL(fileURLWithPath: snapshot.rootPath), showFile: { commitDiff = $0 }) {
                             self.selectedCommit = nil
+                            commitDiff = nil
                         }
                     } else {
                         ChangesPanel(snapshot: snapshot, commitMessage: Binding(
@@ -517,13 +526,19 @@ private struct WorkbenchView: View {
             }
         }
         .onChange(of: snapshot.rootPath) {
+            commitDiff = nil
             selectedCommit = nil
+            selectedStash = nil
             if model.showingTerminal { model.openTerminal() }
         }
         .onChange(of: snapshot.commits) { _, commits in
             if let selected = selectedCommit {
                 selectedCommit = commits.first { $0.hash == selected.hash }
             }
+        }
+        .onChange(of: selectedCommit?.hash) { commitDiff = nil }
+        .onChange(of: snapshot.stashes) { _, stashes in
+            if let selected = selectedStash { selectedStash = stashes.first { $0.hash == selected.hash } }
         }
         .overlay(alignment: .top) {
             if model.isLoading {

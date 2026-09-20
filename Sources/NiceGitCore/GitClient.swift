@@ -123,7 +123,8 @@ public struct GitClient: Sendable {
     }
 
     public func saveStash(message: String, includeUntracked: Bool, in url: URL) throws {
-        try run(["stash", "push"] + (includeUntracked ? ["--include-untracked"] : []) + ["-m", message.isEmpty ? "NiceGit stash" : message], in: url)
+        let stashMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "WIP on \(currentBranch(in: url))" : message
+        try run(["stash", "push"] + (includeUntracked ? ["--include-untracked"] : []) + ["-m", stashMessage], in: url)
     }
 
     public func applyStash(_ stash: GitStash, in url: URL) throws {
@@ -215,8 +216,21 @@ public struct GitClient: Sendable {
             .split(separator: "\0").map(String.init)
     }
 
+    public func commitFileChanges(hash: String, in repositoryURL: URL) throws -> [GitCommitFileChange] {
+        let output = try run(["diff-tree", "--root", "--no-commit-id", "--first-parent", "-m", "-r", "--no-renames", "--name-status", "-z", hash, "--"], in: repositoryURL)
+        let fields = output.split(separator: "\0", omittingEmptySubsequences: false)
+        return stride(from: 0, to: max(0, fields.count - 1), by: 2).map {
+            GitCommitFileChange(path: String(fields[$0 + 1]), status: String(fields[$0]))
+        }.sorted { $0.path < $1.path }
+    }
+
     public func stashDiff(hash: String, in repositoryURL: URL) throws -> String {
         try run(["stash", "show", "--include-untracked", "--patch", "--stat", "--no-ext-diff", "--no-color", hash], in: repositoryURL)
+    }
+
+    public func stashFiles(hash: String, in repositoryURL: URL) throws -> [String] {
+        try run(["stash", "show", "--include-untracked", "--name-only", "-z", hash], in: repositoryURL)
+            .split(separator: "\0").map(String.init).sorted()
     }
 
     public func loadSnapshot(at selectedURL: URL, historyLimit: Int = 200) throws -> RepositorySnapshot {

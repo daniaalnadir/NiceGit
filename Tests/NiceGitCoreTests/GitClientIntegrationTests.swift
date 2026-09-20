@@ -2,6 +2,29 @@ import Foundation
 import NiceGitCore
 import Testing
 
+@Test func commitFileChangeKindsIncludeRootAndDeletedPaths() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    for name in ["edit.txt", "delete.txt"] {
+        try "base".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    #expect(try git.commitFileChanges(hash: "HEAD", in: root).map(\.status) == ["A", "A"])
+    try "changed".write(to: root.appendingPathComponent("edit.txt"), atomically: true, encoding: .utf8)
+    try FileManager.default.removeItem(at: root.appendingPathComponent("delete.txt"))
+    try "new".write(to: root.appendingPathComponent("new\nfile.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Changes", in: root)
+    let files = try git.commitFileChanges(hash: "HEAD", in: root)
+    #expect(files.map(\.path) == ["delete.txt", "edit.txt", "new\nfile.txt"])
+    #expect(files.map(\.status) == ["D", "M", "A"])
+}
+
 @Test func resetModesPreserveOrDiscardChangesAsSelected() throws {
     for mode in GitResetMode.allCases {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -145,6 +168,7 @@ import Testing
     let unstaged = try git.diff(path: "file.txt", staged: false, in: root)
     try git.saveStash(message: "Saved", includeUntracked: true, in: root)
     let stash = try #require(git.listStashes(in: root).first)
+    #expect(try git.stashFiles(hash: stash.hash, in: root) == ["file.txt", "new.txt"])
     try git.popStash(stash, in: root)
     #expect(try git.listStashes(in: root).isEmpty)
     #expect(try git.diff(path: "file.txt", staged: true, in: root) == staged)

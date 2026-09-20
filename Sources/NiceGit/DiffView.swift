@@ -16,10 +16,12 @@ struct DiffSelection: Identifiable {
 
 struct DiffView: View {
     let selection: DiffSelection
+    var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var lines: [GitDiffLine] = []
     @State private var error: String?
     @State private var loading = true
+    @State private var hasNonTextChanges = false
     @State private var control = GitCommandControl()
     @State private var query = ""
     @State private var matches: [Int] = []
@@ -40,7 +42,7 @@ struct DiffView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark") }
+                Button { if let onClose { onClose() } else { dismiss() } } label: { Image(systemName: "xmark") }
                     .help("Close diff")
                     .keyboardShortcut(.cancelAction)
             }.padding()
@@ -68,7 +70,8 @@ struct DiffView: View {
             } else if let error {
                 ContentUnavailableView("Unable to load diff", systemImage: "exclamationmark.triangle", description: Text(error))
             } else if lines.isEmpty {
-                ContentUnavailableView("No differences", systemImage: "checkmark.circle")
+                ContentUnavailableView(hasNonTextChanges ? "No text hunks" : "No differences", systemImage: hasNonTextChanges ? "doc" : "checkmark.circle",
+                    description: hasNonTextChanges ? Text("This file has binary or file-property changes.") : nil)
             } else {
                 GeometryReader { geometry in
                 ScrollView([.horizontal, .vertical]) {
@@ -107,7 +110,8 @@ struct DiffView: View {
         .onChange(of: selectedMatch) { _, index in
             if let index { proxy.scrollTo(index, anchor: .center) }
         }
-        .frame(width: 900, height: 620)
+        .frame(width: onClose == nil ? 900 : nil, height: onClose == nil ? 620 : nil)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { control.cancel() }
         .task {
             let url = selection.repositoryURL
@@ -125,7 +129,9 @@ struct DiffView: View {
                     if let hash { return try git.commitDiff(hash: hash, path: path, in: url) }
                     return try git.diff(path: path ?? "", staged: staged, untracked: untracked, originalPath: original, in: url)
                 }.value
-                lines = GitDiffLine.parse(text)
+                let parsed = GitDiffLine.parse(text)
+                lines = onClose != nil ? parsed.filter { $0.kind != .metadata || $0.text == "\\ No newline at end of file" } : parsed
+                hasNonTextChanges = onClose != nil && lines.isEmpty && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             } catch { self.error = error.localizedDescription }
             loading = false
         }

@@ -4,6 +4,7 @@ import SwiftUI
 struct GraphWorkspace: View {
     let snapshot: RepositorySnapshot
     @Binding var selectedCommit: GitCommit?
+    @Binding var selectedStash: GitStash?
     @EnvironmentObject private var model: AppModel
     @State private var query = ""
     @State private var hoveredCommitHash: String?
@@ -49,8 +50,28 @@ struct GraphWorkspace: View {
                         .foregroundStyle(.secondary).padding(.leading, 12).frame(height: 30)
                         .background(AppPalette.toolbar)
 
+                        ForEach(snapshot.stashes.filter { query.isEmpty || $0.message.localizedCaseInsensitiveContains(query) || $0.reference.localizedCaseInsensitiveContains(query) }) { stash in
+                            Button {
+                                selectedCommit = nil
+                                selectedStash = stash
+                            } label: {
+                                HStack(spacing: 0) {
+                                    Text(stash.reference).font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(.orange).frame(width: referenceWidth, alignment: .leading)
+                                    Image(systemName: "archivebox.fill")
+                                        .font(.system(size: 15)).foregroundStyle(.orange)
+                                        .frame(width: 36, height: rowHeight)
+                                        .frame(width: railWidth, alignment: .leading)
+                                    Text(stash.message).font(.system(size: 13)).lineLimit(1)
+                                        .frame(width: messageWidth, alignment: .leading)
+                                    Color.clear.frame(width: authorWidth + dateWidth)
+                                }.padding(.leading, 12).frame(height: rowHeight)
+                                    .background(Color.orange.opacity(selectedStash?.hash == stash.hash ? 0.22 : 0.07)).contentShape(Rectangle())
+                            }.buttonStyle(.plain).help("Inspect \(stash.reference): \(stash.message)")
+                        }
+
                         if hasChanges {
-                        Button { selectedCommit = nil } label: {
+                        Button { selectedCommit = nil; selectedStash = nil } label: {
                             HStack(spacing: 0) {
                                 HStack(spacing: 5) {
                                     Image(systemName: "folder")
@@ -87,7 +108,7 @@ struct GraphWorkspace: View {
                                                 }
                                             ))
                                                 .frame(width: referenceWidth, alignment: .leading)
-                                        Button { selectedCommit = commit } label: {
+                                        Button { selectedCommit = commit; selectedStash = nil } label: {
                                         HStack(spacing: 0) {
                                             GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty)
                                                 .frame(width: railWidth, height: rowHeight)

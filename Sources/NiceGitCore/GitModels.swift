@@ -1,5 +1,12 @@
 import Foundation
 
+public struct GitCommitFileChange: Identifiable, Sendable {
+    public let path: String
+    public let status: String
+    public var id: String { path }
+    public init(path: String, status: String) { self.path = path; self.status = status }
+}
+
 public struct RepositorySnapshot: Equatable, Sendable {
     public var rootPath: String
     public var name: String
