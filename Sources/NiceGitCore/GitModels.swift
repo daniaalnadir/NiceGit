@@ -8,6 +8,7 @@ public struct RepositorySnapshot: Equatable, Sendable {
     public var branches: [GitBranch]
     public var commits: [GitCommit]
     public var remotes: [String]
+    public var remoteAddresses: [String: String] = [:]
     public var lastUpdated: Date
     public var stashes: [GitStash] = []
     public var operation: GitOperation?

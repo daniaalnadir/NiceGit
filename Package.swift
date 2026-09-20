@@ -21,7 +21,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "NiceGit",
-            dependencies: ["NiceGitCore", .product(name: "SwiftTerm", package: "SwiftTerm")]
+            dependencies: ["NiceGitCore", .product(name: "SwiftTerm", package: "SwiftTerm")],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "NiceGitCoreTests",

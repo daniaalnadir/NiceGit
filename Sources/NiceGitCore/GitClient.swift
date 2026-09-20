@@ -238,7 +238,8 @@ public struct GitClient: Sendable {
             String(max(1, historyLimit) + 1),
             "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
         ] + head + ["--"], in: rootURL))
-        let remotes = GitRemoteParser.parse(try run(["remote", "-v"], in: rootURL))
+        let remoteOutput = try run(["remote", "-v"], in: rootURL)
+        let remotes = GitRemoteParser.parse(remoteOutput)
 
         var snapshot = RepositorySnapshot(
             rootPath: rootPath,
@@ -249,6 +250,7 @@ public struct GitClient: Sendable {
             commits: Array(commits.prefix(max(1, historyLimit))),
             remotes: remotes
         )
+        snapshot.remoteAddresses = GitRemoteParser.addresses(remoteOutput)
         snapshot.stashes = try listStashes(in: rootURL)
         snapshot.headHash = headHash
         snapshot.worktrees = GitWorktree.parse(try run(["worktree", "list", "--porcelain", "-z"], in: rootURL))
@@ -421,7 +423,7 @@ public struct GitClient: Sendable {
 
         let detachedHead = ((try? run(["rev-parse", "--short", "HEAD"], in: repositoryURL)) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return detachedHead.isEmpty ? "No commits yet" : "Detached at \(detachedHead)"
+        return detachedHead.isEmpty ? "No commits yet" : "Detached HEAD \(detachedHead)"
     }
 
     @discardableResult

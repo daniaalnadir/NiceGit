@@ -90,6 +90,7 @@ public enum GitBranchParser {
                 let isRemote = name.hasPrefix("refs/remotes/") || name.hasPrefix("remotes/")
                 let normalizedName = name.hasPrefix("refs/heads/") ? String(name.dropFirst(11)) :
                     (name.hasPrefix("refs/remotes/") ? String(name.dropFirst(5)) : name)
+                if isRemote && normalizedName.split(separator: "/").count == 3 && normalizedName.hasSuffix("/HEAD") { return nil }
                 return GitBranch(
                     name: normalizedName,
                     isCurrent: fields[1] == "*",
@@ -138,6 +139,15 @@ public enum GitLogParser {
 }
 
 public enum GitRemoteParser {
+    public static func addresses(_ output: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for line in output.split(separator: "\n") where line.hasSuffix(" (fetch)") {
+            let fields = line.dropLast(8).split(separator: "\t", maxSplits: 1)
+            if fields.count == 2 { result[String(fields[0])] = String(fields[1]) }
+        }
+        return result
+    }
+
     public static func parse(_ output: String) -> [String] {
         let names = output
             .split(separator: "\n", omittingEmptySubsequences: true)

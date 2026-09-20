@@ -638,7 +638,7 @@ import Testing
     try git.stageAll(in: root)
     try git.commit(message: "Detached commit", in: root)
     let detached = try git.loadSnapshot(at: root)
-    #expect(detached.currentBranch.hasPrefix("Detached at"))
+    #expect(detached.currentBranch.hasPrefix("Detached HEAD"))
     #expect(detached.commits.first?.subject == "Detached commit")
 }
 

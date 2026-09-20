@@ -77,7 +77,9 @@ struct GraphWorkspace: View {
                             ForEach(Array(snapshot.commits.enumerated()), id: \.element.hash) { index, commit in
                                 if matches(commit) {
                                     HStack(spacing: 0) {
-                                            CommitReferences(refs: commit.refs, showingReferences: Binding(
+                                            CommitReferences(refs: commit.refs, snapshot: snapshot,
+                                                color: AppPalette.laneColors[rows[index + (hasChanges ? 1 : 0)].lane % AppPalette.laneColors.count],
+                                                showingReferences: Binding(
                                                 get: { hoveredCommitHash == commit.hash },
                                                 set: { visible in
                                                     if visible { hoveredCommitHash = commit.hash }
@@ -183,24 +185,30 @@ struct GraphWorkspace: View {
 
 private struct CommitReferences: View {
     let refs: [String]
+    let snapshot: RepositorySnapshot
+    let color: Color
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var showingReferences: Bool
-    @State private var closeTask: Task<Void, Never>?
+    @State private var isBadgeHovered = false
+    @State private var hoveredReference: String?
 
-    private func hover(_ inside: Bool) {
-        closeTask?.cancel()
-        if inside {
-            if refs.count > 1 { showingReferences = true }
-        } else {
-            closeTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(250))
-                guard !Task.isCancelled else { return }
-                showingReferences = false
-            }
+    private func pairedRemote(_ local: GitBranch) -> GitBranch? {
+        guard !local.isRemote else { return nil }
+        return refs.compactMap { branch($0) }.first {
+            $0.isRemote && ($0.displayName == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
+                && !$0.name.hasSuffix("/HEAD")
         }
     }
 
     private var ordered: [String] {
-        refs.sorted { left, right in
+        let pairedNames = Set(refs.compactMap { branch($0) }.compactMap { pairedRemote($0)?.name })
+        return refs.filter { ref in
+            if snapshot.remotes.contains(where: { ref == "\($0)/HEAD" || ref == "remotes/\($0)/HEAD" }) { return false }
+            if ref == "HEAD" { return !snapshot.branches.contains(where: { $0.isCurrent }) }
+            guard let branch = branch(ref) else { return true }
+            return !pairedNames.contains(branch.name)
+        }.sorted { left, right in
             let leftHead = left == "HEAD" || left.hasPrefix("HEAD -> ")
             let rightHead = right == "HEAD" || right.hasPrefix("HEAD -> ")
             if leftHead != rightHead { return leftHead }
@@ -208,42 +216,122 @@ private struct CommitReferences: View {
         }
     }
 
+    private func branch(_ ref: String) -> GitBranch? {
+        guard !ref.hasPrefix("tag: "), ref != "HEAD" else { return nil }
+        let name = ref.hasPrefix("HEAD -> ") ? String(ref.dropFirst(8)) : ref
+        return snapshot.branches.first { !$0.isRemote && $0.name == name }
+            ?? snapshot.branches.first { $0.isRemote && ($0.name == name || $0.displayName == name) }
+    }
+
+    private func isGitHub(_ branch: GitBranch) -> Bool {
+        guard branch.isRemote,
+              let remote = snapshot.remotes.sorted(by: { $0.count > $1.count }).first(where: { branch.displayName.hasPrefix($0 + "/") }),
+              let address = snapshot.remoteAddresses[remote] else { return false }
+        return (try? GitHubRepository(remoteAddress: address)) != nil
+    }
+
+    private func checkout(_ ref: String) {
+        guard let branch = branch(ref), !branch.isCurrent, !(branch.isRemote && branch.name.hasSuffix("/HEAD")),
+              snapshot.operation == nil, !model.isLoading,
+              model.confirmDiscardFileEdits() else { return }
+        showingReferences = false
+        model.checkout(branch: branch)
+    }
+
+    @ViewBuilder
+    private func branchIcon(_ branch: GitBranch) -> some View {
+        if isGitHub(branch), let url = Bundle.module.url(forResource: colorScheme == .dark ? "GitHub_Invertocat_White" : "GitHub_Invertocat_Black", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable().scaledToFit().frame(width: 16, height: 16)
+                .accessibilityLabel("GitHub remote branch")
+        } else {
+            Image(systemName: branch.isRemote ? "network" : "laptopcomputer")
+                .frame(width: 16, height: 16)
+                .accessibilityLabel(branch.isRemote ? "Remote branch" : "Local branch")
+        }
+    }
+
+    private func displayName(_ ref: String) -> String {
+        if ref == "HEAD" { return "Detached HEAD \(snapshot.headHash.map { String($0.prefix(7)) } ?? "")" }
+        guard let branch = branch(ref) else { return ref }
+        guard branch.isRemote else { return branch.name }
+        guard let remote = snapshot.remotes.sorted(by: { $0.count > $1.count }).first(where: {
+            branch.displayName.hasPrefix($0 + "/")
+        }) else { return branch.displayName }
+        return String(branch.displayName.dropFirst(remote.count + 1))
+    }
+
     private func label(_ ref: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: ref.hasPrefix("HEAD") ? "checkmark" : ref.hasPrefix("tag: ") ? "tag" : "arrow.triangle.branch")
-            Text(ref.hasPrefix("HEAD -> ") ? String(ref.dropFirst(8)) : ref)
+            if ref == "HEAD" || branch(ref)?.isCurrent == true { Image(systemName: "checkmark") }
+            Text(displayName(ref))
                 .lineLimit(1).truncationMode(.middle)
+            if let branch = branch(ref) {
+                branchIcon(branch)
+                if let remote = pairedRemote(branch) {
+                    branchIcon(remote).help(remote.displayName)
+                }
+            } else { Image(systemName: ref.hasPrefix("tag: ") ? "tag" : "arrow.triangle.branch") }
         }.font(.system(size: 12, weight: .medium))
     }
 
     var body: some View {
         if let first = ordered.first {
-            HStack(spacing: 5) {
+            HStack(spacing: 8) {
                 label(first)
-                if refs.count > 1 {
-                    Text("+\(refs.count - 1)").font(.system(size: 10, weight: .semibold)).fixedSize()
+                    .padding(.horizontal, 7).frame(height: 27)
+                    .background(color.opacity(isBadgeHovered ? 0.42 : 0.30), in: RoundedRectangle(cornerRadius: 3))
+                if ordered.count > 1 {
+                    Text("+\(ordered.count - 1)").font(.system(size: 10, weight: .semibold)).fixedSize()
+                        .padding(.horizontal, 6).frame(height: 27)
+                        .background(color.opacity(isBadgeHovered ? 0.34 : 0.22), in: RoundedRectangle(cornerRadius: 3))
                 }
             }
-            .padding(.horizontal, 7).frame(height: 27)
-            .background(AppPalette.signal.opacity(0.23), in: RoundedRectangle(cornerRadius: 3))
             .padding(.trailing, 8)
+            .help(ordered.map { displayName($0) }.joined(separator: ", "))
             .contentShape(Rectangle())
-            .onHover(perform: hover)
-            .onDisappear { closeTask?.cancel(); showingReferences = false }
-            .onTapGesture { if refs.count > 1 { showingReferences.toggle() } }
-            .accessibilityLabel(ordered.joined(separator: ", "))
+            .onHover {
+                isBadgeHovered = $0
+                if $0 && ordered.count > 1 { showingReferences = true }
+            }
+            .onDisappear {
+                isBadgeHovered = false
+                hoveredReference = nil
+            }
+            .onChange(of: showingReferences) {
+                if !showingReferences { hoveredReference = nil }
+            }
+            .gesture(TapGesture(count: 2).exclusively(before: TapGesture()).onEnded { gesture in
+                switch gesture {
+                case .first: checkout(first)
+                case .second: if ordered.count > 1 { showingReferences = true }
+                }
+            })
+            .accessibilityAction(named: "Switch to branch") { checkout(first) }
+            .accessibilityLabel(ordered.map { displayName($0) }.joined(separator: ", "))
             .popover(isPresented: $showingReferences, arrowEdge: .bottom) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(ordered, id: \.self) { ref in
-                            label(ref).padding(9).frame(maxWidth: .infinity, alignment: .leading).help(ref)
+                            let isCurrent = branch(ref)?.isCurrent == true
+                            label(ref).padding(9).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(color.opacity(isCurrent ? (hoveredReference == ref ? 0.46 : 0.36) : (hoveredReference == ref ? 0.24 : 0.12)))
+                                .overlay(alignment: .leading) {
+                                    if isCurrent { color.frame(width: 3).allowsHitTesting(false) }
+                                }
+                                .accessibilityAddTraits(isCurrent ? .isSelected : [])
+                                .contentShape(Rectangle())
+                                .onHover { inside in
+                                    if inside { hoveredReference = ref }
+                                    else if hoveredReference == ref { hoveredReference = nil }
+                                }
+                                .onTapGesture(count: 2) { checkout(ref) }
+                                .accessibilityAction(named: "Switch to branch") { checkout(ref) }
+                                .help(ref + (branch(ref).map { $0.isRemote ? " (remote)" : " (local)" } ?? ""))
                         }
                     }
-                }.frame(width: 340, height: min(CGFloat(refs.count) * 36, 300))
-                    .onHover { inside in
-                        if inside { closeTask?.cancel() }
-                        else { hover(false) }
-                    }
+                }.frame(width: 340, height: min(CGFloat(ordered.count) * 36, 300))
             }
         } else {
             Color.clear.frame(height: 27)

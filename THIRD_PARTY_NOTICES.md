@@ -21,3 +21,9 @@ NiceGit's own source is covered by the root MIT LICENSE.
 
 Git and GitHub CLI are external user-installed tools, not bundled with NiceGit.
 Apple system frameworks are supplied by macOS. No GitKraken artwork is bundled.
+# GitHub Logo Artwork
+
+The bundled GitHub Invertocat images are from https://brand.github.com/GitHub_Logos.zip.
+GitHub's logo is a trademark of GitHub, Inc. and remains subject to GitHub's brand
+guidelines at https://brand.github.com/foundations/logo, not NiceGit's MIT license.
+It identifies GitHub-hosted remotes and does not imply endorsement.
