@@ -12,3 +12,4 @@
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.
 - Treat `git stash push` as incomplete until it creates a new stash and leaves only intentionally excluded untracked files; submodule edits can remain after Git reports success.
 - Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
+- Keep destructive action buttons and confirmation text aligned with the actual Git operation, including staged and untracked files.

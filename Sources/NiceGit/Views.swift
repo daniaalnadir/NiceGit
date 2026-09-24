@@ -802,15 +802,16 @@ private struct FileChangeRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.plain)
-            .disabled(entry.kind == .untracked || primaryHelp == "Unstage file")
-            .help("Discard local change")
+            .help("Discard all changes to this file")
         }
         .padding(.horizontal, 6).padding(.vertical, 7)
         .frame(minHeight: 34)
         .confirmationDialog("Discard changes to \(entry.fileName)?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive, action: discard)
         } message: {
-            Text("Unstaged changes to this file will be lost.")
+            Text(entry.kind == .untracked
+                ? "This untracked file will be deleted."
+                : "All staged and unstaged changes to this file will be lost. Newly added files will be deleted.")
         }
     }
 

@@ -394,6 +394,10 @@ final class AppModel: ObservableObject {
     }
 
     func discard(_ entry: GitStatusEntry) {
+        if fileReviewSelection?.path == entry.path {
+            guard confirmDiscardFileEdits() else { return }
+            fileReviewSelection = nil
+        }
         runWorkingTreeAction { git, url in
             try git.discard(entry, in: url)
         }
