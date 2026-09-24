@@ -141,7 +141,11 @@ final class AppModel: ObservableObject {
     }
 
     func publish(remote: String) {
-        runRepositoryAction({ git, url in try git.publish(remote: remote, in: url) }, onSuccess: { self.showingPublish = false })
+        let branch = snapshot?.currentBranch
+        let head = snapshot?.headHash
+        runRepositoryAction({ git, url in
+            try git.publish(remote: remote, expectedBranch: branch, expectedHead: head, in: url)
+        }, onSuccess: { self.showingPublish = false })
     }
 
     func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil) {
@@ -486,12 +490,12 @@ final class AppModel: ObservableObject {
     }
 
     func push() {
-        guard snapshot?.upstream != nil else {
+        guard let snapshot, snapshot.upstream != nil else {
             showingPublish = true
             return
         }
         runRepositoryAction { git, url in
-            try git.push(in: url)
+            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: url)
         }
     }
 

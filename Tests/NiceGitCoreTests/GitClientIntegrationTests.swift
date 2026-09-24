@@ -230,6 +230,24 @@ import Testing
     #expect(try git.loadStatus(in: root).isEmpty)
 }
 
+@Test func stashReportsWhenUntrackedFilesWereExcludedAndNothingWasSaved() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    let file = root.appendingPathComponent("untracked.txt")
+    try "local\n".write(to: file, atomically: true, encoding: .utf8)
+
+    #expect(throws: (any Error).self) {
+        try git.saveStash(message: "Excluded", includeUntracked: false, in: root)
+    }
+    #expect(try git.listStashes(in: root).isEmpty)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "local\n")
+}
+
 @Test func messageAmendPreservesStagedAndUnstagedChanges() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -398,6 +416,10 @@ import Testing
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
     #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "submodule edit\n")
     #expect(try git.listStashes(in: root).map(\.hash) == [earlierStash.hash])
+    #expect(throws: (any Error).self) {
+        try git.saveStash(message: "Submodule only", includeUntracked: true, in: root)
+    }
+    #expect(try git.listStashes(in: root).map(\.hash) == [earlierStash.hash])
 
     try "top-level edit\n".write(to: topLevel, atomically: true, encoding: .utf8)
     #expect(throws: (any Error).self) { try git.checkout(branch: "feature", in: root) }
@@ -405,6 +427,12 @@ import Testing
     #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "submodule edit\n")
     #expect(try String(contentsOf: topLevel, encoding: .utf8) == "top-level edit\n")
     #expect(try git.listStashes(in: root).map(\.hash) == [earlierStash.hash])
+    #expect(throws: (any Error).self) {
+        try git.saveStash(message: "Partial stash", includeUntracked: true, in: root)
+    }
+    #expect(try git.listStashes(in: root).count == 2)
+    #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "submodule edit\n")
+    #expect(try String(contentsOf: topLevel, encoding: .utf8) == "base\n")
 }
 
 @Test func branchSwitchDoesNotOverwriteIgnoredLocalFile() throws {
@@ -557,6 +585,55 @@ import Testing
     #expect(throws: (any Error).self) { try git.pushBranch("feature", to: "origin", in: root) }
     #expect(try git.commitMessage(hash: "refs/heads/feature", in: remote).contains("Newer main"))
     #expect(throws: (any Error).self) { try git.pushBranch("missing", to: "origin", in: root) }
+}
+
+@Test func currentBranchPushIgnoresMatchingBranchesMirrorAndTags() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let remote = base.appendingPathComponent("remote.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try runGit(["init", "--bare"], in: remote)
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["remote", "add", "origin", remote.path], in: root)
+    try runGit(["push", "--set-upstream", "origin", "main"], in: root)
+    try git.createBranch(named: "feature", in: root)
+    try runGit(["push", "--set-upstream", "origin", "feature"], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Unpushed feature"], in: root)
+    try git.checkout(branch: "main", in: root)
+    let main = try git.loadSnapshot(at: root)
+    try git.createTag(name: "unwanted", target: "HEAD", message: "Do not push", in: root)
+    try runGit(["config", "push.default", "matching"], in: root)
+    try runGit(["config", "push.followTags", "true"], in: root)
+    try runGit(["config", "remote.origin.mirror", "true"], in: root)
+
+    try git.push(expectedBranch: "main", expectedHead: main.headHash, in: root)
+    #expect(try git.commitMessage(hash: "refs/heads/feature", in: remote).contains("Base"))
+    #expect(throws: (any Error).self) { try runGit(["show-ref", "--verify", "refs/tags/unwanted"], in: remote) }
+    try runGit(["commit", "--allow-empty", "-m", "New main"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.push(expectedBranch: "main", expectedHead: main.headHash, in: root)
+    }
+    #expect(try git.commitMessage(hash: "refs/heads/main", in: remote).contains("Base"))
+    try git.push(expectedBranch: "main", expectedHead: git.loadSnapshot(at: root).headHash, in: root)
+    #expect(try git.commitMessage(hash: "refs/heads/main", in: remote).contains("New main"))
+    #expect(try git.commitMessage(hash: "refs/heads/feature", in: remote).contains("Base"))
+    try git.createBranch(named: "published", in: root)
+    let selectedPublishedHead = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["commit", "--allow-empty", "-m", "Later published work"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.publish(remote: "origin", expectedBranch: "published", expectedHead: selectedPublishedHead, in: root)
+    }
+    #expect(throws: (any Error).self) { try runGit(["show-ref", "--verify", "refs/heads/published"], in: remote) }
+    try git.publish(remote: "origin", expectedBranch: "published", expectedHead: git.loadSnapshot(at: root).headHash, in: root)
+    #expect(try git.commitMessage(hash: "refs/heads/published", in: remote).contains("Later published work"))
+    #expect(try git.commitMessage(hash: "refs/heads/feature", in: remote).contains("Base"))
+    #expect(throws: (any Error).self) { try runGit(["show-ref", "--verify", "refs/tags/unwanted"], in: remote) }
+    #expect(try git.loadSnapshot(at: root).upstream == "origin/published")
 }
 
 @Test func revertPreservesHistoryAndSupportsConflictAbortAndContinue() throws {

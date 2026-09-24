@@ -129,6 +129,20 @@ public struct GitClient: Sendable {
     }
 
     public func saveStash(message: String, includeUntracked: Bool, in url: URL) throws {
+        let previous = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try pushStash(message: message, includeUntracked: includeUntracked, in: url)
+        guard let saved = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines), saved != previous else {
+            throw GitClientError.commandFailed(command: "stash", message: "Git did not save any changes. Check the untracked-file setting and any dirty submodules.")
+        }
+        let remaining = try loadStatus(in: url)
+        if remaining.contains(where: { includeUntracked || $0.kind != .untracked }) {
+            throw GitClientError.commandFailed(command: "stash", message: "Some changes were saved in stash \(saved.prefix(12)), but changes remain in the working tree. Check submodules before proceeding.")
+        }
+    }
+
+    private func pushStash(message: String, includeUntracked: Bool, in url: URL) throws {
         let stashMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "WIP on \(currentBranch(in: url))" : message
         try run(["stash", "push"] + (includeUntracked ? ["--include-untracked"] : []) + ["-m", stashMessage], in: url)
     }
@@ -422,7 +436,7 @@ public struct GitClient: Sendable {
         if branch == source { return false }
         let previousStash = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        try saveStash(message: "NiceGit: changes from \(source) before switching to \(branch)", includeUntracked: true, in: url)
+        try pushStash(message: "NiceGit: changes from \(source) before switching to \(branch)", includeUntracked: true, in: url)
         guard let stashHash = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
             .trimmingCharacters(in: .whitespacesAndNewlines), stashHash != previousStash else {
             throw GitClientError.commandFailed(command: "switch branch", message: "Git could not save all working changes. The branch was not switched. Check the working tree and Stashes before retrying.")
@@ -454,9 +468,16 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func publish(remote: String, in url: URL) throws {
+    public func publish(remote: String, expectedBranch: String? = nil, expectedHead: String? = nil, in url: URL) throws {
         let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
-        try run(["push", "--set-upstream", "--", remote, "HEAD:refs/heads/" + branch], in: url)
+        let head = try run(["rev-parse", "--verify", "HEAD"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (expectedBranch == nil || expectedBranch == branch),
+              (expectedHead == nil || expectedHead == head) else {
+            throw GitClientError.commandFailed(command: "publish", message: "The current branch changed since it was selected. Refresh and review the publish again.")
+        }
+        try run(["remote", "get-url", "--push", "--", remote], in: url)
+        let reference = "refs/heads/" + branch
+        try run(["-c", "remote." + remote + ".mirror=false", "push", "--set-upstream", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
     }
 
     public func createBranch(named name: String, in repositoryURL: URL) throws {
@@ -505,8 +526,24 @@ public struct GitClient: Sendable {
         try run(["pull", "--ff-only"], in: repositoryURL)
     }
 
-    public func push(in repositoryURL: URL) throws {
-        try run(["push"], in: repositoryURL)
+    public func push(expectedBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws {
+        let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let head = try run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (expectedBranch == nil || expectedBranch == branch),
+              (expectedHead == nil || expectedHead == head) else {
+            throw GitClientError.commandFailed(command: "push", message: "The current branch changed since it was selected. Refresh and review the push again.")
+        }
+        let remote = try run(["config", "--get", "branch." + branch + ".remote"], in: repositoryURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let upstream = try run(["config", "--get", "branch." + branch + ".merge"], in: repositoryURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard remote != ".", !remote.isEmpty, upstream.hasPrefix("refs/heads/") else {
+            throw GitClientError.commandFailed(command: "push", message: "Set a remote branch as the upstream before pushing.")
+        }
+        try run(["remote", "get-url", "--push", "--", remote], in: repositoryURL)
+        try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, head + ":" + upstream], in: repositoryURL)
     }
 
     private func repositoryRoot(for selectedURL: URL) throws -> String {
