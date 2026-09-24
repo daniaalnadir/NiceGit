@@ -10,7 +10,7 @@ private struct RepositorySidebar: View {
     @State private var pushRequest: (branch: GitBranch, remote: String)?
     @State private var integrationRequest: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?)?
     @State private var renamedBranchName = ""
-    @State private var tagToDelete: String?
+    @State private var tagToDelete: (name: String, tip: String)?
     @State private var referenceQuery = ""
     @State private var resetRequest: ResetRequest?
 
@@ -100,7 +100,9 @@ private struct RepositorySidebar: View {
                             ForEach(tags, id: \.self) { tag in
                                 SidebarButton(title: tag, subtitle: "", systemImage: "tag", isSelected: false) { model.inspectTag(tag) }
                                     .contextMenu {
-                                        Button("Delete local tag...", role: .destructive) { tagToDelete = tag }
+                                        Button("Delete local tag...", role: .destructive) {
+                                            if let tip = snapshot.tagTips[tag] { tagToDelete = (tag, tip) }
+                                        }
                                     }
                             }
                         }
@@ -168,9 +170,9 @@ private struct RepositorySidebar: View {
         }
 
 
-        .confirmationDialog("Delete local tag \(tagToDelete ?? "")?", isPresented: Binding(get: { tagToDelete != nil }, set: { if !$0 { tagToDelete = nil } })) {
+        .confirmationDialog("Delete local tag \(tagToDelete?.name ?? "")?", isPresented: Binding(get: { tagToDelete != nil }, set: { if !$0 { tagToDelete = nil } })) {
             if let tagToDelete {
-                Button("Delete local tag", role: .destructive) { model.deleteTag(name: tagToDelete) }
+                Button("Delete local tag", role: .destructive) { model.deleteTag(name: tagToDelete.name, expectedTip: tagToDelete.tip) }
             }
         }
         .alert("Rename branch", isPresented: Binding(get: { branchToRename != nil }, set: { if !$0 { branchToRename = nil } })) {

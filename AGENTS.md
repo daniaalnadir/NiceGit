@@ -9,3 +9,4 @@
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
+- Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.

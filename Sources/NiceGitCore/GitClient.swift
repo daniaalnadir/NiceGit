@@ -40,8 +40,12 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func deleteTag(name: String, in url: URL) throws {
-        try run(["tag", "--delete", "--", name], in: url)
+    public func deleteTag(name: String, expectedTip: String? = nil, in url: URL) throws {
+        if let expectedTip {
+            try run(["update-ref", "-d", "refs/tags/" + name, expectedTip], in: url)
+        } else {
+            try run(["tag", "--delete", "--", name], in: url)
+        }
     }
 
     func conflictVersion(path: String, stage: Int, in url: URL) -> String? {
@@ -277,7 +281,14 @@ public struct GitClient: Sendable {
         snapshot.stashes = try listStashes(in: rootURL)
         snapshot.headHash = headHash
         snapshot.worktrees = GitWorktree.parse(try run(["worktree", "list", "--porcelain", "-z"], in: rootURL))
-        snapshot.tags = try run(["tag", "--list", "--sort=-version:refname"], in: rootURL).split(separator: "\n").map(String.init)
+        let tagLines = try run(["for-each-ref", "--sort=-version:refname", "--format=%(refname:strip=2)%09%(objectname)", "refs/tags"], in: rootURL)
+        for line in tagLines.split(separator: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 1)
+            guard parts.count == 2 else { continue }
+            let name = String(parts[0])
+            snapshot.tags.append(name)
+            snapshot.tagTips[name] = String(parts[1])
+        }
         if let upstream = try? run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], in: rootURL),
            let counts = try? run(["rev-list", "--left-right", "--count", "HEAD...@{upstream}", "--"], in: rootURL) {
             let values = counts.split(whereSeparator: { $0.isWhitespace }).compactMap { Int($0) }

@@ -21,6 +21,7 @@ public struct RepositorySnapshot: Equatable, Sendable {
     public var operation: GitOperation?
     public var hasMoreCommits = false
     public var tags: [String] = []
+    public var tagTips: [String: String] = [:]
     public var upstream: String?
     public var ahead: Int?
     public var behind: Int?

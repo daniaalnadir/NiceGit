@@ -616,6 +616,15 @@ import Testing
     try git.createTag(name: "light", target: selected, in: root)
     #expect(throws: (any Error).self) { try runGit(["cat-file", "-e", "refs/tags/light^{tag}"], in: root) }
     #expect(try git.loadSnapshot(at: root).tags.sorted() == ["light", "v1"])
+    let originalTip = try #require(git.loadSnapshot(at: root).tagTips["v1"])
+    try runGit(["tag", "--delete", "v1"], in: root)
+    try git.createTag(name: "v1", target: "HEAD", message: "Replacement release", in: root)
+    let replacementTip = try #require(git.loadSnapshot(at: root).tagTips["v1"])
+    #expect(replacementTip != originalTip)
+    #expect(throws: (any Error).self) { try git.deleteTag(name: "v1", expectedTip: originalTip, in: root) }
+    #expect(try git.loadSnapshot(at: root).tagTips["v1"] == replacementTip)
+    try git.deleteTag(name: "v1", expectedTip: replacementTip, in: root)
+    #expect(try git.loadSnapshot(at: root).tags == ["light"])
 }
 
 @Test func upstreamChangesTargetSelectedBranchWithoutCheckout() throws {

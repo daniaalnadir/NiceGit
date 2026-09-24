@@ -99,8 +99,8 @@ final class AppModel: ObservableObject {
         runRepositoryAction({ git, url in try git.createTag(name: name, target: target, message: message, in: url) }, onSuccess: { self.taggingCommit = nil })
     }
 
-    func deleteTag(name: String) {
-        runRepositoryAction { git, url in try git.deleteTag(name: name, in: url) }
+    func deleteTag(name: String, expectedTip: String) {
+        runRepositoryAction { git, url in try git.deleteTag(name: name, expectedTip: expectedTip, in: url) }
     }
 
     func amendMessage(_ message: String, for commit: GitCommit) {
