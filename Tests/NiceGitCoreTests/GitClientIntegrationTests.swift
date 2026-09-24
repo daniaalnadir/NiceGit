@@ -503,6 +503,25 @@ import Testing
     #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "nested work\n")
 }
 
+@Test func discardUntrackedGlobNameDoesNotRemoveMatchingFiles() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    let selectedFile = root.appendingPathComponent("[ab].txt")
+    let unrelatedFile = root.appendingPathComponent("a.txt")
+    try "selected\n".write(to: selectedFile, atomically: true, encoding: .utf8)
+    try "unrelated\n".write(to: unrelatedFile, atomically: true, encoding: .utf8)
+    let selected = try #require(git.loadStatus(in: root).first { $0.path == "[ab].txt" })
+
+    try git.discard(selected, in: root)
+
+    #expect(!FileManager.default.fileExists(atPath: selectedFile.path))
+    #expect(try String(contentsOf: unrelatedFile, encoding: .utf8) == "unrelated\n")
+    #expect(try git.loadStatus(in: root).map(\.path) == ["a.txt"])
+}
+
 @Test func selectedBranchPushDoesNotPushHeadOrForceRemote() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("checkout")

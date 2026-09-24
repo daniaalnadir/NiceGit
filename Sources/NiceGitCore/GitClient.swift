@@ -530,7 +530,7 @@ public struct GitClient: Sendable {
         environment["GIT_EDITOR"] = "true"
         environment["GIT_SEQUENCE_EDITOR"] = "true"
         // Stash invokes Git internally with its own pathspecs; do not override those.
-        if let command = arguments.first, ["add", "diff", "show", "diff-tree", "restore", "rm", "checkout"].contains(command) {
+        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout"].contains(command) {
             environment["GIT_LITERAL_PATHSPECS"] = "1"
         }
         process.environment = environment
