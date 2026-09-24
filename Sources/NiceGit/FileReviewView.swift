@@ -35,7 +35,9 @@ struct FileReviewView: View {
 
     private func lineBinding(_ number: Int) -> Binding<String> {
         Binding {
-            lineEdits[number] ?? originalLines()[number - 1]
+            if let edited = lineEdits[number] { return edited }
+            let lines = originalLines()
+            return lines.indices.contains(number - 1) ? lines[number - 1] : ""
         } set: { value in
             lineEdits[number] = value
             var lines = originalLines()

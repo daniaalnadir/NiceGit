@@ -75,12 +75,6 @@ struct ConflictView: View {
         }
         .padding(20).frame(width: 900, height: 620)
         .disabled(busy)
-        .safeAreaInset(edge: .bottom) {
-            if busy {
-                Button("Cancel operation") { control.cancel() }
-                    .disabled(false).padding(10)
-            }
-        }
         .onDisappear { control.cancel() }
         .interactiveDismissDisabled()
         .confirmationDialog("Discard editor changes?", isPresented: $confirmClose) {

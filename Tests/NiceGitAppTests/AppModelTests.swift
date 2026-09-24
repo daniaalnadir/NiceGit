@@ -392,4 +392,110 @@ private enum RefreshFailure: Error { case injected }
     #expect(try git.loadSnapshot(at: root).commits.isEmpty)
 }
 
+@Test @MainActor func branchSwitchReportsActualStashWhenSnapshotIsStale() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.createBranch(named: "feature", startingAt: "HEAD", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    #expect(model.snapshot?.status.isEmpty == true)
+    let feature = try #require(model.snapshot?.branches.first { $0.name == "feature" })
+
+    try "external edit\n".write(to: file, atomically: true, encoding: .utf8)
+    model.checkout(branch: feature)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+
+    #expect(!model.isLoading)
+    #expect(model.errorMessage == nil)
+    #expect(model.snapshot?.currentBranch == "feature")
+    #expect(model.snapshot?.stashes.first?.message.contains("main before switching to feature") == true)
+    #expect(model.noticeMessage?.contains("saved in Stashes") == true)
+}
+
+@Test @MainActor func busyRepositoryLoadKeepsCurrentReview() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    let model = AppModel(defaults: defaults)
+    let original = try git.loadSnapshot(at: root)
+    model.snapshot = original
+    let review = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt")
+    model.fileReviewSelection = review
+    model.isLoading = true
+
+    model.loadRepository(at: root.appendingPathComponent("other"))
+
+    #expect(model.fileReviewSelection?.id == review.id)
+    #expect(model.snapshot?.rootPath == original.rootPath)
+    #expect(model.isLoading)
+}
+
+@Test @MainActor func staleBranchSelectionCannotDeleteOrRenameRecreatedBranch() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.createBranch(named: "feature", startingAt: "HEAD", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let stale = try #require(model.snapshot?.branches.first { $0.name == "feature" })
+    try "new work\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "New work", in: root)
+    try git.deleteBranch("feature", in: root)
+    try git.createBranch(named: "feature", startingAt: "HEAD", in: root)
+    let recreated = try #require(git.loadSnapshot(at: root).branches.first { $0.name == "feature" })
+    #expect(recreated.tip != stale.tip)
+
+    model.deleteBranch(stale)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+
+    #expect(!model.isLoading)
+    #expect(model.errorMessage?.contains("changed") == true)
+    #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "feature" }?.tip == recreated.tip)
+
+    model.errorMessage = nil
+    model.renameBranch(stale, to: "renamed")
+    let renameDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < renameDeadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage?.contains("changed") == true)
+    let afterRename = try git.loadSnapshot(at: root).branches
+    #expect(afterRename.first { $0.name == "feature" }?.tip == recreated.tip)
+    #expect(!afterRename.contains { $0.name == "renamed" })
+}
+
 }

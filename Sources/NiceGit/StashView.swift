@@ -62,7 +62,6 @@ struct StashView: View {
         .padding(20).frame(width: 620, height: 460)
         .onAppear { message = "WIP on \(model.snapshot?.currentBranch ?? "HEAD")" }
         .disabled(model.isLoading)
-        .operationCancellation()
         .sheet(item: $preview) { DiffView(selection: $0) }
         .confirmationDialog("Apply and remove this stash?", isPresented: Binding(get: { pendingPop != nil }, set: { if !$0 { pendingPop = nil } })) {
             if let stash = pendingPop {

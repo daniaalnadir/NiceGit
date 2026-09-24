@@ -344,11 +344,12 @@ struct ContentView: View {
             if phase == .active { model.refreshOnActivation() }
         }
         .disabled(model.isLoading)
-        .overlay(alignment: .bottomLeading) {
+        .overlay {
             if model.isLoading {
-                Button("Cancel operation") { model.cancelOperation() }
-                    .padding(12)
-                    .background(.regularMaterial)
+                ProgressView()
+                    .controlSize(.large)
+                    .padding(22)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .sheet(item: $model.diffSelection, onDismiss: model.refreshAfterReview) { selection in
@@ -362,15 +363,15 @@ struct ContentView: View {
         .sheet(item: $model.taggingCommit, onDismiss: model.refreshAfterReview) { TagView(commit: $0) }
         .sheet(item: $model.editingCommitMessage, onDismiss: model.refreshAfterReview) { CommitMessageView(commit: $0) }
         .alert(
-            "Git needs attention",
+            model.errorMessage == nil ? "Branch switched" : "Git needs attention",
             isPresented: Binding(
-                get: { model.errorMessage != nil },
-                set: { if !$0 { model.errorMessage = nil } }
+                get: { model.errorMessage != nil || model.noticeMessage != nil },
+                set: { if !$0 { model.errorMessage = nil; model.noticeMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(model.errorMessage ?? "")
+            Text(model.errorMessage ?? model.noticeMessage ?? "")
         }
     }
 }
@@ -539,16 +540,6 @@ private struct WorkbenchView: View {
         .onChange(of: selectedCommit?.hash) { commitDiff = nil }
         .onChange(of: snapshot.stashes) { _, stashes in
             if let selected = selectedStash { selectedStash = stashes.first { $0.hash == selected.hash } }
-        }
-        .overlay(alignment: .top) {
-            if model.isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(12)
-                    .background(.thinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 14)
-            }
         }
     }
 }

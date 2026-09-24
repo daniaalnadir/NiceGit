@@ -47,7 +47,6 @@ struct RepositorySettingsView: View {
         .textFieldStyle(.roundedBorder)
         .padding(24).frame(width: 520)
         .disabled(model.isLoading || loading)
-        .operationCancellation()
         .task {
             if let url = model.repositoryURL {
                 let identity = await Task.detached { GitClient().identity(in: url) }.value

@@ -32,6 +32,5 @@ struct TagView: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (annotated && message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             }
         }.padding(24).frame(width: 440).disabled(model.isLoading)
-            .operationCancellation()
     }
 }

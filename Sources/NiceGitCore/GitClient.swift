@@ -114,10 +114,12 @@ public struct GitClient: Sendable {
     }
 
     private func currentOperation(in url: URL) throws -> GitOperation? {
-        for (marker, operation) in [("rebase-merge", GitOperation.rebase), ("rebase-apply", .rebase), ("MERGE_HEAD", .merge), ("CHERRY_PICK_HEAD", .cherryPick), ("REVERT_HEAD", .revert)] {
-            let path = try run(["rev-parse", "--git-path", marker], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolved = URL(fileURLWithPath: path, relativeTo: url)
-            if FileManager.default.fileExists(atPath: resolved.path) { return operation }
+        let markers: [(String, GitOperation)] = [("rebase-merge", .rebase), ("rebase-apply", .rebase), ("MERGE_HEAD", .merge), ("CHERRY_PICK_HEAD", .cherryPick), ("REVERT_HEAD", .revert)]
+        var gitDirectory = try run(["rev-parse", "--absolute-git-dir"], in: url)
+        if gitDirectory.hasSuffix("\n") { gitDirectory.removeLast() }
+        let directory = URL(fileURLWithPath: gitDirectory, isDirectory: true)
+        for (marker, operation) in markers {
+            if FileManager.default.fileExists(atPath: directory.appendingPathComponent(marker).path) { return operation }
         }
         return nil
     }
@@ -128,6 +130,9 @@ public struct GitClient: Sendable {
     }
 
     public func applyStash(_ stash: GitStash, in url: URL) throws {
+        guard try listStashes(in: url).contains(where: { $0.hash == stash.hash }) else {
+            throw GitClientError.commandFailed(command: "stash apply", message: "This stash no longer exists. Refresh the repository.")
+        }
         try run(["stash", "apply", "--index", stash.hash], in: url)
     }
 
@@ -240,9 +245,9 @@ public struct GitClient: Sendable {
     public func loadSnapshot(at selectedURL: URL, historyLimit: Int = 200) throws -> RepositorySnapshot {
         let rootPath = try repositoryRoot(for: selectedURL)
         let rootURL = URL(fileURLWithPath: rootPath)
-        let branch = currentBranch(in: rootURL)
         let status = try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: rootURL))
         let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)"], in: rootURL))
+        let branch = branches.first(where: { $0.isCurrent && !$0.name.hasPrefix("(") })?.name ?? currentBranch(in: rootURL)
         let headHash = (try? run(["rev-parse", "--verify", "HEAD"], in: rootURL))?.trimmingCharacters(in: .whitespacesAndNewlines)
         let head = headHash != nil ? ["HEAD"] : []
         let commits = GitLogParser.parse(try run([
@@ -328,8 +333,9 @@ public struct GitClient: Sendable {
         try run(["commit", "-m", trimmedMessage], in: repositoryURL)
     }
 
-    public func checkout(branch: String, in repositoryURL: URL) throws {
-        try run(["switch", "--", branch], in: repositoryURL)
+    @discardableResult
+    public func checkout(branch: String, in repositoryURL: URL) throws -> Bool {
+        try switchPreservingChanges(["switch", "--", branch], to: branch, in: repositoryURL)
     }
 
     public func amendMessage(_ message: String, expectedHead: String, in url: URL) throws {
@@ -346,29 +352,82 @@ public struct GitClient: Sendable {
         try run(["worktree", "add", "--", destination.path, branch], in: repositoryURL)
     }
 
-    public func renameBranch(_ branch: String, to name: String, in url: URL) throws {
+    public func renameBranch(_ branch: String, to name: String, expectedTip: String? = nil, in url: URL) throws {
         try run(["check-ref-format", "--branch", name], in: url)
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: url) }
         try run(["branch", "--move", "--", branch, name], in: url)
     }
 
-    public func deleteBranch(_ branch: String, in url: URL) throws {
+    public func deleteBranch(_ branch: String, expectedTip: String? = nil, in url: URL) throws {
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: url) }
         try run(["branch", "--delete", "--", branch], in: url)
     }
 
-    public func checkoutRemote(branch: String, in url: URL) throws {
+    private func requireBranchTip(_ branch: String, expectedTip: String, in url: URL) throws {
+        let current = try run(["rev-parse", "--verify", "--end-of-options", "refs/heads/" + branch], in: url)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard current == expectedTip else {
+            throw GitClientError.commandFailed(command: "branch", message: "This branch changed since it was selected. Refresh and review it again.")
+        }
+    }
+
+    @discardableResult
+    public func checkoutRemote(branch: String, in url: URL) throws -> Bool {
         let reference: String
         if branch.hasPrefix("refs/remotes/") { reference = branch }
         else if branch.hasPrefix("remotes/") { reference = "refs/" + branch }
         else { reference = "refs/remotes/" + branch }
         try run(["show-ref", "--verify", "--quiet", reference], in: url)
-        let tracking = try loadSnapshot(at: url).branches.filter { !$0.isRemote && $0.upstream == reference }
+        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)"], in: url))
+        let tracking = branches.filter { !$0.isRemote && $0.upstream == reference }
         if tracking.count > 1 {
             throw GitClientError.commandFailed(command: "checkout remote branch", message: "Several local branches track this remote branch. Choose the desired branch in Local.")
         }
         if let existing = tracking.first {
-            try checkout(branch: existing.name, in: url)
+            return try checkout(branch: existing.name, in: url)
         } else {
-            try run(["switch", "--track", "--", reference], in: url)
+            return try switchPreservingChanges(["switch", "--track", "--", reference], to: reference, in: url)
+        }
+    }
+
+    private func switchPreservingChanges(_ arguments: [String], to branch: String, in url: URL) throws -> Bool {
+        guard try !loadStatus(in: url).isEmpty else {
+            try run(arguments, in: url)
+            return false
+        }
+        let source = currentBranch(in: url)
+        if branch == source { return false }
+        let previousStash = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try saveStash(message: "NiceGit: changes from \(source) before switching to \(branch)", includeUntracked: true, in: url)
+        guard let stashHash = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines), stashHash != previousStash else {
+            throw GitClientError.commandFailed(command: "switch branch", message: "Git could not save all working changes. The branch was not switched. Check the working tree and Stashes before retrying.")
+        }
+        do {
+            guard try loadStatus(in: url).isEmpty else {
+                throw GitClientError.commandFailed(command: "switch branch", message: "Git could not stash every change, including changes inside submodules. The branch was not switched.")
+            }
+            try run(arguments, in: url)
+            return true
+        } catch {
+            do {
+                try restoreSavedStash(stashHash, in: url)
+            } catch let restoreError {
+                throw GitClientError.commandFailed(command: "switch branch", message: "Switch failed: \(error.localizedDescription)\nYour changes are saved in stash \(stashHash.prefix(12)). Automatic restoration also failed: \(restoreError.localizedDescription)")
+            }
+            throw error
+        }
+    }
+
+    private func restoreSavedStash(_ hash: String, in url: URL) throws {
+        try run(["stash", "apply", "--index", hash], in: url)
+        if let saved = try listStashes(in: url).first(where: { $0.hash == hash }) {
+            do {
+                try run(["stash", "drop", saved.reference], in: url)
+            } catch {
+                throw GitClientError.commandFailed(command: "switch branch", message: "Changes were restored, but stash \(hash.prefix(12)) could not be removed. Do not apply it again. \(error.localizedDescription)")
+            }
         }
     }
 
@@ -386,8 +445,9 @@ public struct GitClient: Sendable {
         try run(["checkout", "-b", trimmedName], in: repositoryURL)
     }
 
-    public func pushBranch(_ branch: String, to remote: String, in url: URL) throws {
-        try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: url)
+    public func pushBranch(_ branch: String, to remote: String, expectedTip: String? = nil, in url: URL) throws {
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: url) }
+        else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: url) }
         try run(["remote", "get-url", "--push", "--", remote], in: url)
         let reference = "refs/heads/" + branch
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
@@ -406,8 +466,9 @@ public struct GitClient: Sendable {
         try run(["fetch", "--all", "--prune"], in: repositoryURL)
     }
 
-    public func setUpstream(branch: String, remoteBranch: String?, in url: URL) throws {
-        try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: url)
+    public func setUpstream(branch: String, remoteBranch: String?, expectedTip: String? = nil, in url: URL) throws {
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: url) }
+        else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: url) }
         if let remoteBranch {
             let reference = "refs/remotes/" + remoteBranch
             try run(["show-ref", "--verify", "--quiet", reference], in: url)
