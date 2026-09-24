@@ -391,7 +391,7 @@ final class AppModel: ObservableObject {
 
     func discard(_ entry: GitStatusEntry) {
         runWorkingTreeAction { git, url in
-            try git.discard(path: entry.path, in: url)
+            try git.discard(entry, in: url)
         }
     }
 

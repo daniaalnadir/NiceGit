@@ -320,8 +320,20 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func discard(path: String, in repositoryURL: URL) throws {
-        try run(["restore", "--", path], in: repositoryURL)
+    public func discard(_ entry: GitStatusEntry, in repositoryURL: URL) throws {
+        guard try loadStatus(in: repositoryURL).contains(entry) else {
+            throw GitClientError.commandFailed(command: "discard", message: "This file changed since it was selected. Refresh and review it again.")
+        }
+        if entry.kind == .untracked {
+            try run(["clean", "--force", "--", entry.path], in: repositoryURL)
+            if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path }) {
+                throw GitClientError.commandFailed(command: "discard", message: "Git could not remove this untracked path. Nested repositories require manual removal.")
+            }
+        } else if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
+            try run(["rm", "--force", "--", entry.path], in: repositoryURL)
+        } else {
+            try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (entry.originalPath.map { [$0] } ?? []), in: repositoryURL)
+        }
     }
 
     public func commit(message: String, in repositoryURL: URL) throws {
@@ -335,7 +347,7 @@ public struct GitClient: Sendable {
 
     @discardableResult
     public func checkout(branch: String, in repositoryURL: URL) throws -> Bool {
-        try switchPreservingChanges(["switch", "--", branch], to: branch, in: repositoryURL)
+        try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--", branch], to: branch, in: repositoryURL)
     }
 
     public func amendMessage(_ message: String, expectedHead: String, in url: URL) throws {
@@ -386,7 +398,7 @@ public struct GitClient: Sendable {
         if let existing = tracking.first {
             return try checkout(branch: existing.name, in: url)
         } else {
-            return try switchPreservingChanges(["switch", "--track", "--", reference], to: reference, in: url)
+            return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--track", "--", reference], to: reference, in: url)
         }
     }
 

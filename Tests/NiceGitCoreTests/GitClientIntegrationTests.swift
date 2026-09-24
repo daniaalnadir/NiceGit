@@ -407,6 +407,102 @@ import Testing
     #expect(try git.listStashes(in: root).map(\.hash) == [earlierStash.hash])
 }
 
+@Test func branchSwitchDoesNotOverwriteIgnoredLocalFile() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "generated.txt\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Ignore generated file", in: root)
+    try git.createBranch(named: "feature", in: root)
+    let ignoredFile = root.appendingPathComponent("generated.txt")
+    try "tracked feature\n".write(to: ignoredFile, atomically: true, encoding: .utf8)
+    try runGit(["add", "--force", "generated.txt"], in: root)
+    try git.commit(message: "Track generated file", in: root)
+    try git.checkout(branch: "main", in: root)
+    try "ignored local\n".write(to: ignoredFile, atomically: true, encoding: .utf8)
+    #expect(try git.loadStatus(in: root).isEmpty)
+
+    #expect(throws: (any Error).self) { try git.checkout(branch: "feature", in: root) }
+    #expect(try git.loadSnapshot(at: root).currentBranch == "main")
+    #expect(try String(contentsOf: ignoredFile, encoding: .utf8) == "ignored local\n")
+}
+
+@Test func discardRemovesStagedUnstagedRenamedAndUntrackedChanges() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let edited = root.appendingPathComponent("edited.txt")
+    let deleted = root.appendingPathComponent("deleted.txt")
+    let oldName = root.appendingPathComponent("old.txt")
+    let newName = root.appendingPathComponent("new.txt")
+    let untracked = root.appendingPathComponent("untracked\nfile.txt")
+    for file in [edited, deleted, oldName] {
+        try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    }
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+
+    try "staged\n".write(to: edited, atomically: true, encoding: .utf8)
+    try git.stage(path: "edited.txt", in: root)
+    try "unstaged\n".write(to: edited, atomically: true, encoding: .utf8)
+    try runGit(["rm", "deleted.txt"], in: root)
+    try runGit(["mv", "old.txt", "new.txt"], in: root)
+    try "new\n".write(to: untracked, atomically: true, encoding: .utf8)
+    let entries = try git.loadStatus(in: root)
+    #expect(entries.count == 4)
+
+    for entry in entries {
+        try git.discard(entry, in: root)
+    }
+
+    #expect(try git.loadStatus(in: root).isEmpty)
+    for file in [edited, deleted, oldName] {
+        #expect(try String(contentsOf: file, encoding: .utf8) == "base\n")
+    }
+    #expect(!FileManager.default.fileExists(atPath: newName.path))
+    #expect(!FileManager.default.fileExists(atPath: untracked.path))
+}
+
+@Test func discardBeforeFirstCommitAndStaleSelectionPreservesFiles() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    let staged = root.appendingPathComponent("staged.txt")
+    let untracked = root.appendingPathComponent("untracked.txt")
+    try "staged\n".write(to: staged, atomically: true, encoding: .utf8)
+    try git.stage(path: "staged.txt", in: root)
+    try "untracked\n".write(to: untracked, atomically: true, encoding: .utf8)
+    let selected = try #require(git.loadStatus(in: root).first { $0.path == "staged.txt" })
+    try "changed\n".write(to: staged, atomically: true, encoding: .utf8)
+
+    #expect(throws: (any Error).self) { try git.discard(selected, in: root) }
+    #expect(try String(contentsOf: staged, encoding: .utf8) == "changed\n")
+    for entry in try git.loadStatus(in: root) {
+        try git.discard(entry, in: root)
+    }
+    #expect(try git.loadStatus(in: root).isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: staged.path))
+    #expect(!FileManager.default.fileExists(atPath: untracked.path))
+
+    let nested = root.appendingPathComponent("nested")
+    try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+    try runGit(["init", "--initial-branch=main"], in: nested)
+    let nestedFile = nested.appendingPathComponent("file.txt")
+    try "nested work\n".write(to: nestedFile, atomically: true, encoding: .utf8)
+    let nestedEntry = try #require(git.loadStatus(in: root).first { $0.path == "nested/" })
+    #expect(throws: (any Error).self) { try git.discard(nestedEntry, in: root) }
+    #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "nested work\n")
+}
+
 @Test func selectedBranchPushDoesNotPushHeadOrForceRemote() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("checkout")

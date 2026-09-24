@@ -6,3 +6,5 @@
 - Git metadata paths can contain newlines; use a single absolute Git directory path and remove only Git's final line terminator. Validate that a selected stash is still listed before applying it.
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
+- Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
