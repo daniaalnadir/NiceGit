@@ -60,6 +60,7 @@ struct StashView: View {
             }
         }
         .padding(20).frame(width: 620, height: 460)
+        .onAppear { message = "WIP on \(model.snapshot?.currentBranch ?? "HEAD")" }
         .disabled(model.isLoading)
         .operationCancellation()
         .sheet(item: $preview) { DiffView(selection: $0) }

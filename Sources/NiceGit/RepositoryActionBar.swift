@@ -92,13 +92,18 @@ struct RepositoryActionBar: View {
                         .disabled(snapshot.upstream == nil || snapshot.operation != nil)
                 } label: { Image(systemName: "chevron.down").font(.system(size: 9)).frame(width: 18, height: 40) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .modifier(ActionHoverHighlight())
                     .help("Fetch and pull options").accessibilityLabel("Fetch and pull options")
             }
             action("Push", icon: "arrow.up.to.line", help: "Push or publish current branch") { model.push() }
                 .disabled(snapshot.remotes.isEmpty)
             action("Branch", icon: "arrow.triangle.branch", help: "Create a branch") { newBranch = true }
                 .disabled(snapshot.operation != nil)
-            action("Stash", icon: "archivebox", help: "Save or manage stashes") { model.showingStashes = true }
+            action("Stash", icon: "archivebox", help: "Stash working changes") {
+                guard model.confirmDiscardFileEdits() else { return }
+                model.saveStash(message: "WIP on \(snapshot.currentBranch)", includeUntracked: true) {}
+            }
+                .disabled(snapshot.status.isEmpty || snapshot.headHash == nil || snapshot.operation != nil)
             action("Pop", icon: "tray.and.arrow.up", help: "Apply and remove the latest stash") { stashToPop = snapshot.stashes.first }
                 .disabled(snapshot.stashes.isEmpty || snapshot.operation != nil)
             Divider().frame(height: 34).padding(.horizontal, 4)
@@ -113,6 +118,18 @@ struct RepositoryActionBar: View {
                 Text(title).font(.system(size: 11))
                 Image(systemName: icon).font(.system(size: 18, weight: .medium))
             }.frame(width: 48, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(help).accessibilityLabel(title)
+        }.buttonStyle(.plain).modifier(ActionHoverHighlight()).help(help).accessibilityLabel(title)
+    }
+}
+
+private struct ActionHoverHighlight: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(.primary.opacity(isHovered && isEnabled ? 0.10 : 0), in: RoundedRectangle(cornerRadius: 4))
+            .onHover { isHovered = $0 }
+            .onDisappear { isHovered = false }
     }
 }

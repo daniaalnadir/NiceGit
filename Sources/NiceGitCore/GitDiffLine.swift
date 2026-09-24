@@ -7,6 +7,19 @@ public struct GitDiffLine: Sendable, Equatable {
     public let oldNumber: Int?
     public let newNumber: Int?
 
+    public static func changesOnly(_ patch: String) -> [GitDiffLine] {
+        parse(patch).filter {
+            switch $0.kind {
+            case .hunk, .addition, .deletion: true
+            case .metadata, .context: false
+            }
+        }
+    }
+
+    public static func codeOnly(_ patch: String) -> [GitDiffLine] {
+        parse(patch).filter { $0.kind != .metadata }
+    }
+
     public static func parse(_ patch: String) -> [GitDiffLine] {
         guard !patch.isEmpty else { return [] }
         var old: Int?

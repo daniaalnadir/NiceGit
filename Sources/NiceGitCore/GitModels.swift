@@ -1,5 +1,12 @@
 import Foundation
 
+public struct GitCommitFileChange: Identifiable, Sendable {
+    public let path: String
+    public let status: String
+    public var id: String { path }
+    public init(path: String, status: String) { self.path = path; self.status = status }
+}
+
 public struct RepositorySnapshot: Equatable, Sendable {
     public var rootPath: String
     public var name: String
@@ -8,6 +15,7 @@ public struct RepositorySnapshot: Equatable, Sendable {
     public var branches: [GitBranch]
     public var commits: [GitCommit]
     public var remotes: [String]
+    public var remoteAddresses: [String: String] = [:]
     public var lastUpdated: Date
     public var stashes: [GitStash] = []
     public var operation: GitOperation?

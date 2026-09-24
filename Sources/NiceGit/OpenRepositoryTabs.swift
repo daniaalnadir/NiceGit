@@ -17,7 +17,7 @@ struct OpenRepositoryTabs: View {
                     Text("Repositories").font(.system(size: 13, weight: .semibold))
                     Spacer(minLength: 0)
                 }
-            }.padding(.horizontal, 8).frame(height: 52)
+            }.padding(.horizontal, 8).frame(height: 52).padding(.top, 20)
             if !isCollapsed {
             HStack(spacing: 8) {
                 Text("OPEN TABS").font(.system(size: 11, weight: .semibold))

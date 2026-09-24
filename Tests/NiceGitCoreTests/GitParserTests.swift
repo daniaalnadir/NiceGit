@@ -1,6 +1,20 @@
 import NiceGitCore
 import Testing
 
+@Test func remoteHeadAliasIsNotABranch() {
+    let entries = GitBranchParser.parse("refs/remotes/origin/HEAD\t\tabc\tAlias\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/heads/topic/HEAD\t*\tabc\tLocal")
+    #expect(entries.map(\.name) == ["remotes/origin/main", "topic/HEAD"])
+}
+
+@Test func remoteAddressesUseFetchURLsForProviderIdentity() {
+    let output = "origin\tgit@github.com:example/project.git (fetch)\norigin\thttps://elsewhere.example/project.git (push)\nbackup\tssh://git@example.org/project.git (fetch)\n"
+    let addresses = GitRemoteParser.addresses(output)
+    #expect(addresses["origin"] == "git@github.com:example/project.git")
+    #expect(addresses["backup"] == "ssh://git@example.org/project.git")
+    #expect((try? GitHubRepository(remoteAddress: addresses["origin"]!)) != nil)
+    #expect((try? GitHubRepository(remoteAddress: addresses["backup"]!)) == nil)
+}
+
 @Test func exactPathsAndConflictStatesArePreserved() {
     let entries = GitStatusParser.parseNullTerminated("?? folder/a -> b\nfile.txt\0R  new name.txt\0old name.txt\0AA both.txt\0DD deleted.txt\0")
     #expect(entries.count == 4)
