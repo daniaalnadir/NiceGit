@@ -5,6 +5,7 @@ import SwiftUI
 struct FileReviewView: View {
     let selection: DiffSelection
     @EnvironmentObject private var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var review: GitFileReview?
     @State private var document: GitEditableFile?
     @State private var text = ""
@@ -112,6 +113,7 @@ struct FileReviewView: View {
     private var diffBody: some View {
         let editable = canEditDiff
         let hunks = GitDiffHunk.grouped(review?.lines ?? [])
+        let highlights = GitInlineChange.highlights(in: review?.lines ?? [])
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         let textWidth = hunks.flatMap(\.lineIndices).map { index -> CGFloat in
             guard let line = review?.lines[index] else { return 0 }
@@ -154,8 +156,8 @@ struct FileReviewView: View {
                                         .background(AppPalette.signal.opacity(0.1))
                                         .overlay(RoundedRectangle(cornerRadius: 3).stroke(AppPalette.signal.opacity(0.7)))
                                         .disabled(review.lineStagingUnavailable != nil || dirty)
-                                }.padding(.horizontal, 12).frame(height: 40)
-                                    .frame(width: geometry.size.width)
+                                }.padding(.horizontal, 12).frame(height: 32)
+                                    .frame(width: contentWidth)
                                     .background(AppPalette.toolbar)
                                 Rectangle().fill(AppPalette.line).frame(height: 1)
                             ForEach(hunk.lineIndices, id: \.self) { index in
@@ -174,25 +176,42 @@ struct FileReviewView: View {
                                     } else { Color.clear.frame(width: 28, height: 22) }
                                     Text(line.oldNumber.map(String.init) ?? "").foregroundStyle(.secondary).frame(width: 42, alignment: .trailing)
                                     Text(line.newNumber.map(String.init) ?? "").foregroundStyle(.secondary).frame(width: 42, alignment: .trailing)
+                                    Text(line.kind == .addition ? "+" : line.kind == .deletion ? "-" : "")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20, alignment: .trailing)
+                                        .padding(.leading, 8)
                                     if editable, let number = line.newNumber,
                                        originalLines().indices.contains(number - 1),
                                        line.kind == .context || line.kind == .addition {
-                                        Text(line.kind == .addition ? "+" : " ").padding(.leading, 12)
                                         TextField("", text: lineBinding(number), axis: .vertical)
                                             .textFieldStyle(.plain)
                                             .frame(width: contentWidth - 160, alignment: .leading)
+                                            .background(alignment: .leading) {
+                                                if lineEdits[number] == nil,
+                                                   let change = highlights[index], !change.changed.isEmpty {
+                                                    let prefixWidth = (change.prefix as NSString).size(withAttributes: [.font: font]).width
+                                                    let changeWidth = (change.changed as NSString).size(withAttributes: [.font: font]).width
+                                                    Rectangle()
+                                                        .fill(DiffHighlight.inline(for: line.kind, scheme: colorScheme))
+                                                        .frame(width: changeWidth)
+                                                        .offset(x: prefixWidth)
+                                                }
+                                            }
                                             .padding(.trailing, 12)
                                             .accessibilityLabel("Edit working line \(number)")
                                     } else {
-                                        Text(line.text.isEmpty ? " " : line.text).padding(.horizontal, 12).textSelection(.enabled)
+                                        InlineDiffText(line: line, change: highlights[index], path: selection.path)
+                                            .padding(.leading, 8).textSelection(.enabled)
                                     }
                                 }
                                 .font(.system(size: 12, design: .monospaced))
-                                .frame(minHeight: 24)
+                                .frame(minHeight: 25)
                                 .frame(width: contentWidth, alignment: .leading)
-                                .background(line.newNumber.flatMap { lineEdits[$0] } != nil ? Color.green.opacity(0.18) : color(line))
+                                .background(line.newNumber.flatMap { lineEdits[$0] } != nil
+                                    ? DiffHighlight.row(for: .addition, scheme: colorScheme)
+                                    : DiffHighlight.row(for: line.kind, scheme: colorScheme))
                                 .overlay(alignment: .leading) {
-                                    Rectangle().fill(AppPalette.line).frame(width: 1).offset(x: 119)
+                                    Rectangle().fill(AppPalette.line).frame(width: 1).offset(x: 111)
                                 }
                                 .overlay(alignment: .leading) {
                                     if !query.isEmpty && line.text.localizedCaseInsensitiveContains(query) {
@@ -212,15 +231,6 @@ struct FileReviewView: View {
                 }
                 .scrollIndicators(.visible, axes: .horizontal)
             }
-        }
-    }
-
-    private func color(_ line: GitDiffLine) -> Color {
-        switch line.kind {
-        case .addition: .green.opacity(0.18)
-        case .deletion: .red.opacity(0.18)
-        case .hunk: .blue.opacity(0.12)
-        default: .clear
         }
     }
 

@@ -23,6 +23,30 @@ import Testing
     let files = try git.commitFileChanges(hash: "HEAD", in: root)
     #expect(files.map(\.path) == ["delete.txt", "edit.txt", "new\nfile.txt"])
     #expect(files.map(\.status) == ["D", "M", "A"])
+    let patch = try git.commitFileDiff(hash: "HEAD", path: "edit.txt", in: root)
+    #expect(!patch.contains("Author:"))
+    #expect(GitDiffLine.changesOnly(patch).map(\.kind) == [.hunk, .deletion, .addition])
+}
+
+@Test func commitFileDiffShowsNearbyCodeWithoutCommitMetadata() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("code.swift")
+    try "one\ntwo\nthree\nold value\nfive\nsix\nseven\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try "one\ntwo\nthree\nnew value\nfive\nsix\nseven\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Edit", in: root)
+
+    let lines = GitDiffLine.codeOnly(try git.commitFileDiff(hash: "HEAD", path: "code.swift", in: root))
+    #expect(lines.map(\.kind) == [.hunk, .context, .context, .context, .deletion, .addition, .context, .context, .context])
+    #expect(lines[1].text == " one")
+    #expect(lines[7].text == " six")
 }
 
 @Test func resetModesPreserveOrDiscardChangesAsSelected() throws {

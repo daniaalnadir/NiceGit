@@ -207,6 +207,10 @@ public struct GitClient: Sendable {
         try run(["show", "--first-parent", "-m", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color", hash, "--"] + (path.map { [$0] } ?? []), in: repositoryURL)
     }
 
+    public func commitFileDiff(hash: String, path: String, in repositoryURL: URL) throws -> String {
+        try run(["show", "--first-parent", "-m", "--format=", "--patch", "--unified=3", "--no-renames", "--no-ext-diff", "--no-color", hash, "--", path], in: repositoryURL)
+    }
+
     public func commitMessage(hash: String, in repositoryURL: URL) throws -> String {
         try run(["show", "--no-patch", "--format=%B", "--no-color", hash, "--"], in: repositoryURL)
     }

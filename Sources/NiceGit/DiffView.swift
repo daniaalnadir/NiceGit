@@ -1,3 +1,4 @@
+import AppKit
 import NiceGitCore
 import SwiftUI
 
@@ -18,6 +19,7 @@ struct DiffView: View {
     let selection: DiffSelection
     var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var lines: [GitDiffLine] = []
     @State private var error: String?
     @State private var loading = true
@@ -33,13 +35,16 @@ struct DiffView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
+        let highlights = GitInlineChange.highlights(in: lines)
+        return ScrollViewReader { proxy in
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selection.title).font(.headline).lineLimit(1)
-                    Text(selection.stashHash != nil ? "Stashed changes" : selection.commitHash == nil ? (selection.staged ? "Staged changes" : "Working tree") : "Commit details")
-                        .font(.caption).foregroundStyle(.secondary)
+                    if onClose == nil {
+                        Text(selection.stashHash != nil ? "Stashed changes" : selection.commitHash == nil ? (selection.staged ? "Staged changes" : "Working tree") : "Commit details")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button { if let onClose { onClose() } else { dismiss() } } label: { Image(systemName: "xmark") }
@@ -74,35 +79,62 @@ struct DiffView: View {
                     description: hasNonTextChanges ? Text("This file has binary or file-property changes.") : nil)
             } else {
                 GeometryReader { geometry in
+                let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+                let textWidth = lines.map { line in
+                    let code = [.addition, .deletion, .context].contains(line.kind) ? String(line.text.dropFirst()) : line.text
+                    return (code as NSString).size(withAttributes: [.font: font]).width
+                }.max() ?? 0
+                let contentWidth = max(geometry.size.width, ceil(textWidth) + 142)
                 ScrollView([.horizontal, .vertical]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(lines.indices, id: \.self) { index in
+                            if lines[index].kind == .hunk {
+                                Color.clear.frame(height: index == 0 ? 12 : 28)
+                                HStack {
+                                    Text(hunkLabel(lines[index].text))
+                                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(width: contentWidth, height: 30)
+                                .background(AppPalette.toolbar)
+                                .overlay(alignment: .bottom) { AppPalette.line.frame(height: 1) }
+                                .id(index)
+                            } else {
                             HStack(spacing: 0) {
                                 Text(lines[index].oldNumber.map(String.init) ?? "")
-                                    .frame(width: 48, alignment: .trailing)
+                                    .frame(width: 40, alignment: .trailing)
                                     .foregroundStyle(.secondary)
                                 Text(lines[index].newNumber.map(String.init) ?? "")
-                                    .frame(width: 48, alignment: .trailing)
+                                    .frame(width: 40, alignment: .trailing)
                                     .foregroundStyle(.secondary)
-                                Text(lines[index].text.isEmpty ? " " : lines[index].text)
-                                    .padding(.leading, 16)
+                                Text(marker(for: lines[index]))
+                                    .frame(width: 24, alignment: .trailing)
+                                    .foregroundStyle(.secondary)
+                                InlineDiffText(line: lines[index], change: highlights[index], path: selection.path)
+                                    .padding(.leading, 8)
+                                Spacer(minLength: 0)
                             }
                                 .font(.system(size: 12, design: .monospaced))
                                 .textSelection(.enabled)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .padding(.horizontal, 12).padding(.vertical, 2)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(lineColor(lines[index]))
+                                .frame(width: contentWidth, height: 25, alignment: .leading)
+                                .background(DiffHighlight.row(for: lines[index].kind, scheme: colorScheme))
+                                .overlay(alignment: .leading) {
+                                    AppPalette.line.opacity(0.7).frame(width: 1).offset(x: 105)
+                                }
                                 .overlay(alignment: .leading) {
                                     if selectedMatch == index {
                                         Rectangle().fill(.yellow).frame(width: 3)
                                     }
                                 }
                                 .id(index)
+                            }
                         }
-                    }.fixedSize(horizontal: true, vertical: false)
-                        .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
+                    }.frame(width: contentWidth, alignment: .leading)
+                        .frame(minHeight: geometry.size.height, alignment: .topLeading)
                 }
+                .scrollIndicators(.visible, axes: .horizontal)
                 }
             }
         }
@@ -122,15 +154,18 @@ struct DiffView: View {
             let original = selection.originalPath
             let stashHash = selection.stashHash
             let commandControl = control
+            let embedded = onClose != nil
             do {
                 let text = try await Task.detached {
                     let git = GitClient(control: commandControl)
                     if let stashHash { return try git.stashDiff(hash: stashHash, in: url) }
+                    if let hash, let path, embedded {
+                        return try git.commitFileDiff(hash: hash, path: path, in: url)
+                    }
                     if let hash { return try git.commitDiff(hash: hash, path: path, in: url) }
                     return try git.diff(path: path ?? "", staged: staged, untracked: untracked, originalPath: original, in: url)
                 }.value
-                let parsed = GitDiffLine.parse(text)
-                lines = onClose != nil ? parsed.filter { $0.kind != .metadata || $0.text == "\\ No newline at end of file" } : parsed
+                lines = embedded ? GitDiffLine.codeOnly(text) : GitDiffLine.parse(text)
                 hasNonTextChanges = onClose != nil && lines.isEmpty && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             } catch { self.error = error.localizedDescription }
             loading = false
@@ -139,7 +174,9 @@ struct DiffView: View {
     }
 
     private func updateMatches() {
-        matches = query.isEmpty ? [] : lines.indices.filter { lines[$0].text.localizedCaseInsensitiveContains(query) }
+        matches = query.isEmpty ? [] : lines.indices.filter {
+            (onClose == nil || lines[$0].kind != .hunk) && lines[$0].text.localizedCaseInsensitiveContains(query)
+        }
         matchPosition = 0
     }
 
@@ -148,10 +185,20 @@ struct DiffView: View {
         matchPosition = (matchPosition + step + matches.count) % matches.count
     }
 
-    private func lineColor(_ line: GitDiffLine) -> Color {
-        if line.kind == .addition { return .green.opacity(0.14) }
-        if line.kind == .deletion { return .red.opacity(0.14) }
-        if line.kind == .hunk { return .blue.opacity(0.12) }
-        return .clear
+    private func marker(for line: GitDiffLine) -> String {
+        switch line.kind {
+        case .addition: "+"
+        case .deletion: "-"
+        default: ""
+        }
     }
+
+    private func hunkLabel(_ text: String) -> String {
+        guard text.hasPrefix("@@"),
+              let end = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex) else {
+            return text
+        }
+        return String(text[..<end.upperBound])
+    }
+
 }
