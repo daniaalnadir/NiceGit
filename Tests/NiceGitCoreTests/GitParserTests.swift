@@ -42,12 +42,20 @@ import Testing
 }
 
 @Test func fullReferencesDistinguishRemoteFromLocalBranches() {
-    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/remotes/origin/topic/remotes/demo\t\tabc\tNested")
+    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/remotes/origin/topic/remotes/demo\t\tabc\tNested\nrefs/heads/remotes/origin/main\t\tabc\tLocal collision")
     #expect(entries[0].name == "origin/main")
     #expect(!entries[0].isRemote)
     #expect(entries[1].isRemote)
     #expect(entries[1].displayName == "origin/main")
     #expect(entries[2].displayName == "origin/topic/remotes/demo")
+    #expect(entries[3].name == entries[1].name)
+    #expect(entries[3].id != entries[1].id)
+}
+
+@Test func statusEntryIdentityKeepsLiteralSeparatorPathsDistinct() {
+    let entries = GitStatusParser.parseNullTerminated("R  b|c\0a\0R  c\0a|b\0")
+    #expect(entries.count == 2)
+    #expect(entries[0].id != entries[1].id)
 }
 
 @Test func statusParserClassifiesStagedUnstagedAndRenamedFiles() {

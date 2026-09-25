@@ -130,7 +130,7 @@ public struct GitStatusEntry: Identifiable, Equatable, Sendable {
     }
 
     public var id: String {
-        "\(originalPath ?? "")|\(path)|\(indexStatus)\(workTreeStatus)"
+        "\(originalPath ?? "")\0\(path)\0\(indexStatus)\(workTreeStatus)"
     }
 
     public var fileName: String {
@@ -164,7 +164,7 @@ public struct GitBranch: Identifiable, Equatable, Sendable {
     }
 
     public var id: String {
-        name
+        "\(isRemote ? "remote" : "local")\0\(name)"
     }
 
     public var displayName: String {

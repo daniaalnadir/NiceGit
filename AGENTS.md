@@ -34,3 +34,4 @@
 - Let parsed branch metadata decide whether a remote ref is a symbolic HEAD alias; a real branch can end in HEAD and remain usable from the graph.
 - Strip the leading `remotes/` prefix only when displaying a remote branch; nested branch names may contain that text legitimately.
 - Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
+- Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
