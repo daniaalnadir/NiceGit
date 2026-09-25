@@ -391,8 +391,9 @@ public struct GitClient: Sendable {
         try run(["commit", "--amend", "--only", "--message", message], in: url)
     }
 
-    public func createWorktree(branch: String, at destination: URL, in repositoryURL: URL) throws {
-        try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repositoryURL)
+    public func createWorktree(branch: String, expectedTip: String? = nil, at destination: URL, in repositoryURL: URL) throws {
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: repositoryURL) }
+        else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repositoryURL) }
         try run(["worktree", "add", "--", destination.path, branch], in: repositoryURL)
     }
 
@@ -554,7 +555,17 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func pull(in repositoryURL: URL) throws {
+    public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws {
+        if expectedBranch != nil || expectedHead != nil {
+            let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let head = try run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard (expectedBranch == nil || expectedBranch == branch),
+                  (expectedHead == nil || expectedHead == head) else {
+                throw GitClientError.commandFailed(command: "pull", message: "The current branch changed since Pull was selected. Refresh and review it again.")
+            }
+        }
         try run(["pull", "--ff-only"], in: repositoryURL)
     }
 

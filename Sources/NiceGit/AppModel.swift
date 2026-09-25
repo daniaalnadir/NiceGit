@@ -235,7 +235,7 @@ final class AppModel: ObservableObject {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         runRepositoryAction { git, url in
-            try git.createWorktree(branch: branch.name, at: destination, in: url)
+            try git.createWorktree(branch: branch.name, expectedTip: branch.tip, at: destination, in: url)
         }
     }
 
@@ -509,8 +509,10 @@ final class AppModel: ObservableObject {
 
     func pull() {
         guard requireSavedFileEdits(before: "pulling") else { return }
+        let branch = snapshot?.currentBranch
+        let head = snapshot?.headHash
         runRepositoryAction { git, url in
-            try git.pull(in: url)
+            try git.pull(expectedBranch: branch, expectedHead: head, in: url)
         }
     }
 
