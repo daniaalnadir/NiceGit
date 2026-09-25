@@ -277,6 +277,8 @@ public struct GitClient: Sendable {
         let branch = current.flatMap { $0.name.hasPrefix("(") ? nil : $0.name } ?? currentBranch(in: rootURL)
         let headHash = current?.tip
         let head = headHash != nil ? ["HEAD"] : []
+        let limit = max(1, historyLimit)
+        let logFormat = "%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
         let commits = GitLogParser.parse(try run([
             "log",
             "--exclude=refs/stash",
@@ -285,9 +287,18 @@ public struct GitClient: Sendable {
             "--decorate=short",
             "--date=relative",
             "-n",
-            String(max(1, historyLimit) + 1),
-            "--pretty=format:%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
+            String(limit + 1),
+            "--pretty=format:" + logFormat
         ] + head + ["--"], in: rootURL))
+        var visibleCommits = Array(commits.prefix(limit))
+        if let headHash, !visibleCommits.contains(where: { $0.hash == headHash }) {
+            if let headCommit = commits.first(where: { $0.hash == headHash }) {
+                visibleCommits.append(headCommit)
+            } else {
+                let headCommit = GitLogParser.parse(try run(["log", "-1", "--decorate=short", "--pretty=format:" + logFormat, "HEAD", "--"], in: rootURL))
+                visibleCommits.append(contentsOf: headCommit.prefix(1))
+            }
+        }
         let remoteOutput = try run(["remote", "-v"], in: rootURL)
         let remotes = GitRemoteParser.parse(remoteOutput)
 
@@ -297,7 +308,7 @@ public struct GitClient: Sendable {
             currentBranch: branch,
             status: status,
             branches: branches,
-            commits: Array(commits.prefix(max(1, historyLimit))),
+            commits: visibleCommits,
             remotes: remotes
         )
         snapshot.remoteAddresses = GitRemoteParser.addresses(remoteOutput)
@@ -324,7 +335,7 @@ public struct GitClient: Sendable {
                 snapshot.behind = values[1]
             }
         }
-        snapshot.hasMoreCommits = commits.count > max(1, historyLimit)
+        snapshot.hasMoreCommits = commits.count > limit
         snapshot.operation = try currentOperation(in: rootURL)
         return snapshot
     }

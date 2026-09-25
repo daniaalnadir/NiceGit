@@ -1418,6 +1418,35 @@ import Testing
     #expect(snapshot.behind == 1)
 }
 
+@Test func pagedHistoryKeepsOlderCurrentHeadVisible() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    let head = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["switch", "-c", "busy"], in: root)
+    for number in 0..<8 {
+        try runGit(["commit", "--allow-empty", "-m", "Busy \(number)"], in: root)
+    }
+    try runGit(["switch", "main"], in: root)
+
+    let firstPage = try git.loadSnapshot(at: root, historyLimit: 3)
+    #expect(firstPage.currentBranch == "main")
+    #expect(firstPage.headHash == head)
+    #expect(firstPage.commits.count == 4)
+    #expect(firstPage.commits.last?.hash == head)
+    #expect(firstPage.hasMoreCommits)
+    #expect(GitGraph.layoutWithWorkingTree(firstPage.commits, headHash: head).count == 5)
+
+    let fullHistory = try git.loadSnapshot(at: root, historyLimit: 20)
+    #expect(fullHistory.commits.count == 9)
+    #expect(fullHistory.commits.filter { $0.hash == head }.count == 1)
+    #expect(!fullHistory.hasMoreCommits)
+}
+
 @Test func branchManagementPreservesUnmergedWork() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
