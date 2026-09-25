@@ -468,6 +468,9 @@ public struct GitClient: Sendable {
     }
 
     private func switchPreservingChanges(_ arguments: [String], to branch: String, in url: URL) throws -> Bool {
+        guard try currentOperation(in: url) == nil else {
+            throw GitClientError.commandFailed(command: "switch branch", message: "Finish or abort the current Git operation before switching branches.")
+        }
         guard try !loadStatus(in: url).isEmpty else {
             try run(arguments, in: url)
             return false
@@ -529,6 +532,9 @@ public struct GitClient: Sendable {
             throw GitClientError.emptyBranchName
         }
         try requireSelectedCheckout(branch: expectedBranch, head: expectedHead, command: "create branch", in: repositoryURL)
+        guard try currentOperation(in: repositoryURL) == nil else {
+            throw GitClientError.commandFailed(command: "create branch", message: "Finish or abort the current Git operation before creating and checking out a branch.")
+        }
         try run(["checkout", "-b", trimmedName], in: repositoryURL)
     }
 

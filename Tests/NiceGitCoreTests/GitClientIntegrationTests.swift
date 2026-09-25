@@ -1294,6 +1294,27 @@ import Testing
     #expect(try String(contentsOf: file, encoding: .utf8) == "external edit\n")
     let reloaded = try git.loadConflict(path: "file.txt", in: root)
     try git.resolveConflict(reloaded, content: "resolved\n", in: root)
+    let readyToContinue = try git.loadSnapshot(at: root)
+    #expect(readyToContinue.operation == .merge)
+    do {
+        try git.checkout(branch: "feature", in: root)
+        Issue.record("Branch checkout ran during an unfinished merge")
+    } catch {
+        #expect(error.localizedDescription.contains("Finish or abort"))
+    }
+    do {
+        try git.createBranch(named: "wrong-merge-branch", in: root)
+        Issue.record("Branch creation changed checkout during an unfinished merge")
+    } catch {
+        #expect(error.localizedDescription.contains("Finish or abort"))
+    }
+    let stillMerging = try git.loadSnapshot(at: root)
+    #expect(stillMerging.operation == .merge)
+    #expect(stillMerging.currentBranch == "main")
+    #expect(stillMerging.stashes == readyToContinue.stashes)
+    #expect(stillMerging.status == readyToContinue.status)
+    #expect(stillMerging.branches.allSatisfy { $0.name != "wrong-merge-branch" })
+    #expect(try String(contentsOf: file, encoding: .utf8) == "resolved\n")
     try git.continueOperation(.merge, in: root)
     let merged = try git.loadSnapshot(at: root)
     #expect(merged.operation == nil)

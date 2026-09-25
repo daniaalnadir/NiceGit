@@ -51,7 +51,7 @@ private struct RepositorySidebar: View {
                         newBranchCheckout = (snapshot.currentBranch, snapshot.headHash)
                         showingNewBranch = true
                     } label: { Image(systemName: "plus") }
-                        .buttonStyle(.plain).help("Create branch")
+                        .buttonStyle(.plain).help("Create branch").disabled(snapshot.operation != nil)
                 }.padding(.horizontal, 16).padding(.bottom, 12)
 
                 ScrollView {
@@ -171,7 +171,7 @@ private struct RepositorySidebar: View {
                     model.createBranch(named: newBranchName, expectedBranch: newBranchCheckout.branch, expectedHead: newBranchCheckout.head) { newBranchName = "" }
                 }
             }
-                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (branchSource == nil && newBranchCheckout == nil))
+                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (branchSource == nil && (newBranchCheckout == nil || model.snapshot?.operation != nil)))
         }
 
 
@@ -207,11 +207,11 @@ private struct RepositorySidebar: View {
     }
 
     private func branchRow(_ branch: GitBranch, snapshot: RepositorySnapshot) -> some View {
-        SidebarButton(title: branch.displayName, subtitle: "", systemImage: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch", isSelected: branch.isCurrent) {
+        SidebarButton(title: branch.displayName, subtitle: "", systemImage: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch", isSelected: branch.isCurrent, isDisabled: branch.isCurrent || snapshot.operation != nil) {
             model.checkout(branch: branch)
         }.contextMenu {
             Button(branch.isRemote ? "Checkout tracking branch" : "Checkout branch") { model.checkout(branch: branch) }
-                .disabled(branch.isCurrent)
+                .disabled(branch.isCurrent || snapshot.operation != nil)
             if branch.isCurrent {
                 Divider()
                 Button("Pull (fast-forward only)") { model.pull() }
@@ -401,6 +401,7 @@ private struct SidebarButton: View {
     var subtitle: String
     var systemImage: String
     var isSelected: Bool
+    var isDisabled = false
     var action: () -> Void
 
     var body: some View {
@@ -433,6 +434,7 @@ private struct SidebarButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .padding(.horizontal, 8)
         .help(title)
     }

@@ -25,3 +25,5 @@
 - Capture all displayed fetch and push URLs for a remote; verify the destination before Pull, Push, and Publish so a changed remote address cannot redirect the operation.
 - Guard Create and checkout branch while the built-in editor has unsaved text, just like other actions that change the checkout.
 - Check the starting branch and HEAD before switching, so a delayed click cannot stash or switch an unexpected checkout.
+- Refuse branch switching during an unfinished Git operation before creating any stash; disable checkout controls while that operation is shown.
+- Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
