@@ -690,9 +690,15 @@ import Testing
     try runGit(["config", "push.followTags", "true"], in: root)
     try runGit(["config", "remote.origin.mirror", "true"], in: root)
 
-    try git.push(expectedBranch: "main", expectedHead: main.headHash, in: root)
+    try git.push(expectedBranch: "main", expectedHead: main.headHash, expectedUpstream: main.upstream, in: root)
     #expect(try git.commitMessage(hash: "refs/heads/feature", in: remote).contains("Base"))
     #expect(throws: (any Error).self) { try runGit(["show-ref", "--verify", "refs/tags/unwanted"], in: remote) }
+    try runGit(["update-ref", "refs/remotes/origin/other", try #require(main.headHash)], in: root)
+    try runGit(["branch", "--set-upstream-to=origin/other", "main"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.push(expectedBranch: "main", expectedHead: main.headHash, expectedUpstream: main.upstream, in: root)
+    }
+    try runGit(["branch", "--set-upstream-to=origin/main", "main"], in: root)
     try runGit(["commit", "--allow-empty", "-m", "New main"], in: root)
     #expect(throws: (any Error).self) {
         try git.push(expectedBranch: "main", expectedHead: main.headHash, in: root)
@@ -732,6 +738,7 @@ import Testing
     let selectedHead = try #require(selected.headHash)
     try runGit(["remote", "add", "origin", remote.path], in: root)
     try runGit(["push", "--set-upstream", "origin", "main"], in: root)
+    let selectedUpstream = try #require(git.loadSnapshot(at: root).upstream)
     try runGit(["commit", "--allow-empty", "-m", "Remote advancement"], in: root)
     let remoteHead = try #require(git.loadSnapshot(at: root).headHash)
     try runGit(["push", "origin", "main"], in: root)
@@ -740,12 +747,18 @@ import Testing
 
     // Act
     #expect(throws: (any Error).self) {
-        try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, in: root)
+        try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, expectedUpstream: selectedUpstream, in: root)
     }
     try runGit(["switch", selected.currentBranch], in: root)
-    try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, in: root)
+    try runGit(["update-ref", "refs/remotes/origin/other", selectedHead], in: root)
+    try runGit(["branch", "--set-upstream-to=origin/other", selected.currentBranch], in: root)
     #expect(throws: (any Error).self) {
-        try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, in: root)
+        try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, expectedUpstream: selectedUpstream, in: root)
+    }
+    try runGit(["branch", "--set-upstream-to=origin/main", selected.currentBranch], in: root)
+    try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, expectedUpstream: selectedUpstream, in: root)
+    #expect(throws: (any Error).self) {
+        try git.pull(expectedBranch: selected.currentBranch, expectedHead: selectedHead, expectedUpstream: selectedUpstream, in: root)
     }
 
     // Assert

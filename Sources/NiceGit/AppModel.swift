@@ -511,8 +511,9 @@ final class AppModel: ObservableObject {
         guard requireSavedFileEdits(before: "pulling") else { return }
         let branch = snapshot?.currentBranch
         let head = snapshot?.headHash
+        let upstream = snapshot?.upstream
         runRepositoryAction { git, url in
-            try git.pull(expectedBranch: branch, expectedHead: head, in: url)
+            try git.pull(expectedBranch: branch, expectedHead: head, expectedUpstream: upstream, in: url)
         }
     }
 
@@ -522,7 +523,7 @@ final class AppModel: ObservableObject {
             return
         }
         runRepositoryAction { git, url in
-            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: url)
+            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, expectedUpstream: snapshot.upstream, in: url)
         }
     }
 

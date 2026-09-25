@@ -21,3 +21,4 @@
 - Check a selected branch tip again after the worktree destination dialog closes, before creating the worktree.
 - Capture branch and HEAD for Pull before dispatch; a delayed Pull must not run on a checkout that changed after the click.
 - Capture branch and HEAD when opening a Create at HEAD dialog; check them again before creating and checking out the new branch.
+- Capture the displayed upstream for Pull and Push, and reject a changed tracking target before fetching or pushing.

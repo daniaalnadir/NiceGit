@@ -561,7 +561,7 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws {
+    public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, in repositoryURL: URL) throws {
         if expectedBranch != nil || expectedHead != nil {
             let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -572,10 +572,13 @@ public struct GitClient: Sendable {
                 throw GitClientError.commandFailed(command: "pull", message: "The current branch changed since Pull was selected. Refresh and review it again.")
             }
         }
+        if let expectedUpstream {
+            try requireUpstream(expectedUpstream, command: "pull", in: repositoryURL)
+        }
         try run(["pull", "--ff-only"], in: repositoryURL)
     }
 
-    public func push(expectedBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws {
+    public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, in repositoryURL: URL) throws {
         let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let head = try run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)
@@ -591,8 +594,19 @@ public struct GitClient: Sendable {
         guard remote != ".", !remote.isEmpty, upstream.hasPrefix("refs/heads/") else {
             throw GitClientError.commandFailed(command: "push", message: "Set a remote branch as the upstream before pushing.")
         }
+        if let expectedUpstream {
+            try requireUpstream(expectedUpstream, command: "push", in: repositoryURL)
+        }
         try run(["remote", "get-url", "--push", "--", remote], in: repositoryURL)
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, head + ":" + upstream], in: repositoryURL)
+    }
+
+    private func requireUpstream(_ expected: String, command: String, in repositoryURL: URL) throws {
+        let current = (try? run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], in: repositoryURL))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard current == expected else {
+            throw GitClientError.commandFailed(command: command, message: "The upstream branch changed since this action was selected. Refresh and review it again.")
+        }
     }
 
     private func repositoryRoot(for selectedURL: URL) throws -> String {
