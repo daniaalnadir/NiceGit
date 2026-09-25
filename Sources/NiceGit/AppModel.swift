@@ -46,7 +46,7 @@ final class AppModel: ObservableObject {
     var canRedoCommit: Bool { canMoveCommitHistory(undone: true) }
 
     private func canMoveCommitHistory(undone: Bool) -> Bool {
-        guard !isLoading, let step = commitHistoryStep, let snapshot else { return false }
+        guard !isLoading, !fileReviewHasEdits, let step = commitHistoryStep, let snapshot else { return false }
         return step.undone == undone && snapshot.rootPath == step.path && snapshot.currentBranch == step.branch
             && snapshot.headHash == (undone ? step.before : step.after) && snapshot.operation == nil
     }
@@ -71,6 +71,14 @@ final class AppModel: ObservableObject {
         alert.addButton(withTitle: "Discard edits")
         guard alert.runModal() == .alertSecondButtonReturn else { return false }
         fileReviewHasEdits = false
+        return true
+    }
+
+    private func requireSavedFileEdits(before action: String) -> Bool {
+        guard !fileReviewHasEdits else {
+            errorMessage = "Save or discard your unsaved file edits before \(action)."
+            return false
+        }
         return true
     }
 
@@ -129,6 +137,8 @@ final class AppModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard confirmDiscardFileEdits() else { return }
+        fileReviewSelection = nil
         perform(at: url, action: { git, url in try git.initialize(at: url) }, onSuccess: { self.showingRepositorySettings = true })
     }
 
@@ -149,6 +159,7 @@ final class AppModel: ObservableObject {
     }
 
     func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil) {
+        guard requireSavedFileEdits(before: "starting a Git operation") else { return }
         let head = expectedHead ?? snapshot?.headHash
         let branch = expectedBranch ?? snapshot?.currentBranch
         runRepositoryAction { git, url in
@@ -157,32 +168,41 @@ final class AppModel: ObservableObject {
     }
 
     func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String) {
-        runRepositoryAction { git, url in
+        guard requireSavedFileEdits(before: "resetting") else { return }
+        let reviewID = fileReviewSelection?.id
+        runRepositoryAction({ git, url in
             try git.reset(to: target, mode: mode, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url)
-        }
+        }, onSuccess: {
+            if self.fileReviewSelection?.id == reviewID { self.fileReviewSelection = nil }
+        })
     }
 
     func continueOperation() {
+        guard requireSavedFileEdits(before: "continuing the Git operation") else { return }
         guard let operation = snapshot?.operation else { return }
         runRepositoryAction { git, url in try git.continueOperation(operation, in: url) }
     }
 
     func abortOperation() {
+        guard requireSavedFileEdits(before: "aborting the Git operation") else { return }
         guard let operation = snapshot?.operation else { return }
         runRepositoryAction { git, url in try git.abortOperation(operation, in: url) }
     }
 
     func saveStash(message: String, includeUntracked: Bool, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "stashing") else { return }
         runRepositoryAction({ git, url in
             try git.saveStash(message: message, includeUntracked: includeUntracked, in: url)
         }, onSuccess: onSuccess)
     }
 
     func applyStash(_ stash: GitStash) {
+        guard requireSavedFileEdits(before: "applying a stash") else { return }
         runRepositoryAction { git, url in try git.applyStash(stash, in: url) }
     }
 
     func popStash(_ stash: GitStash) {
+        guard requireSavedFileEdits(before: "popping a stash") else { return }
         runRepositoryAction { git, url in try git.popStash(stash, in: url) }
     }
 
@@ -198,6 +218,8 @@ final class AppModel: ObservableObject {
         panel.nameFieldStringValue = "repository"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let destination = panel.url else { return }
+        guard confirmDiscardFileEdits() else { return }
+        fileReviewSelection = nil
         showingClone = false
         perform(at: destination) { git, url in
             try git.clone(source: source, to: url)
@@ -227,6 +249,7 @@ final class AppModel: ObservableObject {
 
     func importPatch() {
         guard !isLoading, let url = repositoryURL else { return }
+        guard requireSavedFileEdits(before: "applying a patch") else { return }
         let panel = NSOpenPanel()
         panel.title = "Apply patch"
         panel.canChooseDirectories = false
@@ -405,10 +428,7 @@ final class AppModel: ObservableObject {
 
     func commit(message: String, onSuccess: @escaping () -> Void) {
         guard !isLoading, let url = repositoryURL else { return }
-        guard !fileReviewHasEdits else {
-            errorMessage = "Save or discard your unsaved file edits before committing."
-            return
-        }
+        guard requireSavedFileEdits(before: "committing") else { return }
         let reviewID = fileReviewSelection?.id
         let previous = snapshot
         perform(at: url, action: { git, url in
@@ -488,6 +508,7 @@ final class AppModel: ObservableObject {
     }
 
     func pull() {
+        guard requireSavedFileEdits(before: "pulling") else { return }
         runRepositoryAction { git, url in
             try git.pull(in: url)
         }

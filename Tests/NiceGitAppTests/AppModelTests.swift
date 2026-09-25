@@ -189,6 +189,65 @@ struct AppModelTests {
     #expect(!model.canUndoCommit)
 }
 
+@Test @MainActor func hardResetDoesNotRunWhileFileEditorHasUnsavedChanges() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    let base = try #require(git.loadSnapshot(at: root).headHash)
+    try "current\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Current", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let current = try #require(model.snapshot?.headHash)
+    model.fileReviewSelection = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt")
+    model.fileReviewHasEdits = true
+
+    model.reset(to: base, mode: .hard, expectedHead: current, expectedBranch: "main")
+    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while model.isLoading && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+
+    #expect(!model.isLoading)
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(try git.loadSnapshot(at: root).headHash == current)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "current\n")
+    #expect(model.fileReviewHasEdits)
+
+    model.errorMessage = nil
+    model.saveStash(message: "Editor is dirty", includeUntracked: true) {}
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(!model.isLoading)
+    model.errorMessage = nil
+    model.pull()
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(!model.isLoading)
+    model.errorMessage = nil
+    model.start(.merge, target: base)
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(!model.isLoading)
+    #expect(try git.loadSnapshot(at: root).headHash == current)
+
+    model.fileReviewHasEdits = false
+    model.errorMessage = nil
+    model.reset(to: base, mode: .hard, expectedHead: current, expectedBranch: "main")
+    let successDeadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while model.isLoading && ContinuousClock.now < successDeadline { try await Task.sleep(for: .milliseconds(20)) }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage == nil)
+    #expect(model.fileReviewSelection == nil)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "base\n")
+}
+
 @Test @MainActor func openTabsDeduplicateAndCloseWithoutLosingDrafts() async throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let first = base.appendingPathComponent("first")

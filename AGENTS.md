@@ -13,3 +13,4 @@
 - Treat `git stash push` as incomplete until it creates a new stash and leaves only intentionally excluded untracked files; submodule edits can remain after Git reports success.
 - Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
 - Keep destructive action buttons and confirmation text aligned with the actual Git operation, including staged and untracked files.
+- Block Git operations that can rewrite working files while the built-in editor has unsaved text; confirm before navigation to a new checkout.
