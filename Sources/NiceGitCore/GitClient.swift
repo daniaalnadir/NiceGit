@@ -273,8 +273,9 @@ public struct GitClient: Sendable {
         let rootURL = URL(fileURLWithPath: rootPath)
         let status = try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: rootURL))
         let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=" + GitBranchParser.format], in: rootURL), includesSymref: true)
-        let branch = branches.first(where: { $0.isCurrent && !$0.name.hasPrefix("(") })?.name ?? currentBranch(in: rootURL)
-        let headHash = (try? run(["rev-parse", "--verify", "HEAD"], in: rootURL))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = branches.first(where: \.isCurrent)
+        let branch = current.flatMap { $0.name.hasPrefix("(") ? nil : $0.name } ?? currentBranch(in: rootURL)
+        let headHash = current?.tip
         let head = headHash != nil ? ["HEAD"] : []
         let commits = GitLogParser.parse(try run([
             "log",
@@ -313,10 +314,11 @@ public struct GitClient: Sendable {
             snapshot.tags.append(name)
             snapshot.tagTips[name] = String(parts[1])
         }
-        if let upstream = try? run(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], in: rootURL),
-           let counts = try? run(["rev-list", "--left-right", "--count", "HEAD...@{upstream}", "--"], in: rootURL) {
+        if let upstream = current?.upstream,
+           let counts = try? run(["rev-list", "--left-right", "--count", "HEAD..." + upstream, "--"], in: rootURL) {
             let values = counts.split(whereSeparator: { $0.isWhitespace }).compactMap { Int($0) }
-            snapshot.upstream = upstream.trimmingCharacters(in: .whitespacesAndNewlines)
+            snapshot.upstream = upstream.hasPrefix("refs/remotes/") ? String(upstream.dropFirst("refs/remotes/".count)) :
+                (upstream.hasPrefix("refs/heads/") ? String(upstream.dropFirst("refs/heads/".count)) : upstream)
             if values.count == 2 {
                 snapshot.ahead = values[0]
                 snapshot.behind = values[1]

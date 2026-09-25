@@ -1391,7 +1391,31 @@ import Testing
     try git.commit(message: "Detached commit", in: root)
     let detached = try git.loadSnapshot(at: root)
     #expect(detached.currentBranch.hasPrefix("Detached HEAD"))
+    #expect(detached.headHash == detached.commits.first?.hash)
     #expect(detached.commits.first?.subject == "Detached commit")
+}
+
+@Test func snapshotShowsLocalUpstreamAndDivergence() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["switch", "-c", "feature"], in: root)
+    try runGit(["branch", "--set-upstream-to=main", "feature"], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Feature work"], in: root)
+    try runGit(["switch", "main"], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Main work"], in: root)
+    try runGit(["switch", "feature"], in: root)
+
+    let snapshot = try git.loadSnapshot(at: root)
+    #expect(snapshot.currentBranch == "feature")
+    #expect(snapshot.headHash == snapshot.branches.first { $0.isCurrent }?.tip)
+    #expect(snapshot.upstream == "main")
+    #expect(snapshot.ahead == 1)
+    #expect(snapshot.behind == 1)
 }
 
 @Test func branchManagementPreservesUnmergedWork() throws {

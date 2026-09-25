@@ -29,3 +29,4 @@
 - Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
 - Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
 - Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
+- Derive HEAD and upstream from the already-read branch listing during snapshot refresh, retaining ahead/behind validation while avoiding redundant Git processes.
