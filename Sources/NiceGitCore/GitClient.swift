@@ -123,7 +123,7 @@ public struct GitClient: Sendable {
         try run([operation.rawValue, "--abort"], in: url)
     }
 
-    private func currentOperation(in url: URL) throws -> GitOperation? {
+    public func currentOperation(in url: URL) throws -> GitOperation? {
         let markers: [(String, GitOperation)] = [("rebase-merge", .rebase), ("rebase-apply", .rebase), ("MERGE_HEAD", .merge), ("CHERRY_PICK_HEAD", .cherryPick), ("REVERT_HEAD", .revert)]
         var gitDirectory = try run(["rev-parse", "--absolute-git-dir"], in: url)
         if gitDirectory.hasSuffix("\n") { gitDirectory.removeLast() }
@@ -342,6 +342,10 @@ public struct GitClient: Sendable {
 
     public func loadStatus(in repositoryURL: URL) throws -> [GitStatusEntry] {
         try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: repositoryURL))
+    }
+
+    public func loadStatusWithCheckout(in repositoryURL: URL) throws -> (entries: [GitStatusEntry], branch: String?, headHash: String?, isComplete: Bool) {
+        GitStatusParser.parseWithCheckout(try run(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], in: repositoryURL))
     }
 
     public func stage(path: String, in repositoryURL: URL) throws {

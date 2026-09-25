@@ -591,9 +591,15 @@ final class AppModel: ObservableObject {
                 let updated = try await Task.detached {
                     let git = GitClient()
                     if statusOnly, var cached = previous, cached.rootPath == url.path {
-                        cached.status = try git.loadStatus(in: url)
-                        cached.lastUpdated = Date()
-                        return cached
+                        let current = try git.loadStatusWithCheckout(in: url)
+                        let sameBranch = current.branch == cached.currentBranch ||
+                            (current.branch == "(detached)" && cached.currentBranch.hasPrefix("Detached HEAD "))
+                        if current.isComplete, sameBranch, current.headHash == cached.headHash,
+                           try git.currentOperation(in: url) == cached.operation {
+                            cached.status = current.entries
+                            cached.lastUpdated = Date()
+                            return cached
+                        }
                     }
                     return try loadSnapshot(git, url, limit)
                 }.value

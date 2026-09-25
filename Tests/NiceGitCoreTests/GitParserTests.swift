@@ -58,6 +58,26 @@ import Testing
     #expect(entries[0].id != entries[1].id)
 }
 
+@Test func quickStatusParserKeepsCheckoutAndExactPaths() {
+    let output = "# branch.oid abc123\0# branch.head topic\0" +
+        "2 R. N... 100644 100644 100644 abc abc R100 new name.txt\0old.txt\0" +
+        "?  leading.txt\0" +
+        "u UU N... 100644 100644 100644 100644 abc def ghi conflict.txt\0"
+    let parsed = GitStatusParser.parseWithCheckout(output)
+    #expect(parsed.isComplete)
+    #expect(parsed.branch == "topic")
+    #expect(parsed.headHash == "abc123")
+    #expect(parsed.entries.map(\.path) == ["new name.txt", " leading.txt", "conflict.txt"])
+    #expect(parsed.entries[0].originalPath == "old.txt")
+    #expect(parsed.entries[0].kind == .renamed)
+    #expect(parsed.entries[0].indexStatus == "R")
+    #expect(parsed.entries[0].workTreeStatus == " ")
+    #expect(parsed.entries[1].kind == .untracked)
+    #expect(parsed.entries[2].kind == .conflicted)
+    #expect(GitStatusParser.parseWithCheckout("# branch.oid (initial)\0# branch.head main\0").headHash == nil)
+    #expect(!GitStatusParser.parseWithCheckout("# branch.oid abc123\0# branch.head main\0new-format path\0").isComplete)
+}
+
 @Test func statusParserClassifiesStagedUnstagedAndRenamedFiles() {
     let output = """
      M Sources/App.swift

@@ -43,6 +43,47 @@ struct AppModelTests {
     }
 }
 
+@Test @MainActor func stagingAfterExternalCheckoutReloadsBranchAndHistory() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let base = try #require(model.snapshot?.headHash)
+
+    try git.createBranch(named: "external", in: root)
+    try "changed\n".write(to: file, atomically: true, encoding: .utf8)
+    model.stageAll()
+    let firstDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < firstDeadline { try await Task.sleep(for: .milliseconds(20)) }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage == nil)
+    #expect(model.snapshot?.currentBranch == "external")
+    #expect(model.snapshot?.headHash == base)
+    #expect(model.snapshot?.stagedCount == 1)
+
+    try git.commit(message: "External commit", in: root)
+    let newHead = try #require(git.loadSnapshot(at: root).headHash)
+    try "more changes\n".write(to: file, atomically: true, encoding: .utf8)
+    model.stageAll()
+    let secondDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < secondDeadline { try await Task.sleep(for: .milliseconds(20)) }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage == nil)
+    #expect(model.snapshot?.headHash == newHead)
+    #expect(model.snapshot?.commits.first?.hash == newHead)
+}
+
 @Test @MainActor func terminalToggleRefreshesChangesAndRespectsBusyState() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

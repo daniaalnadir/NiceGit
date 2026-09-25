@@ -2,6 +2,25 @@ import Foundation
 import NiceGitCore
 import Testing
 
+@Test func quickStatusMatchesFullStatusForRenamesAndLiteralPaths() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "base\n".write(to: root.appendingPathComponent("old.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try runGit(["mv", "old.txt", "new name.txt"], in: root)
+    try "new\n".write(to: root.appendingPathComponent(" leading.txt"), atomically: true, encoding: .utf8)
+    let quick = try git.loadStatusWithCheckout(in: root)
+    #expect(quick.isComplete)
+    #expect(quick.branch == "main")
+    #expect(quick.headHash == (try git.loadSnapshot(at: root)).headHash)
+    #expect(quick.entries == (try git.loadStatus(in: root)))
+}
+
 @Test func commitFileChangeKindsIncludeRootAndDeletedPaths() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
