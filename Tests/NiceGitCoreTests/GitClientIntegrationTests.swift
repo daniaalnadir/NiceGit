@@ -172,6 +172,53 @@ import Testing
     #expect(try git.loadSnapshot(at: root).headHash == advanced.headHash)
 }
 
+@Test func integrationRejectsMovedSourceBranchBeforeMergeOrRebase() throws {
+    // Arrange
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "base\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    let original = try git.loadSnapshot(at: root)
+    let head = try #require(original.headHash)
+    try runGit(["switch", "-c", "feature"], in: root)
+    try "first\n".write(to: root.appendingPathComponent("feature.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "First", in: root)
+    let selectedTip = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["switch", original.currentBranch], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/feature", selectedTip], in: root)
+    let local = GitBranch(name: "feature", isCurrent: false, isRemote: false, tip: selectedTip, subject: "First")
+    let remote = GitBranch(name: "remotes/origin/feature", isCurrent: false, isRemote: true, tip: selectedTip, subject: "First")
+    try runGit(["switch", "feature"], in: root)
+    try "second\n".write(to: root.appendingPathComponent("feature.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Second", in: root)
+    let newerTip = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["switch", original.currentBranch], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/feature", newerTip], in: root)
+
+    // Act
+    for source in [local, remote] {
+        for operation in [GitOperation.merge, .rebase] {
+            #expect(throws: (any Error).self) {
+                try git.start(operation, target: selectedTip, expectedHead: head, expectedBranch: original.currentBranch, expectedSourceBranch: source, in: root)
+            }
+        }
+    }
+
+    // Assert
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.headHash == head)
+    #expect(after.currentBranch == original.currentBranch)
+    #expect(after.operation == nil)
+    #expect(after.status.isEmpty)
+}
+
 @Test func stashPopRestoresChangesAndKeepsStashOnFailure() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -791,7 +838,13 @@ import Testing
     #expect(throws: (any Error).self) { try git.createBranch(named: "selected-tip", startingAt: "HEAD", in: root) }
     #expect(throws: (any Error).self) { try git.createBranch(named: "invalid name", startingAt: base, in: root) }
     #expect(throws: (any Error).self) { try git.createBranch(named: "missing", startingAt: "missing-target", in: root) }
-    #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "selected-tip" }?.tip == base)
+    let selectedSource = GitBranch(name: "selected-tip", isCurrent: false, isRemote: false, tip: base, subject: "Base")
+    try runGit(["branch", "--force", "selected-tip", "HEAD"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.createBranch(named: "stale-source", startingAt: base, expectedSourceBranch: selectedSource, in: root)
+    }
+    #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "stale-source" } == nil)
+    #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "selected-tip" }?.tip == before.headHash)
 }
 
 @Test func repositoryRootPreservesTrailingWhitespace() throws {

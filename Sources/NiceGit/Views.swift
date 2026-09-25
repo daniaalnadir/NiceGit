@@ -138,7 +138,7 @@ private struct RepositorySidebar: View {
         .confirmationDialog(integrationTitle, isPresented: Binding(get: { integrationRequest != nil }, set: { if !$0 { integrationRequest = nil } })) {
             if let request = integrationRequest {
                 Button(request.operation == .rebase ? "Rebase branch" : "Merge branch") {
-                    model.start(request.operation, target: request.branch.tip, expectedHead: request.head, expectedBranch: request.currentBranch)
+                    model.start(request.operation, target: request.branch.tip, expectedHead: request.head, expectedBranch: request.currentBranch, expectedSourceBranch: request.branch)
                     integrationRequest = nil
                 }
             }

@@ -16,3 +16,5 @@
 - Block Git operations that can rewrite working files while the built-in editor has unsaved text; confirm before navigation to a new checkout.
 - Capture branch and HEAD when showing a commit-operation confirmation, and pass both to Git so a stale dialog cannot act on a different checkout.
 - Check the selected local or remote branch tip before checkout; a ref that moved after display should be reviewed again before switching.
+- For merge and rebase confirmations, verify the selected source branch still points to the displayed commit as well as checking the current checkout.
+- When creating a branch from a selected branch, verify that source ref still points to its displayed commit before creating the new ref.

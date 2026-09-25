@@ -158,12 +158,12 @@ final class AppModel: ObservableObject {
         }, onSuccess: { self.showingPublish = false })
     }
 
-    func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil) {
+    func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil) {
         guard requireSavedFileEdits(before: "starting a Git operation") else { return }
         let head = expectedHead ?? snapshot?.headHash
         let branch = expectedBranch ?? snapshot?.currentBranch
         runRepositoryAction { git, url in
-            try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, in: url)
+            try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, expectedSourceBranch: expectedSourceBranch, in: url)
         }
     }
 
@@ -489,7 +489,7 @@ final class AppModel: ObservableObject {
 
     func createBranch(named name: String, from branch: GitBranch, onSuccess: @escaping () -> Void) {
         runRepositoryAction({ git, url in
-            try git.createBranch(named: name, startingAt: branch.tip, in: url)
+            try git.createBranch(named: name, startingAt: branch.tip, expectedSourceBranch: branch, in: url)
         }, onSuccess: onSuccess)
     }
 

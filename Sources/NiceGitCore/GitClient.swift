@@ -82,7 +82,7 @@ public struct GitClient: Sendable {
         return address
     }
 
-    public func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, in url: URL) throws {
+    public func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil, in url: URL) throws {
         let snapshot = try loadSnapshot(at: url)
         guard expectedHead == nil || snapshot.headHash == expectedHead,
               expectedBranch == nil || snapshot.currentBranch == expectedBranch else {
@@ -93,6 +93,12 @@ public struct GitClient: Sendable {
         }
         let hash = try run(["rev-parse", "--verify", "--end-of-options", target + "^{commit}"], in: url)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let expectedSourceBranch {
+            try requireSelectedBranchTip(expectedSourceBranch, command: operation.rawValue, in: url)
+            guard hash == expectedSourceBranch.tip else {
+                throw GitClientError.commandFailed(command: operation.rawValue, message: "The selected branch changed since this action was selected. Refresh and review it again.")
+            }
+        }
         var arguments = [operation.rawValue]
         if operation == .merge || operation == .revert { arguments.append("--no-edit") }
         if let mainline, operation == .revert || operation == .cherryPick { arguments += ["--mainline", String(mainline)] }
@@ -409,6 +415,17 @@ public struct GitClient: Sendable {
         }
     }
 
+    private func requireSelectedBranchTip(_ branch: GitBranch, command: String, in url: URL) throws {
+        let reference = branch.isRemote
+            ? "refs/" + branch.name
+            : "refs/heads/" + branch.name
+        let current = try run(["rev-parse", "--verify", "--end-of-options", reference], in: url)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard current == branch.tip else {
+            throw GitClientError.commandFailed(command: command, message: "The selected branch changed since this action was selected. Refresh and review it again.")
+        }
+    }
+
     @discardableResult
     public func checkoutRemote(branch: String, expectedTip: String? = nil, in url: URL) throws -> Bool {
         let reference: String
@@ -506,12 +523,18 @@ public struct GitClient: Sendable {
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
     }
 
-    public func createBranch(named name: String, startingAt target: String, in url: URL) throws {
+    public func createBranch(named name: String, startingAt target: String, expectedSourceBranch: GitBranch? = nil, in url: URL) throws {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw GitClientError.emptyBranchName }
         try run(["check-ref-format", "--branch", name], in: url)
         let commit = try run(["rev-parse", "--verify", "--end-of-options", target + "^{commit}"], in: url)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let expectedSourceBranch {
+            try requireSelectedBranchTip(expectedSourceBranch, command: "branch", in: url)
+            guard commit == expectedSourceBranch.tip else {
+                throw GitClientError.commandFailed(command: "branch", message: "The selected branch changed since this action was selected. Refresh and review it again.")
+            }
+        }
         try run(["branch", "--no-track", "--", name, commit], in: url)
     }
 
