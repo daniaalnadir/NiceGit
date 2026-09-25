@@ -223,7 +223,7 @@ private struct CommitReferences: View {
     private func pairedRemote(_ local: GitBranch) -> GitBranch? {
         guard !local.isRemote else { return nil }
         return refs.compactMap { branch($0) }.first {
-            $0.isRemote && ($0.displayName == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
+            $0.isRemote && ("refs/" + $0.name == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
         }
     }
 
