@@ -461,8 +461,8 @@ final class AppModel: ObservableObject {
         let outcome = BranchSwitchOutcome()
         runRepositoryAction({ git, url in
             let savedChanges: Bool
-            if branch.isRemote { savedChanges = try git.checkoutRemote(branch: branch.name, in: url) }
-            else { savedChanges = try git.checkout(branch: branch.name, in: url) }
+            if branch.isRemote { savedChanges = try git.checkoutRemote(branch: branch.name, expectedTip: branch.tip, in: url) }
+            else { savedChanges = try git.checkout(branch: branch.name, expectedTip: branch.tip, in: url) }
             outcome.record(savedChanges)
         }, onSuccess: {
             self.fileReviewSelection = nil

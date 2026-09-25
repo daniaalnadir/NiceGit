@@ -8,7 +8,7 @@ struct GraphWorkspace: View {
     @EnvironmentObject private var model: AppModel
     @State private var query = ""
     @State private var hoveredCommitHash: String?
-    @State private var commitToRevert: GitCommit?
+    @State private var revertRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
     private let referenceWidth: CGFloat = 220
@@ -133,7 +133,9 @@ struct GraphWorkspace: View {
                                         Button("Cherry-pick commit...") {
                                             cherryPickRequest = (commit, snapshot.currentBranch, snapshot.headHash)
                                         }.disabled(snapshot.operation != nil)
-                                        Button("Revert commit...") { commitToRevert = commit }
+                                        Button("Revert commit...") {
+                                            revertRequest = (commit, snapshot.currentBranch, snapshot.headHash)
+                                        }
                                         Button("Create tag...") { model.taggingCommit = commit }
                                         Menu("Reset \(snapshot.currentBranch) to this commit") {
                                             ForEach(GitResetMode.allCases, id: \.self) { mode in
@@ -186,16 +188,20 @@ struct GraphWorkspace: View {
         } message: {
             Text("Copies this change into a new commit on the current branch. Conflicts may need resolving. For a merge, choose the parent to use as the baseline for the copied changes.")
         }
-        .confirmationDialog("Revert \(commitToRevert?.shortHash ?? "") on \(snapshot.currentBranch)?", isPresented: Binding(get: { commitToRevert != nil }, set: { if !$0 { commitToRevert = nil } })) {
-            if let commit = commitToRevert {
-                if commit.parents.count > 1 {
-                    ForEach(Array(commit.parents.enumerated()), id: \.offset) { index, parent in
+        .confirmationDialog("Revert \(revertRequest?.commit.shortHash ?? "") on \(revertRequest?.branch ?? "")?", isPresented: Binding(get: { revertRequest != nil }, set: { if !$0 { revertRequest = nil } })) {
+            if let request = revertRequest {
+                if request.commit.parents.count > 1 {
+                    ForEach(Array(request.commit.parents.enumerated()), id: \.offset) { index, parent in
                         Button("Revert relative to parent \(index + 1) (\(parent.prefix(8)))") {
-                            model.start(.revert, target: commit.hash, mainline: index + 1)
+                            model.start(.revert, target: request.commit.hash, mainline: index + 1,
+                                        expectedHead: request.head, expectedBranch: request.branch)
                         }
                     }
                 } else {
-                    Button("Create revert commit") { model.start(.revert, target: commit.hash) }
+                    Button("Create revert commit") {
+                        model.start(.revert, target: request.commit.hash,
+                                    expectedHead: request.head, expectedBranch: request.branch)
+                    }
                 }
             }
         } message: {

@@ -371,8 +371,9 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    public func checkout(branch: String, in repositoryURL: URL) throws -> Bool {
-        try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--", branch], to: branch, in: repositoryURL)
+    public func checkout(branch: String, expectedTip: String? = nil, in repositoryURL: URL) throws -> Bool {
+        if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: repositoryURL) }
+        return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--", branch], to: branch, in: repositoryURL)
     }
 
     public func amendMessage(_ message: String, expectedHead: String, in url: URL) throws {
@@ -409,19 +410,27 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    public func checkoutRemote(branch: String, in url: URL) throws -> Bool {
+    public func checkoutRemote(branch: String, expectedTip: String? = nil, in url: URL) throws -> Bool {
         let reference: String
         if branch.hasPrefix("refs/remotes/") { reference = branch }
         else if branch.hasPrefix("remotes/") { reference = "refs/" + branch }
         else { reference = "refs/remotes/" + branch }
-        try run(["show-ref", "--verify", "--quiet", reference], in: url)
+        if let expectedTip {
+            let current = try run(["rev-parse", "--verify", "--end-of-options", reference], in: url)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard current == expectedTip else {
+                throw GitClientError.commandFailed(command: "checkout remote branch", message: "This remote branch changed since it was selected. Refresh and review it again.")
+            }
+        } else {
+            try run(["show-ref", "--verify", "--quiet", reference], in: url)
+        }
         let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)"], in: url))
         let tracking = branches.filter { !$0.isRemote && $0.upstream == reference }
         if tracking.count > 1 {
             throw GitClientError.commandFailed(command: "checkout remote branch", message: "Several local branches track this remote branch. Choose the desired branch in Local.")
         }
         if let existing = tracking.first {
-            return try checkout(branch: existing.name, in: url)
+            return try checkout(branch: existing.name, expectedTip: existing.tip, in: url)
         } else {
             return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--track", "--", reference], to: reference, in: url)
         }

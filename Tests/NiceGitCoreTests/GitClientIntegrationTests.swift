@@ -144,7 +144,7 @@ import Testing
     let original = try git.loadSnapshot(at: root)
     let head = try #require(original.headHash)
     try runGit(["switch", "-c", "other-checkout"], in: root)
-    for operation in [GitOperation.merge, .rebase] {
+    for operation in [GitOperation.merge, .rebase, .cherryPick, .revert] {
         #expect(throws: (any Error).self) {
             try git.start(operation, target: head, expectedHead: head, expectedBranch: original.currentBranch, in: root)
         }
@@ -159,7 +159,7 @@ import Testing
     try git.stageAll(in: root)
     try git.commit(message: "Advanced outside confirmation", in: root)
     let advanced = try git.loadSnapshot(at: root)
-    for operation in [GitOperation.merge, .rebase] {
+    for operation in [GitOperation.merge, .rebase, .cherryPick, .revert] {
         #expect(throws: (any Error).self) {
             try git.start(operation, target: head, expectedHead: head, expectedBranch: original.currentBranch, in: root)
         }
@@ -381,6 +381,38 @@ import Testing
     #expect(after.stashes.isEmpty)
     #expect(after.status.count == 1)
     #expect(try String(contentsOf: file, encoding: .utf8) == "changed\n")
+}
+
+@Test func branchSwitchRejectsSelectedLocalAndRemoteTipsThatMoved() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["branch", "feature"], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/remote-feature", "HEAD"], in: root)
+    let selected = try git.loadSnapshot(at: root)
+    let oldLocal = try #require(selected.branches.first { $0.name == "feature" }?.tip)
+    let oldRemote = try #require(selected.branches.first { $0.name == "remotes/origin/remote-feature" }?.tip)
+    try runGit(["commit", "--allow-empty", "-m", "Advanced main"], in: root)
+    try runGit(["branch", "--force", "feature", "main"], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/remote-feature", "HEAD"], in: root)
+    let current = try git.loadSnapshot(at: root)
+
+    #expect(throws: (any Error).self) {
+        try git.checkout(branch: "feature", expectedTip: oldLocal, in: root)
+    }
+    #expect(throws: (any Error).self) {
+        try git.checkoutRemote(branch: "remotes/origin/remote-feature", expectedTip: oldRemote, in: root)
+    }
+    #expect(try git.loadSnapshot(at: root).currentBranch == "main")
+    #expect(try git.loadSnapshot(at: root).stashes.isEmpty)
+    #expect(try git.loadSnapshot(at: root).branches.allSatisfy { $0.name != "remote-feature" })
+    let newLocal = try #require(current.branches.first { $0.name == "feature" }?.tip)
+    try git.checkout(branch: "feature", expectedTip: newLocal, in: root)
+    #expect(try git.loadSnapshot(at: root).currentBranch == "feature")
 }
 
 @Test func branchSwitchKeepsDirtySubmoduleAndExistingStash() throws {
