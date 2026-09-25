@@ -358,6 +358,7 @@ import Testing
     try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
     try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
     let head = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["remote", "add", "origin", root.path], in: root)
     try runGit(["update-ref", "refs/remotes/team/shared/main", head], in: root)
     try runGit(["symbolic-ref", "refs/remotes/team/shared/HEAD", "refs/remotes/team/shared/main"], in: root)
     try runGit(["update-ref", "refs/remotes/origin/topic/HEAD", head], in: root)
@@ -370,6 +371,8 @@ import Testing
         try git.checkoutRemote(branch: "remotes/team/shared/HEAD", expectedTip: head, in: root)
     }
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
+    try git.checkoutRemote(branch: "remotes/origin/topic/HEAD", expectedTip: head, in: root)
+    #expect(try git.loadSnapshot(at: root).currentBranch == "topic/HEAD")
 }
 
 @Test func linkedWorktreeWithNewlinePathDetectsGitOperation() throws {

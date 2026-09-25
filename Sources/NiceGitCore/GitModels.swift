@@ -168,7 +168,7 @@ public struct GitBranch: Identifiable, Equatable, Sendable {
     }
 
     public var displayName: String {
-        name.replacingOccurrences(of: "remotes/", with: "")
+        name.hasPrefix("remotes/") ? String(name.dropFirst("remotes/".count)) : name
     }
 }
 

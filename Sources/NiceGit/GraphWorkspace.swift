@@ -224,14 +224,13 @@ private struct CommitReferences: View {
         guard !local.isRemote else { return nil }
         return refs.compactMap { branch($0) }.first {
             $0.isRemote && ($0.displayName == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
-                && !$0.name.hasSuffix("/HEAD")
         }
     }
 
     private var ordered: [String] {
         let pairedNames = Set(refs.compactMap { branch($0) }.compactMap { pairedRemote($0)?.name })
         return refs.filter { ref in
-            if snapshot.remotes.contains(where: { ref == "\($0)/HEAD" || ref == "remotes/\($0)/HEAD" }) { return false }
+            if branch(ref) == nil && snapshot.remotes.contains(where: { ref == "\($0)/HEAD" || ref == "remotes/\($0)/HEAD" }) { return false }
             if ref == "HEAD" { return !snapshot.branches.contains(where: { $0.isCurrent }) }
             guard let branch = branch(ref) else { return true }
             return !pairedNames.contains(branch.name)
@@ -258,7 +257,7 @@ private struct CommitReferences: View {
     }
 
     private func checkout(_ ref: String) {
-        guard let branch = branch(ref), !branch.isCurrent, !(branch.isRemote && branch.name.hasSuffix("/HEAD")),
+        guard let branch = branch(ref), !branch.isCurrent,
               snapshot.operation == nil, !model.isLoading,
               model.confirmDiscardFileEdits() else { return }
         showingReferences = false

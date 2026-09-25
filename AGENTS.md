@@ -31,3 +31,5 @@
 - Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
 - Derive HEAD and upstream from the already-read branch listing during snapshot refresh, retaining ahead/behind validation while avoiding redundant Git processes.
 - Keep current HEAD in the visible history even when other branches consume the first log page; fetch it separately only when outside the existing page.
+- Let parsed branch metadata decide whether a remote ref is a symbolic HEAD alias; a real branch can end in HEAD and remain usable from the graph.
+- Strip the leading `remotes/` prefix only when displaying a remote branch; nested branch names may contain that text legitimately.

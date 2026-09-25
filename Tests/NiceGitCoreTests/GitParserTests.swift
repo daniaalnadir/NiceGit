@@ -42,11 +42,12 @@ import Testing
 }
 
 @Test func fullReferencesDistinguishRemoteFromLocalBranches() {
-    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote")
+    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/remotes/origin/topic/remotes/demo\t\tabc\tNested")
     #expect(entries[0].name == "origin/main")
     #expect(!entries[0].isRemote)
     #expect(entries[1].isRemote)
     #expect(entries[1].displayName == "origin/main")
+    #expect(entries[2].displayName == "origin/topic/remotes/demo")
 }
 
 @Test func statusParserClassifiesStagedUnstagedAndRenamedFiles() {
