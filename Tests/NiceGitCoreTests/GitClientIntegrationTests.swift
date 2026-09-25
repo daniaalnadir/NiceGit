@@ -768,6 +768,59 @@ import Testing
     #expect(after.status.isEmpty)
 }
 
+@Test func remoteActionsRejectChangedDestination() throws {
+    // Arrange
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let originalRemote = base.appendingPathComponent("original.git")
+    let replacementRemote = base.appendingPathComponent("replacement.git")
+    for directory in [root, originalRemote, replacementRemote] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try runGit(["init", "--bare"], in: originalRemote)
+    try runGit(["init", "--bare"], in: replacementRemote)
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["remote", "add", "origin", originalRemote.path], in: root)
+    try runGit(["push", "--set-upstream", "origin", "main"], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Unpushed work"], in: root)
+    let selected = try git.loadSnapshot(at: root)
+    let head = try #require(selected.headHash)
+    try runGit(["remote", "set-url", "origin", replacementRemote.path], in: root)
+
+    // Act
+    for action in ["pull", "push", "pushBranch", "publish"] {
+        do {
+            switch action {
+            case "pull":
+                try git.pull(expectedBranch: selected.currentBranch, expectedHead: head, expectedUpstream: selected.upstream, expectedFetchAddresses: selected.remoteFetchAddresses, in: root)
+            case "push":
+                try git.push(expectedBranch: selected.currentBranch, expectedHead: head, expectedUpstream: selected.upstream, expectedPushAddresses: selected.remotePushAddresses, in: root)
+            case "pushBranch":
+                try git.pushBranch("main", to: "origin", expectedTip: head, expectedPushAddresses: selected.remotePushAddresses, in: root)
+            default:
+                try git.publish(remote: "origin", expectedBranch: selected.currentBranch, expectedHead: head, expectedPushAddresses: selected.remotePushAddresses, in: root)
+            }
+            Issue.record("\(action) accepted a changed remote address")
+        } catch {
+            #expect(error.localizedDescription.contains("remote address changed"))
+        }
+    }
+
+    // Assert
+    #expect(throws: (any Error).self) { try runGit(["show-ref", "--verify", "refs/heads/main"], in: replacementRemote) }
+    #expect(try git.commitMessage(hash: "refs/heads/main", in: originalRemote).contains("Base"))
+    try runGit(["remote", "set-url", "origin", originalRemote.path], in: root)
+    try git.pull(expectedBranch: selected.currentBranch, expectedHead: head, expectedUpstream: selected.upstream, expectedFetchAddresses: selected.remoteFetchAddresses, in: root)
+    try git.pushBranch("main", to: "origin", expectedTip: head, expectedPushAddresses: selected.remotePushAddresses, in: root)
+    try git.push(expectedBranch: selected.currentBranch, expectedHead: head, expectedUpstream: selected.upstream, expectedPushAddresses: selected.remotePushAddresses, in: root)
+    try git.publish(remote: "origin", expectedBranch: selected.currentBranch, expectedHead: head, expectedPushAddresses: selected.remotePushAddresses, in: root)
+    #expect(try git.commitMessage(hash: "refs/heads/main", in: originalRemote).contains("Unpushed work"))
+}
+
 @Test func revertPreservesHistoryAndSupportsConflictAbortAndContinue() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

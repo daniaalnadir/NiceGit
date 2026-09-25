@@ -13,6 +13,10 @@ import Testing
     #expect(addresses["backup"] == "ssh://git@example.org/project.git")
     #expect((try? GitHubRepository(remoteAddress: addresses["origin"]!)) != nil)
     #expect((try? GitHubRepository(remoteAddress: addresses["backup"]!)) == nil)
+    #expect(GitRemoteParser.allAddresses(output, direction: "fetch")["origin"] == ["git@github.com:example/project.git"])
+    #expect(GitRemoteParser.allAddresses(output, direction: "push")["origin"] == ["https://elsewhere.example/project.git"])
+    let multiple = "origin\thttps://first.example/project.git (push)\norigin\thttps://second.example/project.git (push)\n"
+    #expect(GitRemoteParser.allAddresses(multiple, direction: "push")["origin"] == ["https://first.example/project.git", "https://second.example/project.git"])
 }
 
 @Test func exactPathsAndConflictStatesArePreserved() {

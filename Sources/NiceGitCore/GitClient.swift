@@ -298,6 +298,8 @@ public struct GitClient: Sendable {
             remotes: remotes
         )
         snapshot.remoteAddresses = GitRemoteParser.addresses(remoteOutput)
+        snapshot.remoteFetchAddresses = GitRemoteParser.allAddresses(remoteOutput, direction: "fetch")
+        snapshot.remotePushAddresses = GitRemoteParser.allAddresses(remoteOutput, direction: "push")
         snapshot.stashes = try listStashes(in: rootURL)
         snapshot.headHash = headHash
         snapshot.worktrees = GitWorktree.parse(try run(["worktree", "list", "--porcelain", "-z"], in: rootURL))
@@ -495,12 +497,15 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func publish(remote: String, expectedBranch: String? = nil, expectedHead: String? = nil, in url: URL) throws {
+    public func publish(remote: String, expectedBranch: String? = nil, expectedHead: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in url: URL) throws {
         let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
         let head = try run(["rev-parse", "--verify", "HEAD"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
         guard (expectedBranch == nil || expectedBranch == branch),
               (expectedHead == nil || expectedHead == head) else {
             throw GitClientError.commandFailed(command: "publish", message: "The current branch changed since it was selected. Refresh and review the publish again.")
+        }
+        if let expectedPushAddresses {
+            try requireRemoteAddresses(expectedPushAddresses, remote: remote, push: true, command: "publish", in: url)
         }
         try run(["remote", "get-url", "--push", "--", remote], in: url)
         let reference = "refs/heads/" + branch
@@ -522,9 +527,12 @@ public struct GitClient: Sendable {
         try run(["checkout", "-b", trimmedName], in: repositoryURL)
     }
 
-    public func pushBranch(_ branch: String, to remote: String, expectedTip: String? = nil, in url: URL) throws {
+    public func pushBranch(_ branch: String, to remote: String, expectedTip: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in url: URL) throws {
         if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: url) }
         else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: url) }
+        if let expectedPushAddresses {
+            try requireRemoteAddresses(expectedPushAddresses, remote: remote, push: true, command: "push", in: url)
+        }
         try run(["remote", "get-url", "--push", "--", remote], in: url)
         let reference = "refs/heads/" + branch
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
@@ -561,7 +569,7 @@ public struct GitClient: Sendable {
         }
     }
 
-    public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, in repositoryURL: URL) throws {
+    public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedFetchAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {
         if expectedBranch != nil || expectedHead != nil {
             let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -575,10 +583,17 @@ public struct GitClient: Sendable {
         if let expectedUpstream {
             try requireUpstream(expectedUpstream, command: "pull", in: repositoryURL)
         }
+        if let expectedFetchAddresses {
+            let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let remote = try run(["config", "--get", "branch." + branch + ".remote"], in: repositoryURL)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            try requireRemoteAddresses(expectedFetchAddresses, remote: remote, push: false, command: "pull", in: repositoryURL)
+        }
         try run(["pull", "--ff-only"], in: repositoryURL)
     }
 
-    public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, in repositoryURL: URL) throws {
+    public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {
         let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let head = try run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)
@@ -597,6 +612,9 @@ public struct GitClient: Sendable {
         if let expectedUpstream {
             try requireUpstream(expectedUpstream, command: "push", in: repositoryURL)
         }
+        if let expectedPushAddresses {
+            try requireRemoteAddresses(expectedPushAddresses, remote: remote, push: true, command: "push", in: repositoryURL)
+        }
         try run(["remote", "get-url", "--push", "--", remote], in: repositoryURL)
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, head + ":" + upstream], in: repositoryURL)
     }
@@ -606,6 +624,15 @@ public struct GitClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard current == expected else {
             throw GitClientError.commandFailed(command: command, message: "The upstream branch changed since this action was selected. Refresh and review it again.")
+        }
+    }
+
+    private func requireRemoteAddresses(_ expected: [String: [String]], remote: String, push: Bool, command: String, in repositoryURL: URL) throws {
+        let arguments = ["remote", "get-url"] + (push ? ["--push"] : []) + ["--all", "--", remote]
+        let current = (try? run(arguments, in: repositoryURL))?
+            .split(separator: "\n").map(String.init)
+        guard let displayed = expected[remote], !displayed.isEmpty, current == displayed else {
+            throw GitClientError.commandFailed(command: command, message: "The remote address changed since this action was selected. Refresh and review it again.")
         }
     }
 

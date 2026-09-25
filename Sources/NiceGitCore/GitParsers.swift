@@ -139,6 +139,16 @@ public enum GitLogParser {
 }
 
 public enum GitRemoteParser {
+    public static func allAddresses(_ output: String, direction: String) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        let suffix = " (" + direction + ")"
+        for line in output.split(separator: "\n") where line.hasSuffix(suffix) {
+            let fields = line.dropLast(suffix.count).split(separator: "\t", maxSplits: 1)
+            if fields.count == 2 { result[String(fields[0]), default: []].append(String(fields[1])) }
+        }
+        return result
+    }
+
     public static func addresses(_ output: String) -> [String: String] {
         var result: [String: String] = [:]
         for line in output.split(separator: "\n") where line.hasSuffix(" (fetch)") {

@@ -153,8 +153,9 @@ final class AppModel: ObservableObject {
     func publish(remote: String) {
         let branch = snapshot?.currentBranch
         let head = snapshot?.headHash
+        let addresses = snapshot?.remotePushAddresses
         runRepositoryAction({ git, url in
-            try git.publish(remote: remote, expectedBranch: branch, expectedHead: head, in: url)
+            try git.publish(remote: remote, expectedBranch: branch, expectedHead: head, expectedPushAddresses: addresses, in: url)
         }, onSuccess: { self.showingPublish = false })
     }
 
@@ -512,8 +513,9 @@ final class AppModel: ObservableObject {
         let branch = snapshot?.currentBranch
         let head = snapshot?.headHash
         let upstream = snapshot?.upstream
+        let addresses = snapshot?.remoteFetchAddresses
         runRepositoryAction { git, url in
-            try git.pull(expectedBranch: branch, expectedHead: head, expectedUpstream: upstream, in: url)
+            try git.pull(expectedBranch: branch, expectedHead: head, expectedUpstream: upstream, expectedFetchAddresses: addresses, in: url)
         }
     }
 
@@ -523,13 +525,14 @@ final class AppModel: ObservableObject {
             return
         }
         runRepositoryAction { git, url in
-            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, expectedUpstream: snapshot.upstream, in: url)
+            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, expectedUpstream: snapshot.upstream, expectedPushAddresses: snapshot.remotePushAddresses, in: url)
         }
     }
 
     func push(_ branch: GitBranch, to remote: String) {
         guard !branch.isRemote else { return }
-        runRepositoryAction { git, url in try git.pushBranch(branch.name, to: remote, expectedTip: branch.tip, in: url) }
+        let addresses = snapshot?.remotePushAddresses
+        runRepositoryAction { git, url in try git.pushBranch(branch.name, to: remote, expectedTip: branch.tip, expectedPushAddresses: addresses, in: url) }
     }
 
     func copyCommitLink(hash: String, remote: String) {
