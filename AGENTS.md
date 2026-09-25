@@ -28,3 +28,4 @@
 - Refuse branch switching during an unfinished Git operation before creating any stash; disable checkout controls while that operation is shown.
 - Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
 - Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
+- Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.

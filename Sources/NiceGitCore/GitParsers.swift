@@ -77,12 +77,14 @@ public enum GitStatusParser {
 }
 
 public enum GitBranchParser {
-    public static func parse(_ output: String) -> [GitBranch] {
+    public static let format = "%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)%09%(symref)"
+
+    public static func parse(_ output: String, includesSymref: Bool = false) -> [GitBranch] {
         output
             .split(separator: "\n", omittingEmptySubsequences: true)
             .compactMap { line in
                 let fields = String(line).components(separatedBy: "\t")
-                guard fields.count >= 4 else {
+                guard fields.count >= (includesSymref ? 6 : 4) else {
                     return nil
                 }
 
@@ -90,14 +92,16 @@ public enum GitBranchParser {
                 let isRemote = name.hasPrefix("refs/remotes/") || name.hasPrefix("remotes/")
                 let normalizedName = name.hasPrefix("refs/heads/") ? String(name.dropFirst(11)) :
                     (name.hasPrefix("refs/remotes/") ? String(name.dropFirst(5)) : name)
-                if isRemote && normalizedName.split(separator: "/").count == 3 && normalizedName.hasSuffix("/HEAD") { return nil }
+                if isRemote && (includesSymref ? !fields[fields.count - 1].isEmpty : normalizedName.split(separator: "/").count == 3 && normalizedName.hasSuffix("/HEAD")) { return nil }
+                let subjectEnd = fields.count - (includesSymref ? 2 : (fields.count > 4 ? 1 : 0))
                 return GitBranch(
                     name: normalizedName,
                     isCurrent: fields[1] == "*",
                     isRemote: isRemote,
                     tip: fields[2],
-                    subject: fields.count > 4 ? fields[3..<(fields.count - 1)].joined(separator: "\t") : fields[3],
-                    upstream: fields.count > 4 && fields.last != "" ? fields.last : nil
+                    subject: fields[3..<subjectEnd].joined(separator: "\t"),
+                    upstream: fields.count > 4 && fields[includesSymref ? fields.count - 2 : fields.count - 1] != ""
+                        ? fields[includesSymref ? fields.count - 2 : fields.count - 1] : nil
                 )
             }
     }

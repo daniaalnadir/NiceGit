@@ -349,6 +349,29 @@ import Testing
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
 }
 
+@Test func remoteHeadAliasesAreNotShownAsBranches() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    let head = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["update-ref", "refs/remotes/team/shared/main", head], in: root)
+    try runGit(["symbolic-ref", "refs/remotes/team/shared/HEAD", "refs/remotes/team/shared/main"], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/topic/HEAD", head], in: root)
+
+    let branches = try git.loadSnapshot(at: root).branches
+    #expect(branches.contains { $0.name == "remotes/team/shared/main" })
+    #expect(branches.contains { $0.name == "remotes/origin/topic/HEAD" })
+    #expect(branches.allSatisfy { $0.name != "remotes/team/shared/HEAD" })
+    #expect(throws: (any Error).self) {
+        try git.checkoutRemote(branch: "remotes/team/shared/HEAD", expectedTip: head, in: root)
+    }
+    #expect(try git.loadSnapshot(at: root).currentBranch == "main")
+}
+
 @Test func linkedWorktreeWithNewlinePathDetectsGitOperation() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("repository\nwith newline")

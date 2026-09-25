@@ -4,6 +4,16 @@ import Testing
 @Test func remoteHeadAliasIsNotABranch() {
     let entries = GitBranchParser.parse("refs/remotes/origin/HEAD\t\tabc\tAlias\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/heads/topic/HEAD\t*\tabc\tLocal")
     #expect(entries.map(\.name) == ["remotes/origin/main", "topic/HEAD"])
+    let withSymbolicRefs = GitBranchParser.parse(
+        "refs/remotes/team/shared/HEAD\t \tabc\tAlias\t\trefs/remotes/team/shared/main\n" +
+        "refs/remotes/team/shared/main\t \tabc\tRemote\t\t\n" +
+        "refs/remotes/origin/topic/HEAD\t \tabc\tReal branch\t\t\n" +
+        "refs/heads/main\t*\tabc\tSubject\twith tab\trefs/remotes/origin/main\t",
+        includesSymref: true
+    )
+    #expect(withSymbolicRefs.map(\.name) == ["remotes/team/shared/main", "remotes/origin/topic/HEAD", "main"])
+    #expect(withSymbolicRefs.last?.subject == "Subject\twith tab")
+    #expect(withSymbolicRefs.last?.upstream == "refs/remotes/origin/main")
 }
 
 @Test func remoteAddressesUseFetchURLsForProviderIdentity() {

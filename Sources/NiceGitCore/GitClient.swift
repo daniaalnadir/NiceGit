@@ -272,7 +272,7 @@ public struct GitClient: Sendable {
         let rootPath = try repositoryRoot(for: selectedURL)
         let rootURL = URL(fileURLWithPath: rootPath)
         let status = try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: rootURL))
-        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)"], in: rootURL))
+        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=" + GitBranchParser.format], in: rootURL), includesSymref: true)
         let branch = branches.first(where: { $0.isCurrent && !$0.name.hasPrefix("(") })?.name ?? currentBranch(in: rootURL)
         let headHash = (try? run(["rev-parse", "--verify", "HEAD"], in: rootURL))?.trimmingCharacters(in: .whitespacesAndNewlines)
         let head = headHash != nil ? ["HEAD"] : []
@@ -448,7 +448,10 @@ public struct GitClient: Sendable {
         } else {
             try run(["show-ref", "--verify", "--quiet", reference], in: url)
         }
-        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)"], in: url))
+        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=" + GitBranchParser.format], in: url), includesSymref: true)
+        guard branches.contains(where: { $0.isRemote && "refs/" + $0.name == reference }) else {
+            throw GitClientError.commandFailed(command: "checkout remote branch", message: "This remote branch is no longer available. Refresh and select a branch again.")
+        }
         let tracking = branches.filter { !$0.isRemote && $0.upstream == reference }
         if tracking.count > 1 {
             throw GitClientError.commandFailed(command: "checkout remote branch", message: "Several local branches track this remote branch. Choose the desired branch in Local.")
