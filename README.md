@@ -17,7 +17,7 @@ Built with SwiftUI and AppKit. Released under the [MIT License](LICENSE).
 | --- | --- |
 | Visual history | Follow a parent-linked branch and merge graph, inspect commits, and see the working tree connected to HEAD. |
 | Repositories | Open, initialize, or clone repositories; switch between saved tabs in a separate collapsible sidebar. |
-| Branches and worktrees | Browse local and remote branches, create linked worktrees, switch checkouts, and use context menus for branch actions. |
+| Branches and worktrees | Browse local and remote branches, create linked worktrees, switch checkouts, and use context menus for branch actions. Switching with uncommitted changes saves staged, unstaged, and untracked files in a named stash for later restoration. |
 | Changes and commits | Separate resizable Unstaged and Staged panes, inline red/green diffs, editable working-file lines, individual-line staging and unstaging, and per-checkout commit drafts. |
 | Everyday Git | Fetch, pull, push, publish branches, manage stashes and tags, and import or export patches. |
 | History and conflicts | Merge, rebase, cherry-pick, revert, reset with confirmation, and resolve text or binary conflicts. |

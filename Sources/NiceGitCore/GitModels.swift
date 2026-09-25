@@ -16,11 +16,14 @@ public struct RepositorySnapshot: Equatable, Sendable {
     public var commits: [GitCommit]
     public var remotes: [String]
     public var remoteAddresses: [String: String] = [:]
+    public var remoteFetchAddresses: [String: [String]] = [:]
+    public var remotePushAddresses: [String: [String]] = [:]
     public var lastUpdated: Date
     public var stashes: [GitStash] = []
     public var operation: GitOperation?
     public var hasMoreCommits = false
     public var tags: [String] = []
+    public var tagTips: [String: String] = [:]
     public var upstream: String?
     public var ahead: Int?
     public var behind: Int?
@@ -127,7 +130,7 @@ public struct GitStatusEntry: Identifiable, Equatable, Sendable {
     }
 
     public var id: String {
-        "\(originalPath ?? "")|\(path)|\(indexStatus)\(workTreeStatus)"
+        "\(originalPath ?? "")\0\(path)\0\(indexStatus)\(workTreeStatus)"
     }
 
     public var fileName: String {
@@ -161,11 +164,11 @@ public struct GitBranch: Identifiable, Equatable, Sendable {
     }
 
     public var id: String {
-        name
+        "\(isRemote ? "remote" : "local")\0\(name)"
     }
 
     public var displayName: String {
-        name.replacingOccurrences(of: "remotes/", with: "")
+        name.hasPrefix("remotes/") ? String(name.dropFirst("remotes/".count)) : name
     }
 }
 

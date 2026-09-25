@@ -5,12 +5,13 @@ private struct RepositorySidebar: View {
     @State private var newBranchName = ""
     @State private var showingNewBranch = false
     @State private var branchSource: GitBranch?
+    @State private var newBranchCheckout: (branch: String, head: String?)?
     @State private var branchToRename: GitBranch?
     @State private var branchToDelete: GitBranch?
     @State private var pushRequest: (branch: GitBranch, remote: String)?
     @State private var integrationRequest: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?)?
     @State private var renamedBranchName = ""
-    @State private var tagToDelete: String?
+    @State private var tagToDelete: (name: String, tip: String)?
     @State private var referenceQuery = ""
     @State private var resetRequest: ResetRequest?
 
@@ -45,8 +46,12 @@ private struct RepositorySidebar: View {
                         Button { referenceQuery = "" } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain).help("Clear filter")
                     }
-                    Button { branchSource = nil; showingNewBranch = true } label: { Image(systemName: "plus") }
-                        .buttonStyle(.plain).help("Create branch")
+                    Button {
+                        branchSource = nil
+                        newBranchCheckout = (snapshot.currentBranch, snapshot.headHash)
+                        showingNewBranch = true
+                    } label: { Image(systemName: "plus") }
+                        .buttonStyle(.plain).help("Create branch").disabled(snapshot.operation != nil)
                 }.padding(.horizontal, 16).padding(.bottom, 12)
 
                 ScrollView {
@@ -100,7 +105,9 @@ private struct RepositorySidebar: View {
                             ForEach(tags, id: \.self) { tag in
                                 SidebarButton(title: tag, subtitle: "", systemImage: "tag", isSelected: false) { model.inspectTag(tag) }
                                     .contextMenu {
-                                        Button("Delete local tag...", role: .destructive) { tagToDelete = tag }
+                                        Button("Delete local tag...", role: .destructive) {
+                                            if let tip = snapshot.tagTips[tag] { tagToDelete = (tag, tip) }
+                                        }
                                     }
                             }
                         }
@@ -136,7 +143,7 @@ private struct RepositorySidebar: View {
         .confirmationDialog(integrationTitle, isPresented: Binding(get: { integrationRequest != nil }, set: { if !$0 { integrationRequest = nil } })) {
             if let request = integrationRequest {
                 Button(request.operation == .rebase ? "Rebase branch" : "Merge branch") {
-                    model.start(request.operation, target: request.branch.tip, expectedHead: request.head, expectedBranch: request.currentBranch)
+                    model.start(request.operation, target: request.branch.tip, expectedHead: request.head, expectedBranch: request.currentBranch, expectedSourceBranch: request.branch)
                     integrationRequest = nil
                 }
             }
@@ -160,17 +167,17 @@ private struct RepositorySidebar: View {
             Button(branchSource == nil ? "Create and checkout" : "Create branch") {
                 if let branchSource {
                     model.createBranch(named: newBranchName, from: branchSource) { newBranchName = "" }
-                } else {
-                    model.createBranch(named: newBranchName) { newBranchName = "" }
+                } else if let newBranchCheckout {
+                    model.createBranch(named: newBranchName, expectedBranch: newBranchCheckout.branch, expectedHead: newBranchCheckout.head) { newBranchName = "" }
                 }
             }
-                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (branchSource == nil && (newBranchCheckout == nil || model.snapshot?.operation != nil)))
         }
 
 
-        .confirmationDialog("Delete local tag \(tagToDelete ?? "")?", isPresented: Binding(get: { tagToDelete != nil }, set: { if !$0 { tagToDelete = nil } })) {
+        .confirmationDialog("Delete local tag \(tagToDelete?.name ?? "")?", isPresented: Binding(get: { tagToDelete != nil }, set: { if !$0 { tagToDelete = nil } })) {
             if let tagToDelete {
-                Button("Delete local tag", role: .destructive) { model.deleteTag(name: tagToDelete) }
+                Button("Delete local tag", role: .destructive) { model.deleteTag(name: tagToDelete.name, expectedTip: tagToDelete.tip) }
             }
         }
         .alert("Rename branch", isPresented: Binding(get: { branchToRename != nil }, set: { if !$0 { branchToRename = nil } })) {
@@ -200,11 +207,11 @@ private struct RepositorySidebar: View {
     }
 
     private func branchRow(_ branch: GitBranch, snapshot: RepositorySnapshot) -> some View {
-        SidebarButton(title: branch.displayName, subtitle: "", systemImage: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch", isSelected: branch.isCurrent) {
+        SidebarButton(title: branch.displayName, subtitle: "", systemImage: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch", isSelected: branch.isCurrent, isDisabled: branch.isCurrent || snapshot.operation != nil) {
             model.checkout(branch: branch)
         }.contextMenu {
             Button(branch.isRemote ? "Checkout tracking branch" : "Checkout branch") { model.checkout(branch: branch) }
-                .disabled(branch.isCurrent)
+                .disabled(branch.isCurrent || snapshot.operation != nil)
             if branch.isCurrent {
                 Divider()
                 Button("Pull (fast-forward only)") { model.pull() }
@@ -344,11 +351,12 @@ struct ContentView: View {
             if phase == .active { model.refreshOnActivation() }
         }
         .disabled(model.isLoading)
-        .overlay(alignment: .bottomLeading) {
+        .overlay {
             if model.isLoading {
-                Button("Cancel operation") { model.cancelOperation() }
-                    .padding(12)
-                    .background(.regularMaterial)
+                ProgressView()
+                    .controlSize(.large)
+                    .padding(22)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .sheet(item: $model.diffSelection, onDismiss: model.refreshAfterReview) { selection in
@@ -362,15 +370,15 @@ struct ContentView: View {
         .sheet(item: $model.taggingCommit, onDismiss: model.refreshAfterReview) { TagView(commit: $0) }
         .sheet(item: $model.editingCommitMessage, onDismiss: model.refreshAfterReview) { CommitMessageView(commit: $0) }
         .alert(
-            "Git needs attention",
+            model.errorMessage == nil ? "Branch switched" : "Git needs attention",
             isPresented: Binding(
-                get: { model.errorMessage != nil },
-                set: { if !$0 { model.errorMessage = nil } }
+                get: { model.errorMessage != nil || model.noticeMessage != nil },
+                set: { if !$0 { model.errorMessage = nil; model.noticeMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(model.errorMessage ?? "")
+            Text(model.errorMessage ?? model.noticeMessage ?? "")
         }
     }
 }
@@ -393,6 +401,7 @@ private struct SidebarButton: View {
     var subtitle: String
     var systemImage: String
     var isSelected: Bool
+    var isDisabled = false
     var action: () -> Void
 
     var body: some View {
@@ -425,6 +434,7 @@ private struct SidebarButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .padding(.horizontal, 8)
         .help(title)
     }
@@ -539,16 +549,6 @@ private struct WorkbenchView: View {
         .onChange(of: selectedCommit?.hash) { commitDiff = nil }
         .onChange(of: snapshot.stashes) { _, stashes in
             if let selected = selectedStash { selectedStash = stashes.first { $0.hash == selected.hash } }
-        }
-        .overlay(alignment: .top) {
-            if model.isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(12)
-                    .background(.thinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .padding(.top, 14)
-            }
         }
     }
 }
@@ -809,15 +809,16 @@ private struct FileChangeRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.plain)
-            .disabled(entry.kind == .untracked || primaryHelp == "Unstage file")
-            .help("Discard local change")
+            .help("Discard all changes to this file")
         }
         .padding(.horizontal, 6).padding(.vertical, 7)
         .frame(minHeight: 34)
         .confirmationDialog("Discard changes to \(entry.fileName)?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive, action: discard)
         } message: {
-            Text("Unstaged changes to this file will be lost.")
+            Text(entry.kind == .untracked
+                ? "This untracked file will be deleted."
+                : "All staged and unstaged changes to this file will be lost. Newly added files will be deleted.")
         }
     }
 

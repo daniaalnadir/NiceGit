@@ -1,0 +1,38 @@
+# NiceGit working notes
+
+- A branch switch must preserve staged, unstaged, and untracked changes. Keep the saved stash visible, and restore the original checkout if the switch fails.
+- When reducing repository refresh calls, retain detached-HEAD and linked-worktree behavior in integration tests.
+- Check busy state before changing repository selection or editor state. Base post-operation notices on the Git result rather than a possibly stale snapshot.
+- Git metadata paths can contain newlines; use a single absolute Git directory path and remove only Git's final line terminator. Validate that a selected stash is still listed before applying it.
+- For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
+- Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
+- Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
+- Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
+- Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.
+- Treat `git stash push` as incomplete until it creates a new stash and leaves only intentionally excluded untracked files; submodule edits can remain after Git reports success.
+- Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
+- Keep destructive action buttons and confirmation text aligned with the actual Git operation, including staged and untracked files.
+- Block Git operations that can rewrite working files while the built-in editor has unsaved text; confirm before navigation to a new checkout.
+- Capture branch and HEAD when showing a commit-operation confirmation, and pass both to Git so a stale dialog cannot act on a different checkout.
+- Check the selected local or remote branch tip before checkout; a ref that moved after display should be reviewed again before switching.
+- For merge and rebase confirmations, verify the selected source branch still points to the displayed commit as well as checking the current checkout.
+- When creating a branch from a selected branch, verify that source ref still points to its displayed commit before creating the new ref.
+- Check a selected branch tip again after the worktree destination dialog closes, before creating the worktree.
+- Capture branch and HEAD for Pull before dispatch; a delayed Pull must not run on a checkout that changed after the click.
+- Capture branch and HEAD when opening a Create at HEAD dialog; check them again before creating and checking out the new branch.
+- Capture the displayed upstream for Pull and Push, and reject a changed tracking target before fetching or pushing.
+- Capture all displayed fetch and push URLs for a remote; verify the destination before Pull, Push, and Publish so a changed remote address cannot redirect the operation.
+- Guard Create and checkout branch while the built-in editor has unsaved text, just like other actions that change the checkout.
+- Check the starting branch and HEAD before switching, so a delayed click cannot stash or switch an unexpected checkout.
+- Refuse branch switching during an unfinished Git operation before creating any stash; disable checkout controls while that operation is shown.
+- Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
+- Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
+- Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
+- Derive HEAD and upstream from the already-read branch listing during snapshot refresh, retaining ahead/behind validation while avoiding redundant Git processes.
+- Keep current HEAD in the visible history even when other branches consume the first log page; fetch it separately only when outside the existing page.
+- Let parsed branch metadata decide whether a remote ref is a symbolic HEAD alias; a real branch can end in HEAD and remain usable from the graph.
+- Strip the leading `remotes/` prefix only when displaying a remote branch; nested branch names may contain that text legitimately.
+- Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
+- Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
+- Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.

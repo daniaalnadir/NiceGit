@@ -6,6 +6,7 @@ struct RepositoryActionBar: View {
     @EnvironmentObject private var model: AppModel
     let snapshot: RepositorySnapshot
     @State private var newBranch = false
+    @State private var newBranchCheckout: (branch: String, head: String?)?
     @State private var branchName = ""
     @State private var stashToPop: GitStash?
     @State private var historyAction: Bool?
@@ -37,8 +38,12 @@ struct RepositoryActionBar: View {
         .alert("Create and checkout branch", isPresented: $newBranch) {
             TextField("Branch name", text: $branchName)
             Button("Cancel", role: .cancel) {}
-            Button("Create branch") { model.createBranch(named: branchName) { branchName = "" } }
-                .disabled(branchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Create branch") {
+                if let newBranchCheckout {
+                    model.createBranch(named: branchName, expectedBranch: newBranchCheckout.branch, expectedHead: newBranchCheckout.head) { branchName = "" }
+                }
+            }
+                .disabled(branchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newBranchCheckout == nil)
         }
         .confirmationDialog("Apply and remove this stash?", isPresented: Binding(get: { stashToPop != nil }, set: { if !$0 { stashToPop = nil } })) {
             if let stash = stashToPop {
@@ -97,7 +102,10 @@ struct RepositoryActionBar: View {
             }
             action("Push", icon: "arrow.up.to.line", help: "Push or publish current branch") { model.push() }
                 .disabled(snapshot.remotes.isEmpty)
-            action("Branch", icon: "arrow.triangle.branch", help: "Create a branch") { newBranch = true }
+            action("Branch", icon: "arrow.triangle.branch", help: "Create a branch") {
+                newBranchCheckout = (snapshot.currentBranch, snapshot.headHash)
+                newBranch = true
+            }
                 .disabled(snapshot.operation != nil)
             action("Stash", icon: "archivebox", help: "Stash working changes") {
                 guard model.confirmDiscardFileEdits() else { return }

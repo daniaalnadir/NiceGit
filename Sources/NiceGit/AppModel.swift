@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var recentRepositories: [RepositoryBookmark]
     @Published private(set) var openRepositories: [RepositoryBookmark] = []
     @Published var errorMessage: String?
+    @Published var noticeMessage: String?
     @Published var isLoading = false
     @Published var showingTerminal = false
     @Published private(set) var activeTerminal: TerminalSession?
@@ -45,7 +46,7 @@ final class AppModel: ObservableObject {
     var canRedoCommit: Bool { canMoveCommitHistory(undone: true) }
 
     private func canMoveCommitHistory(undone: Bool) -> Bool {
-        guard !isLoading, let step = commitHistoryStep, let snapshot else { return false }
+        guard !isLoading, !fileReviewHasEdits, let step = commitHistoryStep, let snapshot else { return false }
         return step.undone == undone && snapshot.rootPath == step.path && snapshot.currentBranch == step.branch
             && snapshot.headHash == (undone ? step.before : step.after) && snapshot.operation == nil
     }
@@ -73,6 +74,14 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    private func requireSavedFileEdits(before action: String) -> Bool {
+        guard !fileReviewHasEdits else {
+            errorMessage = "Save or discard your unsaved file edits before \(action)."
+            return false
+        }
+        return true
+    }
+
     func closeFileReview() {
         guard confirmDiscardFileEdits() else { return }
         fileReviewSelection = nil
@@ -91,18 +100,15 @@ final class AppModel: ObservableObject {
         commitDrafts[path] = message.isEmpty ? nil : message
         defaults.set(commitDrafts, forKey: draftKey)
     }
-    private var commandControl: GitCommandControl?
     private var activationRefreshPending = false
     private let snapshotLoader: @Sendable (GitClient, URL, Int) throws -> RepositorySnapshot
-
-    func cancelOperation() { commandControl?.cancel() }
 
     func createTag(name: String, target: String, message: String? = nil) {
         runRepositoryAction({ git, url in try git.createTag(name: name, target: target, message: message, in: url) }, onSuccess: { self.taggingCommit = nil })
     }
 
-    func deleteTag(name: String) {
-        runRepositoryAction { git, url in try git.deleteTag(name: name, in: url) }
+    func deleteTag(name: String, expectedTip: String) {
+        runRepositoryAction { git, url in try git.deleteTag(name: name, expectedTip: expectedTip, in: url) }
     }
 
     func amendMessage(_ message: String, for commit: GitCommit) {
@@ -131,6 +137,8 @@ final class AppModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard confirmDiscardFileEdits() else { return }
+        fileReviewSelection = nil
         perform(at: url, action: { git, url in try git.initialize(at: url) }, onSuccess: { self.showingRepositorySettings = true })
     }
 
@@ -143,44 +151,59 @@ final class AppModel: ObservableObject {
     }
 
     func publish(remote: String) {
-        runRepositoryAction({ git, url in try git.publish(remote: remote, in: url) }, onSuccess: { self.showingPublish = false })
+        let branch = snapshot?.currentBranch
+        let head = snapshot?.headHash
+        let addresses = snapshot?.remotePushAddresses
+        runRepositoryAction({ git, url in
+            try git.publish(remote: remote, expectedBranch: branch, expectedHead: head, expectedPushAddresses: addresses, in: url)
+        }, onSuccess: { self.showingPublish = false })
     }
 
-    func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil) {
+    func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil) {
+        guard requireSavedFileEdits(before: "starting a Git operation") else { return }
         let head = expectedHead ?? snapshot?.headHash
         let branch = expectedBranch ?? snapshot?.currentBranch
         runRepositoryAction { git, url in
-            try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, in: url)
+            try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, expectedSourceBranch: expectedSourceBranch, in: url)
         }
     }
 
     func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String) {
-        runRepositoryAction { git, url in
+        guard requireSavedFileEdits(before: "resetting") else { return }
+        let reviewID = fileReviewSelection?.id
+        runRepositoryAction({ git, url in
             try git.reset(to: target, mode: mode, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url)
-        }
+        }, onSuccess: {
+            if self.fileReviewSelection?.id == reviewID { self.fileReviewSelection = nil }
+        })
     }
 
     func continueOperation() {
+        guard requireSavedFileEdits(before: "continuing the Git operation") else { return }
         guard let operation = snapshot?.operation else { return }
         runRepositoryAction { git, url in try git.continueOperation(operation, in: url) }
     }
 
     func abortOperation() {
+        guard requireSavedFileEdits(before: "aborting the Git operation") else { return }
         guard let operation = snapshot?.operation else { return }
         runRepositoryAction { git, url in try git.abortOperation(operation, in: url) }
     }
 
     func saveStash(message: String, includeUntracked: Bool, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "stashing") else { return }
         runRepositoryAction({ git, url in
             try git.saveStash(message: message, includeUntracked: includeUntracked, in: url)
         }, onSuccess: onSuccess)
     }
 
     func applyStash(_ stash: GitStash) {
+        guard requireSavedFileEdits(before: "applying a stash") else { return }
         runRepositoryAction { git, url in try git.applyStash(stash, in: url) }
     }
 
     func popStash(_ stash: GitStash) {
+        guard requireSavedFileEdits(before: "popping a stash") else { return }
         runRepositoryAction { git, url in try git.popStash(stash, in: url) }
     }
 
@@ -196,6 +219,8 @@ final class AppModel: ObservableObject {
         panel.nameFieldStringValue = "repository"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let destination = panel.url else { return }
+        guard confirmDiscardFileEdits() else { return }
+        fileReviewSelection = nil
         showingClone = false
         perform(at: destination) { git, url in
             try git.clone(source: source, to: url)
@@ -211,7 +236,7 @@ final class AppModel: ObservableObject {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         runRepositoryAction { git, url in
-            try git.createWorktree(branch: branch.name, at: destination, in: url)
+            try git.createWorktree(branch: branch.name, expectedTip: branch.tip, at: destination, in: url)
         }
     }
 
@@ -225,6 +250,7 @@ final class AppModel: ObservableObject {
 
     func importPatch() {
         guard !isLoading, let url = repositoryURL else { return }
+        guard requireSavedFileEdits(before: "applying a patch") else { return }
         let panel = NSOpenPanel()
         panel.title = "Apply patch"
         panel.canChooseDirectories = false
@@ -321,6 +347,7 @@ final class AppModel: ObservableObject {
     }
 
     func openRepository() {
+        guard !isLoading else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
@@ -335,6 +362,7 @@ final class AppModel: ObservableObject {
     }
 
     func loadRepository(at url: URL) {
+        guard !isLoading else { return }
         if url.standardizedFileURL.path != repositoryURL?.standardizedFileURL.path {
             guard confirmDiscardFileEdits() else { return }
             historyLimit = 200
@@ -390,17 +418,18 @@ final class AppModel: ObservableObject {
     }
 
     func discard(_ entry: GitStatusEntry) {
+        if fileReviewSelection?.path == entry.path {
+            guard confirmDiscardFileEdits() else { return }
+            fileReviewSelection = nil
+        }
         runWorkingTreeAction { git, url in
-            try git.discard(path: entry.path, in: url)
+            try git.discard(entry, in: url)
         }
     }
 
     func commit(message: String, onSuccess: @escaping () -> Void) {
         guard !isLoading, let url = repositoryURL else { return }
-        guard !fileReviewHasEdits else {
-            errorMessage = "Save or discard your unsaved file edits before committing."
-            return
-        }
+        guard requireSavedFileEdits(before: "committing") else { return }
         let reviewID = fileReviewSelection?.id
         let previous = snapshot
         perform(at: url, action: { git, url in
@@ -422,29 +451,52 @@ final class AppModel: ObservableObject {
     }
 
     func checkout(branch: GitBranch) {
-        runRepositoryAction { git, url in
-            if branch.isRemote { try git.checkoutRemote(branch: branch.name, in: url) }
-            else { try git.checkout(branch: branch.name, in: url) }
-        }
+        guard !isLoading, !branch.isCurrent else { return }
+        let currentBranch = snapshot?.currentBranch
+        let currentHead = snapshot?.headHash
+        if branch.isRemote, snapshot?.branches.contains(where: {
+            $0.isCurrent && $0.upstream == "refs/" + branch.name
+        }) == true { return }
+        let discardEditorEdits = fileReviewHasEdits
+        guard confirmDiscardFileEdits() else { return }
+        if discardEditorEdits { fileReviewSelection = nil }
+        noticeMessage = nil
+        let outcome = BranchSwitchOutcome()
+        runRepositoryAction({ git, url in
+            let savedChanges: Bool
+            if branch.isRemote {
+                savedChanges = try git.checkoutRemote(branch: branch.name, expectedTip: branch.tip, expectedCurrentBranch: currentBranch, expectedHead: currentHead, in: url)
+            } else {
+                savedChanges = try git.checkout(branch: branch.name, expectedTip: branch.tip, expectedCurrentBranch: currentBranch, expectedHead: currentHead, in: url)
+            }
+            outcome.record(savedChanges)
+        }, onSuccess: {
+            self.fileReviewSelection = nil
+        }, onRefreshed: {
+            if outcome.savedChanges {
+                self.noticeMessage = "Your uncommitted changes were saved in Stashes before switching branches. Apply the NiceGit stash to restore them."
+            }
+        })
     }
 
     func renameBranch(_ branch: GitBranch, to name: String) {
-        runRepositoryAction { git, url in try git.renameBranch(branch.name, to: name, in: url) }
+        runRepositoryAction { git, url in try git.renameBranch(branch.name, to: name, expectedTip: branch.tip, in: url) }
     }
 
     func deleteBranch(_ branch: GitBranch) {
-        runRepositoryAction { git, url in try git.deleteBranch(branch.name, in: url) }
+        runRepositoryAction { git, url in try git.deleteBranch(branch.name, expectedTip: branch.tip, in: url) }
     }
 
-    func createBranch(named name: String, onSuccess: @escaping () -> Void) {
+    func createBranch(named name: String, expectedBranch: String? = nil, expectedHead: String? = nil, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "creating and checking out a branch") else { return }
         runRepositoryAction({ git, url in
-            try git.createBranch(named: name, in: url)
+            try git.createBranch(named: name, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }, onSuccess: onSuccess)
     }
 
     func createBranch(named name: String, from branch: GitBranch, onSuccess: @escaping () -> Void) {
         runRepositoryAction({ git, url in
-            try git.createBranch(named: name, startingAt: branch.tip, in: url)
+            try git.createBranch(named: name, startingAt: branch.tip, expectedSourceBranch: branch, in: url)
         }, onSuccess: onSuccess)
     }
 
@@ -458,29 +510,35 @@ final class AppModel: ObservableObject {
         guard !branch.isRemote else { return }
         let remoteName = remoteBranch.map { String($0.name.dropFirst("remotes/".count)) }
         runRepositoryAction { git, url in
-            try git.setUpstream(branch: branch.name, remoteBranch: remoteName, in: url)
+            try git.setUpstream(branch: branch.name, remoteBranch: remoteName, expectedTip: branch.tip, in: url)
         }
     }
 
     func pull() {
+        guard requireSavedFileEdits(before: "pulling") else { return }
+        let branch = snapshot?.currentBranch
+        let head = snapshot?.headHash
+        let upstream = snapshot?.upstream
+        let addresses = snapshot?.remoteFetchAddresses
         runRepositoryAction { git, url in
-            try git.pull(in: url)
+            try git.pull(expectedBranch: branch, expectedHead: head, expectedUpstream: upstream, expectedFetchAddresses: addresses, in: url)
         }
     }
 
     func push() {
-        guard snapshot?.upstream != nil else {
+        guard let snapshot, snapshot.upstream != nil else {
             showingPublish = true
             return
         }
         runRepositoryAction { git, url in
-            try git.push(in: url)
+            try git.push(expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, expectedUpstream: snapshot.upstream, expectedPushAddresses: snapshot.remotePushAddresses, in: url)
         }
     }
 
     func push(_ branch: GitBranch, to remote: String) {
         guard !branch.isRemote else { return }
-        runRepositoryAction { git, url in try git.pushBranch(branch.name, to: remote, in: url) }
+        let addresses = snapshot?.remotePushAddresses
+        runRepositoryAction { git, url in try git.pushBranch(branch.name, to: remote, expectedTip: branch.tip, expectedPushAddresses: addresses, in: url) }
     }
 
     func copyCommitLink(hash: String, remote: String) {
@@ -508,9 +566,9 @@ final class AppModel: ObservableObject {
         perform(at: repositoryURL, action: action, statusOnly: true)
     }
 
-    private func runRepositoryAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void, onSuccess: @escaping () -> Void = {}) {
+    private func runRepositoryAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void, onSuccess: @escaping () -> Void = {}, onRefreshed: @escaping () -> Void = {}) {
         guard let repositoryURL else { return }
-        perform(at: repositoryURL, action: action, onActionSuccess: onSuccess)
+        perform(at: repositoryURL, action: action, onActionSuccess: onSuccess, onSuccess: onRefreshed)
     }
 
     private func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
@@ -520,24 +578,28 @@ final class AppModel: ObservableObject {
         let limit = historyLimit
         let loadSnapshot = snapshotLoader
         let previous = snapshot
-        let control = GitCommandControl()
-        commandControl = control
         Task {
-            defer { isLoading = false; commandControl = nil }
+            defer { isLoading = false }
             var actionCompleted = false
             do {
                 try await Task.detached {
-                    try action(GitClient(control: control), url)
+                    try action(GitClient(), url)
                 }.value
                 // A successful mutation stays successful even if refreshing its result fails.
                 actionCompleted = true
                 onActionSuccess?()
                 let updated = try await Task.detached {
-                    let git = GitClient(control: control)
+                    let git = GitClient()
                     if statusOnly, var cached = previous, cached.rootPath == url.path {
-                        cached.status = try git.loadStatus(in: url)
-                        cached.lastUpdated = Date()
-                        return cached
+                        let current = try git.loadStatusWithCheckout(in: url)
+                        let sameBranch = current.branch == cached.currentBranch ||
+                            (current.branch == "(detached)" && cached.currentBranch.hasPrefix("Detached HEAD "))
+                        if current.isComplete, sameBranch, current.headHash == cached.headHash,
+                           try git.currentOperation(in: url) == cached.operation {
+                            cached.status = current.entries
+                            cached.lastUpdated = Date()
+                            return cached
+                        }
                     }
                     return try loadSnapshot(git, url, limit)
                 }.value
@@ -569,6 +631,23 @@ final class AppModel: ObservableObject {
         if let data = try? JSONEncoder().encode(recentRepositories) {
             defaults.set(data, forKey: recentKey)
         }
+    }
+}
+
+private final class BranchSwitchOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func record(_ savedChanges: Bool) {
+        lock.lock()
+        value = savedChanges
+        lock.unlock()
+    }
+
+    var savedChanges: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }
 

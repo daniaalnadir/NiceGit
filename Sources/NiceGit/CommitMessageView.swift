@@ -27,7 +27,6 @@ struct CommitMessageView: View {
                     .disabled(loading || error != nil || message == original || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }.padding(24).frame(width: 520).disabled(model.isLoading)
-        .operationCancellation()
         .confirmationDialog("Rewrite the HEAD commit?", isPresented: $confirming) {
             Button("Amend message") { model.amendMessage(message, for: commit) }
         } message: {

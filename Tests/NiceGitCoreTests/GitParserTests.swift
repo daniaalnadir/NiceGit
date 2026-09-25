@@ -4,6 +4,16 @@ import Testing
 @Test func remoteHeadAliasIsNotABranch() {
     let entries = GitBranchParser.parse("refs/remotes/origin/HEAD\t\tabc\tAlias\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/heads/topic/HEAD\t*\tabc\tLocal")
     #expect(entries.map(\.name) == ["remotes/origin/main", "topic/HEAD"])
+    let withSymbolicRefs = GitBranchParser.parse(
+        "refs/remotes/team/shared/HEAD\t \tabc\tAlias\t\trefs/remotes/team/shared/main\n" +
+        "refs/remotes/team/shared/main\t \tabc\tRemote\t\t\n" +
+        "refs/remotes/origin/topic/HEAD\t \tabc\tReal branch\t\t\n" +
+        "refs/heads/main\t*\tabc\tSubject\twith tab\trefs/remotes/origin/main\t",
+        includesSymref: true
+    )
+    #expect(withSymbolicRefs.map(\.name) == ["remotes/team/shared/main", "remotes/origin/topic/HEAD", "main"])
+    #expect(withSymbolicRefs.last?.subject == "Subject\twith tab")
+    #expect(withSymbolicRefs.last?.upstream == "refs/remotes/origin/main")
 }
 
 @Test func remoteAddressesUseFetchURLsForProviderIdentity() {
@@ -13,6 +23,10 @@ import Testing
     #expect(addresses["backup"] == "ssh://git@example.org/project.git")
     #expect((try? GitHubRepository(remoteAddress: addresses["origin"]!)) != nil)
     #expect((try? GitHubRepository(remoteAddress: addresses["backup"]!)) == nil)
+    #expect(GitRemoteParser.allAddresses(output, direction: "fetch")["origin"] == ["git@github.com:example/project.git"])
+    #expect(GitRemoteParser.allAddresses(output, direction: "push")["origin"] == ["https://elsewhere.example/project.git"])
+    let multiple = "origin\thttps://first.example/project.git (push)\norigin\thttps://second.example/project.git (push)\n"
+    #expect(GitRemoteParser.allAddresses(multiple, direction: "push")["origin"] == ["https://first.example/project.git", "https://second.example/project.git"])
 }
 
 @Test func exactPathsAndConflictStatesArePreserved() {
@@ -28,11 +42,40 @@ import Testing
 }
 
 @Test func fullReferencesDistinguishRemoteFromLocalBranches() {
-    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote")
+    let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/remotes/origin/topic/remotes/demo\t\tabc\tNested\nrefs/heads/remotes/origin/main\t\tabc\tLocal collision")
     #expect(entries[0].name == "origin/main")
     #expect(!entries[0].isRemote)
     #expect(entries[1].isRemote)
     #expect(entries[1].displayName == "origin/main")
+    #expect(entries[2].displayName == "origin/topic/remotes/demo")
+    #expect(entries[3].name == entries[1].name)
+    #expect(entries[3].id != entries[1].id)
+}
+
+@Test func statusEntryIdentityKeepsLiteralSeparatorPathsDistinct() {
+    let entries = GitStatusParser.parseNullTerminated("R  b|c\0a\0R  c\0a|b\0")
+    #expect(entries.count == 2)
+    #expect(entries[0].id != entries[1].id)
+}
+
+@Test func quickStatusParserKeepsCheckoutAndExactPaths() {
+    let output = "# branch.oid abc123\0# branch.head topic\0" +
+        "2 R. N... 100644 100644 100644 abc abc R100 new name.txt\0old.txt\0" +
+        "?  leading.txt\0" +
+        "u UU N... 100644 100644 100644 100644 abc def ghi conflict.txt\0"
+    let parsed = GitStatusParser.parseWithCheckout(output)
+    #expect(parsed.isComplete)
+    #expect(parsed.branch == "topic")
+    #expect(parsed.headHash == "abc123")
+    #expect(parsed.entries.map(\.path) == ["new name.txt", " leading.txt", "conflict.txt"])
+    #expect(parsed.entries[0].originalPath == "old.txt")
+    #expect(parsed.entries[0].kind == .renamed)
+    #expect(parsed.entries[0].indexStatus == "R")
+    #expect(parsed.entries[0].workTreeStatus == " ")
+    #expect(parsed.entries[1].kind == .untracked)
+    #expect(parsed.entries[2].kind == .conflicted)
+    #expect(GitStatusParser.parseWithCheckout("# branch.oid (initial)\0# branch.head main\0").headHash == nil)
+    #expect(!GitStatusParser.parseWithCheckout("# branch.oid abc123\0# branch.head main\0new-format path\0").isComplete)
 }
 
 @Test func statusParserClassifiesStagedUnstagedAndRenamedFiles() {

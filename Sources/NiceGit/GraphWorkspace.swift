@@ -8,7 +8,7 @@ struct GraphWorkspace: View {
     @EnvironmentObject private var model: AppModel
     @State private var query = ""
     @State private var hoveredCommitHash: String?
-    @State private var commitToRevert: GitCommit?
+    @State private var revertRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
     private let referenceWidth: CGFloat = 220
@@ -133,7 +133,9 @@ struct GraphWorkspace: View {
                                         Button("Cherry-pick commit...") {
                                             cherryPickRequest = (commit, snapshot.currentBranch, snapshot.headHash)
                                         }.disabled(snapshot.operation != nil)
-                                        Button("Revert commit...") { commitToRevert = commit }
+                                        Button("Revert commit...") {
+                                            revertRequest = (commit, snapshot.currentBranch, snapshot.headHash)
+                                        }
                                         Button("Create tag...") { model.taggingCommit = commit }
                                         Menu("Reset \(snapshot.currentBranch) to this commit") {
                                             ForEach(GitResetMode.allCases, id: \.self) { mode in
@@ -186,16 +188,20 @@ struct GraphWorkspace: View {
         } message: {
             Text("Copies this change into a new commit on the current branch. Conflicts may need resolving. For a merge, choose the parent to use as the baseline for the copied changes.")
         }
-        .confirmationDialog("Revert \(commitToRevert?.shortHash ?? "") on \(snapshot.currentBranch)?", isPresented: Binding(get: { commitToRevert != nil }, set: { if !$0 { commitToRevert = nil } })) {
-            if let commit = commitToRevert {
-                if commit.parents.count > 1 {
-                    ForEach(Array(commit.parents.enumerated()), id: \.offset) { index, parent in
+        .confirmationDialog("Revert \(revertRequest?.commit.shortHash ?? "") on \(revertRequest?.branch ?? "")?", isPresented: Binding(get: { revertRequest != nil }, set: { if !$0 { revertRequest = nil } })) {
+            if let request = revertRequest {
+                if request.commit.parents.count > 1 {
+                    ForEach(Array(request.commit.parents.enumerated()), id: \.offset) { index, parent in
                         Button("Revert relative to parent \(index + 1) (\(parent.prefix(8)))") {
-                            model.start(.revert, target: commit.hash, mainline: index + 1)
+                            model.start(.revert, target: request.commit.hash, mainline: index + 1,
+                                        expectedHead: request.head, expectedBranch: request.branch)
                         }
                     }
                 } else {
-                    Button("Create revert commit") { model.start(.revert, target: commit.hash) }
+                    Button("Create revert commit") {
+                        model.start(.revert, target: request.commit.hash,
+                                    expectedHead: request.head, expectedBranch: request.branch)
+                    }
                 }
             }
         } message: {
@@ -217,15 +223,14 @@ private struct CommitReferences: View {
     private func pairedRemote(_ local: GitBranch) -> GitBranch? {
         guard !local.isRemote else { return nil }
         return refs.compactMap { branch($0) }.first {
-            $0.isRemote && ($0.displayName == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
-                && !$0.name.hasSuffix("/HEAD")
+            $0.isRemote && ("refs/" + $0.name == local.upstream || $0.displayName == "origin/\(local.name)") && $0.tip == local.tip
         }
     }
 
     private var ordered: [String] {
         let pairedNames = Set(refs.compactMap { branch($0) }.compactMap { pairedRemote($0)?.name })
         return refs.filter { ref in
-            if snapshot.remotes.contains(where: { ref == "\($0)/HEAD" || ref == "remotes/\($0)/HEAD" }) { return false }
+            if branch(ref) == nil && snapshot.remotes.contains(where: { ref == "\($0)/HEAD" || ref == "remotes/\($0)/HEAD" }) { return false }
             if ref == "HEAD" { return !snapshot.branches.contains(where: { $0.isCurrent }) }
             guard let branch = branch(ref) else { return true }
             return !pairedNames.contains(branch.name)
@@ -252,7 +257,7 @@ private struct CommitReferences: View {
     }
 
     private func checkout(_ ref: String) {
-        guard let branch = branch(ref), !branch.isCurrent, !(branch.isRemote && branch.name.hasSuffix("/HEAD")),
+        guard let branch = branch(ref), !branch.isCurrent,
               snapshot.operation == nil, !model.isLoading,
               model.confirmDiscardFileEdits() else { return }
         showingReferences = false
