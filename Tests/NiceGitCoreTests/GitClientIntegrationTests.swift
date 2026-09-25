@@ -462,6 +462,51 @@ import Testing
     #expect(try git.loadSnapshot(at: root).currentBranch == "feature")
 }
 
+@Test func branchSwitchRejectsChangedStartingCheckoutBeforeStashing() throws {
+    // Arrange
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["branch", "feature"], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/remote-feature", "HEAD"], in: root)
+    let selected = try git.loadSnapshot(at: root)
+    let head = try #require(selected.headHash)
+    let localTip = try #require(selected.branches.first { $0.name == "feature" }?.tip)
+    let remoteTip = try #require(selected.branches.first { $0.name == "remotes/origin/remote-feature" }?.tip)
+    try runGit(["switch", "-c", "other"], in: root)
+    let draft = root.appendingPathComponent("draft.txt")
+    try "Keep this work\n".write(to: draft, atomically: true, encoding: .utf8)
+
+    // Act
+    #expect(throws: (any Error).self) {
+        try git.checkout(branch: "feature", expectedTip: localTip, expectedCurrentBranch: selected.currentBranch, expectedHead: head, in: root)
+    }
+    #expect(throws: (any Error).self) {
+        try git.checkoutRemote(branch: "remotes/origin/remote-feature", expectedTip: remoteTip, expectedCurrentBranch: selected.currentBranch, expectedHead: head, in: root)
+    }
+
+    // Assert
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.currentBranch == "other")
+    #expect(after.stashes.isEmpty)
+    #expect(try String(contentsOf: draft, encoding: .utf8) == "Keep this work\n")
+    try FileManager.default.removeItem(at: draft)
+    try runGit(["switch", selected.currentBranch], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Advance HEAD"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.checkout(branch: "feature", expectedTip: localTip, expectedCurrentBranch: selected.currentBranch, expectedHead: head, in: root)
+    }
+    let current = try git.loadSnapshot(at: root)
+    #expect(current.currentBranch == selected.currentBranch)
+    #expect(current.stashes.isEmpty)
+    #expect(try !git.checkout(branch: "feature", expectedTip: localTip, expectedCurrentBranch: current.currentBranch, expectedHead: current.headHash, in: root))
+    #expect(try git.loadSnapshot(at: root).currentBranch == "feature")
+}
+
 @Test func branchSwitchKeepsDirtySubmoduleAndExistingStash() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let source = base.appendingPathComponent("source")

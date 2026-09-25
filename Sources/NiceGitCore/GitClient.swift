@@ -379,7 +379,8 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    public func checkout(branch: String, expectedTip: String? = nil, in repositoryURL: URL) throws -> Bool {
+    public func checkout(branch: String, expectedTip: String? = nil, expectedCurrentBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws -> Bool {
+        try requireSelectedCheckout(branch: expectedCurrentBranch, head: expectedHead, command: "switch branch", in: repositoryURL)
         if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: repositoryURL) }
         return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--", branch], to: branch, in: repositoryURL)
     }
@@ -430,7 +431,8 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    public func checkoutRemote(branch: String, expectedTip: String? = nil, in url: URL) throws -> Bool {
+    public func checkoutRemote(branch: String, expectedTip: String? = nil, expectedCurrentBranch: String? = nil, expectedHead: String? = nil, in url: URL) throws -> Bool {
+        try requireSelectedCheckout(branch: expectedCurrentBranch, head: expectedHead, command: "switch branch", in: url)
         let reference: String
         if branch.hasPrefix("refs/remotes/") { reference = branch }
         else if branch.hasPrefix("remotes/") { reference = "refs/" + branch }
@@ -450,9 +452,18 @@ public struct GitClient: Sendable {
             throw GitClientError.commandFailed(command: "checkout remote branch", message: "Several local branches track this remote branch. Choose the desired branch in Local.")
         }
         if let existing = tracking.first {
-            return try checkout(branch: existing.name, expectedTip: existing.tip, in: url)
+            return try checkout(branch: existing.name, expectedTip: existing.tip, expectedCurrentBranch: expectedCurrentBranch, expectedHead: expectedHead, in: url)
         } else {
             return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--track", "--", reference], to: reference, in: url)
+        }
+    }
+
+    private func requireSelectedCheckout(branch expectedBranch: String?, head expectedHead: String?, command: String, in url: URL) throws {
+        guard let expectedBranch else { return }
+        let currentHead = (try? run(["rev-parse", "--verify", "HEAD"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard currentBranch(in: url) == expectedBranch, currentHead == expectedHead else {
+            throw GitClientError.commandFailed(command: command, message: "The current checkout changed since this action was selected. Refresh and review it again.")
         }
     }
 
@@ -517,13 +528,7 @@ public struct GitClient: Sendable {
         guard !trimmedName.isEmpty else {
             throw GitClientError.emptyBranchName
         }
-        if let expectedBranch {
-            let head = (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL))?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard currentBranch(in: repositoryURL) == expectedBranch, head == expectedHead else {
-                throw GitClientError.commandFailed(command: "create branch", message: "The current checkout changed since Create branch was selected. Refresh and review it again.")
-            }
-        }
+        try requireSelectedCheckout(branch: expectedBranch, head: expectedHead, command: "create branch", in: repositoryURL)
         try run(["checkout", "-b", trimmedName], in: repositoryURL)
     }
 

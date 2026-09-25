@@ -452,6 +452,8 @@ final class AppModel: ObservableObject {
 
     func checkout(branch: GitBranch) {
         guard !isLoading, !branch.isCurrent else { return }
+        let currentBranch = snapshot?.currentBranch
+        let currentHead = snapshot?.headHash
         if branch.isRemote, snapshot?.branches.contains(where: {
             $0.isCurrent && $0.upstream == "refs/" + branch.name
         }) == true { return }
@@ -462,8 +464,11 @@ final class AppModel: ObservableObject {
         let outcome = BranchSwitchOutcome()
         runRepositoryAction({ git, url in
             let savedChanges: Bool
-            if branch.isRemote { savedChanges = try git.checkoutRemote(branch: branch.name, expectedTip: branch.tip, in: url) }
-            else { savedChanges = try git.checkout(branch: branch.name, expectedTip: branch.tip, in: url) }
+            if branch.isRemote {
+                savedChanges = try git.checkoutRemote(branch: branch.name, expectedTip: branch.tip, expectedCurrentBranch: currentBranch, expectedHead: currentHead, in: url)
+            } else {
+                savedChanges = try git.checkout(branch: branch.name, expectedTip: branch.tip, expectedCurrentBranch: currentBranch, expectedHead: currentHead, in: url)
+            }
             outcome.record(savedChanges)
         }, onSuccess: {
             self.fileReviewSelection = nil
