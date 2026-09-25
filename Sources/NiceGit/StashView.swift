@@ -22,7 +22,7 @@ struct StashView: View {
                 TextField("Stash message", text: $message).textFieldStyle(.roundedBorder)
                 Button("Stash changes") {
                     model.saveStash(message: message, includeUntracked: includeUntracked) { message = "" }
-                }.disabled(model.snapshot?.status.isEmpty != false || model.snapshot?.commits.isEmpty != false)
+                }.disabled(model.snapshot?.status.isEmpty != false || model.snapshot?.commits.isEmpty != false || model.snapshot?.operation != nil)
             }
             Toggle("Include untracked files", isOn: $includeUntracked)
             Divider()
@@ -44,7 +44,9 @@ struct StashView: View {
                     } label: { Image(systemName: "doc.text.magnifyingglass") }
                         .help("Inspect stash").accessibilityLabel("Inspect \(stash.reference)")
                     Button("Apply") { model.applyStash(stash) }.help("Restore changes and keep the stash")
+                        .disabled(model.snapshot?.operation != nil)
                     Button("Pop") { pendingPop = stash }.help("Restore changes and remove the stash after a successful apply")
+                        .disabled(model.snapshot?.operation != nil)
                     Button { pendingDrop = stash } label: { Image(systemName: "trash") }
                         .help("Delete stash").accessibilityLabel("Delete \(stash.reference)")
                 }.padding(.vertical, 6)
@@ -66,6 +68,7 @@ struct StashView: View {
         .confirmationDialog("Apply and remove this stash?", isPresented: Binding(get: { pendingPop != nil }, set: { if !$0 { pendingPop = nil } })) {
             if let stash = pendingPop {
                 Button("Pop stash") { model.popStash(stash); pendingPop = nil }
+                    .disabled(model.snapshot?.operation != nil)
             }
         } message: {
             Text("The stash is removed only after its changes apply successfully. If applying fails or conflicts, it is kept.")

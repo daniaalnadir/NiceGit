@@ -1268,6 +1268,9 @@ import Testing
     try "main\n".write(to: file, atomically: true, encoding: .utf8)
     try git.stageAll(in: root)
     try git.commit(message: "Main", in: root)
+    try "saved\n".write(to: root.appendingPathComponent("saved.txt"), atomically: true, encoding: .utf8)
+    try git.saveStash(message: "Before integration", includeUntracked: true, in: root)
+    let savedStash = try #require(git.listStashes(in: root).first)
 
     #expect(throws: (any Error).self) { try git.start(.rebase, target: "feature", in: root) }
     #expect(try git.loadSnapshot(at: root).operation == .rebase)
@@ -1307,6 +1310,18 @@ import Testing
         Issue.record("Branch creation changed checkout during an unfinished merge")
     } catch {
         #expect(error.localizedDescription.contains("Finish or abort"))
+    }
+    for action in [
+        { try git.saveStash(message: "Wrong time", includeUntracked: true, in: root) },
+        { try git.applyStash(savedStash, in: root) },
+        { try git.popStash(savedStash, in: root) }
+    ] {
+        do {
+            try action()
+            Issue.record("A stash action ran during an unfinished merge")
+        } catch {
+            #expect(error.localizedDescription.contains("Finish or abort"))
+        }
     }
     let stillMerging = try git.loadSnapshot(at: root)
     #expect(stillMerging.operation == .merge)

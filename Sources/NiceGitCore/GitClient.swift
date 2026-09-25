@@ -135,6 +135,7 @@ public struct GitClient: Sendable {
     }
 
     public func saveStash(message: String, includeUntracked: Bool, in url: URL) throws {
+        try requireFinishedOperation(command: "stash", in: url)
         let previous = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         try pushStash(message: message, includeUntracked: includeUntracked, in: url)
@@ -154,6 +155,7 @@ public struct GitClient: Sendable {
     }
 
     public func applyStash(_ stash: GitStash, in url: URL) throws {
+        try requireFinishedOperation(command: "stash apply", in: url)
         guard try listStashes(in: url).contains(where: { $0.hash == stash.hash }) else {
             throw GitClientError.commandFailed(command: "stash apply", message: "This stash no longer exists. Refresh the repository.")
         }
@@ -468,9 +470,7 @@ public struct GitClient: Sendable {
     }
 
     private func switchPreservingChanges(_ arguments: [String], to branch: String, in url: URL) throws -> Bool {
-        guard try currentOperation(in: url) == nil else {
-            throw GitClientError.commandFailed(command: "switch branch", message: "Finish or abort the current Git operation before switching branches.")
-        }
+        try requireFinishedOperation(command: "switch branch", in: url)
         guard try !loadStatus(in: url).isEmpty else {
             try run(arguments, in: url)
             return false
@@ -497,6 +497,12 @@ public struct GitClient: Sendable {
                 throw GitClientError.commandFailed(command: "switch branch", message: "Switch failed: \(error.localizedDescription)\nYour changes are saved in stash \(stashHash.prefix(12)). Automatic restoration also failed: \(restoreError.localizedDescription)")
             }
             throw error
+        }
+    }
+
+    private func requireFinishedOperation(command: String, in url: URL) throws {
+        guard try currentOperation(in: url) == nil else {
+            throw GitClientError.commandFailed(command: command, message: "Finish or abort the current Git operation before changing the working tree.")
         }
     }
 
