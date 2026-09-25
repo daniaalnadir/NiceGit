@@ -507,12 +507,18 @@ public struct GitClient: Sendable {
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--set-upstream", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
     }
 
-    public func createBranch(named name: String, in repositoryURL: URL) throws {
+    public func createBranch(named name: String, expectedBranch: String? = nil, expectedHead: String? = nil, in repositoryURL: URL) throws {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             throw GitClientError.emptyBranchName
         }
-
+        if let expectedBranch {
+            let head = (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard currentBranch(in: repositoryURL) == expectedBranch, head == expectedHead else {
+                throw GitClientError.commandFailed(command: "create branch", message: "The current checkout changed since Create branch was selected. Refresh and review it again.")
+            }
+        }
         try run(["checkout", "-b", trimmedName], in: repositoryURL)
     }
 

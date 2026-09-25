@@ -5,6 +5,7 @@ private struct RepositorySidebar: View {
     @State private var newBranchName = ""
     @State private var showingNewBranch = false
     @State private var branchSource: GitBranch?
+    @State private var newBranchCheckout: (branch: String, head: String?)?
     @State private var branchToRename: GitBranch?
     @State private var branchToDelete: GitBranch?
     @State private var pushRequest: (branch: GitBranch, remote: String)?
@@ -45,7 +46,11 @@ private struct RepositorySidebar: View {
                         Button { referenceQuery = "" } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain).help("Clear filter")
                     }
-                    Button { branchSource = nil; showingNewBranch = true } label: { Image(systemName: "plus") }
+                    Button {
+                        branchSource = nil
+                        newBranchCheckout = (snapshot.currentBranch, snapshot.headHash)
+                        showingNewBranch = true
+                    } label: { Image(systemName: "plus") }
                         .buttonStyle(.plain).help("Create branch")
                 }.padding(.horizontal, 16).padding(.bottom, 12)
 
@@ -162,11 +167,11 @@ private struct RepositorySidebar: View {
             Button(branchSource == nil ? "Create and checkout" : "Create branch") {
                 if let branchSource {
                     model.createBranch(named: newBranchName, from: branchSource) { newBranchName = "" }
-                } else {
-                    model.createBranch(named: newBranchName) { newBranchName = "" }
+                } else if let newBranchCheckout {
+                    model.createBranch(named: newBranchName, expectedBranch: newBranchCheckout.branch, expectedHead: newBranchCheckout.head) { newBranchName = "" }
                 }
             }
-                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(newBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (branchSource == nil && newBranchCheckout == nil))
         }
 
 

@@ -887,6 +887,47 @@ import Testing
     #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "selected-tip" }?.tip == before.headHash)
 }
 
+@Test func createBranchAtHeadRejectsChangedCheckout() throws {
+    // Arrange
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    let selected = try git.loadSnapshot(at: root)
+    let selectedHead = try #require(selected.headHash)
+    try runGit(["switch", "-c", "other"], in: root)
+
+    // Act
+    #expect(throws: (any Error).self) {
+        try git.createBranch(named: "wrong-checkout", expectedBranch: selected.currentBranch, expectedHead: selectedHead, in: root)
+    }
+    try runGit(["switch", selected.currentBranch], in: root)
+    try runGit(["commit", "--allow-empty", "-m", "New HEAD"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.createBranch(named: "wrong-head", expectedBranch: selected.currentBranch, expectedHead: selectedHead, in: root)
+    }
+    let current = try git.loadSnapshot(at: root)
+    try git.createBranch(named: "correct-head", expectedBranch: current.currentBranch, expectedHead: current.headHash, in: root)
+
+    // Assert
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.currentBranch == "correct-head")
+    #expect(after.headHash == current.headHash)
+    #expect(after.branches.allSatisfy { $0.name != "wrong-checkout" && $0.name != "wrong-head" })
+
+    let unborn = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: unborn, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: unborn) }
+    try git.initialize(at: unborn)
+    let empty = try git.loadSnapshot(at: unborn)
+    #expect(empty.headHash == nil)
+    try git.createBranch(named: "first-branch", expectedBranch: empty.currentBranch, expectedHead: empty.headHash, in: unborn)
+    #expect(try git.loadSnapshot(at: unborn).currentBranch == "first-branch")
+}
+
 @Test func repositoryRootPreservesTrailingWhitespace() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("repository \n")

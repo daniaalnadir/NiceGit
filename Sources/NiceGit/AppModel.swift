@@ -481,9 +481,9 @@ final class AppModel: ObservableObject {
         runRepositoryAction { git, url in try git.deleteBranch(branch.name, expectedTip: branch.tip, in: url) }
     }
 
-    func createBranch(named name: String, onSuccess: @escaping () -> Void) {
+    func createBranch(named name: String, expectedBranch: String? = nil, expectedHead: String? = nil, onSuccess: @escaping () -> Void) {
         runRepositoryAction({ git, url in
-            try git.createBranch(named: name, in: url)
+            try git.createBranch(named: name, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }, onSuccess: onSuccess)
     }
 
