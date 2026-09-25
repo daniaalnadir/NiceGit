@@ -235,6 +235,11 @@ struct AppModelTests {
     model.start(.merge, target: base)
     #expect(model.errorMessage?.contains("unsaved file edits") == true)
     #expect(!model.isLoading)
+    model.errorMessage = nil
+    model.createBranch(named: "unsaved-branch", expectedBranch: "main", expectedHead: current) {}
+    #expect(model.errorMessage?.contains("unsaved file edits") == true)
+    #expect(!model.isLoading)
+    #expect(try git.loadSnapshot(at: root).branches.allSatisfy { $0.name != "unsaved-branch" })
     #expect(try git.loadSnapshot(at: root).headHash == current)
 
     model.fileReviewHasEdits = false

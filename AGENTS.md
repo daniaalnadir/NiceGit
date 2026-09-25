@@ -23,3 +23,4 @@
 - Capture branch and HEAD when opening a Create at HEAD dialog; check them again before creating and checking out the new branch.
 - Capture the displayed upstream for Pull and Push, and reject a changed tracking target before fetching or pushing.
 - Capture all displayed fetch and push URLs for a remote; verify the destination before Pull, Push, and Publish so a changed remote address cannot redirect the operation.
+- Guard Create and checkout branch while the built-in editor has unsaved text, just like other actions that change the checkout.

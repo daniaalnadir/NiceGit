@@ -483,6 +483,7 @@ final class AppModel: ObservableObject {
     }
 
     func createBranch(named name: String, expectedBranch: String? = nil, expectedHead: String? = nil, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "creating and checking out a branch") else { return }
         runRepositoryAction({ git, url in
             try git.createBranch(named: name, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }, onSuccess: onSuccess)
