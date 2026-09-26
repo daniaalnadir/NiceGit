@@ -368,7 +368,7 @@ final class AppModel: ObservableObject {
             historyLimit = 200
             fileReviewSelection = nil
         }
-        perform(at: url) { _, _ in }
+        perform(at: url, action: { _, _ in }, reportsActionCompletion: false)
     }
 
     func refresh() {
@@ -571,7 +571,7 @@ final class AppModel: ObservableObject {
         perform(at: repositoryURL, action: action, onActionSuccess: onSuccess, onSuccess: onRefreshed)
     }
 
-    private func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
+    func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, reportsActionCompletion: Bool = true, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -607,7 +607,7 @@ final class AppModel: ObservableObject {
                 if !statusOnly { rememberRepository(path: updated.rootPath) }
                 onSuccess()
             } catch {
-                errorMessage = actionCompleted && (onActionSuccess != nil || statusOnly)
+                errorMessage = actionCompleted && reportsActionCompletion
                     ? "The Git action completed, but the repository could not be refreshed. Refresh before repeating the action.\n\n\(error.localizedDescription)"
                     : error.localizedDescription
                 // Failed operations such as stash apply may still change files.

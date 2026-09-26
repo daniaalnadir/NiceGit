@@ -384,6 +384,43 @@ struct AppModelTests {
     #expect(actual.status.isEmpty)
 }
 
+@Test @MainActor func refreshFailureDistinguishesCompletedActionFromReload() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "base\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let model = AppModel(defaults: defaults, snapshotLoader: { _, _, _ in throw RefreshFailure.injected })
+    model.snapshot = try git.loadSnapshot(at: root)
+
+    model.loadRepository(at: root)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage?.contains("The Git action completed") == false)
+
+    model.perform(at: root) { git, url in
+        try git.createBranch(named: "feature", startingAt: "HEAD", in: url)
+    }
+    let actionDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while model.isLoading && ContinuousClock.now < actionDeadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    #expect(!model.isLoading)
+    #expect(model.errorMessage?.contains("The Git action completed") == true)
+    let actual = try git.loadSnapshot(at: root)
+    #expect(actual.branches.contains { $0.name == "feature" })
+}
+
 private enum RefreshFailure: Error { case injected }
 
 @Test @MainActor func commitDraftsRemainSeparateForEachCheckout() throws {
