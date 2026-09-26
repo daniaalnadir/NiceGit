@@ -65,7 +65,7 @@ private struct RepositorySidebar: View {
                             let branches = snapshot.branches.filter { $0.isRemote && matches($0.displayName) }
                             ForEach(snapshot.remotes, id: \.self) { remote in
                                 DisclosureGroup(remote) {
-                                    ForEach(branches.filter { $0.name.hasPrefix("remotes/" + remote + "/") }) { branch in
+                                    ForEach(branches.filter { $0.remoteName(among: snapshot.remotes) == remote }) { branch in
                                         branchRow(branch, snapshot: snapshot)
                                     }
                                 }.padding(.horizontal, 12).padding(.vertical, 4)

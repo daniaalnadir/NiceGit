@@ -378,13 +378,16 @@ public struct GitClient: Sendable {
         }
         if entry.kind == .untracked {
             try run(["clean", "--force", "--", entry.path], in: repositoryURL)
-            if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path }) {
-                throw GitClientError.commandFailed(command: "discard", message: "Git could not remove this untracked path. Nested repositories require manual removal.")
-            }
         } else if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
             try run(["rm", "--force", "--", entry.path], in: repositoryURL)
         } else {
             try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (entry.originalPath.map { [$0] } ?? []), in: repositoryURL)
+        }
+        if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path || $0.path == entry.originalPath }) {
+            let message = entry.kind == .untracked
+                ? "Git could not remove this untracked path. Nested repositories require manual removal."
+                : "Changes remain after Git restored this path. If it is a submodule, open it and discard its changes there."
+            throw GitClientError.commandFailed(command: "discard", message: message)
         }
     }
 
@@ -476,7 +479,30 @@ public struct GitClient: Sendable {
         if let existing = tracking.first {
             return try checkout(branch: existing.name, expectedTip: existing.tip, expectedCurrentBranch: expectedCurrentBranch, expectedHead: expectedHead, in: url)
         } else {
-            return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--track", "--", reference], to: reference, in: url)
+            let remotePath = String(reference.dropFirst("refs/remotes/".count))
+            let remotes = try run(["remote"], in: url).split(separator: "\n").map(String.init)
+            guard let remote = remotes.filter({ remotePath.hasPrefix($0 + "/") }).max(by: { $0.count < $1.count }) else {
+                throw GitClientError.commandFailed(command: "checkout remote branch", message: "This remote is no longer available. Refresh and select a branch again.")
+            }
+            let preferred = String(remotePath.dropFirst(remote.count + 1))
+            let localNames = branches.filter { !$0.isRemote }.map(\.name)
+            func available(_ name: String) -> Bool {
+                !localNames.contains { $0 == name || $0.hasPrefix(name + "/") || name.hasPrefix($0 + "/") }
+                    && (try? run(["check-ref-format", "--branch", name], in: url)) != nil
+            }
+            var name = preferred
+            if !available(name) {
+                let flattened = remotePath.replacingOccurrences(of: "/", with: "-")
+                let base = (try? run(["check-ref-format", "--branch", flattened], in: url)) == nil
+                    ? "remote-" + flattened : flattened
+                name = base
+                var suffix = 2
+                while !available(name) {
+                    name = "\(base)-\(suffix)"
+                    suffix += 1
+                }
+            }
+            return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--track", "--create", name, "--", reference], to: reference, in: url)
         }
     }
 
