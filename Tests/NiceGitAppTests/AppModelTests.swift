@@ -7,6 +7,18 @@ import Testing
 @Suite(.serialized)
 struct AppModelTests {
 
+@Test func fileTreeShowsDeletedFileAndReplacementFolder() {
+    let deleted = GitStatusEntry(path: "foo", kind: .deleted, indexStatus: " ", workTreeStatus: "D")
+    let untracked = GitStatusEntry(path: "foo/bar", kind: .untracked, indexStatus: "?", workTreeStatus: "?")
+    for entries in [[deleted, untracked], [untracked, deleted]] {
+        let nodes = FileChangeNode.build(entries)
+        #expect(nodes.count == 2)
+        #expect(Set(nodes.map(\.id)).count == 2)
+        #expect(nodes.compactMap(\.entry) == [deleted])
+        #expect(nodes.first(where: { $0.entry == nil })?.children.first?.entry == untracked)
+    }
+}
+
 @Test @MainActor func stagingRefreshesStatusWithoutReloadingHistory() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
