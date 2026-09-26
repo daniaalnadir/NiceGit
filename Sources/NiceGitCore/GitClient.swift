@@ -378,13 +378,16 @@ public struct GitClient: Sendable {
         }
         if entry.kind == .untracked {
             try run(["clean", "--force", "--", entry.path], in: repositoryURL)
-            if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path }) {
-                throw GitClientError.commandFailed(command: "discard", message: "Git could not remove this untracked path. Nested repositories require manual removal.")
-            }
         } else if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
             try run(["rm", "--force", "--", entry.path], in: repositoryURL)
         } else {
             try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (entry.originalPath.map { [$0] } ?? []), in: repositoryURL)
+        }
+        if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path || $0.path == entry.originalPath }) {
+            let message = entry.kind == .untracked
+                ? "Git could not remove this untracked path. Nested repositories require manual removal."
+                : "Changes remain after Git restored this path. If it is a submodule, open it and discard its changes there."
+            throw GitClientError.commandFailed(command: "discard", message: message)
         }
     }
 

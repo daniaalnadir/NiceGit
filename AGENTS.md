@@ -7,6 +7,8 @@
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- A deleted tracked file and an untracked directory can share the same path prefix; file-tree grouping must show both regardless of status order.
+- Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.
@@ -29,6 +31,7 @@
 - Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
 - Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
 - Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
+- Group remote branches under the longest matching configured remote name; remote names with slashes can share prefixes.
 - Derive HEAD and upstream from the already-read branch listing during snapshot refresh, retaining ahead/behind validation while avoiding redundant Git processes.
 - Keep current HEAD in the visible history even when other branches consume the first log page; fetch it separately only when outside the existing page.
 - Let parsed branch metadata decide whether a remote ref is a symbolic HEAD alias; a real branch can end in HEAD and remain usable from the graph.
