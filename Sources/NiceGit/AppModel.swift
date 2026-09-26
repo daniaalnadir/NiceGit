@@ -339,6 +339,8 @@ final class AppModel: ObservableObject {
         if defaults.string(forKey: activeTabKey) == path { defaults.removeObject(forKey: activeTabKey) }
         guard snapshot?.rootPath == path else { return }
         snapshot = nil
+        activeTerminal = nil
+        if openRepositories.isEmpty { showingTerminal = false }
         errorMessage = nil
         if !openRepositories.isEmpty {
             let next = openRepositories[min(index, openRepositories.count - 1)]
@@ -604,6 +606,7 @@ final class AppModel: ObservableObject {
                     return try loadSnapshot(git, url, limit)
                 }.value
                 snapshot = updated
+                if showingTerminal && activeTerminal?.path != updated.rootPath { openTerminal() }
                 if !statusOnly { rememberRepository(path: updated.rootPath) }
                 onSuccess()
             } catch {
