@@ -7,6 +7,7 @@
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.

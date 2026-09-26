@@ -580,6 +580,14 @@ import Testing
     let earlierStash = try #require(git.listStashes(in: root).first)
     let nestedFile = root.appendingPathComponent("nested/file.txt")
     try "submodule edit\n".write(to: nestedFile, atomically: true, encoding: .utf8)
+    let nestedEntry = try #require(git.loadStatus(in: root).first { $0.path == "nested" })
+    do {
+        try git.discard(nestedEntry, in: root)
+        Issue.record("Discard reported success while submodule changes remained")
+    } catch {
+        #expect(error.localizedDescription.contains("submodule"))
+    }
+    #expect(try String(contentsOf: nestedFile, encoding: .utf8) == "submodule edit\n")
 
     #expect(throws: (any Error).self) { try git.checkout(branch: "feature", in: root) }
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
