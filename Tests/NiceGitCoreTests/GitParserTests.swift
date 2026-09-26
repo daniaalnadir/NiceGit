@@ -52,6 +52,13 @@ import Testing
     #expect(entries[3].id != entries[1].id)
 }
 
+@Test func overlappingRemoteNamesAssignEachBranchOnce() {
+    let branch = GitBranch(name: "remotes/team/shared/main", isCurrent: false, isRemote: true, tip: "abc", subject: "")
+    let local = GitBranch(name: branch.name, isCurrent: false, isRemote: false, tip: "abc", subject: "")
+    #expect(branch.remoteName(among: ["team", "team/shared"]) == "team/shared")
+    #expect(local.remoteName(among: ["team", "team/shared"]) == nil)
+}
+
 @Test func statusEntryIdentityKeepsLiteralSeparatorPathsDistinct() {
     let entries = GitStatusParser.parseNullTerminated("R  b|c\0a\0R  c\0a|b\0")
     #expect(entries.count == 2)
