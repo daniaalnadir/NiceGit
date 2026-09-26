@@ -170,6 +170,12 @@ public struct GitBranch: Identifiable, Equatable, Sendable {
     public var displayName: String {
         name.hasPrefix("remotes/") ? String(name.dropFirst("remotes/".count)) : name
     }
+
+    public func remoteName(among remotes: [String]) -> String? {
+        guard isRemote else { return nil }
+        return remotes.filter { name.hasPrefix("remotes/" + $0 + "/") }
+            .max { $0.count < $1.count }
+    }
 }
 
 public struct GitCommit: Identifiable, Equatable, Sendable {
