@@ -127,7 +127,7 @@ import Testing
 }
 
 @Test func logParserReadsCommitMetadataAndRefs() {
-    let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u{1f}aaaaaaa\u{1f}bbbb cccc\u{1f}HEAD -> main, origin/main\u{1f}Ship MVP\u{1f}Daniaal\u{1f}d@example.com\u{1f}2 hours ago\u{1e}"
+    let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u{1f}aaaaaaa\u{1f}bbbb cccc\u{1f}HEAD\u{1c}main\u{1d}origin/main\u{1f}Ship MVP\u{1f}Daniaal\u{1f}d@example.com\u{1f}2 hours ago\u{1e}"
 
     let commits = GitLogParser.parse(output)
 
