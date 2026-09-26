@@ -607,7 +607,7 @@ final class AppModel: ObservableObject {
                 if !statusOnly { rememberRepository(path: updated.rootPath) }
                 onSuccess()
             } catch {
-                errorMessage = actionCompleted && (onActionSuccess != nil || statusOnly)
+                errorMessage = actionCompleted
                     ? "The Git action completed, but the repository could not be refreshed. Refresh before repeating the action.\n\n\(error.localizedDescription)"
                     : error.localizedDescription
                 // Failed operations such as stash apply may still change files.
