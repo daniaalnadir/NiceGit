@@ -42,3 +42,4 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
+- Detect pending cherry-pick/revert sequences from `sequencer/todo` after a manual conflict commit removes the per-commit HEAD marker.
