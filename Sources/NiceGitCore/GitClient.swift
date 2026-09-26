@@ -358,7 +358,7 @@ public struct GitClient: Sendable {
 
     public func unstage(path: String, originalPath: String? = nil, in repositoryURL: URL) throws {
         if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
-            try run(["rm", "--cached", "--", path], in: repositoryURL)
+            try run(["rm", "--cached", "--force", "--", path], in: repositoryURL)
         } else {
             try run(["restore", "--staged", "--", path] + (originalPath.map { [$0] } ?? []), in: repositoryURL)
         }
@@ -366,7 +366,7 @@ public struct GitClient: Sendable {
 
     public func unstageAll(in repositoryURL: URL) throws {
         if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
-            try run(["rm", "--cached", "-r", "--", "."], in: repositoryURL)
+            try run(["rm", "--cached", "--force", "-r", "--", "."], in: repositoryURL)
         } else {
             try run(["restore", "--staged", "."], in: repositoryURL)
         }

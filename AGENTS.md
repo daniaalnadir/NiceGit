@@ -40,3 +40,4 @@
 - Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
+- Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
