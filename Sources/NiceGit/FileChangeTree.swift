@@ -33,7 +33,7 @@ private struct FileChangeBranch<Row: View>: View {
     }
 }
 
-private struct FileChangeNode: Identifiable {
+struct FileChangeNode: Identifiable {
     let id: String
     let name: String
     let entry: GitStatusEntry?
@@ -41,18 +41,24 @@ private struct FileChangeNode: Identifiable {
 
     static func build(_ entries: [GitStatusEntry], depth: Int = 0) -> [FileChangeNode] {
         let groups = Dictionary(grouping: entries) { $0.path.split(separator: "/").map(String.init)[depth] }
-        return groups.keys.sorted().map { name in
+        return groups.keys.sorted().flatMap { name -> [FileChangeNode] in
             let group = groups[name] ?? []
-            let first = group[0]
-            let components = first.path.split(separator: "/").map(String.init)
-            if components.count == depth + 1 {
-                return FileChangeNode(id: first.path, name: name, entry: first, children: [])
+            let path = group[0].path.split(separator: "/").prefix(depth + 1).joined(separator: "/")
+            let exact = group.first { $0.path.split(separator: "/").count == depth + 1 }
+            let descendants = group.filter { $0.path.split(separator: "/").count > depth + 1 }
+            var nodes: [FileChangeNode] = []
+            if let exact {
+                nodes.append(FileChangeNode(id: "file\0" + exact.path, name: name, entry: exact, children: []))
             }
-            let children = build(group, depth: depth + 1)
-            if children.count == 1, let child = children.first, child.entry == nil {
-                return FileChangeNode(id: child.id, name: name + "/" + child.name, entry: nil, children: child.children)
+            if !descendants.isEmpty {
+                let children = build(descendants, depth: depth + 1)
+                if children.count == 1, let child = children.first, child.entry == nil {
+                    nodes.append(FileChangeNode(id: child.id, name: name + "/" + child.name, entry: nil, children: child.children))
+                } else {
+                    nodes.append(FileChangeNode(id: "folder\0" + path, name: name, entry: nil, children: children))
+                }
             }
-            return FileChangeNode(id: components.prefix(depth + 1).joined(separator: "/"), name: name, entry: nil, children: children)
+            return nodes
         }
     }
 }
