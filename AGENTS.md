@@ -36,3 +36,4 @@
 - Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
 - Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
+- Report completed Git mutations even when the subsequent repository refresh fails, so users do not repeat them.
