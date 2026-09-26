@@ -231,7 +231,14 @@ public struct GitClient: Sendable {
         if untracked {
             return try run(["diff", "--no-index", "--no-ext-diff", "--no-color", "--", "/dev/null", path], in: repositoryURL, acceptedStatuses: [0, 1])
         }
-        return try run(["diff", "--no-ext-diff", "--no-color"] + (staged ? ["--cached"] : []) + ["--", path] + (originalPath.map { [$0] } ?? []), in: repositoryURL)
+        var renameSource: String?
+        if let originalPath {
+            guard let entry = try loadStatus(in: repositoryURL).first(where: { $0.path == path && $0.originalPath == originalPath }) else {
+                throw GitClientError.commandFailed(command: "diff", message: "This file changed since it was selected. Refresh and review it again.")
+            }
+            if entry.kind == .renamed { renameSource = originalPath }
+        }
+        return try run(["diff", "--no-ext-diff", "--no-color"] + (staged ? ["--cached"] : []) + ["--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
     }
 
     public func commitDiff(hash: String, path: String? = nil, in repositoryURL: URL) throws -> String {

@@ -746,6 +746,9 @@ import Testing
     let selected = try #require(git.loadStatus(in: root).first { $0.path == "copy.txt" })
     #expect(selected.kind == .added)
     #expect(selected.originalPath == "source.txt")
+    let copyDiff = try git.diff(path: selected.path, staged: true, originalPath: selected.originalPath, in: root)
+    #expect(copyDiff.contains("diff --git a/copy.txt b/copy.txt"))
+    #expect(!copyDiff.contains("diff --git a/source.txt b/source.txt"))
 
     try git.unstage(path: selected.path, originalPath: selected.originalPath, in: root)
     #expect(try git.loadStatus(in: root).first { $0.path == "source.txt" }?.indexStatus == "M")
