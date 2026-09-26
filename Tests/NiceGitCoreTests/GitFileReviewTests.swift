@@ -118,3 +118,26 @@ private func reviewFixture(_ operation: (GitClient, URL) throws -> Void) throws 
         #expect(throws: (any Error).self) { try git.editableFile(path: "../outside", in: root) }
     }
 }
+
+@Test func partialStagingDoesNotTreatFileContentAsPatchHeaders() throws {
+    try reviewFixture { git, root in
+        let path = "example.patch"
+        let file = root.appendingPathComponent(path)
+        let original = "-- /dev/null\nkeep\nother\n"
+        let modified = "++ /dev/null\nkeep\nOTHER\n"
+        try original.write(to: file, atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Base", in: root)
+        try modified.write(to: file, atomically: true, encoding: .utf8)
+        let review = try git.fileReview(path: path, staged: false, in: root)
+        let selected = Set(review.lines.indices.filter { ["--- /dev/null", "+++ /dev/null"].contains(review.lines[$0].text) })
+        #expect(selected.count == 2)
+        try git.stageLines(selected, from: review, in: root)
+        #expect(try git.run(["show", ":" + path], in: root) == "++ /dev/null\nkeep\nother\n")
+        let staged = try git.fileReview(path: path, staged: true, in: root)
+        let undo = Set(staged.lines.indices.filter { [.addition, .deletion].contains(staged.lines[$0].kind) })
+        try git.stageLines(undo, from: staged, in: root)
+        #expect(try git.run(["show", ":" + path], in: root) == original)
+        #expect(try String(contentsOf: file, encoding: .utf8) == modified)
+    }
+}
