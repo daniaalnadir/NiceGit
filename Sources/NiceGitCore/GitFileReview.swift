@@ -85,9 +85,16 @@ extension GitClient {
         }
         flushChanges()
         guard baseline != target else { throw reviewError("The selected lines do not change the index.") }
-        func quoted(_ path: String) throws -> String {
-            let data = try JSONSerialization.data(withJSONObject: path, options: [.fragmentsAllowed, .withoutEscapingSlashes])
-            return String(decoding: data, as: UTF8.self)
+        func quoted(_ path: String) -> String {
+            // Git patch paths use C-style byte escapes, not JSON Unicode escapes.
+            let escaped = path.utf8.map { byte -> String in
+                switch byte {
+                case 34, 92: return "\\" + String(UnicodeScalar(byte))
+                case 32...126: return String(UnicodeScalar(byte))
+                default: return String(format: "\\%03o", Int(byte))
+                }
+            }.joined()
+            return "\"" + escaped + "\""
         }
         func body(_ text: String, prefix: String) -> (Int, String) {
             guard !text.isEmpty else { return (0, "") }
@@ -101,8 +108,8 @@ extension GitClient {
         let new = body(target, prefix: "+")
         let createsFile = review.staged ? review.patch.contains("+++ /dev/null\n") : review.patch.contains("--- /dev/null\n")
         let removesFile = target.isEmpty && (review.staged ? review.patch.contains("--- /dev/null\n") : review.patch.contains("+++ /dev/null\n"))
-        let a = try quoted("a/" + review.path)
-        let b = try quoted("b/" + review.path)
+        let a = quoted("a/" + review.path)
+        let b = quoted("b/" + review.path)
         var patch = "diff --git \(a) \(b)\n"
         if createsFile {
             let mode = review.patch.components(separatedBy: "\n").first { $0.hasPrefix(review.staged ? "deleted file mode " : "new file mode ") }?.split(separator: " ").last ?? "100644"
