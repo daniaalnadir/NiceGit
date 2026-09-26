@@ -368,6 +368,28 @@ import Testing
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
 }
 
+@Test func remoteCheckoutUsesDistinctLocalNameWhenRemotesShareBranchName() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try runGit(["init", "--initial-branch=main"], in: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try runGit(["remote", "add", "origin", root.path], in: root)
+    try runGit(["remote", "add", "upstream", root.path], in: root)
+    try runGit(["update-ref", "refs/remotes/origin/feature", "HEAD"], in: root)
+    try runGit(["update-ref", "refs/remotes/upstream/feature", "HEAD"], in: root)
+
+    try git.checkoutRemote(branch: "origin/feature", in: root)
+    try git.checkout(branch: "main", in: root)
+    try git.checkoutRemote(branch: "upstream/feature", in: root)
+    let snapshot = try git.loadSnapshot(at: root)
+    #expect(snapshot.currentBranch == "upstream-feature")
+    #expect(snapshot.upstream == "upstream/feature")
+    #expect(snapshot.branches.contains { !$0.isRemote && $0.name == "feature" && $0.upstream == "refs/remotes/origin/feature" })
+}
+
 @Test func remoteHeadAliasesAreNotShownAsBranches() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

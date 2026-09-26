@@ -7,6 +7,7 @@
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- A deleted tracked file and an untracked directory can share the same path prefix; file-tree grouping must show both regardless of status order.
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
@@ -39,3 +40,6 @@
 - Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
 - A detected copy carries a source path like a rename, but Discard, Unstage, and Diff must affect or display only the copied path.
+- Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
+- Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
+- When remotes share a branch name, create a distinct local tracking branch for the second remote.
