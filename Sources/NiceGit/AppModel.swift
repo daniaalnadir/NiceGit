@@ -616,6 +616,7 @@ final class AppModel: ObservableObject {
                 // Failed operations such as stash apply may still change files.
                 if let refreshed = try? await Task.detached(operation: { try loadSnapshot(GitClient(), url, limit) }).value {
                     snapshot = refreshed
+                    if showingTerminal && activeTerminal?.path != refreshed.rootPath { openTerminal() }
                     rememberRepository(path: refreshed.rootPath)
                 }
             }
