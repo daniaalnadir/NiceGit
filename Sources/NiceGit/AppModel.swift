@@ -472,7 +472,6 @@ final class AppModel: ObservableObject {
             outcome.record(savedChanges)
         }, onSuccess: {
             self.fileReviewSelection = nil
-        }, onRefreshed: {
             if outcome.savedChanges {
                 self.noticeMessage = "Your uncommitted changes were saved in Stashes before switching branches. Apply the NiceGit stash to restore them."
             }
