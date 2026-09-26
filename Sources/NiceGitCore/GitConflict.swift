@@ -7,6 +7,7 @@ public struct GitConflictDocument: Sendable {
     public let base: String?
     public let current: String?
     public let incoming: String?
+    let markerSize: Int
 }
 
 extension GitClient {
@@ -20,10 +21,13 @@ extension GitClient {
         guard !data.contains(0), let content = String(data: data, encoding: .utf8) else {
             throw conflictError("This file is not UTF-8 text. Choose a whole-file resolution or use an external editor.")
         }
+        let attribute = try run(["check-attr", "-z", "conflict-marker-size", "--", path], in: repository)
+            .split(separator: "\0").last.flatMap { Int($0) } ?? 7
         return GitConflictDocument(path: path, content: content, originalData: data,
                                    base: conflictVersion(path: path, stage: 1, in: repository),
                                    current: conflictVersion(path: path, stage: 2, in: repository),
-                                   incoming: conflictVersion(path: path, stage: 3, in: repository))
+                                   incoming: conflictVersion(path: path, stage: 3, in: repository),
+                                   markerSize: attribute > 0 ? attribute : 7)
     }
 
     public func resolveConflict(_ document: GitConflictDocument, content: String, in repository: URL) throws {
@@ -32,7 +36,8 @@ extension GitClient {
             throw conflictError("The file changed outside this editor. Close and reopen it before saving.")
         }
         guard !content.split(separator: "\n").contains(where: {
-            $0.hasPrefix("<<<<<<<") || $0.hasPrefix("=======") || $0.hasPrefix(">>>>>>>") || $0.hasPrefix("|||||||")
+            guard let first = $0.first, "<=>|".contains(first) else { return false }
+            return $0.prefix(while: { $0 == first }).count >= document.markerSize
         }) else {
             throw conflictError("Remove the conflict markers before saving the resolution.")
         }
