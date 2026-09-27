@@ -63,3 +63,14 @@ import Testing
     #expect(changes[1] == GitInlineChange(prefix: "let value = old", changed: "", suffix: "Name()"))
     #expect(changes[2] == GitInlineChange(prefix: "let value = old", changed: "Long", suffix: "Name()"))
 }
+
+@Test func suppressedBlankContextKeepsLineNumbers() {
+    let lines = GitDiffLine.parse("@@ -1,3 +1,3 @@\n-old\n+new\n\n last\n")
+    #expect(lines[3].kind == .context)
+    #expect(lines[3].text == " ")
+    #expect(lines[3].oldNumber == 2)
+    #expect(lines[3].newNumber == 2)
+    #expect(lines[4].oldNumber == 3)
+    #expect(lines[4].newNumber == 3)
+    #expect(lines[5].kind == .metadata)
+}

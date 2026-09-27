@@ -118,3 +118,26 @@ private func reviewFixture(_ operation: (GitClient, URL) throws -> Void) throws 
         #expect(throws: (any Error).self) { try git.editableFile(path: "../outside", in: root) }
     }
 }
+
+@Test func partialStagingPreservesSuppressedBlankContext() throws {
+    try reviewFixture { git, root in
+        try git.run(["config", "diff.suppressBlankEmpty", "true"], in: root)
+        let path = "blank-lines.txt"
+        let file = root.appendingPathComponent(path)
+        let original = "one\n\nthree\n"
+        let modified = "ONE\n\nTHREE\n"
+        try original.write(to: file, atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Base", in: root)
+        try modified.write(to: file, atomically: true, encoding: .utf8)
+        let review = try git.fileReview(path: path, staged: false, in: root)
+        let chosen = Set(review.lines.indices.filter { ["-one", "+ONE"].contains(review.lines[$0].text) })
+        try git.stageLines(chosen, from: review, in: root)
+        #expect(try git.run(["show", ":" + path], in: root) == "ONE\n\nthree\n")
+        let staged = try git.fileReview(path: path, staged: true, in: root)
+        let undo = Set(staged.lines.indices.filter { ["-one", "+ONE"].contains(staged.lines[$0].text) })
+        try git.stageLines(undo, from: staged, in: root)
+        #expect(try git.run(["show", ":" + path], in: root) == original)
+        #expect(try String(contentsOf: file, encoding: .utf8) == modified)
+    }
+}
