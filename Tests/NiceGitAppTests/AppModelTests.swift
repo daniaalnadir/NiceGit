@@ -661,7 +661,7 @@ private enum RefreshFailure: Error { case injected }
     #expect(actual.stashes.first?.message.contains("main before switching to feature") == true)
 }
 
-@Test @MainActor func busyRepositoryLoadKeepsCurrentReview() throws {
+@Test(arguments: [false, true]) @MainActor func busyRepositoryLoadKeepsCurrentReview(discard: Bool) throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -670,6 +670,8 @@ private enum RefreshFailure: Error { case injected }
     defer { defaults.removePersistentDomain(forName: suite) }
     let git = GitClient()
     try git.initialize(at: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "keep this work\n".write(to: file, atomically: true, encoding: .utf8)
     let model = AppModel(defaults: defaults)
     let original = try git.loadSnapshot(at: root)
     model.snapshot = original
@@ -677,11 +679,16 @@ private enum RefreshFailure: Error { case injected }
     model.fileReviewSelection = review
     model.isLoading = true
 
-    model.loadRepository(at: root.appendingPathComponent("other"))
+    if discard {
+        model.discard(try #require(original.status.first))
+    } else {
+        model.loadRepository(at: root.appendingPathComponent("other"))
+    }
 
     #expect(model.fileReviewSelection?.id == review.id)
     #expect(model.snapshot?.rootPath == original.rootPath)
     #expect(model.isLoading)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "keep this work\n")
 }
 
 @Test @MainActor func staleBranchSelectionCannotDeleteOrRenameRecreatedBranch() async throws {

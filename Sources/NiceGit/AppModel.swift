@@ -420,6 +420,7 @@ final class AppModel: ObservableObject {
     }
 
     func discard(_ entry: GitStatusEntry) {
+        guard !isLoading else { return }
         if fileReviewSelection?.path == entry.path {
             guard confirmDiscardFileEdits() else { return }
             fileReviewSelection = nil
