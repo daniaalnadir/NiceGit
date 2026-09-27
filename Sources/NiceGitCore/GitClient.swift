@@ -231,7 +231,14 @@ public struct GitClient: Sendable {
         if untracked {
             return try run(["diff", "--no-index", "--no-ext-diff", "--no-color", "--", "/dev/null", path], in: repositoryURL, acceptedStatuses: [0, 1])
         }
-        return try run(["diff", "--no-ext-diff", "--no-color"] + (staged ? ["--cached"] : []) + ["--", path] + (originalPath.map { [$0] } ?? []), in: repositoryURL)
+        var renameSource: String?
+        if let originalPath {
+            guard let entry = try loadStatus(in: repositoryURL).first(where: { $0.path == path && $0.originalPath == originalPath }) else {
+                throw GitClientError.commandFailed(command: "diff", message: "This file changed since it was selected. Refresh and review it again.")
+            }
+            if entry.kind == .renamed { renameSource = originalPath }
+        }
+        return try run(["diff", "--no-ext-diff", "--no-color"] + (staged ? ["--cached"] : []) + ["--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
     }
 
     public func commitDiff(hash: String, path: String? = nil, in repositoryURL: URL) throws -> String {
@@ -357,10 +364,17 @@ public struct GitClient: Sendable {
     }
 
     public func unstage(path: String, originalPath: String? = nil, in repositoryURL: URL) throws {
+        var renameSource: String?
+        if let originalPath {
+            guard let entry = try loadStatus(in: repositoryURL).first(where: { $0.path == path && $0.originalPath == originalPath }) else {
+                throw GitClientError.commandFailed(command: "unstage", message: "This file changed since it was selected. Refresh and review it again.")
+            }
+            if entry.kind == .renamed { renameSource = originalPath }
+        }
         if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
             try run(["rm", "--cached", "--", path], in: repositoryURL)
         } else {
-            try run(["restore", "--staged", "--", path] + (originalPath.map { [$0] } ?? []), in: repositoryURL)
+            try run(["restore", "--staged", "--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
         }
     }
 
@@ -376,14 +390,15 @@ public struct GitClient: Sendable {
         guard try loadStatus(in: repositoryURL).contains(entry) else {
             throw GitClientError.commandFailed(command: "discard", message: "This file changed since it was selected. Refresh and review it again.")
         }
+        let renameSource = entry.kind == .renamed ? entry.originalPath : nil
         if entry.kind == .untracked {
             try run(["clean", "--force", "--", entry.path], in: repositoryURL)
         } else if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
             try run(["rm", "--force", "--", entry.path], in: repositoryURL)
         } else {
-            try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (entry.originalPath.map { [$0] } ?? []), in: repositoryURL)
+            try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
         }
-        if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path || $0.path == entry.originalPath }) {
+        if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path || $0.path == renameSource }) {
             let message = entry.kind == .untracked
                 ? "Git could not remove this untracked path. Nested repositories require manual removal."
                 : "Changes remain after Git restored this path. If it is a submodule, open it and discard its changes there."

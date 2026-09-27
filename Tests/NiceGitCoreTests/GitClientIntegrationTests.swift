@@ -749,6 +749,41 @@ import Testing
     #expect(try git.loadStatus(in: root).map(\.path) == ["a.txt"])
 }
 
+@Test func copiedFileActionsPreserveChangesInTheSource() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["config", "status.renames", "copies"], in: root)
+    let source = root.appendingPathComponent("source.txt")
+    let copy = root.appendingPathComponent("copy.txt")
+    try "one\ntwo\nthree\nfour\nfive\n".write(to: source, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try FileManager.default.copyItem(at: source, to: copy)
+    try "one\ntwo\nthree\nfour\nupdated\n".write(to: source, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    let selected = try #require(git.loadStatus(in: root).first { $0.path == "copy.txt" })
+    #expect(selected.kind == .added)
+    #expect(selected.originalPath == "source.txt")
+    let copyDiff = try git.diff(path: selected.path, staged: true, originalPath: selected.originalPath, in: root)
+    #expect(copyDiff.contains("diff --git a/copy.txt b/copy.txt"))
+    #expect(!copyDiff.contains("diff --git a/source.txt b/source.txt"))
+
+    try git.unstage(path: selected.path, originalPath: selected.originalPath, in: root)
+    #expect(try git.loadStatus(in: root).first { $0.path == "source.txt" }?.indexStatus == "M")
+    #expect(try git.loadStatus(in: root).first { $0.path == "copy.txt" }?.kind == .untracked)
+    try git.stage(path: selected.path, in: root)
+    let copiedAgain = try #require(git.loadStatus(in: root).first { $0.path == "copy.txt" })
+    try git.discard(copiedAgain, in: root)
+    #expect(!FileManager.default.fileExists(atPath: copy.path))
+    #expect(try String(contentsOf: source, encoding: .utf8).hasSuffix("updated\n"))
+    #expect(try git.loadStatus(in: root).map(\.path) == ["source.txt"])
+    #expect(try git.diff(path: "source.txt", staged: true, in: root).contains("+updated"))
+}
+
 @Test func selectedBranchPushDoesNotPushHeadOrForceRemote() throws {
     let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let root = base.appendingPathComponent("checkout")

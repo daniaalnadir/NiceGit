@@ -65,6 +65,7 @@ public enum GitStatusParser {
         if conflicted { kind = .conflicted }
         else if x == "?" { kind = .untracked }
         else if x == "R" || y == "R" { kind = .renamed }
+        else if x == "C" || y == "C" { kind = .added }
         else if x == "A" || y == "A" { kind = .added }
         else if x == "D" || y == "D" { kind = .deleted }
         else { kind = .modified }
