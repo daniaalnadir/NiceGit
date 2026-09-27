@@ -339,6 +339,8 @@ final class AppModel: ObservableObject {
         if defaults.string(forKey: activeTabKey) == path { defaults.removeObject(forKey: activeTabKey) }
         guard snapshot?.rootPath == path else { return }
         snapshot = nil
+        activeTerminal = nil
+        if openRepositories.isEmpty { showingTerminal = false }
         errorMessage = nil
         if !openRepositories.isEmpty {
             let next = openRepositories[min(index, openRepositories.count - 1)]
@@ -418,6 +420,7 @@ final class AppModel: ObservableObject {
     }
 
     func discard(_ entry: GitStatusEntry) {
+        guard !isLoading else { return }
         if fileReviewSelection?.path == entry.path {
             guard confirmDiscardFileEdits() else { return }
             fileReviewSelection = nil
@@ -603,6 +606,7 @@ final class AppModel: ObservableObject {
                     return try loadSnapshot(git, url, limit)
                 }.value
                 snapshot = updated
+                if showingTerminal && activeTerminal?.path != updated.rootPath { openTerminal() }
                 if !statusOnly { rememberRepository(path: updated.rootPath) }
                 onSuccess()
             } catch {
@@ -612,6 +616,7 @@ final class AppModel: ObservableObject {
                 // Failed operations such as stash apply may still change files.
                 if let refreshed = try? await Task.detached(operation: { try loadSnapshot(GitClient(), url, limit) }).value {
                     snapshot = refreshed
+                    if showingTerminal && activeTerminal?.path != refreshed.rootPath { openTerminal() }
                     rememberRepository(path: refreshed.rootPath)
                 }
             }

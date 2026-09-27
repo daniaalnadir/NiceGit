@@ -539,7 +539,6 @@ private struct WorkbenchView: View {
             commitDiff = nil
             selectedCommit = nil
             selectedStash = nil
-            if model.showingTerminal { model.openTerminal() }
         }
         .onChange(of: snapshot.commits) { _, commits in
             if let selected = selectedCommit {

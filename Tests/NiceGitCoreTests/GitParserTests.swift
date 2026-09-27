@@ -41,6 +41,14 @@ import Testing
     #expect(entries[3].isUnstaged)
 }
 
+@Test func copiedStatusKeepsItsSourceWithoutClassifyingItAsARename() {
+    let entries = GitStatusParser.parseNullTerminated("C  copy.txt\0source.txt\0M  source.txt\0")
+    #expect(entries.count == 2)
+    #expect(entries[0].kind == .added)
+    #expect(entries[0].originalPath == "source.txt")
+    #expect(entries[1].kind == .modified)
+}
+
 @Test func fullReferencesDistinguishRemoteFromLocalBranches() {
     let entries = GitBranchParser.parse("refs/heads/origin/main\t*\tabc\tLocal\nrefs/remotes/origin/main\t\tabc\tRemote\nrefs/remotes/origin/topic/remotes/demo\t\tabc\tNested\nrefs/heads/remotes/origin/main\t\tabc\tLocal collision")
     #expect(entries[0].name == "origin/main")
@@ -127,7 +135,7 @@ import Testing
 }
 
 @Test func logParserReadsCommitMetadataAndRefs() {
-    let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u{1f}aaaaaaa\u{1f}bbbb cccc\u{1f}HEAD -> main, origin/main\u{1f}Ship MVP\u{1f}Daniaal\u{1f}d@example.com\u{1f}2 hours ago\u{1e}"
+    let output = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u{1f}aaaaaaa\u{1f}bbbb cccc\u{1f}HEAD\u{1c}main\u{1d}origin/main\u{1f}Ship MVP\u{1f}Daniaal\u{1f}d@example.com\u{1f}2 hours ago\u{1e}"
 
     let commits = GitLogParser.parse(output)
 
