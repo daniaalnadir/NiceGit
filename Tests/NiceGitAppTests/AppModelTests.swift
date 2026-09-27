@@ -190,6 +190,52 @@ struct AppModelTests {
     #expect(model.activeTerminal === b)
 }
 
+@Test @MainActor func terminalFollowsRepositoryWhenActiveTabCloses() async throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let first = base.appendingPathComponent("first")
+    let second = base.appendingPathComponent("second")
+    for url in [first, second] {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try GitClient().initialize(at: url)
+    }
+    let firstPath = try GitClient().loadSnapshot(at: first).rootPath
+    let secondPath = try GitClient().loadSnapshot(at: second).rootPath
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let model = AppModel(defaults: defaults)
+    @MainActor func waitForLoad() async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while model.isLoading && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(!model.isLoading)
+        #expect(model.errorMessage == nil)
+    }
+
+    model.loadRepository(at: first)
+    try await waitForLoad()
+    model.openTerminal()
+    let firstSession = try #require(model.activeTerminal)
+    model.loadRepository(at: second)
+    try await waitForLoad()
+    #expect(model.activeTerminal?.path == secondPath)
+
+    model.closeRepository(path: secondPath)
+    try await waitForLoad()
+    #expect(model.snapshot?.rootPath == firstPath)
+    #expect(model.activeTerminal === firstSession)
+
+    model.closeRepository(path: firstPath)
+    #expect(model.snapshot == nil)
+    #expect(model.activeTerminal == nil)
+    #expect(!model.showingTerminal)
+
+    model.loadRepository(at: first)
+    try await waitForLoad()
+    model.openTerminal()
+    #expect(model.activeTerminal === firstSession)
+}
+
 @Test @MainActor func commitUndoRedoPreservesWorkingFiles() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -39,6 +39,7 @@
 - Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
 - Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
+- Keep the visible terminal bound to the active repository in the model; closing the last tab must hide it while preserving its shell session for later reuse.
 - A detected copy carries a source path like a rename, but Discard, Unstage, and Diff must affect or display only the copied path.
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
