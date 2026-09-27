@@ -668,7 +668,8 @@ public struct GitClient: Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             try requireRemoteAddresses(expectedFetchAddresses, remote: remote, push: false, command: "pull", in: repositoryURL)
         }
-        try run(["pull", "--ff-only"], in: repositoryURL)
+        try run(["fetch"], in: repositoryURL)
+        try run(["merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD"], in: repositoryURL)
     }
 
     public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {

@@ -1613,3 +1613,37 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
         throw NSError(domain: "NiceGitCoreTests", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
+
+@Test func pullPreservesIgnoredLocalFiles() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let remote = base.appendingPathComponent("remote.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try runGit(["init", "--bare"], in: remote)
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "local.txt\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.addRemote(name: "origin", address: remote.path, in: root)
+    try runGit(["push", "--set-upstream", "origin", "main"], in: root)
+    let original = try #require(git.loadSnapshot(at: root).headHash)
+    let file = root.appendingPathComponent("local.txt")
+    try "remote contents\n".write(to: file, atomically: true, encoding: .utf8)
+    try runGit(["add", "--force", "local.txt"], in: root)
+    try git.commit(message: "Track local file", in: root)
+    try runGit(["push", "origin", "main"], in: root)
+    let incoming = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["reset", "--hard", original], in: root)
+    try "local contents\n".write(to: file, atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.pull(in: root) }
+    #expect(try git.loadSnapshot(at: root).headHash == original)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "local contents\n")
+    try FileManager.default.removeItem(at: file)
+    try git.pull(in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == incoming)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "remote contents\n")
+}
