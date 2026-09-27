@@ -285,7 +285,7 @@ public struct GitClient: Sendable {
         let headHash = current?.tip
         let head = headHash != nil ? ["HEAD"] : []
         let limit = max(1, historyLimit)
-        let logFormat = "%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
+        let logFormat = "%H%x1f%h%x1f%P%x1f%(decorate:prefix=,suffix=,separator=%x1d,pointer=%x1c,tag=tag: )%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
         let commits = GitLogParser.parse(try run([
             "log",
             "--exclude=refs/stash",

@@ -39,6 +39,7 @@
 - Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
 - Use unambiguous UI identities for local versus remote branches and for status paths; Git names can contain separators used in display strings.
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
+- Keep the visible terminal bound to the active repository in the model; closing the last tab must hide it while preserving its shell session for later reuse.
 - A detected copy carries a source path like a rename, but Discard, Unstage, and Diff must affect or display only the copied path.
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
@@ -46,3 +47,4 @@
 - Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
 - Preserve Pull auto-stash precedence: `pull.autoStash` overrides the merge/rebase default, and branch-specific rebase settings override `pull.rebase`.
 - Recheck the starting branch and HEAD after fetching, before Pull integrates changes; another client may switch checkouts during network activity.
+- Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
