@@ -53,12 +53,13 @@ public struct GitDiffLine: Sendable, Equatable {
                 oldRemaining -= 1
                 return Self(text: text, kind: .deletion, oldNumber: oldValue, newNumber: nil)
             }
-            if text.hasPrefix(" "), oldRemaining > 0, newRemaining > 0 {
+            if text.hasPrefix(" ") || text.isEmpty, oldRemaining > 0, newRemaining > 0 {
                 old = oldValue + 1
                 new = newValue + 1
                 oldRemaining -= 1
                 newRemaining -= 1
-                return Self(text: text, kind: .context, oldNumber: oldValue, newNumber: newValue)
+                // diff.suppressBlankEmpty omits the prefix on empty context lines.
+                return Self(text: text.isEmpty ? " " : text, kind: .context, oldNumber: oldValue, newNumber: newValue)
             }
             return Self(text: text, kind: .metadata, oldNumber: nil, newNumber: nil)
         }

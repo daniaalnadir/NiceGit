@@ -32,6 +32,7 @@
 - Guard Create and checkout branch while the built-in editor has unsaved text, just like other actions that change the checkout.
 - Check the starting branch and HEAD before switching, so a delayed click cannot stash or switch an unexpected checkout.
 - Refuse branch switching during an unfinished Git operation before creating any stash; disable checkout controls while that operation is shown.
+- Detect pending cherry-pick/revert sequences from `sequencer/todo` after a manual conflict commit removes the per-commit HEAD marker.
 - Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
 - Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
 - Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
@@ -45,6 +46,7 @@
 - Quick working-tree refreshes must compare Git's current branch, HEAD, and operation with the cached snapshot; use porcelain v2 branch headers and fall back to a full refresh when they differ or status parsing is incomplete.
 - Keep the visible terminal bound to the active repository in the model; closing the last tab must hide it while preserving its shell session for later reuse.
 - A detected copy carries a source path like a rename, but Discard, Unstage, and Diff must affect or display only the copied path.
+- Within a diff hunk, preserve empty context lines emitted by `diff.suppressBlankEmpty` when parsing line numbers and rebuilding partial-stage patches.
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.

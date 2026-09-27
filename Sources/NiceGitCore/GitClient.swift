@@ -131,6 +131,16 @@ public struct GitClient: Sendable {
         for (marker, operation) in markers {
             if FileManager.default.fileExists(atPath: directory.appendingPathComponent(marker).path) { return operation }
         }
+        let todo = directory.appendingPathComponent("sequencer/todo")
+        if FileManager.default.fileExists(atPath: todo.path) {
+            for line in try String(contentsOf: todo, encoding: .utf8).split(separator: "\n") {
+                switch line.split(whereSeparator: \.isWhitespace).first {
+                case "pick": return .cherryPick
+                case "revert": return .revert
+                default: continue
+                }
+            }
+        }
         return nil
     }
 
