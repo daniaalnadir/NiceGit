@@ -45,4 +45,5 @@
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
 - Git's missing-newline annotation belongs to the surrounding change; keep replacement pairing across it when computing inline highlights.
+- Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
