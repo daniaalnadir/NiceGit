@@ -29,7 +29,7 @@ extension GitClient {
         let lines = GitDiffLine.parse(patch)
         let reason: String?
         if entry?.kind == .conflicted { reason = "Resolve conflicts before staging individual lines." }
-        else if entry?.originalPath != nil { reason = "Stage or unstage renamed files as a whole." }
+        else if entry?.originalPath != nil { reason = "Stage or unstage renamed and copied files as a whole." }
         else if lines.contains(where: { $0.kind == .metadata && ($0.text.hasSuffix("120000") || $0.text.hasSuffix("160000") || $0.text.hasPrefix("Binary files ")) }) {
             reason = "Binary files, symbolic links, and submodules require whole-file staging."
         } else if patch.utf8.count > 4_000_000 { reason = "This diff is too large for line staging." }
