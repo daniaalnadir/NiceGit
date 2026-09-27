@@ -1647,3 +1647,39 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
     #expect(try git.loadSnapshot(at: root).headHash == incoming)
     #expect(try String(contentsOf: file, encoding: .utf8) == "remote contents\n")
 }
+
+@Test(arguments: [false, true]) func pullUpdatesInitializedSubmodulesWhenConfigured(recurse: Bool) throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let source = base.appendingPathComponent("source")
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    for url in [source, remote] {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try git.initialize(at: url)
+        try git.setIdentity(name: "Test", email: "test@example.invalid", in: url)
+    }
+    let file = source.appendingPathComponent("file.txt")
+    try "one\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: source)
+    try git.commit(message: "One", in: source)
+    try runGit(["-c", "protocol.file.allow=always", "submodule", "add", source.path, "module"], in: remote)
+    try git.commit(message: "Base", in: remote)
+    try runGit(["-c", "protocol.file.allow=always", "clone", "--recurse-submodules", remote.path, checkout.path], in: base)
+    try runGit(["config", "submodule.recurse", recurse ? "true" : "false"], in: checkout)
+    try "two\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: source)
+    try git.commit(message: "Two", in: source)
+    let tip = try #require(git.loadSnapshot(at: source).headHash)
+    let remoteModule = remote.appendingPathComponent("module")
+    try runGit(["fetch"], in: remoteModule)
+    try runGit(["checkout", tip], in: remoteModule)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Advance submodule", in: remote)
+    // Pre-fetch the local fixture's objects; recursive fetch deliberately restricts file transport.
+    try runGit(["fetch"], in: checkout.appendingPathComponent("module"))
+    try git.pull(in: checkout)
+    #expect(try String(contentsOf: checkout.appendingPathComponent("module/file.txt"), encoding: .utf8) == (recurse ? "two\n" : "one\n"))
+    #expect(try git.loadStatus(in: checkout).isEmpty == recurse)
+}

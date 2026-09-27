@@ -668,8 +668,11 @@ public struct GitClient: Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             try requireRemoteAddresses(expectedFetchAddresses, remote: remote, push: false, command: "pull", in: repositoryURL)
         }
+        let recurse = try run(["config", "--bool", "--get", "submodule.recurse"], in: repositoryURL, acceptedStatuses: [0, 1])
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         try run(["fetch"], in: repositoryURL)
         try run(["merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD"], in: repositoryURL)
+        if recurse { try run(["submodule", "update", "--recursive", "--checkout"], in: repositoryURL) }
     }
 
     public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {

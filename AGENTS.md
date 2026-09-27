@@ -43,4 +43,4 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
-- Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose.
+- Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
