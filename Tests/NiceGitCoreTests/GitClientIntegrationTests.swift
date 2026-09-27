@@ -1378,21 +1378,27 @@ func checkoutAndMergePreserveIgnoredLocalFiles(action: String, path: String) thr
     }
 }
 
-@Test func unstageBeforeFirstCommitPreservesFiles() throws {
+@Test(arguments: [false, true]) func unstageBeforeFirstCommitPreservesFiles(unstageAll: Bool) throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     try runGit(["init"], in: root)
     let file = root.appendingPathComponent("first.txt")
-    try "keep me".write(to: file, atomically: true, encoding: .utf8)
+    let other = root.appendingPathComponent("other.txt")
+    try "staged version\n".write(to: file, atomically: true, encoding: .utf8)
+    try "other file\n".write(to: other, atomically: true, encoding: .utf8)
     let git = GitClient()
     try git.stageAll(in: root)
-    try git.unstage(path: "first.txt", in: root)
-    #expect(try git.loadSnapshot(at: root).stagedCount == 0)
-    try git.stageAll(in: root)
-    try git.unstageAll(in: root)
-    #expect(try git.loadSnapshot(at: root).stagedCount == 0)
-    #expect(try String(contentsOf: file, encoding: .utf8) == "keep me")
+    try "newer working version\n".write(to: file, atomically: true, encoding: .utf8)
+
+    if unstageAll { try git.unstageAll(in: root) }
+    else { try git.unstage(path: "first.txt", in: root) }
+
+    let status = try git.loadStatus(in: root)
+    #expect(status.first { $0.path == "first.txt" }?.kind == .untracked)
+    #expect(status.first { $0.path == "other.txt" }?.isStaged == !unstageAll)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "newer working version\n")
+    #expect(try String(contentsOf: other, encoding: .utf8) == "other file\n")
 }
 
 @Test func mergeConflictCanContinueAndRebaseCanAbort() throws {
