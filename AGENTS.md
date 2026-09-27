@@ -8,6 +8,7 @@
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
+- Detect file creation, deletion, and modes only from patch headers before the first hunk; file content can resemble those headers.
 - A deleted tracked file and an untracked directory can share the same path prefix; file-tree grouping must show both regardless of status order.
 - Git's missing-newline annotation belongs to the surrounding change; keep replacement pairing across it when computing inline highlights.
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.

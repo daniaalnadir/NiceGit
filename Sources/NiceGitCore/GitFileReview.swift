@@ -106,17 +106,18 @@ extension GitClient {
         }
         let old = body(baseline, prefix: "-")
         let new = body(target, prefix: "+")
-        let createsFile = review.staged ? review.patch.contains("+++ /dev/null\n") : review.patch.contains("--- /dev/null\n")
-        let removesFile = target.isEmpty && (review.staged ? review.patch.contains("--- /dev/null\n") : review.patch.contains("+++ /dev/null\n"))
+        let headers = review.lines.prefix { $0.kind != .hunk }.map(\.text)
+        let createsFile = headers.contains(review.staged ? "+++ /dev/null" : "--- /dev/null")
+        let removesFile = target.isEmpty && headers.contains(review.staged ? "--- /dev/null" : "+++ /dev/null")
         let a = quoted("a/" + review.path)
         let b = quoted("b/" + review.path)
         var patch = "diff --git \(a) \(b)\n"
         if createsFile {
-            let mode = review.patch.components(separatedBy: "\n").first { $0.hasPrefix(review.staged ? "deleted file mode " : "new file mode ") }?.split(separator: " ").last ?? "100644"
+            let mode = headers.first { $0.hasPrefix(review.staged ? "deleted file mode " : "new file mode ") }?.split(separator: " ").last ?? "100644"
             patch += "new file mode \(mode)\n"
         }
         if removesFile {
-            let mode = review.patch.components(separatedBy: "\n").first { $0.hasPrefix(review.staged ? "new file mode " : "deleted file mode ") }?.split(separator: " ").last ?? "100644"
+            let mode = headers.first { $0.hasPrefix(review.staged ? "new file mode " : "deleted file mode ") }?.split(separator: " ").last ?? "100644"
             patch += "deleted file mode \(mode)\n"
         }
         patch += "--- \(createsFile ? "/dev/null" : a)\n+++ \(removesFile ? "/dev/null" : b)\n"
