@@ -47,4 +47,5 @@
 - Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
 - Preserve Pull auto-stash precedence: `pull.autoStash` overrides the merge/rebase default, and branch-specific rebase settings override `pull.rebase`.
 - Recheck the starting branch and HEAD after fetching, before Pull integrates changes; another client may switch checkouts during network activity.
+- Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
