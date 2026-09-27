@@ -21,6 +21,24 @@ import Testing
     #expect(quick.entries == (try git.loadStatus(in: root)))
 }
 
+@Test func graphReferencesPreserveCommasInBranchAndTagNames() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try git.createBranch(named: "feature,one", startingAt: "HEAD", in: root)
+    try git.createTag(name: "v1,preview", target: "HEAD", in: root)
+    try git.createTag(name: "release,stable", target: "HEAD", message: "Release", in: root)
+    try runGit(["update-ref", "refs/remotes/origin/remote,one", "HEAD"], in: root)
+
+    let snapshot = try git.loadSnapshot(at: root)
+    let refs = try #require(snapshot.commits.first?.refs)
+    #expect(Set(refs) == Set(["HEAD -> main", "feature,one", "origin/remote,one", "tag: v1,preview", "tag: release,stable"]))
+}
+
 @Test func commitFileChangeKindsIncludeRootAndDeletedPaths() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
