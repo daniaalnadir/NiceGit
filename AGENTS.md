@@ -2,6 +2,7 @@
 
 - A branch switch must preserve staged, unstaged, and untracked changes. Keep the saved stash visible, and restore the original checkout if the switch fails.
 - When reducing repository refresh calls, retain detached-HEAD and linked-worktree behavior in integration tests.
+- Remove inherited `GIT_DIFF_OPTS`; it overrides explicit context options and can break full-file patch reconstruction for partial staging.
 - Check busy state before changing repository selection or editor state. Base post-operation notices on the Git result rather than a possibly stale snapshot.
 - Git metadata paths can contain newlines; use a single absolute Git directory path and remove only Git's final line terminator. Validate that a selected stash is still listed before applying it.
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
@@ -44,6 +45,5 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
-- Remove inherited `GIT_DIFF_OPTS`; it overrides explicit context options and can break full-file patch reconstruction for partial staging.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
