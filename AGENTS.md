@@ -2,6 +2,7 @@
 
 - A branch switch must preserve staged, unstaged, and untracked changes. Keep the saved stash visible, and restore the original checkout if the switch fails.
 - When reducing repository refresh calls, retain detached-HEAD and linked-worktree behavior in integration tests.
+- Remove inherited `GIT_DIFF_OPTS`; it overrides explicit context options and can break full-file patch reconstruction for partial staging.
 - Check busy state before changing repository selection or editor state. Base post-operation notices on the Git result rather than a possibly stale snapshot.
 - Git metadata paths can contain newlines; use a single absolute Git directory path and remove only Git's final line terminator. Validate that a selected stash is still listed before applying it.
 - For actions on a selected branch, compare its current ref tip with the tip shown when selected before renaming, deleting, pushing, or changing upstream settings.
@@ -12,11 +13,13 @@
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
+- Quote generated patch paths with Git's C-style byte escapes; JSON Unicode escapes do not preserve control characters in filenames.
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.
 - Treat `git stash push` as incomplete until it creates a new stash and leaves only intentionally excluded untracked files; submodule edits can remain after Git reports success.
 - Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
 - Keep destructive action buttons and confirmation text aligned with the actual Git operation, including staged and untracked files.
 - Block Git operations that can rewrite working files while the built-in editor has unsaved text; confirm before navigation to a new checkout.
+- Conflict-editor validation must honor the file's `conflict-marker-size` attribute, including sizes shorter than Git's default seven characters.
 - Capture branch and HEAD when showing a commit-operation confirmation, and pass both to Git so a stale dialog cannot act on a different checkout.
 - Check the selected local or remote branch tip before checkout; a ref that moved after display should be reviewed again before switching.
 - For merge and rebase confirmations, verify the selected source branch still points to the displayed commit as well as checking the current checkout.

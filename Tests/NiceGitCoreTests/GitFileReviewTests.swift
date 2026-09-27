@@ -56,9 +56,9 @@ private func reviewFixture(_ operation: (GitClient, URL) throws -> Void) throws 
     try operation(git, root)
 }
 
-@Test func partialStageAndUnstagePreserveUnselectedAndWorkingChanges() throws {
+@Test(arguments: ["file with spaces.txt", "control\u{1}file.txt", "quote\"and\\slash.txt", "café\nfile.txt"])
+func partialStageAndUnstagePreserveUnselectedAndWorkingChanges(path: String) throws {
     try reviewFixture { git, root in
-        let path = "file with spaces.txt"
         let file = root.appendingPathComponent(path)
         try "one\ntwo\nthree\n".write(to: file, atomically: true, encoding: .utf8)
         try git.stageAll(in: root)
