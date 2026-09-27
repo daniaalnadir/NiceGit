@@ -22,6 +22,9 @@
 - When creating a branch from a selected branch, verify that source ref still points to its displayed commit before creating the new ref.
 - Check a selected branch tip again after the worktree destination dialog closes, before creating the worktree.
 - Capture branch and HEAD for Pull before dispatch; a delayed Pull must not run on a checkout that changed after the click.
+- Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
+- Preserve Pull auto-stash precedence: `pull.autoStash` overrides the merge/rebase default, and branch-specific rebase settings override `pull.rebase`.
+- Recheck the starting branch and HEAD after fetching, before Pull integrates changes; another client may switch checkouts during network activity.
 - Capture branch and HEAD when opening a Create at HEAD dialog; check them again before creating and checking out the new branch.
 - Capture the displayed upstream for Pull and Push, and reject a changed tracking target before fetching or pushing.
 - Capture all displayed fetch and push URLs for a remote; verify the destination before Pull, Push, and Publish so a changed remote address cannot redirect the operation.
@@ -44,8 +47,5 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
-- Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
-- Preserve Pull auto-stash precedence: `pull.autoStash` overrides the merge/rebase default, and branch-specific rebase settings override `pull.rebase`.
-- Recheck the starting branch and HEAD after fetching, before Pull integrates changes; another client may switch checkouts during network activity.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
