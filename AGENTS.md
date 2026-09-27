@@ -11,6 +11,7 @@
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
+- Quote generated patch paths with Git's C-style byte escapes; JSON Unicode escapes do not preserve control characters in filenames.
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.
 - Treat `git stash push` as incomplete until it creates a new stash and leaves only intentionally excluded untracked files; submodule edits can remain after Git reports success.
 - Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
@@ -44,6 +45,5 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
-- Quote generated patch paths with Git's C-style byte escapes; JSON Unicode escapes do not preserve control characters in filenames.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
