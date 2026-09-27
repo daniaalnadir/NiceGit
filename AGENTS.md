@@ -9,6 +9,7 @@
 - Before switching branches, confirm that stash push created a new stash and cleared the working tree; a superproject stash does not save dirty submodule files.
 - Discard must handle staged and unstaged changes together, restore both paths of a rename, and remove selected untracked files without touching other paths.
 - A deleted tracked file and an untracked directory can share the same path prefix; file-tree grouping must show both regardless of status order.
+- Git's missing-newline annotation belongs to the surrounding change; keep replacement pairing across it when computing inline highlights.
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
 - Guard incoming merge paths against ignored local files before merging; `--no-overwrite-ignore` alone does not protect divergent merges with Git's ort strategy.
