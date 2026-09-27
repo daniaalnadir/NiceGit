@@ -31,6 +31,7 @@ public struct GitInlineChange: Equatable, Sendable {
             switch lines[index].kind {
             case .deletion: removed.append(index)
             case .addition: added.append(index)
+            case .metadata where lines[index].text == "\\ No newline at end of file": continue
             default: flush()
             }
         }
