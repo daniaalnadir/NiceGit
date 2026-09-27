@@ -1781,3 +1781,37 @@ func pullRespectsAutoStashConfiguration(setting: String) throws {
     #expect(after.headHash == original)
     #expect(try String(contentsOf: checkout.appendingPathComponent("file.txt"), encoding: .utf8) == "base\n")
 }
+@Test(arguments: [3, 9]) func conflictEditorHonorsCustomMarkerSize(markerSize: Int) throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["config", "merge.conflictStyle", "diff3"], in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "file.txt conflict-marker-size=\(markerSize)\n".write(to: root.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.createBranch(named: "feature", in: root)
+    try "feature\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Feature", in: root)
+    try git.checkout(branch: "main", in: root)
+    try "main\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Main", in: root)
+    #expect(throws: (any Error).self) { try git.start(.merge, target: "feature", in: root) }
+    let document = try git.loadConflict(path: "file.txt", in: root)
+    #expect(document.content.contains(String(repeating: "<", count: markerSize) + " HEAD"))
+    #expect(throws: (any Error).self) { try git.resolveConflict(document, content: document.content, in: root) }
+    #expect(try Data(contentsOf: file) == document.originalData)
+    #expect(try git.loadStatus(in: root).contains { $0.path == "file.txt" && $0.kind == .conflicted })
+    if markerSize == 9 {
+        let resolved = "Heading\n=======\nresolved\n"
+        try git.resolveConflict(document, content: resolved, in: root)
+        #expect(try String(contentsOf: file, encoding: .utf8) == resolved)
+        #expect(try git.loadStatus(in: root).allSatisfy { $0.kind != .conflicted })
+    }
+}

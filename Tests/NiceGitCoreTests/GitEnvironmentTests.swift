@@ -7,7 +7,7 @@ import Testing
         "GIT_COMMON_DIR": "/other/common", "GIT_CONFIG_COUNT": "1",
         "GIT_CONFIG_KEY_0": "core.worktree", "GIT_CONFIG_VALUE_0": "/other",
         "GIT_CONFIG_PARAMETERS": "override", "SSH_AUTH_SOCK": "/agent",
-        "HOME": "/home/test", "GIT_SSH_COMMAND": "ssh -i key"
+        "HOME": "/home/test", "GIT_SSH_COMMAND": "ssh -i key", "GIT_DIFF_OPTS": "--unified=0"
     ])
     #expect(result == ["SSH_AUTH_SOCK": "/agent", "HOME": "/home/test", "GIT_SSH_COMMAND": "ssh -i key"])
 }
