@@ -16,6 +16,7 @@
 - Push and publish only the selected current branch with an explicit refspec, disabling mirror and automatic tag following; plain `git push` can send other branches or tags under user Git settings.
 - Keep destructive action buttons and confirmation text aligned with the actual Git operation, including staged and untracked files.
 - Block Git operations that can rewrite working files while the built-in editor has unsaved text; confirm before navigation to a new checkout.
+- Conflict-editor validation must honor the file's `conflict-marker-size` attribute, including sizes shorter than Git's default seven characters.
 - Capture branch and HEAD when showing a commit-operation confirmation, and pass both to Git so a stale dialog cannot act on a different checkout.
 - Check the selected local or remote branch tip before checkout; a ref that moved after display should be reviewed again before switching.
 - For merge and rebase confirmations, verify the selected source branch still points to the displayed commit as well as checking the current checkout.
@@ -44,6 +45,5 @@
 - Report a saved branch-switch stash as soon as Git succeeds, even if the following repository refresh fails.
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
-- Conflict-editor validation must honor the file's `conflict-marker-size` attribute, including sizes shorter than Git's default seven characters.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
