@@ -21,6 +21,24 @@ import Testing
     #expect(quick.entries == (try git.loadStatus(in: root)))
 }
 
+@Test func graphReferencesPreserveCommasInBranchAndTagNames() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["commit", "--allow-empty", "-m", "Base"], in: root)
+    try git.createBranch(named: "feature,one", startingAt: "HEAD", in: root)
+    try git.createTag(name: "v1,preview", target: "HEAD", in: root)
+    try git.createTag(name: "release,stable", target: "HEAD", message: "Release", in: root)
+    try runGit(["update-ref", "refs/remotes/origin/remote,one", "HEAD"], in: root)
+
+    let snapshot = try git.loadSnapshot(at: root)
+    let refs = try #require(snapshot.commits.first?.refs)
+    #expect(Set(refs) == Set(["HEAD -> main", "feature,one", "origin/remote,one", "tag: v1,preview", "tag: release,stable"]))
+}
+
 @Test func commitFileChangeKindsIncludeRootAndDeletedPaths() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -747,6 +765,41 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: selectedFile.path))
     #expect(try String(contentsOf: unrelatedFile, encoding: .utf8) == "unrelated\n")
     #expect(try git.loadStatus(in: root).map(\.path) == ["a.txt"])
+}
+
+@Test func copiedFileActionsPreserveChangesInTheSource() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try runGit(["config", "status.renames", "copies"], in: root)
+    let source = root.appendingPathComponent("source.txt")
+    let copy = root.appendingPathComponent("copy.txt")
+    try "one\ntwo\nthree\nfour\nfive\n".write(to: source, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try FileManager.default.copyItem(at: source, to: copy)
+    try "one\ntwo\nthree\nfour\nupdated\n".write(to: source, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    let selected = try #require(git.loadStatus(in: root).first { $0.path == "copy.txt" })
+    #expect(selected.kind == .added)
+    #expect(selected.originalPath == "source.txt")
+    let copyDiff = try git.diff(path: selected.path, staged: true, originalPath: selected.originalPath, in: root)
+    #expect(copyDiff.contains("diff --git a/copy.txt b/copy.txt"))
+    #expect(!copyDiff.contains("diff --git a/source.txt b/source.txt"))
+
+    try git.unstage(path: selected.path, originalPath: selected.originalPath, in: root)
+    #expect(try git.loadStatus(in: root).first { $0.path == "source.txt" }?.indexStatus == "M")
+    #expect(try git.loadStatus(in: root).first { $0.path == "copy.txt" }?.kind == .untracked)
+    try git.stage(path: selected.path, in: root)
+    let copiedAgain = try #require(git.loadStatus(in: root).first { $0.path == "copy.txt" })
+    try git.discard(copiedAgain, in: root)
+    #expect(!FileManager.default.fileExists(atPath: copy.path))
+    #expect(try String(contentsOf: source, encoding: .utf8).hasSuffix("updated\n"))
+    #expect(try git.loadStatus(in: root).map(\.path) == ["source.txt"])
+    #expect(try git.diff(path: "source.txt", staged: true, in: root).contains("+updated"))
 }
 
 @Test func selectedBranchPushDoesNotPushHeadOrForceRemote() throws {
