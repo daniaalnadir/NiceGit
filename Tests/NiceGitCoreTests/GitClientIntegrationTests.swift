@@ -1683,3 +1683,46 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
     #expect(try String(contentsOf: checkout.appendingPathComponent("module/file.txt"), encoding: .utf8) == (recurse ? "two\n" : "one\n"))
     #expect(try git.loadStatus(in: checkout).isEmpty == recurse)
 }
+
+@Test(arguments: ["pull-on", "pull-off", "rebase-on", "branch-off"])
+func pullRespectsAutoStashConfiguration(setting: String) throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: remote)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: remote)
+    let middle = String(repeating: "unchanged\n", count: 20)
+    let file = remote.appendingPathComponent("file.txt")
+    try ("first\n" + middle + "last\n").write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Base", in: remote)
+    try git.clone(source: remote.path, to: checkout)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: checkout)
+    let original = try #require(git.loadSnapshot(at: checkout).headHash)
+    try runGit(["config", "merge.autostash", setting == "pull-off" ? "true" : "false"], in: checkout)
+    if setting.hasPrefix("pull-") {
+        try runGit(["config", "pull.autostash", setting == "pull-on" ? "true" : "false"], in: checkout)
+    } else {
+        try runGit(["config", "pull.rebase", "merges"], in: checkout)
+        try runGit(["config", "rebase.autostash", "true"], in: checkout)
+        if setting == "branch-off" { try runGit(["config", "branch.main.rebase", "false"], in: checkout) }
+    }
+    let working = checkout.appendingPathComponent("file.txt")
+    let local = "local\n" + middle + "last\n"
+    try local.write(to: working, atomically: true, encoding: .utf8)
+    try ("first\n" + middle + "remote\n").write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Remote", in: remote)
+    if setting.hasSuffix("-on") {
+        try git.pull(in: checkout)
+        #expect(try String(contentsOf: working, encoding: .utf8) == "local\n" + middle + "remote\n")
+        #expect(try git.loadSnapshot(at: checkout).headHash != original)
+    } else {
+        #expect(throws: (any Error).self) { try git.pull(in: checkout) }
+        #expect(try String(contentsOf: working, encoding: .utf8) == local)
+        #expect(try git.loadSnapshot(at: checkout).headHash == original)
+    }
+}

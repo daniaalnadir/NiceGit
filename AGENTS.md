@@ -44,3 +44,4 @@
 - Report completed Git mutations when a subsequent refresh fails, and distinguish them from refresh-only failures.
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
 - Pull must protect ignored local files too: fetch first, then fast-forward with `--no-overwrite-ignore`, which `git pull` does not expose. Preserve configured recursive submodule updates afterward.
+- Preserve Pull auto-stash precedence: `pull.autoStash` overrides the merge/rebase default, and branch-specific rebase settings override `pull.rebase`.

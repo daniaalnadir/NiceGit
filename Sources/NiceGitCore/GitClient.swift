@@ -670,9 +670,28 @@ public struct GitClient: Sendable {
         }
         let recurse = try run(["config", "--bool", "--get", "submodule.recurse"], in: repositoryURL, acceptedStatuses: [0, 1])
             .trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+        let autoStash = try pullAutoStash(in: repositoryURL)
         try run(["fetch"], in: repositoryURL)
-        try run(["merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD"], in: repositoryURL)
+        try run(["merge", "--ff-only", "--no-overwrite-ignore", autoStash ? "--autostash" : "--no-autostash", "FETCH_HEAD"], in: repositoryURL)
         if recurse { try run(["submodule", "update", "--recursive", "--checkout"], in: repositoryURL) }
+    }
+
+    private func pullAutoStash(in url: URL) throws -> Bool {
+        func config(_ key: String, boolean: Bool = false) throws -> String? {
+            let value = try run(["config"] + (boolean ? ["--bool"] : []) + ["--get", key], in: url, acceptedStatuses: [0, 1])
+            return value.isEmpty ? nil : value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let override = try config("pull.autostash", boolean: true) { return override == "true" }
+        let branch = (try? run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: url))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let branchKey = branch.map { "branch." + $0 + ".rebase" }
+        let key: String
+        if let branchKey, try config(branchKey) != nil { key = branchKey }
+        else { key = "pull.rebase" }
+        let rebase = try config(key)
+        let rebasing = try ["merges", "m", "interactive", "i"].contains(rebase ?? "")
+            || config(key, boolean: true) == "true"
+        return try config(rebasing ? "rebase.autostash" : "merge.autostash", boolean: true) == "true"
     }
 
     public func push(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedPushAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {
