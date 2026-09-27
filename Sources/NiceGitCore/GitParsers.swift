@@ -65,6 +65,7 @@ public enum GitStatusParser {
         if conflicted { kind = .conflicted }
         else if x == "?" { kind = .untracked }
         else if x == "R" || y == "R" { kind = .renamed }
+        else if x == "C" || y == "C" { kind = .added }
         else if x == "A" || y == "A" { kind = .added }
         else if x == "D" || y == "D" { kind = .deleted }
         else { kind = .modified }
@@ -186,8 +187,8 @@ public enum GitLogParser {
                 }
 
                 let refs = fields[3]
-                    .split(separator: ",")
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .split(separator: "\u{1d}")
+                    .map { $0.replacingOccurrences(of: "\u{1c}", with: " -> ").trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
 
                 return GitCommit(
