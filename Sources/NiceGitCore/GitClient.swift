@@ -100,9 +100,40 @@ public struct GitClient: Sendable {
             }
         }
         var arguments = [operation.rawValue]
+        if operation == .merge {
+            if snapshot.headHash != nil { try requireNoIgnoredMergeCollisions(target: hash, in: url) }
+            arguments.append("--no-overwrite-ignore")
+        }
         if operation == .merge || operation == .revert { arguments.append("--no-edit") }
         if let mainline, operation == .revert || operation == .cherryPick { arguments += ["--mainline", String(mainline)] }
         try run(arguments + [hash], in: url)
+    }
+
+    private func requireNoIgnoredMergeCollisions(target: String, in url: URL) throws {
+        let bases = try run(["merge-base", "--all", "HEAD", target], in: url, acceptedStatuses: [0, 1])
+            .split(whereSeparator: \.isWhitespace)
+        var candidates = Set<String>()
+        for base in bases {
+            let paths = try run(["diff", "--name-only", "--no-renames", "--diff-filter=ACMRT", "-z", String(base), target, "--"], in: url)
+                .split(separator: "\0")
+            for path in paths {
+                var prefix = ""
+                let components = path.split(separator: "/")
+                for (index, component) in components.enumerated() {
+                    prefix += (prefix.isEmpty ? "" : "/") + component
+                    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.appendingPathComponent(prefix).path) else { break }
+                    if attributes[.type] as? FileAttributeType != .typeDirectory || index == components.count - 1 {
+                        candidates.insert(prefix)
+                        break
+                    }
+                }
+            }
+        }
+        guard !candidates.isEmpty else { return }
+        let ignored = try run(["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--"] + candidates.sorted(), in: url)
+        guard ignored.isEmpty else {
+            throw GitClientError.commandFailed(command: "merge", message: "Ignored local files would be overwritten by this merge. Move or back them up before merging.")
+        }
     }
 
     public func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String, in url: URL) throws {
@@ -756,7 +787,7 @@ public struct GitClient: Sendable {
         environment["GIT_EDITOR"] = "true"
         environment["GIT_SEQUENCE_EDITOR"] = "true"
         // Stash invokes Git internally with its own pathspecs; do not override those.
-        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout"].contains(command) {
+        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files"].contains(command) {
             environment["GIT_LITERAL_PATHSPECS"] = "1"
         }
         process.environment = environment

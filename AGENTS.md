@@ -11,6 +11,7 @@
 - A deleted tracked file and an untracked directory can share the same path prefix; file-tree grouping must show both regardless of status order.
 - Verify the path is clean after discard; Git can report a successful restore while dirty submodule files remain.
 - Use `git switch --no-overwrite-ignore`: Git otherwise overwrites ignored local files when a target branch tracks the same path.
+- Guard incoming merge paths against ignored local files before merging; `--no-overwrite-ignore` alone does not protect divergent merges with Git's ort strategy.
 - Set literal pathspecs for every Git command receiving a selected file path, including `git clean`; glob characters in a filename can otherwise select and delete other files.
 - Quote generated patch paths with Git's C-style byte escapes; JSON Unicode escapes do not preserve control characters in filenames.
 - Delete selected tags with the exact ref object ID captured when selected, using an atomic `update-ref -d` check so a replaced tag survives stale confirmation.

@@ -652,28 +652,51 @@ import Testing
     #expect(try String(contentsOf: topLevel, encoding: .utf8) == "base\n")
 }
 
-@Test func branchSwitchDoesNotOverwriteIgnoredLocalFile() throws {
+@Test(arguments: ["checkout", "merge", "merge-diverged"], ["generated.txt", "output/generated.txt", "[cache].txt"])
+func checkoutAndMergePreserveIgnoredLocalFiles(action: String, path: String) throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     let git = GitClient()
     try git.initialize(at: root)
     try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
-    try "generated.txt\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+    try ((path.hasPrefix("output/") ? "output/" : path.replacingOccurrences(of: "[", with: "\\[")) + "\n").write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
     try git.stageAll(in: root)
     try git.commit(message: "Ignore generated file", in: root)
     try git.createBranch(named: "feature", in: root)
-    let ignoredFile = root.appendingPathComponent("generated.txt")
+    let ignoredFile = root.appendingPathComponent(path)
+    try FileManager.default.createDirectory(at: ignoredFile.deletingLastPathComponent(), withIntermediateDirectories: true)
     try "tracked feature\n".write(to: ignoredFile, atomically: true, encoding: .utf8)
-    try runGit(["add", "--force", "generated.txt"], in: root)
+    try runGit(["add", "--force", "--", path], in: root)
     try git.commit(message: "Track generated file", in: root)
     try git.checkout(branch: "main", in: root)
+    if action == "merge-diverged" {
+        try "main work\n".write(to: root.appendingPathComponent("main.txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Independent main work", in: root)
+    }
+    let before = try git.loadSnapshot(at: root).headHash
+    try FileManager.default.createDirectory(at: ignoredFile.deletingLastPathComponent(), withIntermediateDirectories: true)
     try "ignored local\n".write(to: ignoredFile, atomically: true, encoding: .utf8)
     #expect(try git.loadStatus(in: root).isEmpty)
 
-    #expect(throws: (any Error).self) { try git.checkout(branch: "feature", in: root) }
+    #expect(throws: (any Error).self) {
+        if action == "checkout" { try git.checkout(branch: "feature", in: root) }
+        else { try git.start(.merge, target: "feature", in: root) }
+    }
+    #expect(try git.loadSnapshot(at: root).headHash == before)
     #expect(try git.loadSnapshot(at: root).currentBranch == "main")
     #expect(try String(contentsOf: ignoredFile, encoding: .utf8) == "ignored local\n")
+    try FileManager.default.removeItem(at: ignoredFile)
+    if path.hasPrefix("output/") {
+        try "unrelated local\n".write(to: ignoredFile.deletingLastPathComponent().appendingPathComponent("other.txt"), atomically: true, encoding: .utf8)
+    }
+    if action == "checkout" { try git.checkout(branch: "feature", in: root) }
+    else { try git.start(.merge, target: "feature", in: root) }
+    #expect(try String(contentsOf: ignoredFile, encoding: .utf8) == "tracked feature\n")
+    if path.hasPrefix("output/") {
+        #expect(try String(contentsOf: ignoredFile.deletingLastPathComponent().appendingPathComponent("other.txt"), encoding: .utf8) == "unrelated local\n")
+    }
 }
 
 @Test func discardRemovesStagedUnstagedRenamedAndUntrackedChanges() throws {
