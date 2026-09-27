@@ -1661,6 +1661,149 @@ private func runGit(_ arguments: [String], in directory: URL) throws {
     }
 }
 
+@Test func pullPreservesIgnoredLocalFiles() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let remote = base.appendingPathComponent("remote.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try runGit(["init", "--bare"], in: remote)
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "local.txt\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.addRemote(name: "origin", address: remote.path, in: root)
+    try runGit(["push", "--set-upstream", "origin", "main"], in: root)
+    let original = try #require(git.loadSnapshot(at: root).headHash)
+    let file = root.appendingPathComponent("local.txt")
+    try "remote contents\n".write(to: file, atomically: true, encoding: .utf8)
+    try runGit(["add", "--force", "local.txt"], in: root)
+    try git.commit(message: "Track local file", in: root)
+    try runGit(["push", "origin", "main"], in: root)
+    let incoming = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["reset", "--hard", original], in: root)
+    try "local contents\n".write(to: file, atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.pull(in: root) }
+    #expect(try git.loadSnapshot(at: root).headHash == original)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "local contents\n")
+    try FileManager.default.removeItem(at: file)
+    try git.pull(in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == incoming)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "remote contents\n")
+}
+
+@Test(arguments: [false, true]) func pullUpdatesInitializedSubmodulesWhenConfigured(recurse: Bool) throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let source = base.appendingPathComponent("source")
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    for url in [source, remote] {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try git.initialize(at: url)
+        try git.setIdentity(name: "Test", email: "test@example.invalid", in: url)
+    }
+    let file = source.appendingPathComponent("file.txt")
+    try "one\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: source)
+    try git.commit(message: "One", in: source)
+    try runGit(["-c", "protocol.file.allow=always", "submodule", "add", source.path, "module"], in: remote)
+    try git.commit(message: "Base", in: remote)
+    try runGit(["-c", "protocol.file.allow=always", "clone", "--recurse-submodules", remote.path, checkout.path], in: base)
+    try runGit(["config", "submodule.recurse", recurse ? "true" : "false"], in: checkout)
+    try "two\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: source)
+    try git.commit(message: "Two", in: source)
+    let tip = try #require(git.loadSnapshot(at: source).headHash)
+    let remoteModule = remote.appendingPathComponent("module")
+    try runGit(["fetch"], in: remoteModule)
+    try runGit(["checkout", tip], in: remoteModule)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Advance submodule", in: remote)
+    // Pre-fetch the local fixture's objects; recursive fetch deliberately restricts file transport.
+    try runGit(["fetch"], in: checkout.appendingPathComponent("module"))
+    try git.pull(in: checkout)
+    #expect(try String(contentsOf: checkout.appendingPathComponent("module/file.txt"), encoding: .utf8) == (recurse ? "two\n" : "one\n"))
+    #expect(try git.loadStatus(in: checkout).isEmpty == recurse)
+}
+
+@Test(arguments: ["pull-on", "pull-off", "rebase-on", "branch-off"])
+func pullRespectsAutoStashConfiguration(setting: String) throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: remote)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: remote)
+    let middle = String(repeating: "unchanged\n", count: 20)
+    let file = remote.appendingPathComponent("file.txt")
+    try ("first\n" + middle + "last\n").write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Base", in: remote)
+    try git.clone(source: remote.path, to: checkout)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: checkout)
+    let original = try #require(git.loadSnapshot(at: checkout).headHash)
+    try runGit(["config", "merge.autostash", setting == "pull-off" ? "true" : "false"], in: checkout)
+    if setting.hasPrefix("pull-") {
+        try runGit(["config", "pull.autostash", setting == "pull-on" ? "true" : "false"], in: checkout)
+    } else {
+        try runGit(["config", "pull.rebase", "merges"], in: checkout)
+        try runGit(["config", "rebase.autostash", "true"], in: checkout)
+        if setting == "branch-off" { try runGit(["config", "branch.main.rebase", "false"], in: checkout) }
+    }
+    let working = checkout.appendingPathComponent("file.txt")
+    let local = "local\n" + middle + "last\n"
+    try local.write(to: working, atomically: true, encoding: .utf8)
+    try ("first\n" + middle + "remote\n").write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Remote", in: remote)
+    if setting.hasSuffix("-on") {
+        try git.pull(in: checkout)
+        #expect(try String(contentsOf: working, encoding: .utf8) == "local\n" + middle + "remote\n")
+        #expect(try git.loadSnapshot(at: checkout).headHash != original)
+    } else {
+        #expect(throws: (any Error).self) { try git.pull(in: checkout) }
+        #expect(try String(contentsOf: working, encoding: .utf8) == local)
+        #expect(try git.loadSnapshot(at: checkout).headHash == original)
+    }
+}
+
+@Test func pullRejectsCheckoutChangedDuringFetch() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: remote)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: remote)
+    try "base\n".write(to: remote.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Base", in: remote)
+    try git.clone(source: remote.path, to: checkout)
+    try runGit(["branch", "other"], in: checkout)
+    let original = try #require(git.loadSnapshot(at: checkout).headHash)
+    try "remote\n".write(to: remote.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Remote", in: remote)
+    let hook = base.appendingPathComponent("upload-pack.sh")
+    let quotedCheckout = "'" + checkout.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    try ("#!/bin/sh\n/usr/bin/env -u GIT_DIR -u GIT_WORK_TREE /usr/bin/git -C " + quotedCheckout + " switch other >&2\nexec /usr/bin/git upload-pack \"$@\"\n")
+        .write(to: hook, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+    try runGit(["config", "remote.origin.uploadpack", hook.path], in: checkout)
+    #expect(throws: (any Error).self) { try git.pull(expectedBranch: "main", expectedHead: original, in: checkout) }
+    let after = try git.loadSnapshot(at: checkout)
+    #expect(after.currentBranch == "other")
+    #expect(after.headHash == original)
+    #expect(try String(contentsOf: checkout.appendingPathComponent("file.txt"), encoding: .utf8) == "base\n")
+}
 @Test(arguments: [3, 9]) func conflictEditorHonorsCustomMarkerSize(markerSize: Int) throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
