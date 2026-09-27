@@ -648,13 +648,12 @@ public struct GitClient: Sendable {
     }
 
     public func pull(expectedBranch: String? = nil, expectedHead: String? = nil, expectedUpstream: String? = nil, expectedFetchAddresses: [String: [String]]? = nil, in repositoryURL: URL) throws {
+        let startingBranch = currentBranch(in: repositoryURL)
+        let startingHead = (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if expectedBranch != nil || expectedHead != nil {
-            let branch = try run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: repositoryURL)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let head = try run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard (expectedBranch == nil || expectedBranch == branch),
-                  (expectedHead == nil || expectedHead == head) else {
+            guard (expectedBranch == nil || expectedBranch == startingBranch),
+                  (expectedHead == nil || expectedHead == startingHead) else {
                 throw GitClientError.commandFailed(command: "pull", message: "The current branch changed since Pull was selected. Refresh and review it again.")
             }
         }
@@ -672,6 +671,7 @@ public struct GitClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         let autoStash = try pullAutoStash(in: repositoryURL)
         try run(["fetch"], in: repositoryURL)
+        try requireSelectedCheckout(branch: startingBranch, head: startingHead, command: "pull", in: repositoryURL)
         try run(["merge", "--ff-only", "--no-overwrite-ignore", autoStash ? "--autostash" : "--no-autostash", "FETCH_HEAD"], in: repositoryURL)
         if recurse { try run(["submodule", "update", "--recursive", "--checkout"], in: repositoryURL) }
     }

@@ -1726,3 +1726,34 @@ func pullRespectsAutoStashConfiguration(setting: String) throws {
         #expect(try git.loadSnapshot(at: checkout).headHash == original)
     }
 }
+
+@Test func pullRejectsCheckoutChangedDuringFetch() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let remote = base.appendingPathComponent("remote")
+    let checkout = base.appendingPathComponent("checkout")
+    try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: remote)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: remote)
+    try "base\n".write(to: remote.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Base", in: remote)
+    try git.clone(source: remote.path, to: checkout)
+    try runGit(["branch", "other"], in: checkout)
+    let original = try #require(git.loadSnapshot(at: checkout).headHash)
+    try "remote\n".write(to: remote.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: remote)
+    try git.commit(message: "Remote", in: remote)
+    let hook = base.appendingPathComponent("upload-pack.sh")
+    let quotedCheckout = "'" + checkout.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    try ("#!/bin/sh\n/usr/bin/env -u GIT_DIR -u GIT_WORK_TREE /usr/bin/git -C " + quotedCheckout + " switch other >&2\nexec /usr/bin/git upload-pack \"$@\"\n")
+        .write(to: hook, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+    try runGit(["config", "remote.origin.uploadpack", hook.path], in: checkout)
+    #expect(throws: (any Error).self) { try git.pull(expectedBranch: "main", expectedHead: original, in: checkout) }
+    let after = try git.loadSnapshot(at: checkout)
+    #expect(after.currentBranch == "other")
+    #expect(after.headHash == original)
+    #expect(try String(contentsOf: checkout.appendingPathComponent("file.txt"), encoding: .utf8) == "base\n")
+}
