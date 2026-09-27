@@ -31,6 +31,7 @@
 - Guard Create and checkout branch while the built-in editor has unsaved text, just like other actions that change the checkout.
 - Check the starting branch and HEAD before switching, so a delayed click cannot stash or switch an unexpected checkout.
 - Refuse branch switching during an unfinished Git operation before creating any stash; disable checkout controls while that operation is shown.
+- Detect pending cherry-pick/revert sequences from `sequencer/todo` after a manual conflict commit removes the per-commit HEAD marker.
 - Apply the same unfinished-operation guard to Create and checkout branch, including its sidebar entry point.
 - Disable Stash Save, Apply, and Pop during unfinished operations, and enforce that rule in the Git client before changing files or index state.
 - Use Git's `%(symref)` field to distinguish remote HEAD aliases from real branches, including remote names with slashes and branch names ending in HEAD.
