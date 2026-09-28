@@ -29,12 +29,20 @@ struct GraphWorkspace: View {
         let railWidth = max(92, CGFloat(rows.map(\.laneCount).max() ?? 1) * 22 + 26)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Text("Repository graph").font(.system(size: 14, weight: .semibold))
+                Text("Commit history").font(.system(size: 14, weight: .semibold))
                 Spacer()
                 Text("\(snapshot.commits.count) commits").font(.caption.monospaced()).foregroundStyle(.secondary)
             }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
             TextField("Filter loaded commits", text: $query)
                 .textFieldStyle(.roundedBorder).padding(.horizontal, 16).padding(.bottom, 12)
+            HStack(spacing: 16) {
+                Label("Commit", systemImage: "circle.fill")
+                Label("Merge", systemImage: "diamond.fill")
+                Spacer(minLength: 0)
+                Text(query.isEmpty ? "Follow lines down to older commits" : "Connections hidden while filtering")
+            }
+            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .padding(.horizontal, 16).padding(.bottom, 10)
             GeometryReader { geometry in
                 let messageWidth = max(260, geometry.size.width - referenceWidth - railWidth - authorWidth - dateWidth - 12)
                 ScrollView([.horizontal, .vertical]) {
@@ -110,7 +118,8 @@ struct GraphWorkspace: View {
                                                 .frame(width: referenceWidth, alignment: .leading)
                                         Button { selectedCommit = commit; selectedStash = nil } label: {
                                         HStack(spacing: 0) {
-                                            GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty)
+                                            GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty,
+                                                      isMerge: commit.parents.count > 1, isHead: commit.hash == snapshot.headHash)
                                                 .frame(width: railWidth, height: rowHeight)
                                             Text(commit.subject).font(.system(size: 13)).lineLimit(1)
                                                 .frame(width: messageWidth, alignment: .leading).help(commit.subject)
@@ -370,25 +379,41 @@ private struct GraphRail: View {
     let row: GitGraphRow
     let workingTree: Bool
     let connected: Bool
+    var isMerge = false
+    var isHead = false
 
     var body: some View {
         Canvas { context, size in
             if connected {
-                for edge in row.segments {
+                // Draw straight continuations first; a background stroke gives crossing
+                // connections a small bridge so crossings cannot look like junctions.
+                for edge in row.segments.sorted(by: { !$0.startsAtNode && $1.startsAtNode }) {
                     let start = CGPoint(x: 18 + CGFloat(edge.fromLane) * 22, y: edge.startsAtNode ? size.height / 2 : 0)
                     let end = CGPoint(x: 18 + CGFloat(edge.toLane) * 22, y: edge.endsAtNode ? size.height / 2 : size.height)
                     var path = Path()
                     path.move(to: start)
                     path.addCurve(to: end, control1: CGPoint(x: start.x, y: (start.y + end.y) / 2), control2: CGPoint(x: end.x, y: (start.y + end.y) / 2))
-                    context.stroke(path, with: .color(AppPalette.laneColors[edge.fromLane % AppPalette.laneColors.count]), style: StrokeStyle(lineWidth: 2, dash: workingTree ? [3, 3] : []))
+                    context.stroke(path, with: .color(AppPalette.canvas), lineWidth: 6)
+                    context.stroke(path, with: .color(AppPalette.laneColors[edge.colorLane % AppPalette.laneColors.count]), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: workingTree ? [3, 3] : []))
                 }
             }
             let x = 18 + CGFloat(row.lane) * 22
-            let circle = Path(ellipseIn: CGRect(x: x - 5, y: size.height / 2 - 5, width: 10, height: 10))
+            let y = size.height / 2
+            var node = Path()
+            if isMerge {
+                node.move(to: CGPoint(x: x, y: y - 7))
+                node.addLine(to: CGPoint(x: x + 7, y: y))
+                node.addLine(to: CGPoint(x: x, y: y + 7))
+                node.addLine(to: CGPoint(x: x - 7, y: y))
+                node.closeSubpath()
+            } else {
+                node.addEllipse(in: CGRect(x: x - 5, y: y - 5, width: 10, height: 10))
+            }
             let color = AppPalette.laneColors[row.lane % AppPalette.laneColors.count]
-            context.fill(circle, with: .color(workingTree ? AppPalette.canvas : color))
-            context.stroke(circle, with: .color(color), lineWidth: 2)
-            if workingTree {
+            context.stroke(node, with: .color(AppPalette.canvas), lineWidth: 5)
+            context.fill(node, with: .color(workingTree ? AppPalette.canvas : color))
+            context.stroke(node, with: .color(color), lineWidth: 2)
+            if workingTree || isHead {
                 context.stroke(Path(ellipseIn: CGRect(x: x - 9, y: size.height / 2 - 9, width: 18, height: 18)), with: .color(color.opacity(0.5)), lineWidth: 1)
             }
         }

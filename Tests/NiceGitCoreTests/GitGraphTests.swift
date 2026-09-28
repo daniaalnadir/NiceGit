@@ -51,3 +51,28 @@ private func commit(_ hash: String, parents: [String] = []) -> GitCommit {
     #expect(rows[1].segments.contains { $0.startsAtNode && $0.toLane == 0 })
     #expect(rows[2].laneCount == 1)
 }
+
+@Test func endingALaneDoesNotMoveSurvivingBranches() {
+    let rows = GitGraph.layout([
+        commit("merge", parents: ["short", "long", "other"]),
+        commit("short"),
+        commit("long", parents: ["older"]),
+        commit("other", parents: ["older"]),
+        commit("older")
+    ])
+    #expect(rows.map(\.lane) == [0, 0, 1, 2, 1])
+    #expect(rows[1].segments.contains { $0.fromLane == 2 && $0.toLane == 2 && !$0.startsAtNode && !$0.endsAtNode })
+    #expect(rows[2].segments.contains { $0.startsAtNode && $0.fromLane == 1 && $0.toLane == 1 })
+    // The joining edge and the continuation below use the same colour.
+    #expect(rows[3].segments.first { $0.startsAtNode }?.colorLane == 1)
+    #expect(rows[4].segments.first { $0.endsAtNode }?.colorLane == 1)
+}
+
+@Test func newTipsReuseEmptyLanesWithoutMovingExistingHistory() {
+    let rows = GitGraph.layout([
+        commit("merge", parents: ["short", "long"]), commit("short"),
+        commit("new", parents: ["root"]), commit("long", parents: ["root"]), commit("root")
+    ])
+    #expect(rows.map(\.lane) == [0, 0, 0, 1, 0])
+    #expect(rows[2].segments.contains { $0.fromLane == 1 && $0.toLane == 1 && !$0.startsAtNode })
+}
