@@ -58,3 +58,4 @@
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
+- Pin the checkout's first-parent line to the leftmost graph lane in colour 0, keep each other line's colour from tip to end, and never reserve a lane for a HEAD appended below its page.

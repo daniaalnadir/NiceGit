@@ -869,10 +869,15 @@ enum AppPalette {
     static let branchTag = Color.green.opacity(0.16)
     static let changeRow = Color(nsColor: .controlBackgroundColor)
 
+    /// Graph line colours. The first belongs to the checkout's line; yellow and red stay
+    /// reserved for change and conflict states.
     static let laneColors: [Color] = [
         signal,
-        Color(red: 0.157, green: 0.478, blue: 0.812),
-        merge,
-        conflict
+        Color(nsColor: .systemBlue),
+        Color(nsColor: .systemPurple),
+        Color(nsColor: .systemTeal),
+        Color(nsColor: .systemPink),
+        Color(nsColor: .systemIndigo),
+        Color(nsColor: .systemBrown)
     ]
 }

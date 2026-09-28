@@ -21,8 +21,15 @@ struct GraphWorkspace: View {
     var body: some View {
         let hasChanges = !snapshot.status.isEmpty
         let rows = hasChanges
-            ? GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash)
-            : GitGraph.layout(snapshot.commits)
+            ? GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash, colorCount: AppPalette.laneColors.count)
+            : GitGraph.layout(snapshot.commits, pinning: snapshot.headHash, colorCount: AppPalette.laneColors.count)
+        // Emphasise the selected commit's line, or the checkout's line when nothing is selected.
+        let focusHash = selectedCommit?.hash ?? (selectedStash == nil && hasChanges ? GitGraph.workingTreeHash : snapshot.headHash)
+        let focusLine = focusHash.flatMap { hash in
+            hash == GitGraph.workingTreeHash
+                ? rows.first?.line
+                : snapshot.commits.firstIndex(where: { $0.hash == hash }).map { rows[$0 + (hasChanges ? 1 : 0)].line }
+        }
         let railWidth = max(54, CGFloat((rows.map(\.laneCount).max() ?? 1) - 1) * 20 + 36)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -74,7 +81,7 @@ struct GraphWorkspace: View {
                         if hasChanges && query.isEmpty {
                             Button { selectedCommit = nil; selectedStash = nil } label: {
                                 HStack(spacing: 0) {
-                                    GraphRail(row: rows[0], workingTree: true, connected: true)
+                                    GraphRail(row: rows[0], workingTree: true, connected: true, focusLine: focusLine)
                                         .frame(width: railWidth, height: rowHeight)
                                     VStack(alignment: .leading, spacing: 5) {
                                         Text("\(snapshot.status.count) uncommitted \(snapshot.status.count == 1 ? "file" : "files")")
@@ -94,7 +101,7 @@ struct GraphWorkspace: View {
                                     HStack(spacing: 0) {
                                         Button { selectedCommit = commit; selectedStash = nil } label: {
                                             GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty,
-                                                      isMerge: commit.parents.count > 1, isHead: commit.hash == snapshot.headHash)
+                                                      focusLine: focusLine, isMerge: commit.parents.count > 1, isHead: commit.hash == snapshot.headHash)
                                                 .frame(width: railWidth, height: rowHeight)
                                                 .contentShape(Rectangle())
                                         }.buttonStyle(.plain).accessibilityHidden(true)
@@ -115,7 +122,7 @@ struct GraphWorkspace: View {
                                             HStack(spacing: 8) {
                                                 if !commit.refs.isEmpty {
                                                     CommitReferences(refs: commit.refs, snapshot: snapshot,
-                                                        color: AppPalette.laneColors[rows[index + (hasChanges ? 1 : 0)].lane % AppPalette.laneColors.count],
+                                                        color: AppPalette.laneColors[rows[index + (hasChanges ? 1 : 0)].color % AppPalette.laneColors.count],
                                                         showingReferences: Binding(
                                                             get: { hoveredCommitHash == commit.hash },
                                                             set: { visible in
@@ -379,22 +386,31 @@ private struct GraphRail: View {
     let row: GitGraphRow
     let workingTree: Bool
     let connected: Bool
+    var focusLine: Int?
     var isMerge = false
     var isHead = false
+
+    /// Lines away from the focused one fade so the selected path reads first.
+    private func opacity(_ matches: Bool) -> Double { focusLine == nil || matches ? 1 : 0.3 }
+    private func isFocused(_ edge: GitGraphSegment) -> Bool { edge.line == focusLine || edge.fromLine == focusLine }
 
     var body: some View {
         Canvas { context, size in
             if connected {
                 // Draw straight continuations first; a background stroke gives crossing
                 // connections a small bridge so crossings cannot look like junctions.
-                for edge in row.segments.sorted(by: { !$0.startsAtNode && $1.startsAtNode }) {
+                // Focused lines go last so a faded crossing never cuts through them.
+                let order = { (edge: GitGraphSegment) in (isFocused(edge) ? 1 : 0, edge.startsAtNode ? 1 : 0) }
+                for edge in row.segments.sorted(by: { order($0) < order($1) }) {
                     let start = CGPoint(x: 18 + CGFloat(edge.fromLane) * 20, y: edge.startsAtNode ? size.height / 2 : 0)
                     let end = CGPoint(x: 18 + CGFloat(edge.toLane) * 20, y: edge.endsAtNode ? size.height / 2 : size.height)
                     var path = Path()
                     path.move(to: start)
                     path.addCurve(to: end, control1: CGPoint(x: start.x, y: (start.y + end.y) / 2), control2: CGPoint(x: end.x, y: (start.y + end.y) / 2))
                     context.stroke(path, with: .color(AppPalette.canvas), lineWidth: 6)
-                    context.stroke(path, with: .color(AppPalette.laneColors[edge.colorLane % AppPalette.laneColors.count]), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: workingTree ? [3, 3] : []))
+                    let focused = isFocused(edge)
+                    context.stroke(path, with: .color(AppPalette.laneColors[edge.color % AppPalette.laneColors.count].opacity(opacity(focused))),
+                                   style: StrokeStyle(lineWidth: focused && focusLine != nil ? 2.5 : 2, lineCap: .round, dash: workingTree ? [3, 3] : []))
                 }
             }
             let x = 18 + CGFloat(row.lane) * 20
@@ -409,7 +425,7 @@ private struct GraphRail: View {
             } else {
                 node.addEllipse(in: CGRect(x: x - 5, y: y - 5, width: 10, height: 10))
             }
-            let color = AppPalette.laneColors[row.lane % AppPalette.laneColors.count]
+            let color = AppPalette.laneColors[row.color % AppPalette.laneColors.count].opacity(opacity(row.line == focusLine))
             context.stroke(node, with: .color(AppPalette.canvas), lineWidth: 5)
             context.fill(node, with: .color(workingTree ? AppPalette.canvas : color))
             context.stroke(node, with: .color(color), lineWidth: 2)
