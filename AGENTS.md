@@ -44,6 +44,7 @@
 - Group remote branches under the longest matching configured remote name; remote names with slashes can share prefixes.
 - Derive HEAD and upstream from the already-read branch listing during snapshot refresh, retaining ahead/behind validation while avoiding redundant Git processes.
 - Keep current HEAD in the visible history even when other branches consume the first log page; fetch it separately only when outside the existing page.
+- Keep active graph lanes stationary when another line ends; colour a parent connection to match its destination lane so it stays continuous across rows.
 - Let parsed branch metadata decide whether a remote ref is a symbolic HEAD alias; a real branch can end in HEAD and remain usable from the graph.
 - Strip the leading `remotes/` prefix only when displaying a remote branch; nested branch names may contain that text legitimately.
 - Compare a local branch's full upstream ref with the remote branch's full ref when pairing graph labels; the upstream is not a display name.
