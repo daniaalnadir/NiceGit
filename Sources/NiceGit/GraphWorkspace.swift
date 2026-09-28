@@ -11,10 +11,7 @@ struct GraphWorkspace: View {
     @State private var revertRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
-    private let referenceWidth: CGFloat = 220
-    private let authorWidth: CGFloat = 140
-    private let dateWidth: CGFloat = 165
-    private let rowHeight: CGFloat = 36
+    private let rowHeight: CGFloat = 58
 
     private func matches(_ commit: GitCommit) -> Bool {
         query.isEmpty || [commit.subject, commit.hash, commit.authorName, commit.refs.joined(separator: " ")]
@@ -26,7 +23,7 @@ struct GraphWorkspace: View {
         let rows = hasChanges
             ? GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash)
             : GitGraph.layout(snapshot.commits)
-        let railWidth = max(92, CGFloat(rows.map(\.laneCount).max() ?? 1) * 22 + 26)
+        let railWidth = max(54, CGFloat((rows.map(\.laneCount).max() ?? 1) - 1) * 20 + 36)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text("Commit history").font(.system(size: 14, weight: .semibold))
@@ -44,18 +41,15 @@ struct GraphWorkspace: View {
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .padding(.horizontal, 16).padding(.bottom, 10)
             GeometryReader { geometry in
-                let messageWidth = max(260, geometry.size.width - referenceWidth - railWidth - authorWidth - dateWidth - 12)
+                let messageWidth = max(320, geometry.size.width - railWidth - 24)
                 ScrollView([.horizontal, .vertical]) {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 0) {
-                            Text("Branch/Tag").frame(width: referenceWidth, alignment: .leading)
-                            Text("Graph").frame(width: railWidth, alignment: .leading)
-                            Text("Commit Message").frame(width: messageWidth, alignment: .leading)
-                            Text("Author").frame(width: authorWidth, alignment: .leading)
-                            Text("Commit Date").frame(width: dateWidth, alignment: .leading)
+                            Text("History").frame(width: railWidth, alignment: .leading)
+                            Text("Commit / branch").frame(width: messageWidth, alignment: .leading)
                         }
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary).padding(.leading, 12).frame(height: 30)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary).padding(.horizontal, 12).frame(height: 28)
                         .background(AppPalette.toolbar)
 
                         ForEach(snapshot.stashes.filter { query.isEmpty || $0.message.localizedCaseInsensitiveContains(query) || $0.reference.localizedCaseInsensitiveContains(query) }) { stash in
@@ -64,76 +58,82 @@ struct GraphWorkspace: View {
                                 selectedStash = stash
                             } label: {
                                 HStack(spacing: 0) {
-                                    Text(stash.reference).font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                        .foregroundStyle(.orange).frame(width: referenceWidth, alignment: .leading)
-                                    Image(systemName: "archivebox.fill")
+                                    Image(systemName: "archivebox")
                                         .font(.system(size: 15)).foregroundStyle(.orange)
-                                        .frame(width: 36, height: rowHeight)
                                         .frame(width: railWidth, alignment: .leading)
-                                    Text(stash.message).font(.system(size: 13)).lineLimit(1)
-                                        .frame(width: messageWidth, alignment: .leading)
-                                    Color.clear.frame(width: authorWidth + dateWidth)
-                                }.padding(.leading, 12).frame(height: rowHeight)
-                                    .background(Color.orange.opacity(selectedStash?.hash == stash.hash ? 0.22 : 0.07)).contentShape(Rectangle())
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(stash.message).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                        Text("Saved changes · \(stash.reference)")
+                                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                                    }.frame(width: messageWidth, alignment: .leading)
+                                }.padding(.horizontal, 12).frame(height: rowHeight)
+                                    .background(Color.orange.opacity(selectedStash?.hash == stash.hash ? 0.18 : 0.04)).contentShape(Rectangle())
                             }.buttonStyle(.plain).help("Inspect \(stash.reference): \(stash.message)")
                         }
 
-                        if hasChanges {
-                        Button { selectedCommit = nil; selectedStash = nil } label: {
-                            HStack(spacing: 0) {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "folder")
-                                    Text("WORKING TREE").font(.system(size: 10, weight: .bold, design: .monospaced))
-                                }.foregroundStyle(AppPalette.signal)
-                                    .frame(width: referenceWidth, alignment: .leading)
-                                GraphRail(row: rows[0], workingTree: true, connected: query.isEmpty)
-                                    .frame(width: railWidth, height: rowHeight)
-                                HStack(spacing: 12) {
-                                    Text(snapshot.status.isEmpty ? "Working tree clean" : "// WIP").foregroundStyle(.secondary)
-                                    Label("\(snapshot.status.filter { $0.kind == .modified || $0.kind == .renamed }.count)", systemImage: "pencil").foregroundStyle(.yellow)
-                                    Label("\(snapshot.status.filter { $0.kind == .added || $0.kind == .untracked }.count)", systemImage: "plus").foregroundStyle(AppPalette.signal)
-                                    if snapshot.status.contains(where: { $0.kind == .deleted }) {
-                                        Label("\(snapshot.status.filter { $0.kind == .deleted }.count)", systemImage: "minus").foregroundStyle(AppPalette.conflict)
-                                    }
-                                }.font(.system(size: 12)).frame(width: messageWidth, alignment: .leading)
-                                Color.clear.frame(width: authorWidth + dateWidth)
-                            }.padding(.leading, 12).frame(height: rowHeight)
-                                .background(selectedCommit == nil ? AppPalette.signal.opacity(0.12) : AppPalette.signal.opacity(0.035))
-                        }.buttonStyle(.plain).help("Show working-tree files and staging")
+                        if hasChanges && query.isEmpty {
+                            Button { selectedCommit = nil; selectedStash = nil } label: {
+                                HStack(spacing: 0) {
+                                    GraphRail(row: rows[0], workingTree: true, connected: true)
+                                        .frame(width: railWidth, height: rowHeight)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("\(snapshot.status.count) uncommitted \(snapshot.status.count == 1 ? "file" : "files")")
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Text("Your changes · not committed yet")
+                                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                                    }.frame(width: messageWidth, alignment: .leading)
+                                }.padding(.horizontal, 12).frame(height: rowHeight)
+                                    .background(AppPalette.signal.opacity(selectedCommit == nil && selectedStash == nil ? 0.12 : 0.035))
+                                    .contentShape(Rectangle())
+                            }.buttonStyle(.plain).help("Show working-tree files and staging")
                         }
 
                         LazyVStack(spacing: 0) {
                             ForEach(Array(snapshot.commits.enumerated()), id: \.element.hash) { index, commit in
                                 if matches(commit) {
                                     HStack(spacing: 0) {
-                                            CommitReferences(refs: commit.refs, snapshot: snapshot,
-                                                color: AppPalette.laneColors[rows[index + (hasChanges ? 1 : 0)].lane % AppPalette.laneColors.count],
-                                                showingReferences: Binding(
-                                                get: { hoveredCommitHash == commit.hash },
-                                                set: { visible in
-                                                    if visible { hoveredCommitHash = commit.hash }
-                                                    else if hoveredCommitHash == commit.hash { hoveredCommitHash = nil }
-                                                }
-                                            ))
-                                                .frame(width: referenceWidth, alignment: .leading)
                                         Button { selectedCommit = commit; selectedStash = nil } label: {
-                                        HStack(spacing: 0) {
                                             GraphRail(row: rows[index + (hasChanges ? 1 : 0)], workingTree: false, connected: query.isEmpty,
                                                       isMerge: commit.parents.count > 1, isHead: commit.hash == snapshot.headHash)
                                                 .frame(width: railWidth, height: rowHeight)
-                                            Text(commit.subject).font(.system(size: 13)).lineLimit(1)
-                                                .frame(width: messageWidth, alignment: .leading).help(commit.subject)
-                                            Text(commit.authorName).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                                                .frame(width: authorWidth, alignment: .leading).help(commit.authorName)
-                                            Text(commit.commitDate.map { $0.formatted(date: .numeric, time: .shortened) } ?? commit.relativeDate)
-                                                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                                                .frame(width: dateWidth, alignment: .leading)
-                                        }
-                                        .frame(height: rowHeight)
-                                        .contentShape(Rectangle())
-                                        }.buttonStyle(.plain)
+                                                .contentShape(Rectangle())
+                                        }.buttonStyle(.plain).accessibilityHidden(true)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Button { selectedCommit = commit; selectedStash = nil } label: {
+                                                HStack(spacing: 8) {
+                                                    Text(commit.subject).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                                    Spacer(minLength: 0)
+                                                    if commit.hash == snapshot.headHash {
+                                                        Text("You are here")
+                                                            .font(.system(size: 10, weight: .semibold)).fixedSize()
+                                                            .foregroundStyle(AppPalette.signal)
+                                                    }
+                                                }.frame(maxWidth: .infinity, minHeight: 22, alignment: .leading).contentShape(Rectangle())
+                                            }.buttonStyle(.plain)
+                                                .help(commit.subject)
+                                                .accessibilityLabel("\(commit.parents.count > 1 ? "Merge commit" : "Commit"): \(commit.subject)\(commit.hash == snapshot.headHash ? ", current checkout" : "")")
+                                            HStack(spacing: 8) {
+                                                if !commit.refs.isEmpty {
+                                                    CommitReferences(refs: commit.refs, snapshot: snapshot,
+                                                        color: AppPalette.laneColors[rows[index + (hasChanges ? 1 : 0)].lane % AppPalette.laneColors.count],
+                                                        showingReferences: Binding(
+                                                            get: { hoveredCommitHash == commit.hash },
+                                                            set: { visible in
+                                                                if visible { hoveredCommitHash = commit.hash }
+                                                                else if hoveredCommitHash == commit.hash { hoveredCommitHash = nil }
+                                                            }
+                                                        ))
+                                                        .frame(maxWidth: min(220, messageWidth * 0.5), alignment: .leading)
+                                                }
+                                                Text("\(commit.authorName) · \(commit.relativeDate)")
+                                                    .lineLimit(1).truncationMode(.middle)
+                                                    .help("\(commit.authorName) · \(commit.commitDate.map { $0.formatted(date: .complete, time: .shortened) } ?? commit.relativeDate)")
+                                                Spacer(minLength: 0)
+                                                Text(commit.shortHash).font(.system(size: 10, design: .monospaced)).fixedSize()
+                                            }.font(.system(size: 11)).foregroundStyle(.secondary)
+                                        }.frame(width: messageWidth, alignment: .leading)
                                     }
-                                    .padding(.leading, 12).frame(height: rowHeight)
+                                    .padding(.horizontal, 12).frame(height: rowHeight)
                                     .background(selectedCommit?.hash == commit.hash ? AppPalette.signal.opacity(0.14) : (index.isMultiple(of: 2) ? Color.clear : AppPalette.rowStripe))
                                     .contextMenu {
                                         Button("View patch") { model.inspect(commit) }
@@ -165,13 +165,13 @@ struct GraphWorkspace: View {
                             Button("Load older commits") { model.loadOlderCommits() }.padding(16)
                         }
                     }
-                    .frame(width: referenceWidth + railWidth + messageWidth + authorWidth + dateWidth + 12, alignment: .leading)
+                    .frame(width: railWidth + messageWidth + 24, alignment: .leading)
                     .frame(minHeight: geometry.size.height, alignment: .topLeading)
                 }
             }
             HStack {
                 Image(systemName: "arrow.triangle.branch")
-                Text(snapshot.currentBranch).lineLimit(1)
+                Text("Current checkout: \(snapshot.currentBranch)").lineLimit(1)
                 Spacer()
                 Text(snapshot.headHash.map { String($0.prefix(7)) } ?? "No commits")
             }.font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -328,7 +328,7 @@ private struct CommitReferences: View {
             .contentShape(Rectangle())
             .onHover {
                 isBadgeHovered = $0
-                if $0 && ordered.count > 1 { showingReferences = true }
+                // Open the reference list on click so tracing a line cannot obscure the graph.
             }
             .onDisappear {
                 isBadgeHovered = false
@@ -388,8 +388,8 @@ private struct GraphRail: View {
                 // Draw straight continuations first; a background stroke gives crossing
                 // connections a small bridge so crossings cannot look like junctions.
                 for edge in row.segments.sorted(by: { !$0.startsAtNode && $1.startsAtNode }) {
-                    let start = CGPoint(x: 18 + CGFloat(edge.fromLane) * 22, y: edge.startsAtNode ? size.height / 2 : 0)
-                    let end = CGPoint(x: 18 + CGFloat(edge.toLane) * 22, y: edge.endsAtNode ? size.height / 2 : size.height)
+                    let start = CGPoint(x: 18 + CGFloat(edge.fromLane) * 20, y: edge.startsAtNode ? size.height / 2 : 0)
+                    let end = CGPoint(x: 18 + CGFloat(edge.toLane) * 20, y: edge.endsAtNode ? size.height / 2 : size.height)
                     var path = Path()
                     path.move(to: start)
                     path.addCurve(to: end, control1: CGPoint(x: start.x, y: (start.y + end.y) / 2), control2: CGPoint(x: end.x, y: (start.y + end.y) / 2))
@@ -397,7 +397,7 @@ private struct GraphRail: View {
                     context.stroke(path, with: .color(AppPalette.laneColors[edge.colorLane % AppPalette.laneColors.count]), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: workingTree ? [3, 3] : []))
                 }
             }
-            let x = 18 + CGFloat(row.lane) * 22
+            let x = 18 + CGFloat(row.lane) * 20
             let y = size.height / 2
             var node = Path()
             if isMerge {
