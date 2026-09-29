@@ -9,6 +9,19 @@
 - Staging, commits, diffs, stash management, branch/tag actions, and confirmations
   for history-changing operations.
 - Merge, rebase, cherry-pick, revert, and conflict-resolution workflows.
+- Restore individual files to their version in, or before, a selected commit.
+- File history that follows renames, with per-commit diffs and restore.
+- Interactive rebase with drag-to-reorder, reword, squash, fixup, and drop.
+- Blame view, full-history commit search, and commit comparison.
+- Signature status, whitespace-insensitive diffs, and image comparison.
+- Undoable discards, a submodules sidebar section, and multi-commit cherry-pick.
+- Keyboard navigation in the graph and drag-and-drop merge or rebase.
+- Identity profiles, a Settings window with appearance and colour-blind-safe graph colours,
+  GitFlow, and Git LFS tracking.
+- Amend with staged changes, side-by-side diffs, reflog recovery, stashing selected
+  files, and worktree removal.
+- Command palette, remote rename/remove/URL editing, tag push and remote tag deletion,
+  and ignoring untracked files.
 - Embedded per-checkout terminal with Control-backtick toggling.
 - GitHub pull-request and issue lists through an existing GitHub CLI login.
 - MIT-licensed source, test suite, local app packaging, and GitHub CI.

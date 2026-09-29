@@ -13,7 +13,21 @@ struct CommitInspector: View {
     @State private var hoveredFile: String?
     @State private var selectedFile: String?
     @State private var showingFullMessage = false
+    @State private var restoreRequest: RestoreFileRequest?
+    @State private var signature: GitSignature?
+    @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var canRestore: Bool { RestoreFileRequest.canRestore(model) }
+
+    private func requestRestore(_ file: GitCommitFileChange, beforeCommit: Bool) {
+        guard let source = beforeCommit ? commit.parents.first : commit.hash else { return }
+        restoreRequest = RestoreFileRequest.make(
+            path: file.path, source: source,
+            sourceDescription: beforeCommit ? "before commit \(commit.shortHash)" : "in commit \(commit.shortHash)",
+            // Files are listed against the first parent, so the status says which side lacks the file.
+            removesFile: beforeCommit ? file.status == "A" : file.status == "D", model: model)
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -55,6 +69,7 @@ struct CommitInspector: View {
                     }
                     .padding(compact ? 6 : 12)
                     .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
+                    if let signature { signatureLabel(signature) }
                     if summaryHeight >= 185 {
                         HStack(spacing: 8) {
                             Image(systemName: "person.crop.circle").foregroundStyle(.secondary)
@@ -121,6 +136,25 @@ struct CommitInspector: View {
                             }
                             .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: hoveredFile)
                             .accessibilityAddTraits(selectedFile == file.path ? .isSelected : [])
+                            .contextMenu {
+                                Button("Restore file to this commit's version...") { requestRestore(file, beforeCommit: false) }
+                                    .disabled(!canRestore)
+                                Button("Restore file to its version before this commit...") { requestRestore(file, beforeCommit: true) }
+                                    .disabled(!canRestore || commit.parents.isEmpty)
+                                Button("Show file history") {
+                                    model.fileHistoryRequest = FileHistoryRequest(path: file.path, repositoryURL: repositoryURL)
+                                }.disabled(file.status == "D")
+                                Button("Blame at this commit") {
+                                    model.blameRequest = BlameRequest(path: file.path, repositoryURL: repositoryURL,
+                                                                      revision: commit.hash, revisionLabel: "at \(commit.shortHash)")
+                                }.disabled(file.status == "D")
+                                Divider()
+                                Button("Copy path") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(file.path, forType: .string)
+                                }
+                            }
+                            .accessibilityAction(named: "Restore file to this commit's version") { requestRestore(file, beforeCommit: false) }
                     }
                     if !loading && files.isEmpty && error == nil {
                         Text("No file changes").foregroundStyle(.secondary).padding(16)
@@ -131,11 +165,14 @@ struct CommitInspector: View {
             .background(AppPalette.panel)
         }
         }
+            .modifier(RestoreFileConfirmation(request: $restoreRequest))
+            .onChange(of: commit.hash) { restoreRequest = nil }
             .task(id: LookupID(repositoryURL: repositoryURL, hash: commit.hash)) {
                 loading = true
                 error = nil
                 files = []
                 message = ""
+                signature = nil
                 selectedFile = nil
                 hoveredFile = nil
                 let hash = commit.hash
@@ -146,7 +183,8 @@ struct CommitInspector: View {
                         try Task.checkCancellation()
                         return try await Task.detached {
                             let git = GitClient(control: control)
-                            return (try git.commitFileChanges(hash: hash, in: url), try git.commitMessage(hash: hash, in: url))
+                            return (try git.commitFileChanges(hash: hash, in: url), try git.commitMessage(hash: hash, in: url),
+                                    try? git.signature(of: hash, in: url))
                         }.value
                     } onCancel: {
                         control.cancel()
@@ -154,6 +192,7 @@ struct CommitInspector: View {
                     guard !Task.isCancelled else { return }
                     files = loaded.0
                     message = loaded.1.trimmingCharacters(in: .newlines)
+                    signature = loaded.2 ?? nil
                 } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                 if !Task.isCancelled { loading = false }
             }
@@ -162,6 +201,18 @@ struct CommitInspector: View {
     private struct LookupID: Hashable {
         let repositoryURL: URL
         let hash: String
+    }
+
+    private func signatureLabel(_ signature: GitSignature) -> some View {
+        let (text, image, color): (String, String, Color) = switch signature.status {
+        case .verified: ("Verified signature" + (signature.signer.isEmpty ? "" : " · \(signature.signer)"), "checkmark.seal.fill", .green)
+        case .untrusted: ("Valid signature from an untrusted key", "checkmark.seal", .orange)
+        case .bad: ("Bad signature: this commit does not match it", "xmark.seal.fill", .red)
+        case .unverifiable: ("Signed, but it cannot be verified on this Mac", "seal", .secondary)
+        }
+        return Label(text, systemImage: image)
+            .font(.system(size: 11)).foregroundStyle(color).lineLimit(1).truncationMode(.middle)
+            .help([signature.key.isEmpty ? nil : "Key \(signature.key)", signature.problem].compactMap { $0 }.joined(separator: "\n"))
     }
 
     private var changeCounts: some View {

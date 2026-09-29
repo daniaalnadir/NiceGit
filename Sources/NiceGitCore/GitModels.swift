@@ -7,6 +7,17 @@ public struct GitCommitFileChange: Identifiable, Sendable {
     public init(path: String, status: String) { self.path = path; self.status = status }
 }
 
+/// A commit that changed a file, with the file's path in that commit (it can differ after a rename).
+public struct GitFileHistoryEntry: Identifiable, Sendable {
+    public let commit: GitCommit
+    public let path: String
+    /// Git's change letter for the file in this commit, such as A, M, D, or R.
+    public let status: String
+    public var id: String { commit.hash }
+    public var deletesFile: Bool { status == "D" }
+    public init(commit: GitCommit, path: String, status: String) { self.commit = commit; self.path = path; self.status = status }
+}
+
 public struct RepositorySnapshot: Equatable, Sendable {
     public var rootPath: String
     public var name: String

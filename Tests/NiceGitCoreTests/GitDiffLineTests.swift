@@ -74,3 +74,38 @@ import Testing
     #expect(lines[4].newNumber == 3)
     #expect(lines[5].kind == .metadata)
 }
+
+@Test func sideBySidePairsReplacementsAcrossMissingNewlineNotes() {
+    let patch = """
+    @@ -1,4 +1,5 @@
+     same
+    -old one
+    -old two
+    \\ No newline at end of file
+    +new one
+    +new two
+    +new three
+    \\ No newline at end of file
+     tail
+    """
+    let lines = GitDiffLine.parse(patch)
+    let rows = GitDiffLine.sideBySide(lines)
+    let text = { (index: Int?) in index.map { lines[$0].text } }
+    let described: [String] = rows.map { row in
+        switch row {
+        case let .banner(index): "banner:" + lines[index].text
+        case let .pair(left, right): "\(text(left) ?? "∅") | \(text(right) ?? "∅")"
+        }
+    }
+    #expect(described == [
+        "banner:@@ -1,4 +1,5 @@",
+        " same |  same",
+        "-old one | +new one",
+        "-old two | +new two",
+        "∅ | +new three",
+        "banner:\\ No newline at end of file",
+        "banner:\\ No newline at end of file",
+        " tail |  tail",
+    ])
+    #expect(GitDiffLine.sideBySide([]) == [])
+}

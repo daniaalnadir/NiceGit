@@ -9,6 +9,8 @@ struct StashView: View {
     @State private var pendingDrop: GitStash?
     @State private var pendingPop: GitStash?
     @State private var preview: DiffSelection?
+    @State private var onlySelected = false
+    @State private var selectedPaths: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -20,11 +22,36 @@ struct StashView: View {
             }
             HStack {
                 TextField("Stash message", text: $message).textFieldStyle(.roundedBorder)
-                Button("Stash changes") {
-                    model.saveStash(message: message, includeUntracked: includeUntracked) { message = "" }
-                }.disabled(model.snapshot?.status.isEmpty != false || model.snapshot?.commits.isEmpty != false || model.snapshot?.operation != nil)
+                Button(onlySelected ? "Stash \(selectedPaths.count) \(selectedPaths.count == 1 ? "file" : "files")" : "Stash changes") {
+                    if onlySelected {
+                        model.saveStash(paths: selectedPaths.sorted(), message: message) { message = ""; selectedPaths = [] }
+                    } else {
+                        model.saveStash(message: message, includeUntracked: includeUntracked) { message = "" }
+                    }
+                }.disabled(model.snapshot?.status.isEmpty != false || model.snapshot?.commits.isEmpty != false || model.snapshot?.operation != nil
+                           || (onlySelected && selectedPaths.isEmpty))
             }
-            Toggle("Include untracked files", isOn: $includeUntracked)
+            HStack(spacing: 16) {
+                Toggle("Include untracked files", isOn: $includeUntracked).disabled(onlySelected)
+                Toggle("Only selected files", isOn: $onlySelected)
+                    .help("Stash just the files you tick below; everything else stays in your working tree")
+            }
+            if onlySelected {
+                let entries = (model.snapshot?.status ?? []).filter { $0.kind != .conflicted }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(entries, id: \.path) { entry in
+                            Toggle(isOn: Binding(get: { selectedPaths.contains(entry.path) },
+                                                 set: { if $0 { selectedPaths.insert(entry.path) } else { selectedPaths.remove(entry.path) } })) {
+                                Text(entry.path + (entry.kind == .untracked ? "  (untracked)" : "")).font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                            }.toggleStyle(.checkbox)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 140)
+                    .onChange(of: model.snapshot?.status) { _, status in
+                        selectedPaths.formIntersection(Set((status ?? []).map(\.path)))
+                    }
+            }
             Divider()
             if let error = model.errorMessage {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)

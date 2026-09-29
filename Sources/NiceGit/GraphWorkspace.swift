@@ -11,8 +11,40 @@ struct GraphWorkspace: View {
     @State private var revertRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var cherryPickRequest: (commit: GitCommit, branch: String, head: String?)?
     @State private var resetRequest: ResetRequest?
+    @State private var searchingHistory = false
+    /// Observed so the graph redraws when the palette changes in Settings.
+    @AppStorage(LanePalette.storageKey) private var lanePalette = LanePalette.standard
+    /// Commits gathered with Command-click for actions on several commits at once.
+    @State private var multiSelection: Set<String> = []
+    @State private var multiPickRequest: (hashes: [String], branch: String, head: String?)?
+
+    private func moveSelection(by offset: Int, proxy: ScrollViewProxy) -> KeyPress.Result {
+        let listed = snapshot.commits.filter(matches)
+        guard !listed.isEmpty else { return .ignored }
+        let current = selectedCommit.flatMap { selected in listed.firstIndex { $0.hash == selected.hash } }
+        let next = current.map { min(max($0 + offset, 0), listed.count - 1) } ?? (offset > 0 ? 0 : listed.count - 1)
+        multiSelection = []
+        selectedStash = nil
+        selectedCommit = listed[next]
+        // Scroll vertically only; centring the row sideways would hide the branch column.
+        proxy.scrollTo(listed[next].hash, anchor: UnitPoint(x: 0, y: 0.5))
+        return .handled
+    }
+
+    /// Command-click adds or removes a commit from the multi-selection; a plain click selects one.
+    private func select(_ commit: GitCommit) {
+        if NSEvent.modifierFlags.contains(.command) {
+            if multiSelection.isEmpty, let current = selectedCommit { multiSelection.insert(current.hash) }
+            if multiSelection.contains(commit.hash) { multiSelection.remove(commit.hash) } else { multiSelection.insert(commit.hash) }
+        } else {
+            multiSelection = []
+        }
+        selectedCommit = commit
+        selectedStash = nil
+    }
     private let rowHeight: CGFloat = 36
-    private let referenceWidth: CGFloat = 212
+    /// The branch/tag column narrows in smaller windows so commit messages keep room.
+    private static func referenceWidth(for width: CGFloat) -> CGFloat { min(212, max(120, width * 0.2)) }
 
     private func matches(_ commit: GitCommit) -> Bool {
         query.isEmpty || [commit.subject, commit.hash, commit.authorName, commit.refs.joined(separator: " ")]
@@ -20,6 +52,7 @@ struct GraphWorkspace: View {
     }
 
     var body: some View {
+        let _ = lanePalette
         let hasChanges = !snapshot.status.isEmpty
         let rows = hasChanges
             ? GitGraph.layoutWithWorkingTree(snapshot.commits, headHash: snapshot.headHash, colorCount: AppPalette.laneColors.count)
@@ -36,10 +69,21 @@ struct GraphWorkspace: View {
                 Spacer()
                 Text("\(snapshot.commits.count) commits").font(.caption.monospaced()).foregroundStyle(.secondary)
             }.padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
-            TextField("Filter loaded commits", text: $query)
-                .textFieldStyle(.roundedBorder).padding(.horizontal, 16).padding(.bottom, 12)
+            HStack(spacing: 8) {
+                TextField("Filter loaded commits", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                Button { searchingHistory = true } label: { Label("Search all history", systemImage: "magnifyingglass") }
+                    .help("Search every branch by message, author, or code change (⇧⌘F)")
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+            }.padding(.horizontal, 16).padding(.bottom, 12)
             GeometryReader { geometry in
-                let messageWidth = max(320, geometry.size.width - referenceWidth - railWidth - 12)
+                let referenceWidth = Self.referenceWidth(for: geometry.size.width)
+                let messageWidth = max(240, geometry.size.width - referenceWidth - railWidth)
+                // In tight rows the date alone is clearer than a name and date both cut short,
+                // and the hash stays available in the inspector.
+                let showsAuthor = messageWidth >= 560
+                let showsHash = messageWidth >= 400
+                ScrollViewReader { proxy in
                 ScrollView([.horizontal, .vertical]) {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 0) {
@@ -100,7 +144,7 @@ struct GraphWorkspace: View {
                             ForEach(Array(snapshot.commits.enumerated()), id: \.element.hash) { index, commit in
                                 if matches(commit) {
                                     let row = rows[index + (hasChanges ? 1 : 0)]
-                                    let isSelected = selectedCommit?.hash == commit.hash
+                                    let isSelected = selectedCommit?.hash == commit.hash || multiSelection.contains(commit.hash)
                                     let isHead = commit.hash == snapshot.headHash
                                     HStack(spacing: 0) {
                                         // Pills sit in their own column; a thin line in the lane colour
@@ -119,7 +163,7 @@ struct GraphWorkspace: View {
                                                 laneColor(row).opacity(0.6).frame(height: 1)
                                             }
                                         }.frame(width: referenceWidth - 12, alignment: .leading)
-                                        Button { selectedCommit = commit; selectedStash = nil } label: {
+                                        Button { select(commit) } label: {
                                             GraphRail(row: row, workingTree: false, connected: query.isEmpty,
                                                       focusLine: focusLine, tint: isSelected ? 0.28 : 0.10,
                                                       initials: GraphRail.initials(commit.authorName),
@@ -128,7 +172,7 @@ struct GraphWorkspace: View {
                                                 .frame(width: railWidth, height: rowHeight)
                                                 .contentShape(Rectangle())
                                         }.buttonStyle(.plain).accessibilityHidden(true)
-                                        Button { selectedCommit = commit; selectedStash = nil } label: {
+                                        Button { select(commit) } label: {
                                             GraphMessage(accent: laneColor(row), tint: isSelected ? 0.28 : 0.10) {
                                                 Text(commit.subject).font(.system(size: 13, weight: isHead ? .semibold : .regular)).lineLimit(1)
                                                 if isHead {
@@ -137,13 +181,15 @@ struct GraphWorkspace: View {
                                                         .foregroundStyle(AppPalette.signal)
                                                 }
                                                 Spacer(minLength: 8)
-                                                Text("\(commit.authorName) · \(commit.relativeDate)")
+                                                Text(showsAuthor ? "\(commit.authorName) · \(commit.relativeDate)" : commit.relativeDate)
                                                     .font(.system(size: 11)).foregroundStyle(.secondary)
                                                     .lineLimit(1).truncationMode(.middle)
                                                     .frame(maxWidth: 220, alignment: .trailing)
                                                     .help("\(commit.authorName) · \(commit.commitDate.map { $0.formatted(date: .complete, time: .shortened) } ?? commit.relativeDate)")
-                                                Text(commit.shortHash).font(.system(size: 10, design: .monospaced))
-                                                    .foregroundStyle(.secondary).fixedSize()
+                                                if showsHash {
+                                                    Text(commit.shortHash).font(.system(size: 10, design: .monospaced))
+                                                        .foregroundStyle(.secondary).fixedSize()
+                                                }
                                             }.frame(width: messageWidth, height: rowHeight).contentShape(Rectangle())
                                         }.buttonStyle(.plain)
                                             .help(commit.subject)
@@ -155,9 +201,37 @@ struct GraphWorkspace: View {
                                         Button("View patch") { model.inspect(commit) }
                                         Button("Create patch from commit...") { model.exportPatch(commit) }
                                             .disabled(commit.parents.count > 1)
+                                        if multiSelection.count > 1 && multiSelection.contains(commit.hash) {
+                                            Button("Cherry-pick \(multiSelection.count) selected commits...") {
+                                                multiPickRequest = (Array(multiSelection), snapshot.currentBranch, snapshot.headHash)
+                                            }.disabled(snapshot.operation != nil || !snapshot.status.isEmpty)
+                                        }
                                         Button("Cherry-pick commit...") {
                                             cherryPickRequest = (commit, snapshot.currentBranch, snapshot.headHash)
                                         }.disabled(snapshot.operation != nil)
+                                        Menu("Compare") {
+                                            Button("With working files") {
+                                                model.compareRequest = CompareRequest(repositoryURL: URL(fileURLWithPath: snapshot.rootPath), older: commit, newer: nil)
+                                            }
+                                            if let marked = model.compareMark, marked.hash != commit.hash {
+                                                Button("With marked commit \(marked.shortHash)") {
+                                                    // Older side first, judged by commit time; equal times keep the marked one first.
+                                                    let markedIsOlder = (marked.commitDate ?? .distantPast) <= (commit.commitDate ?? .distantPast)
+                                                    model.compareRequest = CompareRequest(repositoryURL: URL(fileURLWithPath: snapshot.rootPath),
+                                                                                          older: markedIsOlder ? marked : commit, newer: markedIsOlder ? commit : marked)
+                                                }
+                                            }
+                                            Divider()
+                                            Button(model.compareMark?.hash == commit.hash ? "Clear comparison mark" : "Mark for comparison") {
+                                                model.compareMark = model.compareMark?.hash == commit.hash ? nil : commit
+                                            }
+                                        }
+                                        Button("Interactive rebase from this commit...") {
+                                            if let head = snapshot.headHash {
+                                                model.rebaseRequest = InteractiveRebaseRequest(oldest: commit.hash, branch: snapshot.currentBranch,
+                                                                                               head: head, repositoryURL: URL(fileURLWithPath: snapshot.rootPath))
+                                            }
+                                        }.disabled(snapshot.operation != nil || snapshot.headHash == nil || snapshot.currentBranch.hasPrefix("Detached HEAD"))
                                         Button("Revert commit...") {
                                             revertRequest = (commit, snapshot.currentBranch, snapshot.headHash)
                                         }
@@ -181,8 +255,21 @@ struct GraphWorkspace: View {
                             Button("Load older commits") { model.loadOlderCommits() }.padding(16)
                         }
                     }
-                    .frame(width: railWidth + messageWidth + 24, alignment: .leading)
+                    // Rows are the reference column (including its leading padding), the rail and the message.
+                    .frame(width: referenceWidth + railWidth + messageWidth, alignment: .leading)
                     .frame(minHeight: geometry.size.height, alignment: .topLeading)
+                }
+                // Arrow keys move through the listed commits; Escape clears the selection.
+                .focusable()
+                .focusEffectDisabled()
+                .onKeyPress(.downArrow) { moveSelection(by: 1, proxy: proxy) }
+                .onKeyPress(.upArrow) { moveSelection(by: -1, proxy: proxy) }
+                .onKeyPress(.escape) {
+                    guard selectedCommit != nil || !multiSelection.isEmpty else { return .ignored }
+                    selectedCommit = nil
+                    multiSelection = []
+                    return .handled
+                }
                 }
             }
             HStack {
@@ -196,6 +283,27 @@ struct GraphWorkspace: View {
         .onChange(of: snapshot.commits) { hoveredCommitHash = nil }
         .onChange(of: query) { hoveredCommitHash = nil }
         .modifier(ResetConfirmation(request: $resetRequest))
+        .onChange(of: snapshot.commits) { _, commits in
+            let loaded = Set(commits.map(\.hash))
+            multiSelection.formIntersection(loaded)
+        }
+        .confirmationDialog("Cherry-pick \(multiPickRequest?.hashes.count ?? 0) commits onto \(multiPickRequest?.branch ?? "")?",
+                            isPresented: Binding(get: { multiPickRequest != nil }, set: { if !$0 { multiPickRequest = nil } })) {
+            if let request = multiPickRequest {
+                Button("Cherry-pick commits") {
+                    model.cherryPick(request.hashes, expectedHead: request.head, expectedBranch: request.branch)
+                    multiSelection = []
+                }
+            }
+        } message: {
+            Text("Copies each selected commit onto the current branch as a new commit, oldest first. If one conflicts, NiceGit stops so you can resolve it and continue, or abort to return to where you started. Merge commits must be picked on their own.")
+        }
+        .sheet(isPresented: $searchingHistory) {
+            CommitSearchView(repositoryURL: URL(fileURLWithPath: snapshot.rootPath), query: query) { commit in
+                selectedStash = nil
+                selectedCommit = commit
+            }
+        }
         .confirmationDialog("Cherry-pick \(cherryPickRequest?.commit.shortHash ?? "") onto \(cherryPickRequest?.branch ?? "")?", isPresented: Binding(get: { cherryPickRequest != nil }, set: { if !$0 { cherryPickRequest = nil } })) {
             if let request = cherryPickRequest {
                 if request.commit.parents.count > 1 {
@@ -360,6 +468,8 @@ private struct CommitReferences: View {
                 }
             })
             .accessibilityAction(named: "Switch to branch") { checkout(first) }
+            // Drag a branch label onto the current branch in the sidebar to merge or rebase.
+            .draggable(branch(first).map(branchDragIdentity) ?? "")
             .accessibilityLabel(ordered.map { displayName($0) }.joined(separator: ", "))
             .popover(isPresented: $showingReferences, arrowEdge: .bottom) {
                 ScrollView {

@@ -1642,12 +1642,29 @@ func checkoutAndMergePreserveIgnoredLocalFiles(action: String, path: String) thr
     #expect(try git.loadSnapshot(at: root).operation == nil)
 }
 
-private func runGit(_ arguments: [String], in directory: URL) throws {
+private func runGitOutput(_ arguments: [String], in directory: URL) throws -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = ["git"] + arguments
     process.currentDirectoryURL = directory
     process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"]
+    let output = Pipe()
+    process.standardOutput = output
+    try process.run()
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+        throw GitClientError.commandFailed(command: arguments.joined(separator: " "), message: "exit \(process.terminationStatus)")
+    }
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func runGit(_ arguments: [String], in directory: URL, environment: [String: String] = [:]) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["git"] + arguments
+    process.currentDirectoryURL = directory
+    process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"].merging(environment) { _, new in new }
 
     let error = Pipe()
     process.standardError = error
@@ -1837,4 +1854,921 @@ func pullRespectsAutoStashConfiguration(setting: String) throws {
         #expect(try String(contentsOf: file, encoding: .utf8) == resolved)
         #expect(try git.loadStatus(in: root).allSatisfy { $0.kind != .conflicted })
     }
+}
+
+@Test func restoreFileFromCommitReplacesStagedAndUnstagedEditsOfThatPathOnly() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    let glob = root.appendingPathComponent("*.txt")
+    let other = root.appendingPathComponent("other.txt")
+    for url in [file, glob, other] { try "one\n".write(to: url, atomically: true, encoding: .utf8) }
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    for url in [file, glob, other] { try "two\n".write(to: url, atomically: true, encoding: .utf8) }
+    try git.stageAll(in: root)
+    try git.commit(message: "Two", in: root)
+    try "staged\n".write(to: glob, atomically: true, encoding: .utf8)
+    try git.stage(path: "*.txt", in: root)
+    try "unstaged\n".write(to: glob, atomically: true, encoding: .utf8)
+    try "local\n".write(to: other, atomically: true, encoding: .utf8)
+    let snapshot = try git.loadSnapshot(at: root)
+
+    // A glob-like name restores only that literal path.
+    try git.restore(path: "*.txt", from: first, expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+
+    #expect(try String(contentsOf: glob, encoding: .utf8) == "one\n")
+    #expect(try String(contentsOf: file, encoding: .utf8) == "two\n")
+    #expect(try String(contentsOf: other, encoding: .utf8) == "local\n")
+    let status = try git.loadStatus(in: root)
+    #expect(status.first { $0.path == "*.txt" }?.indexStatus == "M")
+    #expect(status.first { $0.path == "*.txt" }?.workTreeStatus == " ")
+    #expect(status.first { $0.path == "other.txt" }?.workTreeStatus == "M")
+    #expect(try git.loadSnapshot(at: root).headHash == snapshot.headHash)
+}
+
+@Test func restoreFileFromCommitRecreatesAndRemovesFiles() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let removed = root.appendingPathComponent("folder/removed.txt")
+    try FileManager.default.createDirectory(at: removed.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try "kept in history\n".write(to: removed, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["rm", "-r", "--quiet", "folder"], in: root)
+    try "new\n".write(to: root.appendingPathComponent("added.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Remove and add", in: root)
+    var snapshot = try git.loadSnapshot(at: root)
+
+    try git.restore(path: "folder/removed.txt", from: first, expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+    #expect(try String(contentsOf: removed, encoding: .utf8) == "kept in history\n")
+    #expect(try git.loadStatus(in: root).contains { $0.path == "folder/removed.txt" && $0.indexStatus == "A" })
+
+    snapshot = try git.loadSnapshot(at: root)
+    try git.restore(path: "added.txt", from: first, expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+    #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("added.txt").path))
+    #expect(try git.loadStatus(in: root).contains { $0.path == "added.txt" && $0.indexStatus == "D" })
+}
+
+@Test func restoreFileFromCommitRefusesUntrackedFilesStaleCheckoutsAndUnfinishedOperations() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    let later = root.appendingPathComponent("later.txt")
+    try "base\n".write(to: file, atomically: true, encoding: .utf8)
+    try "later\n".write(to: later, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    let base = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["rm", "--quiet", "later.txt"], in: root)
+    try git.commit(message: "Remove later", in: root)
+
+    // An untracked local file at the restored path is never replaced.
+    try "mine\n".write(to: later, atomically: true, encoding: .utf8)
+    var snapshot = try git.loadSnapshot(at: root)
+    #expect(throws: (any Error).self) {
+        try git.restore(path: "later.txt", from: base, expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+    }
+    #expect(try String(contentsOf: later, encoding: .utf8) == "mine\n")
+    try FileManager.default.removeItem(at: later)
+
+    // A dialog opened before HEAD moved cannot act on the new checkout.
+    try "edit\n".write(to: file, atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) {
+        try git.restore(path: "file.txt", from: base, expectedBranch: snapshot.currentBranch, expectedHead: base, in: root)
+    }
+    #expect(try String(contentsOf: file, encoding: .utf8) == "edit\n")
+    try runGit(["checkout", "--quiet", "--", "file.txt"], in: root)
+
+    // Files are left alone while a merge is unfinished.
+    try git.createBranch(named: "feature", in: root)
+    try "feature\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Feature", in: root)
+    try git.checkout(branch: "main", in: root)
+    try "main\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Main", in: root)
+    #expect(throws: (any Error).self) { try git.start(.merge, target: "feature", in: root) }
+    snapshot = try git.loadSnapshot(at: root)
+    let conflicted = try Data(contentsOf: file)
+    #expect(throws: (any Error).self) {
+        try git.restore(path: "file.txt", from: base, expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+    }
+    #expect(try Data(contentsOf: file) == conflicted)
+}
+
+@Test func fileHistoryFollowsRenamesAndKeepsUnusualNamesLiteral() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    #expect(try git.fileHistory(path: "missing.txt", in: root).isEmpty)
+    let original = "\nfirst\u{1e}name.txt"
+    try "one\ntwo\nthree\nfour\n".write(to: root.appendingPathComponent(original), atomically: true, encoding: .utf8)
+    try "other\n".write(to: root.appendingPathComponent("*.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add", in: root)
+    try "changed\n".write(to: root.appendingPathComponent("*.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Only the glob-named file", in: root)
+    try runGit(["mv", original, "renamed.txt"], in: root)
+    try git.commit(message: "Rename", in: root)
+    try "one\ntwo\nthree\nfour\nfive\n".write(to: root.appendingPathComponent("renamed.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Edit", in: root)
+
+    let history = try git.fileHistory(path: "renamed.txt", in: root)
+    #expect(history.map(\.commit.subject) == ["Edit", "Rename", "Add"])
+    #expect(history.map(\.path) == ["renamed.txt", "renamed.txt", original])
+    #expect(history.map(\.status) == ["M", "R", "A"])
+    #expect(try git.fileHistory(path: "*.txt", in: root).map(\.commit.subject) == ["Only the glob-named file", "Add"])
+    #expect(try git.fileHistory(path: "renamed.txt", limit: 1, in: root).count == 1)
+}
+
+@Test func fileHistoryMarksTheCommitThatDeletedAFile() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("gone.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add", in: root)
+    try runGit(["rm", "--quiet", "gone.txt"], in: root)
+    try git.commit(message: "Delete", in: root)
+    let history = try git.fileHistory(path: "gone.txt", in: root)
+    #expect(history.map(\.commit.subject) == ["Delete", "Add"])
+    #expect(history.map(\.deletesFile) == [true, false])
+}
+
+@Test func blameAttributesLinesToCommitsAndUncommittedEdits() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "First Author", email: "first@example.invalid", in: root)
+    let file = root.appendingPathComponent("*.txt")
+    try "one\r\ntwo\r\nthree\r\n".write(to: file, atomically: true, encoding: .utf8)
+    try "other\n".write(to: root.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add lines", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    try git.setIdentity(name: "Second Author", email: "second@example.invalid", in: root)
+    try "one\r\nTWO\r\nthree\r\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Shout the second line", in: root)
+    try "one\r\nTWO\r\nthree\r\nfour\r\n".write(to: file, atomically: true, encoding: .utf8)
+
+    let lines = try git.blame(path: "*.txt", in: root)
+    #expect(lines.map(\.number) == [1, 2, 3, 4])
+    #expect(lines.map(\.content) == ["one\r", "TWO\r", "three\r", "four\r"])
+    #expect(lines.map(\.commit.authorName) == ["First Author", "Second Author", "First Author", "Not Committed Yet"])
+    #expect(lines[1].commit.summary == "Shout the second line")
+    #expect(lines[0].commit.hash == first && lines[0].commit.authorEmail == "first@example.invalid")
+    #expect(lines[3].commit.isUncommitted && !lines[0].commit.isUncommitted)
+    #expect(lines[0].commit.date != nil && lines[0].commit.path == "*.txt")
+
+    let old = try git.blame(path: "*.txt", revision: first, in: root)
+    #expect(old.map(\.content) == ["one\r", "two\r", "three\r"])
+    #expect(Set(old.map(\.commit.hash)) == [first])
+
+    try Data([0, 1, 2, 0]).write(to: root.appendingPathComponent("binary.bin"))
+    try git.stage(path: "binary.bin", in: root)
+    try git.commit(message: "Binary", in: root)
+    #expect(throws: (any Error).self) { try git.blame(path: "binary.bin", in: root) }
+}
+
+@Test func blameParserUnquotesPaths() {
+    #expect(GitBlameParser.unquote("\"tab\\there\\303\\251\\\\\"") == "tab\there\u{e9}\\")
+    #expect(GitBlameParser.unquote("plain.txt") == "plain.txt")
+}
+
+@Test func remotesCanBeRenamedRepointedAndRemovedOnlyWhenUnchanged() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let server = base.appendingPathComponent("server.git")
+    let other = base.appendingPathComponent("other.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    try runGit(["init", "--quiet", "--bare", server.path], in: base)
+    try runGit(["init", "--quiet", "--bare", other.path], in: base)
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    try git.addRemote(name: "origin", address: server.path, in: root)
+    try runGit(["push", "--quiet", "--set-upstream", "origin", "main"], in: root)
+
+    // A dialog shown for another address cannot rename the remote.
+    #expect(throws: (any Error).self) { try git.renameRemote("origin", to: "upstream", expectedAddress: other.path, in: root) }
+    try git.renameRemote("origin", to: "upstream", expectedAddress: server.path, in: root)
+    var snapshot = try git.loadSnapshot(at: root)
+    #expect(snapshot.remotes == ["upstream"])
+    #expect(snapshot.branches.contains { $0.isRemote && $0.displayName == "upstream/main" })
+    #expect(snapshot.branches.first { $0.isCurrent }?.upstream == "refs/remotes/upstream/main")
+
+    #expect(throws: (any Error).self) { try git.setRemoteAddress("upstream", to: "   ", expectedAddress: server.path, in: root) }
+    try git.setRemoteAddress("upstream", to: other.path, expectedAddress: server.path, in: root)
+    #expect(try git.remoteAddress(name: "upstream", in: root) == other.path)
+
+    #expect(throws: (any Error).self) { try git.removeRemote("upstream", expectedAddress: server.path, in: root) }
+    try git.removeRemote("upstream", expectedAddress: other.path, in: root)
+    snapshot = try git.loadSnapshot(at: root)
+    #expect(snapshot.remotes.isEmpty)
+    #expect(!snapshot.branches.contains { $0.isRemote })
+    #expect(throws: (any Error).self) { try git.removeRemote("upstream", expectedAddress: other.path, in: root) }
+}
+
+@Test func tagsArePushedAndDeletedOnRemotesOnlyWhenTheyMatch() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let server = base.appendingPathComponent("server.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    try runGit(["init", "--quiet", "--bare", server.path], in: base)
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    try git.addRemote(name: "origin", address: server.path, in: root)
+    try git.createTag(name: "v1", target: "HEAD", message: "Release one", in: root)
+    try git.createTag(name: "light", target: "HEAD", in: root)
+    try git.createTag(name: "extra", target: "HEAD", in: root)
+    var snapshot = try git.loadSnapshot(at: root)
+    let addresses = snapshot.remotePushAddresses
+    let serverTags = { try runGitOutput(["tag", "--list"], in: server).split(separator: "\n").map(String.init) }
+
+    #expect(throws: (any Error).self) {
+        try git.pushTag("v1", to: "origin", expectedTip: "0000000000000000000000000000000000000000", expectedPushAddresses: addresses, in: root)
+    }
+    #expect(throws: (any Error).self) {
+        try git.pushTag("v1", to: "origin", expectedTip: snapshot.tagTips["v1"]!, expectedPushAddresses: ["origin": ["/elsewhere.git"]], in: root)
+    }
+    try git.pushTag("v1", to: "origin", expectedTip: snapshot.tagTips["v1"]!, expectedPushAddresses: addresses, in: root)
+    try git.pushTag("light", to: "origin", expectedTip: snapshot.tagTips["light"]!, expectedPushAddresses: addresses, in: root)
+    // Only the selected tags reach the remote; no branches or other tags follow.
+    #expect(try serverTags() == ["light", "v1"])
+    #expect(try runGitOutput(["for-each-ref", "refs/heads"], in: server).isEmpty)
+
+    // A local tag moved to another commit is not pushed over the remote one or used to delete it.
+    try "two\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Two", in: root)
+    try runGit(["tag", "--force", "light", "HEAD"], in: root)
+    snapshot = try git.loadSnapshot(at: root)
+    #expect(throws: (any Error).self) {
+        try git.pushTag("light", to: "origin", expectedTip: snapshot.tagTips["light"]!, expectedPushAddresses: addresses, in: root)
+    }
+    #expect(throws: (any Error).self) {
+        try git.deleteRemoteTag("light", from: "origin", expectedTip: snapshot.tagTips["light"]!, expectedPushAddresses: addresses, in: root)
+    }
+    #expect(try serverTags() == ["light", "v1"])
+
+    try git.deleteRemoteTag("v1", from: "origin", expectedTip: snapshot.tagTips["v1"]!, expectedPushAddresses: addresses, in: root)
+    #expect(try serverTags() == ["light"])
+    #expect(try git.loadSnapshot(at: root).tags.contains("v1"))
+}
+
+@Test func ignorePatternsMatchSelectedNamesLiterally() {
+    #expect(GitClient.ignorePattern(for: "*.txt", rule: .path) == "/\\*.txt")
+    #expect(GitClient.ignorePattern(for: "dir/[x]?.log", rule: .path) == "/dir/\\[x]\\?.log")
+    #expect(GitClient.ignorePattern(for: "#note", rule: .path) == "/#note")
+    #expect(GitClient.ignorePattern(for: "space  ", rule: .path) == "/space\\ \\ ")
+    #expect(GitClient.ignorePattern(for: "build/", rule: .path) == "/build/")
+    #expect(GitClient.ignorePattern(for: "logs/app.lo*", rule: .fileExtension) == "*.lo\\*")
+    #expect(GitClient.ignorePattern(for: ".env", rule: .fileExtension) == nil)
+    #expect(GitClient.ignorePattern(for: "line\nbreak", rule: .path) == nil)
+}
+
+@Test func ignoringUntrackedFilesAddsOneLiteralRuleInTheChosenFile() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "tracked\n".write(to: root.appendingPathComponent("tracked.log"), atomically: true, encoding: .utf8)
+    try "keep".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    for name in ["*.txt", "a.txt", "debug.log", "private.key"] {
+        try "x".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+    let untracked = { try git.loadStatus(in: root).filter { $0.kind == .untracked }.map(\.path).sorted() }
+
+    try git.ignore(path: "*.txt", rule: .path, scope: .shared, in: root)
+    try git.ignore(path: "*.txt", rule: .path, scope: .shared, in: root)
+    #expect(try untracked() == ["a.txt", "debug.log", "private.key"])
+    #expect(try String(contentsOf: root.appendingPathComponent(".gitignore"), encoding: .utf8) == "keep\n/\\*.txt\n")
+
+    try git.ignore(path: "debug.log", rule: .fileExtension, scope: .shared, in: root)
+    #expect(try untracked() == ["a.txt", "private.key"])
+
+    try git.ignore(path: "private.key", rule: .path, scope: .local, in: root)
+    #expect(try untracked() == ["a.txt"])
+    #expect(try !String(contentsOf: root.appendingPathComponent(".gitignore"), encoding: .utf8).contains("private"))
+    #expect(try String(contentsOf: root.appendingPathComponent(".git/info/exclude"), encoding: .utf8).hasSuffix("/private.key\n"))
+
+    // Tracked files are not ignored by rules, so they are refused rather than silently kept.
+    #expect(throws: (any Error).self) { try git.ignore(path: "tracked.log", rule: .path, scope: .shared, in: root) }
+}
+
+@Test func commitSearchCoversAllBranchesLiterally() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    #expect(try git.searchCommits("anything", in: .message, in: root).isEmpty)
+    try git.setIdentity(name: "Ada Lovelace", email: "ada@example.invalid", in: root)
+    try "let total = 1\n".write(to: root.appendingPathComponent("code.swift"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add total (v1.0)", in: root)
+    try git.createBranch(named: "feature", in: root)
+    try git.setIdentity(name: "Grace Hopper", email: "grace@example.invalid", in: root)
+    try "let total = 1\nlet average = 2\n".write(to: root.appendingPathComponent("code.swift"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Compute AVERAGE on a side branch", in: root)
+    let side = try #require(git.loadSnapshot(at: root).headHash)
+    try git.checkout(branch: "main", in: root)
+
+    // Branches other than the checkout are searched, and regex characters are literal.
+    #expect(try git.searchCommits("average", in: .message, in: root).map(\.hash) == [side])
+    #expect(try git.searchCommits("(v1.0)", in: .message, in: root).map(\.subject) == ["Add total (v1.0)"])
+    #expect(try git.searchCommits(".*", in: .message, in: root).isEmpty)
+    #expect(try git.searchCommits("grace", in: .author, in: root).map(\.hash) == [side])
+    #expect(try git.searchCommits("let average", in: .change, in: root).map(\.hash) == [side])
+    #expect(try git.searchCommits(String(side.prefix(8)), in: .author, in: root).first?.hash == side)
+    #expect(try git.searchCommits("   ", in: .message, in: root).isEmpty)
+}
+
+private func makeRebaseFixture() throws -> (GitClient, URL, [String]) {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    var hashes: [String] = []
+    for name in ["a", "b", "c", "d", "e"] {
+        try "\(name)\n".write(to: root.appendingPathComponent("\(name).txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Add \(name)\n\nBody of \(name).", in: root)
+        hashes.append(try #require(git.loadSnapshot(at: root).headHash))
+    }
+    return (git, root, hashes)
+}
+
+@Test func interactiveRebaseReordersRewordsSquashesFixesAndDrops() throws {
+    let (git, root, hashes) = try makeRebaseFixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let plan = try git.interactiveRebasePlan(from: hashes[1], in: root)
+    #expect(plan.commits.map(\.hash) == Array(hashes[1...]))
+    #expect(plan.base == hashes[0])
+    #expect(plan.publishedCommits.isEmpty)
+    let byHash = Dictionary(uniqueKeysWithValues: plan.commits.map { ($0.hash, $0) })
+    let steps = [
+        GitRebaseStep(commit: byHash[hashes[3]]!, action: .reword("Add d first\n\n#42 keeps its hash line")),
+        GitRebaseStep(commit: byHash[hashes[1]]!, action: .squash),
+        GitRebaseStep(commit: byHash[hashes[2]]!, action: .fixup),
+        GitRebaseStep(commit: byHash[hashes[4]]!, action: .drop),
+    ]
+    let snapshot = try git.loadSnapshot(at: root)
+    try git.interactiveRebase(steps, plan: plan, expectedBranch: snapshot.currentBranch, expectedHead: hashes[4], in: root)
+
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.operation == nil)
+    #expect(after.commits.map(\.subject) == ["Add d first", "Add a"])
+    #expect(try git.commitMessage(hash: "HEAD", in: root).trimmingCharacters(in: .whitespacesAndNewlines)
+        == "Add d first\n\n#42 keeps its hash line\n\nAdd b\n\nBody of b.")
+    for name in ["a", "b", "c", "d"] { #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("\(name).txt").path)) }
+    #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("e.txt").path))
+    #expect(after.status.isEmpty)
+}
+
+@Test func interactiveRebaseFromRootAndRefusals() throws {
+    let (git, root, hashes) = try makeRebaseFixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let branch = try git.loadSnapshot(at: root).currentBranch
+    let plan = try git.interactiveRebasePlan(from: hashes[0], in: root)
+    #expect(plan.base == nil && plan.commits.count == 5)
+    var steps = plan.commits.map { GitRebaseStep(commit: $0) }
+
+    steps[0].action = .squash
+    #expect(throws: (any Error).self) { try git.interactiveRebase(steps, plan: plan, expectedBranch: branch, expectedHead: hashes[4], in: root) }
+    steps[0].action = .pick
+    #expect(throws: (any Error).self) { try git.interactiveRebase(Array(steps.dropLast()), plan: plan, expectedBranch: branch, expectedHead: hashes[4], in: root) }
+    #expect(throws: (any Error).self) { try git.interactiveRebase(steps, plan: plan, expectedBranch: branch, expectedHead: hashes[3], in: root) }
+    try "dirty\n".write(to: root.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.interactiveRebase(steps, plan: plan, expectedBranch: branch, expectedHead: hashes[4], in: root) }
+    try runGit(["checkout", "--quiet", "--", "a.txt"], in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == hashes[4])
+
+    steps[1].action = .fixup
+    try git.interactiveRebase(steps, plan: plan, expectedBranch: branch, expectedHead: hashes[4], in: root)
+    #expect(try git.loadSnapshot(at: root).commits.map(\.subject) == ["Add e", "Add d", "Add c", "Add a"])
+}
+
+@Test func interactiveRebaseRejectsMergesAndStopsForConflicts() throws {
+    let (git, root, hashes) = try makeRebaseFixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let branch = try git.loadSnapshot(at: root).currentBranch
+    // Reordering two edits of the same line conflicts; the rebase stops for review.
+    for text in ["one\n", "two\n"] {
+        try text.write(to: root.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Set a to \(text)", in: root)
+    }
+    let head = try #require(git.loadSnapshot(at: root).headHash)
+    let plan = try git.interactiveRebasePlan(from: "HEAD~1", in: root)
+    let reversed = plan.commits.reversed().map { GitRebaseStep(commit: $0) }
+    #expect(throws: (any Error).self) { try git.interactiveRebase(reversed, plan: plan, expectedBranch: branch, expectedHead: head, in: root) }
+    #expect(try git.currentOperation(in: root) == .rebase)
+    try git.abortOperation(.rebase, in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == head)
+
+    try git.createBranch(named: "side", in: root)
+    try "side\n".write(to: root.appendingPathComponent("side.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Side", in: root)
+    try git.checkout(branch: branch, in: root)
+    try runGit(["merge", "--quiet", "--no-ff", "--no-edit", "side"], in: root)
+    #expect(throws: (any Error).self) { try git.interactiveRebasePlan(from: hashes[3], in: root) }
+}
+
+@Test func compareListsFilesBetweenCommitsAndWorkingFiles() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    for name in ["keep.txt", "edit.txt", "gone.txt"] { try "one\n".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    try "two\n".write(to: root.appendingPathComponent("edit.txt"), atomically: true, encoding: .utf8)
+    try FileManager.default.removeItem(at: root.appendingPathComponent("gone.txt"))
+    try "new\n".write(to: root.appendingPathComponent("*.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Two", in: root)
+    let second = try #require(git.loadSnapshot(at: root).headHash)
+    try "three\n".write(to: root.appendingPathComponent("keep.txt"), atomically: true, encoding: .utf8)
+
+    let between = try git.compareFiles(from: first, to: second, in: root)
+    #expect(between.map(\.path) == ["*.txt", "edit.txt", "gone.txt"])
+    #expect(between.map(\.status) == ["A", "M", "D"])
+    #expect(try git.compareFiles(from: first, to: nil, in: root).map(\.path) == ["*.txt", "edit.txt", "gone.txt", "keep.txt"])
+    let patch = try git.compareFileDiff(from: first, to: second, path: "*.txt", in: root)
+    #expect(patch.contains("+new") && !patch.contains("edit.txt"))
+    #expect(try git.compareFileDiff(from: second, to: nil, path: "keep.txt", in: root).contains("+three"))
+    #expect(throws: (any Error).self) { try git.compareFiles(from: "--output=/tmp/x", to: nil, in: root) }
+}
+
+@Test func amendingIncludesStagedChangesOnlyForTheCapturedCheckout() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let server = base.appendingPathComponent("server.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    try runGit(["init", "--quiet", "--bare", server.path], in: base)
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "First", in: root)
+    try "two\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Second", in: root)
+    let snapshot = try git.loadSnapshot(at: root)
+    let head = try #require(snapshot.headHash)
+    #expect(try !git.isPublished(head, in: root))
+
+    try "extra\n".write(to: root.appendingPathComponent("extra.txt"), atomically: true, encoding: .utf8)
+    try git.stage(path: "extra.txt", in: root)
+    try "unstaged\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.amendCommit(message: "   ", expectedBranch: snapshot.currentBranch, expectedHead: head, in: root) }
+    #expect(throws: (any Error).self) { try git.amendCommit(message: "Stale", expectedBranch: snapshot.currentBranch, expectedHead: snapshot.commits[1].hash, in: root) }
+    try git.amendCommit(message: "Second, with extra", expectedBranch: snapshot.currentBranch, expectedHead: head, in: root)
+
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.commits.map(\.subject) == ["Second, with extra", "First"])
+    #expect(try git.commitFiles(hash: "HEAD", in: root).sorted() == ["extra.txt", "file.txt"])
+    #expect(after.status.map(\.path) == ["file.txt"])
+
+    try git.addRemote(name: "origin", address: server.path, in: root)
+    try runGit(["push", "--quiet", "origin", "main"], in: root)
+    try git.fetch(in: root)
+    #expect(try git.isPublished(try #require(after.headHash), in: root))
+}
+
+@Test func reflogFindsCommitsLeftBehindByAResetAndRecoversThem() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    #expect(try git.reflog(in: root).isEmpty)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    for message in ["One", "Two", "Three"] {
+        try "\(message)\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: message, in: root)
+    }
+    let lost = try #require(git.loadSnapshot(at: root).headHash)
+    try runGit(["reset", "--quiet", "--hard", "HEAD~2"], in: root)
+    #expect(!(try git.loadSnapshot(at: root).commits.contains { $0.hash == lost }))
+
+    let entries = try git.reflog(in: root)
+    #expect(entries.first?.action.hasPrefix("reset:") == true)
+    let found = try #require(entries.first { $0.hash == lost })
+    // Resetting two commits back leaves "Two" and "Three" on no branch.
+    let unreachable = try git.unreachableCommits(entries.map(\.hash), in: root)
+    #expect(Set(entries.filter { unreachable.contains($0.hash) }.map(\.subject)) == ["Two", "Three"])
+    #expect(found.subject == "Three" && found.selector == "HEAD@{1}" && found.date != nil)
+    try git.createBranch(named: "recovered", startingAt: found.hash, in: root)
+    #expect(try git.loadSnapshot(at: root).branches.first { $0.name == "recovered" }?.tip == lost)
+}
+
+@Test func stashingSelectedFilesLeavesEveryOtherFileAlone() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    for name in ["*.txt", "a.txt", "staged.txt"] { try "one\n".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    for name in ["*.txt", "a.txt"] { try "two\n".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    try "staged\n".write(to: root.appendingPathComponent("staged.txt"), atomically: true, encoding: .utf8)
+    try git.stage(path: "staged.txt", in: root)
+    try "new\n".write(to: root.appendingPathComponent("new*.md"), atomically: true, encoding: .utf8)
+    try "other\n".write(to: root.appendingPathComponent("other.md"), atomically: true, encoding: .utf8)
+
+    try git.saveStash(paths: ["*.txt", "staged.txt", "new*.md"], message: "Selected", in: root)
+    let status = try git.loadStatus(in: root)
+    #expect(status.map(\.path).sorted() == ["a.txt", "other.md"])
+    #expect(try git.listStashes(in: root).first?.message.contains("Selected") == true)
+    #expect(try git.stashFiles(hash: "refs/stash", in: root) == ["*.txt", "new*.md", "staged.txt"])
+    #expect(throws: (any Error).self) { try git.saveStash(paths: ["missing.txt"], message: "", in: root) }
+    #expect(throws: (any Error).self) { try git.saveStash(paths: [], message: "", in: root) }
+}
+
+@Test func linkedWorktreesAreRemovedOnlyWhenCleanAndNotCurrent() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("main")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    for name in ["clean", "dirty", "gone"] {
+        try runGit(["branch", name], in: root)
+        try git.createWorktree(branch: name, at: base.appendingPathComponent(name), in: root)
+    }
+    let paths = try git.loadSnapshot(at: root).worktrees.map(\.path)
+    let path = { (name: String) in try #require(paths.first { $0.hasSuffix("/" + name) }) }
+    try "edit\n".write(to: URL(fileURLWithPath: try path("dirty")).appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+
+    #expect(throws: (any Error).self) { try git.removeWorktree(at: paths[0], in: root) }
+    #expect(throws: (any Error).self) { try git.removeWorktree(at: try path("clean"), in: URL(fileURLWithPath: try path("clean"))) }
+    #expect(throws: (any Error).self) { try git.removeWorktree(at: try path("dirty"), in: root) }
+    #expect(FileManager.default.fileExists(atPath: try path("dirty") + "/file.txt"))
+    try git.removeWorktree(at: try path("clean"), in: root)
+    #expect(!FileManager.default.fileExists(atPath: try path("clean")))
+
+    try FileManager.default.removeItem(atPath: try path("gone"))
+    #expect(try git.loadSnapshot(at: root).worktrees.contains { $0.path == (try? path("gone")) && $0.isPrunable })
+    try git.pruneWorktrees(in: root)
+    #expect(try git.loadSnapshot(at: root).worktrees.map(\.path) == [paths[0], try path("dirty")])
+}
+
+@Test func commitSignaturesAreVerifiedLocally() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("repo")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Unsigned", in: root)
+    #expect(try git.signature(of: "HEAD", in: root) == nil)
+
+    let key = base.appendingPathComponent("key")
+    let keygen = Process()
+    keygen.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-keygen")
+    keygen.arguments = ["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f", key.path]
+    try keygen.run()
+    keygen.waitUntilExit()
+    guard keygen.terminationStatus == 0 else { return }
+    let publicKey = try String(contentsOf: key.appendingPathExtension("pub"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    try runGit(["config", "gpg.format", "ssh"], in: root)
+    try runGit(["config", "user.signingkey", key.path], in: root)
+    try "two\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try runGit(["commit", "--quiet", "-S", "-m", "Signed"], in: root)
+
+    // Without an allowed-signers list, the signature cannot be checked here.
+    let unchecked = try #require(try git.signature(of: "HEAD", in: root))
+    #expect(unchecked.status != .verified && unchecked.status != .bad)
+    // Strict verification needs a Git configuration that lets signatures be checked here;
+    // an invalid global signing setting leaves every signature unverifiable, as reported.
+    guard unchecked.problem == nil else { return }
+
+    let signers = base.appendingPathComponent("allowed_signers")
+    try "test@example.invalid \(publicKey)\n".write(to: signers, atomically: true, encoding: .utf8)
+    try runGit(["config", "gpg.ssh.allowedSignersFile", signers.path], in: root)
+    let verified = try #require(try git.signature(of: "HEAD", in: root))
+    #expect(verified.status == .verified)
+    #expect(verified.signer == "test@example.invalid")
+    #expect(!verified.key.isEmpty)
+}
+
+@Test func diffsCanIgnoreWhitespaceOnlyChanges() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "a\nb\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try "  a\nB\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    let full = GitDiffLine.parse(try git.diff(path: "file.txt", staged: false, in: root)).filter { $0.kind == .addition }
+    let quiet = GitDiffLine.parse(try git.diff(path: "file.txt", staged: false, ignoreWhitespace: true, in: root)).filter { $0.kind == .addition }
+    #expect(full.map(\.text) == ["+  a", "+B"])
+    #expect(quiet.map(\.text) == ["+B"])
+    try git.stageAll(in: root)
+    try git.commit(message: "Indent", in: root)
+    #expect(GitDiffLine.parse(try git.commitFileDiff(hash: "HEAD", path: "file.txt", ignoreWhitespace: true, in: root)).filter { $0.kind == .addition }.map(\.text) == ["+B"])
+}
+
+@Test func fileVersionsAreReadAsBytesFromCommitsIndexAndDisk() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let first = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF])
+    let staged = Data([0x00, 0x01])
+    let working = Data([0xFE])
+    try first.write(to: root.appendingPathComponent("image:1.png"))
+    try git.stageAll(in: root)
+    try git.commit(message: "Add", in: root)
+    try staged.write(to: root.appendingPathComponent("image:1.png"))
+    try git.stage(path: "image:1.png", in: root)
+    try working.write(to: root.appendingPathComponent("image:1.png"))
+
+    #expect(try git.fileData(path: "image:1.png", at: .revision("HEAD"), in: root) == first)
+    #expect(try git.fileData(path: "image:1.png", at: .index, in: root) == staged)
+    #expect(try git.fileData(path: "image:1.png", at: .workingFile, in: root) == working)
+    #expect(try git.fileData(path: "image:1.png", at: .revision("HEAD^1"), in: root) == nil)
+    #expect(try git.fileData(path: "missing.png", at: .revision("HEAD"), in: root) == nil)
+    #expect(try git.fileData(path: "missing.png", at: .workingFile, in: root) == nil)
+    #expect(throws: (any Error).self) { try git.fileData(path: "image:1.png", at: .revision("HEAD"), limit: 2, in: root) }
+}
+
+@Test func submodulesAreListedFromTheIndexAndUpdatedOneAtATime() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let library = base.appendingPathComponent("library")
+    let app = base.appendingPathComponent("app")
+    let clone = base.appendingPathComponent("clone")
+    try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    for repository in [library, app] {
+        try git.initialize(at: repository)
+        try git.setIdentity(name: "Test", email: "test@example.invalid", in: repository)
+    }
+    try "one\n".write(to: library.appendingPathComponent("lib.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: library)
+    try git.commit(message: "Library one", in: library)
+    let recorded = try #require(git.loadSnapshot(at: library).headHash)
+    try runGit(["-c", "protocol.file.allow=always", "submodule", "add", "--quiet", library.path, "vendor/lib x"], in: app)
+    try git.commit(message: "Add library", in: app)
+    #expect(try git.submodules(in: app) == [GitSubmodule(path: "vendor/lib x", recordedCommit: recorded, state: .upToDate, hasLocalChanges: false)])
+
+    try runGit(["clone", "--quiet", app.path, clone.path], in: base)
+    #expect(try git.submodules(in: clone).first?.state == .uninitialized)
+    // Git refuses file-transport submodule clones by default; the fixture opts in for setup only.
+    try runGit(["-c", "protocol.file.allow=always", "submodule", "update", "--quiet", "--init"], in: clone)
+    #expect(try git.submodules(in: clone).first?.state == .upToDate)
+
+    let inside = clone.appendingPathComponent("vendor/lib x")
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: inside)
+    try "two\n".write(to: inside.appendingPathComponent("lib.txt"), atomically: true, encoding: .utf8)
+    #expect(try git.submodules(in: clone).first?.hasLocalChanges == true)
+    try git.stageAll(in: inside)
+    try git.commit(message: "Local library change", in: inside)
+    let local = try #require(git.loadSnapshot(at: inside).headHash)
+    #expect(try git.submodules(in: clone).first?.state == .differentCommit(local))
+    #expect(throws: (any Error).self) { try git.updateSubmodule("vendor/other", in: clone) }
+    try git.updateSubmodule("vendor/lib x", in: clone)
+    #expect(try git.submodules(in: clone).first?.state == .upToDate)
+}
+
+@Test func discardsCanBeUndoneExactlyUntilThePathChangesAgain() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    for name in ["*.txt", "deleted.txt", "tool.sh"] { try "base\n".write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+
+    try "staged\n".write(to: root.appendingPathComponent("*.txt"), atomically: true, encoding: .utf8)
+    try git.stage(path: "*.txt", in: root)
+    try "unstaged\r\n".write(to: root.appendingPathComponent("*.txt"), atomically: true, encoding: .utf8)
+    try FileManager.default.removeItem(at: root.appendingPathComponent("deleted.txt"))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent("tool.sh").path)
+    try "new\n".write(to: root.appendingPathComponent("added.txt"), atomically: true, encoding: .utf8)
+    try git.stage(path: "added.txt", in: root)
+    try "untracked\n".write(to: root.appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+    let before = try git.loadStatus(in: root)
+
+    var undos: [GitDiscardUndo] = []
+    for entry in before { undos.append(try #require(try git.discardKeepingUndo(entry, in: root))) }
+    #expect(try git.loadStatus(in: root).isEmpty)
+    for undo in undos.reversed() { try git.undoDiscard(undo, in: root) }
+    #expect(try git.loadStatus(in: root) == before)
+    #expect(try Data(contentsOf: root.appendingPathComponent("*.txt")) == Data("unstaged\r\n".utf8))
+    #expect(try git.diff(path: "*.txt", staged: true, in: root).contains("+staged"))
+    #expect((try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("tool.sh").path)[.posixPermissions] as? Int) == 0o755)
+
+    // Newer work on the path is never overwritten by an old undo.
+    let entry = try #require(try git.loadStatus(in: root).first { $0.path == "untracked.txt" })
+    let undo = try #require(try git.discardKeepingUndo(entry, in: root))
+    try "newer\n".write(to: root.appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.undoDiscard(undo, in: root) }
+    #expect(try String(contentsOf: root.appendingPathComponent("untracked.txt"), encoding: .utf8) == "newer\n")
+}
+
+@Test func severalCommitsAreCherryPickedOldestFirst() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "base\n".write(to: root.appendingPathComponent("base.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    try git.createBranch(named: "feature", in: root)
+    var picked: [String] = []
+    for (index, name) in ["one", "two", "skip", "three"].enumerated() {
+        try "\(name)\n".write(to: root.appendingPathComponent("\(name).txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        let date = "2026-01-0\(index + 1)T00:00:00"
+        try runGit(["commit", "--quiet", "-m", name, "--date", date], in: root, environment: ["GIT_COMMITTER_DATE": date])
+        if name != "skip" { picked.append(try #require(git.loadSnapshot(at: root).headHash)) }
+    }
+    try git.checkout(branch: "main", in: root)
+    let head = try git.loadSnapshot(at: root).headHash
+
+    #expect(throws: (any Error).self) { try git.cherryPick(picked, expectedHead: "0000000", expectedBranch: "main", in: root) }
+    try git.cherryPick(picked.reversed(), expectedHead: head, expectedBranch: "main", in: root)
+    #expect(try runGitOutput(["log", "--format=%s", "-4", "main"], in: root).split(separator: "\n") == ["three", "two", "one", "Base"])
+    #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("skip.txt").path))
+}
+
+@Test func applyingAnIdentityWritesOnlyRepositorySettings() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.applyIdentity(name: "Work Me", email: "me@work.invalid", signingKey: nil, in: root)
+    #expect(git.identity(in: root) == ("Work Me", "me@work.invalid"))
+    #expect((try? runGitOutput(["config", "--local", "commit.gpgsign"], in: root)) == nil)
+    try git.applyIdentity(name: "Open Me", email: "me@home.invalid", signingKey: " ~/.ssh/id_ed25519.pub ", in: root)
+    #expect(git.identity(in: root) == ("Open Me", "me@home.invalid"))
+    #expect(try runGitOutput(["config", "--local", "user.signingkey"], in: root) == "~/.ssh/id_ed25519.pub\n")
+    #expect(try runGitOutput(["config", "--local", "commit.gpgsign"], in: root) == "true\n")
+    #expect(throws: (any Error).self) { try git.applyIdentity(name: " ", email: "x@y.invalid", signingKey: nil, in: root) }
+}
+
+@Test func gitFlowStartsAndFinishesFeaturesAndReleases() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "base\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    #expect(git.gitFlowConfiguration(in: root) == nil)
+    try git.initializeGitFlow(GitFlowConfiguration(versionTagPrefix: "v"), in: root)
+    #expect(git.gitFlowConfiguration(in: root)?.developBranch == "develop")
+    let head = { try git.loadSnapshot(at: root) }
+
+    var snapshot = try head()
+    try git.startGitFlow(.feature, name: "login", expectedBranch: snapshot.currentBranch, expectedHead: snapshot.headHash, in: root)
+    #expect(try head().currentBranch == "feature/login")
+    try "login\n".write(to: root.appendingPathComponent("login.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Add login", in: root)
+    snapshot = try head()
+    try git.finishGitFlow(expectedBranch: "feature/login", expectedHead: snapshot.headHash, in: root)
+    snapshot = try head()
+    #expect(snapshot.currentBranch == "develop")
+    #expect(!snapshot.branches.contains { $0.name == "feature/login" })
+    #expect(snapshot.commits.first?.parents.count == 2)
+
+    try git.startGitFlow(.release, name: "1.0", expectedBranch: "develop", expectedHead: snapshot.headHash, in: root)
+    try "1.0\n".write(to: root.appendingPathComponent("VERSION"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Bump version", in: root)
+    // Develop moves on with a conflicting change, so finishing stops at the second merge.
+    try git.checkout(branch: "develop", in: root)
+    try "develop\n".write(to: root.appendingPathComponent("VERSION"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Develop version", in: root)
+    try git.checkout(branch: "release/1.0", in: root)
+    snapshot = try head()
+    #expect(throws: (any Error).self) { try git.finishGitFlow(expectedBranch: "release/1.0", expectedHead: snapshot.headHash, in: root) }
+    #expect(try git.currentOperation(in: root) == .merge)
+    #expect(try runGitOutput(["tag", "--list", "v1.0"], in: root) == "v1.0\n")
+    try "1.0\n".write(to: root.appendingPathComponent("VERSION"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.continueOperation(.merge, in: root)
+    try git.checkout(branch: "release/1.0", in: root)
+    snapshot = try head()
+    try git.finishGitFlow(expectedBranch: "release/1.0", expectedHead: snapshot.headHash, in: root)
+    snapshot = try head()
+    #expect(snapshot.currentBranch == "develop")
+    #expect(!snapshot.branches.contains { $0.name == "release/1.0" })
+    #expect(try runGitOutput(["merge-base", "--is-ancestor", "v1.0", "main"], in: root).isEmpty)
+    #expect(throws: (any Error).self) { try git.finishGitFlow(expectedBranch: "develop", expectedHead: snapshot.headHash, in: root) }
+}
+
+@Test func lfsPatternsAndFilesAreReadFromGitAttributes() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try """
+    *.txt text
+    *.psd filter=lfs diff=lfs merge=lfs -text
+    "art files/*.png" filter=lfs diff=lfs merge=lfs -text
+    """.write(to: root.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+    try "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 3\n".write(to: root.appendingPathComponent("pointer.psd"), atomically: true, encoding: .utf8)
+    try "notes\n".write(to: root.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("art files"), withIntermediateDirectories: true)
+    try Data([0x89, 0x50]).write(to: root.appendingPathComponent("art files/logo.png"))
+    // Stage without filters: git-lfs may be missing, and the pointer file is the committed form.
+    try runGit(["-c", "filter.lfs.clean=cat", "-c", "filter.lfs.smudge=cat", "add", "--all"], in: root)
+    try runGit(["-c", "filter.lfs.clean=cat", "-c", "filter.lfs.smudge=cat", "commit", "--quiet", "-m", "Assets"], in: root)
+
+    let status = try git.lfsStatus(in: root)
+    #expect(status.patterns == ["*.psd", "art files/*.png"])
+    #expect(status.files == [GitLFSFile(path: "art files/logo.png", isPointerOnly: false), GitLFSFile(path: "pointer.psd", isPointerOnly: true)])
+
+    if status.version == nil {
+        #expect(throws: (any Error).self) { try git.trackLFS("*.mov", in: root) }
+    } else {
+        try git.trackLFS("my clips/*.mov", in: root)
+        #expect(try git.lfsStatus(in: root).patterns.last == "my clips/*.mov")
+    }
+    try git.untrackLFS("*.psd", in: root)
+    let attributes = try String(contentsOf: root.appendingPathComponent(".gitattributes"), encoding: .utf8)
+    #expect(attributes.hasPrefix("*.txt text\n\"art files/*.png\" filter=lfs"))
+    #expect(!attributes.contains("*.psd"))
 }

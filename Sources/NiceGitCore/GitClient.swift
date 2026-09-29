@@ -63,6 +63,16 @@ public struct GitClient: Sendable {
         return (name.trimmingCharacters(in: .whitespacesAndNewlines), email.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    /// Applies a commit identity to this repository only. With a signing key, commits are also
+    /// signed with it; without one, the repository's signing settings are left unchanged.
+    public func applyIdentity(name: String, email: String, signingKey: String?, in url: URL) throws {
+        try setIdentity(name: name, email: email, in: url)
+        if let signingKey = signingKey?.trimmingCharacters(in: .whitespacesAndNewlines), !signingKey.isEmpty {
+            try run(["config", "--local", "user.signingkey", signingKey], in: url)
+            try run(["config", "--local", "commit.gpgsign", "true"], in: url)
+        }
+    }
+
     public func setIdentity(name: String, email: String, in url: URL) throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -80,6 +90,59 @@ public struct GitClient: Sendable {
         var address = try run(["remote", "get-url", "--", name], in: url)
         if address.hasSuffix("\n") { address.removeLast() }
         return address
+    }
+
+    /// Renames a remote; Git also moves its remote-tracking branches and branch upstream settings.
+    public func renameRemote(_ name: String, to newName: String, expectedAddress: String?, in url: URL) throws {
+        try requireRemoteAddress(name, expectedAddress: expectedAddress, in: url)
+        try run(["remote", "rename", "--", name, newName], in: url)
+    }
+
+    /// Removes a remote with its remote-tracking branches and the upstream settings that use it.
+    public func removeRemote(_ name: String, expectedAddress: String?, in url: URL) throws {
+        try requireRemoteAddress(name, expectedAddress: expectedAddress, in: url)
+        try run(["remote", "remove", "--", name], in: url)
+    }
+
+    /// Changes a remote's fetch address. Separately configured push addresses stay as they are.
+    public func setRemoteAddress(_ name: String, to address: String, expectedAddress: String?, in url: URL) throws {
+        guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw GitClientError.commandFailed(command: "remote set-url", message: "Enter the remote's new address.")
+        }
+        try requireRemoteAddress(name, expectedAddress: expectedAddress, in: url)
+        try run(["remote", "set-url", "--", name, address], in: url)
+    }
+
+    /// Rejects an action confirmed for a remote whose address changed after it was shown.
+    private func requireRemoteAddress(_ name: String, expectedAddress: String?, in url: URL) throws {
+        let current = try? remoteAddress(name: name, in: url)
+        guard let current, current == expectedAddress else {
+            throw GitClientError.commandFailed(command: "remote", message: "The remote \(name) changed or was removed since it was shown. Refresh and review it again.")
+        }
+    }
+
+    /// Cherry-picks several commits onto the current branch, oldest first by commit time. Merge
+    /// commits are refused because each needs a chosen parent. Conflicts stop the sequence for
+    /// Continue or Abort, like a single cherry-pick.
+    public func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String, in url: URL) throws {
+        let snapshot = try loadSnapshot(at: url)
+        guard snapshot.headHash == expectedHead, snapshot.currentBranch == expectedBranch else {
+            throw GitClientError.commandFailed(command: "cherry-pick", message: "The current branch or HEAD changed since this action was selected. Refresh and review the operation again.")
+        }
+        guard snapshot.operation == nil, snapshot.status.isEmpty else {
+            throw GitClientError.commandFailed(command: "cherry-pick", message: "Commit or stash changes and finish the current operation first.")
+        }
+        var resolved: [(hash: String, time: Int)] = []
+        for commit in Set(commits) {
+            let fields = try run(["show", "--no-patch", "--format=%H %ct %P", "--end-of-options", commit + "^{commit}", "--"], in: url)
+                .trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ")
+            guard fields.count <= 3 else {
+                throw GitClientError.commandFailed(command: "cherry-pick", message: "Merge commits cannot be cherry-picked together with others. Pick a merge on its own and choose its parent.")
+            }
+            resolved.append((String(fields[0]), Int(fields[1]) ?? 0))
+        }
+        guard !resolved.isEmpty else { return }
+        try run(["cherry-pick"] + resolved.sorted { ($0.time, $0.hash) < ($1.time, $1.hash) }.map(\.hash), in: url)
     }
 
     public func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil, in url: URL) throws {
@@ -109,7 +172,7 @@ public struct GitClient: Sendable {
         try run(arguments + [hash], in: url)
     }
 
-    private func requireNoIgnoredMergeCollisions(target: String, in url: URL) throws {
+    func requireNoIgnoredMergeCollisions(target: String, in url: URL) throws {
         let bases = try run(["merge-base", "--all", "HEAD", target], in: url, acceptedStatuses: [0, 1])
             .split(whereSeparator: \.isWhitespace)
         var candidates = Set<String>()
@@ -187,6 +250,34 @@ public struct GitClient: Sendable {
         let remaining = try loadStatus(in: url)
         if remaining.contains(where: { includeUntracked || $0.kind != .untracked }) {
             throw GitClientError.commandFailed(command: "stash", message: "Some changes were saved in stash \(saved.prefix(12)), but changes remain in the working tree. Check submodules before proceeding.")
+        }
+    }
+
+    /// Stashes only `paths`, staged and unstaged, including selected untracked files. Every other
+    /// file is left exactly as it was.
+    public func saveStash(paths: [String], message: String, in url: URL) throws {
+        guard !paths.isEmpty else { throw GitClientError.commandFailed(command: "stash", message: "Select files to stash.") }
+        try requireFinishedOperation(command: "stash", in: url)
+        let before = try loadStatus(in: url)
+        let selected = Set(paths)
+        guard selected.allSatisfy({ path in before.contains { $0.path == path } }) else {
+            throw GitClientError.commandFailed(command: "stash", message: "Some selected files changed since they were selected. Refresh and review them again.")
+        }
+        let previous = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stashMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "WIP on \(currentBranch(in: url))" : message
+        // Stash runs Git internally with its own pathspecs, so mark each path literal here rather
+        // than through the environment; a glob-like name must not select other files.
+        try run(["stash", "push", "--include-untracked", "-m", stashMessage, "--"] + paths.map { ":(literal)" + $0 }, in: url)
+        guard let saved = (try? run(["rev-parse", "--verify", "refs/stash"], in: url))?.trimmingCharacters(in: .whitespacesAndNewlines), saved != previous else {
+            throw GitClientError.commandFailed(command: "stash", message: "Git did not save any changes for the selected files.")
+        }
+        let after = try loadStatus(in: url)
+        if after.contains(where: { selected.contains($0.path) }) {
+            throw GitClientError.commandFailed(command: "stash", message: "Stash \(saved.prefix(12)) was saved, but some selected files still have changes. Check submodules before proceeding.")
+        }
+        let others = { (entries: [GitStatusEntry]) in entries.filter { !selected.contains($0.path) } }
+        if others(after) != others(before) {
+            throw GitClientError.commandFailed(command: "stash", message: "Stash \(saved.prefix(12)) was saved, but other files changed too. Review the working tree and the stash before continuing.")
         }
     }
 
@@ -268,7 +359,7 @@ public struct GitClient: Sendable {
         try run(["clone", "--", source, destination.path], in: destination.deletingLastPathComponent())
     }
 
-    public func diff(path: String, staged: Bool, untracked: Bool = false, originalPath: String? = nil, in repositoryURL: URL) throws -> String {
+    public func diff(path: String, staged: Bool, untracked: Bool = false, originalPath: String? = nil, ignoreWhitespace: Bool = false, in repositoryURL: URL) throws -> String {
         if untracked {
             return try run(["diff", "--no-index", "--no-ext-diff", "--no-color", "--", "/dev/null", path], in: repositoryURL, acceptedStatuses: [0, 1])
         }
@@ -279,15 +370,43 @@ public struct GitClient: Sendable {
             }
             if entry.kind == .renamed { renameSource = originalPath }
         }
-        return try run(["diff", "--no-ext-diff", "--no-color"] + (staged ? ["--cached"] : []) + ["--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
+        return try run(["diff", "--no-ext-diff", "--no-color"] + (ignoreWhitespace ? ["-w"] : []) + (staged ? ["--cached"] : []) + ["--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
     }
 
-    public func commitDiff(hash: String, path: String? = nil, in repositoryURL: URL) throws -> String {
-        try run(["show", "--first-parent", "-m", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color", hash, "--"] + (path.map { [$0] } ?? []), in: repositoryURL)
+    public func commitDiff(hash: String, path: String? = nil, ignoreWhitespace: Bool = false, in repositoryURL: URL) throws -> String {
+        try run(["show", "--first-parent", "-m", "--format=fuller", "--stat", "--patch", "--no-ext-diff", "--no-color"] + (ignoreWhitespace ? ["-w"] : []) + [hash, "--"] + (path.map { [$0] } ?? []), in: repositoryURL)
     }
 
-    public func commitFileDiff(hash: String, path: String, in repositoryURL: URL) throws -> String {
-        try run(["show", "--first-parent", "-m", "--format=", "--patch", "--unified=3", "--no-renames", "--no-ext-diff", "--no-color", hash, "--", path], in: repositoryURL)
+    public func commitFileDiff(hash: String, path: String, ignoreWhitespace: Bool = false, in repositoryURL: URL) throws -> String {
+        try run(["show", "--first-parent", "-m", "--format=", "--patch", "--unified=3", "--no-renames", "--no-ext-diff", "--no-color"] + (ignoreWhitespace ? ["-w"] : []) + [hash, "--", path], in: repositoryURL)
+    }
+
+    /// Commits in the current checkout's history that changed `path`, newest first, following renames.
+    public func fileHistory(path: String, limit: Int = 200, in repositoryURL: URL) throws -> [GitFileHistoryEntry] {
+        guard (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) != nil else { return [] }
+        // Each record is the commit fields, then NUL-separated change letter and path; renames
+        // and copies list the old path before the new one.
+        let format = "%x1e%H%x1f%h%x1f%P%x1f%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct"
+        let output = try run(["log", "--follow", "--no-color", "-z", "--name-status", "-n", String(max(1, limit)),
+                              "--format=" + format, "HEAD", "--", path], in: repositoryURL)
+        // Split only on NUL: paths may contain any other byte, including Git's field separators.
+        var entries: [GitFileHistoryEntry] = []
+        var tokens = output.split(separator: "\0", omittingEmptySubsequences: false)[...]
+        while let token = tokens.popFirst() {
+            guard token.hasPrefix("\u{1e}"), let commit = GitLogParser.parse(String(token.dropFirst())).first else { continue }
+            // Git separates the fields from the change letter with one newline.
+            guard let statusToken = tokens.first, statusToken.hasPrefix("\n") else {
+                entries.append(GitFileHistoryEntry(commit: commit, path: path, status: "M"))
+                continue
+            }
+            tokens.removeFirst()
+            let status = String(statusToken.dropFirst())
+            let pathCount = status.hasPrefix("R") || status.hasPrefix("C") ? 2 : 1
+            let paths = tokens.prefix(pathCount)
+            tokens.removeFirst(paths.count)
+            entries.append(GitFileHistoryEntry(commit: commit, path: paths.last.map(String.init) ?? path, status: String(status.prefix(1))))
+        }
+        return entries
     }
 
     public func commitMessage(hash: String, in repositoryURL: URL) throws -> String {
@@ -307,8 +426,8 @@ public struct GitClient: Sendable {
         }.sorted { $0.path < $1.path }
     }
 
-    public func stashDiff(hash: String, in repositoryURL: URL) throws -> String {
-        try run(["stash", "show", "--include-untracked", "--patch", "--stat", "--no-ext-diff", "--no-color", hash], in: repositoryURL)
+    public func stashDiff(hash: String, ignoreWhitespace: Bool = false, in repositoryURL: URL) throws -> String {
+        try run(["stash", "show", "--include-untracked", "--patch", "--stat", "--no-ext-diff", "--no-color"] + (ignoreWhitespace ? ["-w"] : []) + [hash], in: repositoryURL)
     }
 
     public func stashFiles(hash: String, in repositoryURL: URL) throws -> [String] {
@@ -447,6 +566,48 @@ public struct GitClient: Sendable {
         }
     }
 
+    /// Restores one path's staged and working copies to its version in `source`, removing it when
+    /// that version has no such file. Staged and unstaged edits to the path are replaced.
+    public func restore(path: String, from source: String, expectedBranch: String, expectedHead: String?, in url: URL) throws {
+        try requireSelectedCheckout(branch: expectedBranch, head: expectedHead, command: "restore file", in: url)
+        guard try currentOperation(in: url) == nil else {
+            throw GitClientError.commandFailed(command: "restore file", message: "Finish or abort the current Git operation before restoring files.")
+        }
+        let commit = try run(["rev-parse", "--verify", "--end-of-options", source + "^{commit}"], in: url)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Both listings end each record with NUL and separate metadata from the path with a tab.
+        func entry(_ output: String) -> [Substring]? {
+            output.split(separator: "\0").first { $0.split(separator: "\t", maxSplits: 1).last == Substring(path) }?
+                .split(separator: "\t", maxSplits: 1).first?.split(separator: " ")
+        }
+        let sourceEntry = entry(try run(["ls-tree", "-z", commit, "--", path], in: url))
+        let indexEntries = try run(["ls-files", "-z", "--stage", "--", path], in: url)
+            .split(separator: "\0").filter { $0.split(separator: "\t", maxSplits: 1).last == Substring(path) }
+        if indexEntries.contains(where: { $0.split(separator: " ").dropFirst(2).first.map { !$0.hasPrefix("0") } ?? false }) {
+            throw GitClientError.commandFailed(command: "restore file", message: "This file has unresolved conflicts. Resolve them before restoring it.")
+        }
+        if sourceEntry?.first == "160000" || indexEntries.contains(where: { $0.hasPrefix("160000 ") }) {
+            throw GitClientError.commandFailed(command: "restore file", message: "Submodules cannot be restored here. Check out the wanted commit inside the submodule instead.")
+        }
+        if let type = sourceEntry?.dropFirst().first, type != "blob" {
+            throw GitClientError.commandFailed(command: "restore file", message: "This path is a folder in the selected commit. Choose an individual file.")
+        }
+        let file = url.appendingPathComponent(path)
+        let exists = (try? FileManager.default.attributesOfItem(atPath: file.path)) != nil
+        if indexEntries.isEmpty && exists {
+            // Git would overwrite or refuse a local file it does not track; never replace one silently.
+            throw GitClientError.commandFailed(command: "restore file", message: "An untracked file or a folder is at this path in your working tree. Move or rename it before restoring.")
+        }
+        guard sourceEntry != nil || !indexEntries.isEmpty else { return }
+        try run(["restore", "--source=" + commit, "--staged", "--worktree", "--", path], in: url)
+        let matches = (try? run(["diff", "--quiet", "--no-ext-diff", commit, "--", path], in: url)) != nil
+            && (try? run(["diff", "--quiet", "--no-ext-diff", "--cached", commit, "--", path], in: url)) != nil
+            && (sourceEntry != nil || (try? FileManager.default.attributesOfItem(atPath: file.path)) == nil)
+        guard matches else {
+            throw GitClientError.commandFailed(command: "restore file", message: "Git restored this path, but it still differs from the selected commit. Refresh and review it.")
+        }
+    }
+
     public func commit(message: String, in repositoryURL: URL) throws {
         let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else {
@@ -463,6 +624,22 @@ public struct GitClient: Sendable {
         return try switchPreservingChanges(["switch", "--no-overwrite-ignore", "--", branch], to: branch, in: repositoryURL)
     }
 
+    /// Replaces the last commit with one that also contains the staged changes and uses `message`.
+    public func amendCommit(message: String, expectedBranch: String, expectedHead: String, in url: URL) throws {
+        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw GitClientError.emptyCommitMessage }
+        try requireSelectedCheckout(branch: expectedBranch, head: expectedHead, command: "amend commit", in: url)
+        guard try currentOperation(in: url) == nil else {
+            throw GitClientError.commandFailed(command: "amend commit", message: "Finish or abort the current Git operation before amending.")
+        }
+        try run(["commit", "--amend", "--message", message], in: url)
+    }
+
+    /// Whether a remote-tracking branch already contains `commit`.
+    public func isPublished(_ commit: String, in url: URL) throws -> Bool {
+        let id = try run(["rev-parse", "--verify", "--end-of-options", commit + "^{commit}"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !(try run(["branch", "--remotes", "--contains", id], in: url)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     public func amendMessage(_ message: String, expectedHead: String, in url: URL) throws {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw GitClientError.emptyCommitMessage }
         let snapshot = try loadSnapshot(at: url)
@@ -476,6 +653,25 @@ public struct GitClient: Sendable {
         if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: repositoryURL) }
         else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repositoryURL) }
         try run(["worktree", "add", "--", destination.path, branch], in: repositoryURL)
+    }
+
+    /// Removes a linked worktree's folder and registration. Git refuses while it has uncommitted
+    /// or untracked files, or is locked; the main worktree and this checkout are never removed.
+    public func removeWorktree(at path: String, in url: URL) throws {
+        let worktrees = GitWorktree.parse(try run(["worktree", "list", "--porcelain", "-z"], in: url))
+        guard let index = worktrees.firstIndex(where: { $0.path == path }) else {
+            throw GitClientError.commandFailed(command: "worktree remove", message: "This worktree is no longer listed. Refresh the repository.")
+        }
+        let current = try repositoryRoot(for: url)
+        guard index != 0, path != current else {
+            throw GitClientError.commandFailed(command: "worktree remove", message: "The main worktree and the checkout you have open cannot be removed.")
+        }
+        try run(["worktree", "remove", "--", path], in: url)
+    }
+
+    /// Forgets worktrees whose folders were deleted outside Git.
+    public func pruneWorktrees(in url: URL) throws {
+        try run(["worktree", "prune"], in: url)
     }
 
     public func renameBranch(_ branch: String, to name: String, expectedTip: String? = nil, in url: URL) throws {
@@ -562,7 +758,7 @@ public struct GitClient: Sendable {
         }
     }
 
-    private func requireSelectedCheckout(branch expectedBranch: String?, head expectedHead: String?, command: String, in url: URL) throws {
+    func requireSelectedCheckout(branch expectedBranch: String?, head expectedHead: String?, command: String, in url: URL) throws {
         guard let expectedBranch else { return }
         let currentHead = (try? run(["rev-parse", "--verify", "HEAD"], in: url))?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -602,7 +798,7 @@ public struct GitClient: Sendable {
         }
     }
 
-    private func requireFinishedOperation(command: String, in url: URL) throws {
+    func requireFinishedOperation(command: String, in url: URL) throws {
         guard try currentOperation(in: url) == nil else {
             throw GitClientError.commandFailed(command: command, message: "Finish or abort the current Git operation before changing the working tree.")
         }
@@ -655,6 +851,31 @@ public struct GitClient: Sendable {
         try run(["remote", "get-url", "--push", "--", remote], in: url)
         let reference = "refs/heads/" + branch
         try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
+    }
+
+    /// Pushes one tag without moving an existing tag of the same name on the remote.
+    public func pushTag(_ name: String, to remote: String, expectedTip: String, expectedPushAddresses: [String: [String]], in url: URL) throws {
+        let reference = try requireTagTip(name, expectedTip: expectedTip, in: url)
+        try requireRemoteAddresses(expectedPushAddresses, remote: remote, push: true, command: "push tag", in: url)
+        try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, reference + ":" + reference], in: url)
+    }
+
+    /// Deletes a tag from a remote only while the remote tag still matches the local one.
+    public func deleteRemoteTag(_ name: String, from remote: String, expectedTip: String, expectedPushAddresses: [String: [String]], in url: URL) throws {
+        let reference = try requireTagTip(name, expectedTip: expectedTip, in: url)
+        try requireRemoteAddresses(expectedPushAddresses, remote: remote, push: true, command: "delete remote tag", in: url)
+        try run(["-c", "remote." + remote + ".mirror=false", "push", "--no-follow-tags", "--recurse-submodules=no",
+                 "--force-with-lease=" + reference + ":" + expectedTip, "--", remote, ":" + reference], in: url)
+    }
+
+    private func requireTagTip(_ name: String, expectedTip: String, in url: URL) throws -> String {
+        let reference = "refs/tags/" + name
+        let current = try? run(["rev-parse", "--verify", "--end-of-options", reference], in: url)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard current == expectedTip else {
+            throw GitClientError.commandFailed(command: "tag", message: "This tag changed since it was selected. Refresh and review it again.")
+        }
+        return reference
     }
 
     public func createBranch(named name: String, startingAt target: String, expectedSourceBranch: GitBranch? = nil, in url: URL) throws {
@@ -798,7 +1019,16 @@ public struct GitClient: Sendable {
     }
 
     @discardableResult
-    func run(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0]) throws -> String {
+    func run(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0], environmentOverrides: [String: String] = [:]) throws -> String {
+        let outputData = try runData(arguments, in: directory, acceptedStatuses: acceptedStatuses, environmentOverrides: environmentOverrides)
+        guard let outputText = String(data: outputData, encoding: .utf8) else {
+            throw GitClientError.commandFailed(command: "git \(arguments.joined(separator: " "))", message: "Git returned non-UTF-8 data that cannot be displayed as text.")
+        }
+        return outputText
+    }
+
+    /// Runs Git and returns its raw output, for content such as images that is not text.
+    func runData(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0], environmentOverrides: [String: String] = [:]) throws -> Data {
         guard control?.isCancelled != true else { throw CancellationError() }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -810,9 +1040,10 @@ public struct GitClient: Sendable {
         environment["GIT_EDITOR"] = "true"
         environment["GIT_SEQUENCE_EDITOR"] = "true"
         // Stash invokes Git internally with its own pathspecs; do not override those.
-        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files"].contains(command) {
+        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files", "ls-tree", "log"].contains(command) {
             environment["GIT_LITERAL_PATHSPECS"] = "1"
         }
+        environment.merge(environmentOverrides) { _, override in override }
         process.environment = environment
 
         // File-backed output cannot fill a pipe while Git is still running.
@@ -839,7 +1070,6 @@ public struct GitClient: Sendable {
 
         let outputData = try Data(contentsOf: outputURL)
         let errorData = try Data(contentsOf: errorURL)
-        let outputText = String(data: outputData, encoding: .utf8)
         let errorText = String(data: errorData, encoding: .utf8) ?? ""
 
         guard acceptedStatuses.contains(process.terminationStatus) else {
@@ -850,9 +1080,6 @@ public struct GitClient: Sendable {
             )
         }
 
-        guard let outputText else {
-            throw GitClientError.commandFailed(command: "git \(arguments.joined(separator: " "))", message: "Git returned non-UTF-8 data that cannot be displayed as text.")
-        }
-        return outputText
+        return outputData
     }
 }
