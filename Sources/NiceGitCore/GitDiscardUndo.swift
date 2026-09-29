@@ -58,7 +58,7 @@ extension GitClient {
     }
 
     private func indexVersion(_ path: String, in url: URL) throws -> GitDiscardUndo.Version? {
-        try run(["ls-files", "-z", "--stage", "--", path], in: url).split(separator: "\0").compactMap { record in
+        try run(["ls-files", "-z", "--stage", "--", path], in: url).split(separator: "\0").compactMap { record -> GitDiscardUndo.Version? in
             let parts = record.split(separator: "\t", maxSplits: 1)
             let fields = parts.first?.split(separator: " ") ?? []
             guard parts.count == 2, parts[1] == Substring(path), fields.count == 3, fields[2] == "0" else { return nil }

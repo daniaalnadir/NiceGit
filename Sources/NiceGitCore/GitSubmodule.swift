@@ -31,7 +31,7 @@ extension GitClient {
             guard parts.count == 2, fields.count == 3, fields[0] == "160000", fields[2] == "0" else { return nil }
             return (String(parts[1]), String(fields[1]))
         }
-        return entries.map { path, recorded in
+        return entries.map { path, recorded -> GitSubmodule in
             let directory = url.appendingPathComponent(path)
             guard FileManager.default.fileExists(atPath: directory.appendingPathComponent(".git").path),
                   let head = try? run(["rev-parse", "--verify", "HEAD"], in: directory).trimmingCharacters(in: .whitespacesAndNewlines) else {

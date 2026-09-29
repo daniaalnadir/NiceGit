@@ -19,7 +19,7 @@ extension GitClient {
         guard (try? run(["rev-parse", "--verify", "HEAD"], in: url)) != nil else { return [] }
         let output = try run(["log", "--walk-reflogs", "--no-color", "-n", String(max(1, limit)),
                               "--format=%H%x1f%gd%x1f%gs%x1f%s%x1f%ct%x1e", "HEAD", "--"], in: url)
-        return output.split(separator: "\u{1e}").compactMap { record in
+        return output.split(separator: "\u{1e}").compactMap { record -> GitReflogEntry? in
             let fields = record.trimmingCharacters(in: .newlines).components(separatedBy: "\u{1f}")
             guard fields.count == 5, !fields[0].isEmpty else { return nil }
             return GitReflogEntry(hash: fields[0], selector: fields[1], action: fields[2], subject: fields[3],
