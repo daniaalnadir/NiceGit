@@ -65,3 +65,47 @@ public struct GitDiffLine: Sendable, Equatable {
         }
     }
 }
+
+/// One row of a side-by-side diff, referring to lines by their index in the unified list.
+public enum GitSplitRow: Equatable, Sendable {
+    /// A hunk header or file metadata, shown across both sides.
+    case banner(Int)
+    /// The old version's line on the left and the new version's on the right; either may be absent.
+    case pair(left: Int?, right: Int?)
+}
+
+extension GitDiffLine {
+    /// Arranges unified diff lines side by side. Unchanged lines appear on both sides, and each
+    /// run of removed lines pairs row by row with the added lines that follow it. Git's
+    /// missing-newline note belongs to the change around it, so it does not break the pairing.
+    public static func sideBySide(_ lines: [GitDiffLine]) -> [GitSplitRow] {
+        var rows: [GitSplitRow] = []
+        var index = 0
+        let isNote = { (i: Int) in lines[i].kind == .metadata && lines[i].text.hasPrefix("\\") }
+        while index < lines.count {
+            switch lines[index].kind {
+            case .context:
+                rows.append(.pair(left: index, right: index))
+                index += 1
+            case .deletion, .addition:
+                var removed: [Int] = [], added: [Int] = [], notes: [Int] = []
+                while index < lines.count, lines[index].kind == .deletion || isNote(index) {
+                    if isNote(index) { notes.append(index) } else { removed.append(index) }
+                    index += 1
+                }
+                while index < lines.count, lines[index].kind == .addition || isNote(index) {
+                    if isNote(index) { notes.append(index) } else { added.append(index) }
+                    index += 1
+                }
+                for row in 0..<max(removed.count, added.count) {
+                    rows.append(.pair(left: row < removed.count ? removed[row] : nil, right: row < added.count ? added[row] : nil))
+                }
+                rows += notes.map(GitSplitRow.banner)
+            case .hunk, .metadata:
+                rows.append(.banner(index))
+                index += 1
+            }
+        }
+        return rows
+    }
+}

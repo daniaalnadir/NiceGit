@@ -43,6 +43,56 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Search diffs with previous/next matching-line navigation and Command-F.
 - Select a commit to inspect its metadata, changed files, and patches in a persistent side panel.
 - Read the complete commit message, including multiline descriptions, in the inspector.
+- Restore a file from a commit's changed-file list to that commit's version, or to its
+  version before the commit, then review and commit the staged result.
+- Amend the last commit with staged changes from the commit panel, with a warning when it
+  is already on a remote.
+- Show diffs side by side (old left, new right, long lines wrapped) or in one column; the
+  choice is remembered.
+- Save commit identities as profiles (name, email, optional signing key) and apply one to
+  a repository from Repository Settings or the command palette.
+- Settings (Command-comma): System, Light, or Dark appearance; Standard, colour-blind safe,
+  or Muted graph colours; and default diff options.
+- GitFlow (Repository > GitFlow): set up, start feature, release, and hotfix branches, and
+  finish them with no-fast-forward merges and version tags, compatible with git-flow.
+- Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose
+  content has not been downloaded, and track or untrack patterns.
+- Move through the commit graph with the Up and Down arrow keys; Escape clears the
+  selection.
+- Drag a branch (from the sidebar or a graph label) onto the current branch in the sidebar
+  to merge it in or rebase onto it, after confirming.
+- Command-click commits in the graph to select several, then cherry-pick them together,
+  oldest first.
+- Undo a discard from the Changes panel: the file's staged and unstaged versions are
+  saved before discarding and restored exactly, until the file changes again.
+- See submodules in the sidebar with their state (not checked out, at the recorded commit,
+  or on another commit, and whether they have uncommitted changes); open one, or check out
+  its recorded commit.
+- See whether a commit's GPG or SSH signature is verified, untrusted, bad, or cannot be
+  checked on this Mac, in the commit inspector.
+- Hide whitespace-only changes in any diff; the choice is remembered.
+- Compare changed images side by side with their dimensions and file sizes.
+- Recover lost work from Repository > Recover Lost Work: every position HEAD has had,
+  with commits on no branch marked, and a branch can be created at any of them.
+- Stash only selected files (including untracked ones) from the Stashes sheet.
+- Remove a clean linked worktree, and forget worktrees whose folders were deleted.
+- Command palette (Shift-Command-P) for repository actions, branch switching, and recent
+  repositories, with fuzzy matching.
+- Search every branch's history by message, author, or code change (Shift-Command-F),
+  including commits not yet loaded in the graph, or paste a commit ID.
+- Interactive rebase from a commit's context menu: drag to reorder, and pick, reword,
+  squash, fix up, or drop each commit, with a warning for commits already on a remote.
+- Compare any commit with the working files, or two commits with each other (mark one,
+  then compare from another), with a changed-file list and per-file diffs.
+- Blame a file (working version or at a commit), with author, age tinting, an
+  ignore-whitespace option, and each line's commit change one click away.
+- Rename or remove remotes and edit their fetch URL in Repository Settings.
+- Push a tag to a remote, or delete it from a remote, from the tag's context menu.
+- Ignore untracked files from the Changes panel: the exact path or its extension in
+  `.gitignore`, or only on this computer via `info/exclude`.
+- Show a file's history, following renames, from a changed file's context menu in the
+  commit inspector or the Changes panel; review each commit's change to it and restore
+  an earlier version.
 - Stage, unstage, and commit changes.
 - Create and checkout local branches.
 - Rename branches and delete merged branches from their context menu.
@@ -91,6 +141,64 @@ in NiceGit during this session. Undo uses soft reset and preserves the index and
 working files; Redo restores that commit. Both confirm before changing local
 history and reject a changed branch or HEAD. This is not a general undo stack for
 all Git operations, and it does not persist across restarts.
+
+Restoring a file from a commit replaces only that path, in both the index and the
+working tree, and never moves HEAD or changes other files. The confirmation says
+whether the file will be replaced or deleted (when it does not exist in the chosen
+version); any staged or unstaged changes to that file are lost. NiceGit rejects the
+restore when the branch or HEAD changed after the dialog opened, while an operation
+such as a merge is unfinished, while the file has unresolved conflicts, when an
+untracked or ignored local file or a folder occupies the path, and for submodules.
+It verifies afterwards that the file matches the chosen version.
+
+Interactive rebase lists the commits from the chosen commit through HEAD on the
+current branch, newest first. Squash and fixup combine a commit into the nearest kept
+commit below it; squash keeps both messages. NiceGit writes Git's rebase instructions
+itself and stores new messages as Git objects, so a rebase that stops for a conflict
+resumes with Continue and can be undone with Abort. It refuses to start with
+uncommitted tracked changes, during another operation, when the branch or HEAD changed
+since the editor opened, or when the range contains a merge commit. It does not move
+other branches, stash automatically, or reorder commits on its own.
+
+Amending checks that the branch and HEAD still match the moment amend was switched on,
+and refuses during an unfinished operation. Stashing selected files verifies that only
+those files changed. Worktree removal never forces: Git refuses a worktree with
+uncommitted or untracked files, and the main worktree and the open checkout cannot be
+removed.
+
+Undo is available for the last 20 discards of individual files; renames, conflicts,
+folders, and submodules are discarded without undo, and the confirmation says so. Saved
+contents are kept as unreferenced Git objects, which Git's routine cleanup removes after
+its usual grace period. Checking out a submodule's recorded commit uses Git's normal
+submodule update, which refuses to overwrite uncommitted changes and keeps Git's default
+protection against local-file transport.
+
+Profiles apply repository-local settings only. A profile with a signing key also turns on
+commit signing for that repository; one without a key leaves signing settings unchanged.
+Finishing a GitFlow branch deletes it only after every merge succeeds; if a merge stops for
+a conflict, resolve and continue it, then check out the branch and finish again, and
+completed steps are skipped. Git LFS tracking requires git-lfs to be installed, because
+without it Git would commit matching files in full; NiceGit refuses to track until it is.
+
+Signature checks run locally with your Git signing setup and never contact a key server.
+NiceGit only asks Git to verify commits whose objects carry a signature; if your Git
+configuration prevents verification, the inspector says the signature cannot be checked.
+Ignoring whitespace affects what diffs display, never how lines are staged.
+
+Blame, history search, and compare are read-only. Commit search matches text
+literally; message and author searches ignore case, and code-change search finds
+commits that add or remove the exact text. Comparisons with working files include
+staged and unstaged edits to tracked files but not untracked files.
+
+Remote edits and tag pushes check that the remote's addresses still match what was
+shown. Tags are pushed with an explicit refspec and never replace a different tag of
+the same name on the remote; deleting a remote tag succeeds only while it still matches
+the local tag.
+
+File history lists up to 200 commits reachable from the current checkout that changed
+the file, newest first, and follows renames. Commits recorded under an earlier name
+show that name; restoring from them is unavailable because Git restores by path. A
+staged rename shows the history of its original path until it is committed.
 
 Open tabs have their own collapsible leftmost repository sidebar, separate from
 the branch and remote navigation panel. Its collapsed state persists on restart.

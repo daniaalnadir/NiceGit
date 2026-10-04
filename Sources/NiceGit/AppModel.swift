@@ -92,6 +92,18 @@ final class AppModel: ObservableObject {
     @Published var showingRepositorySettings = false
     @Published var taggingCommit: GitCommit?
     @Published var editingCommitMessage: GitCommit?
+    @Published var fileHistoryRequest: FileHistoryRequest?
+    @Published var blameRequest: BlameRequest?
+    @Published var rebaseRequest: InteractiveRebaseRequest?
+    @Published var showingCommandPalette = false
+    @Published var showingReflog = false
+    @Published var showingGitFlow = false
+    @Published var showingLFS = false
+    /// Recent discards that can still be undone, newest last, with the repository they belong to.
+    @Published private(set) var discardUndos: [(path: String, undo: GitDiscardUndo)] = []
+    @Published var compareRequest: CompareRequest?
+    /// A commit chosen as one side of a comparison, awaiting the other.
+    @Published var compareMark: GitCommit?
     @Published private var commitDrafts: [String: String] = [:]
 
     func commitDraft(for path: String) -> String { commitDrafts[path] ?? "" }
@@ -109,6 +121,18 @@ final class AppModel: ObservableObject {
 
     func deleteTag(name: String, expectedTip: String) {
         runRepositoryAction { git, url in try git.deleteTag(name: name, expectedTip: expectedTip, in: url) }
+    }
+
+    func pushTag(_ name: String, to remote: String, expectedTip: String, expectedPushAddresses: [String: [String]]) {
+        runRepositoryAction { git, url in
+            try git.pushTag(name, to: remote, expectedTip: expectedTip, expectedPushAddresses: expectedPushAddresses, in: url)
+        }
+    }
+
+    func deleteRemoteTag(_ name: String, from remote: String, expectedTip: String, expectedPushAddresses: [String: [String]]) {
+        runRepositoryAction { git, url in
+            try git.deleteRemoteTag(name, from: remote, expectedTip: expectedTip, expectedPushAddresses: expectedPushAddresses, in: url)
+        }
     }
 
     func amendMessage(_ message: String, for commit: GitCommit) {
@@ -142,12 +166,55 @@ final class AppModel: ObservableObject {
         perform(at: url, action: { git, url in try git.initialize(at: url) }, onSuccess: { self.showingRepositorySettings = true })
     }
 
+    /// Saved commit identities, kept in this Mac's preferences.
+    @Published private(set) var identityProfiles: [IdentityProfile] = []
+    private let profilesKey = "NiceGit.identityProfiles"
+
+    func saveIdentityProfile(_ profile: IdentityProfile) {
+        identityProfiles.removeAll { $0.id == profile.id || ($0.name == profile.name && $0.email == profile.email) }
+        identityProfiles.append(profile)
+        identityProfiles.sort { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+        storeIdentityProfiles()
+    }
+
+    func deleteIdentityProfile(_ profile: IdentityProfile) {
+        identityProfiles.removeAll { $0.id == profile.id }
+        storeIdentityProfiles()
+    }
+
+    func applyIdentityProfile(_ profile: IdentityProfile, onSuccess: @escaping () -> Void = {}) {
+        runRepositoryAction({ git, url in
+            try git.applyIdentity(name: profile.name, email: profile.email, signingKey: profile.signingKey, in: url)
+        }, onSuccess: onSuccess)
+    }
+
+    private func storeIdentityProfiles() {
+        if let data = try? JSONEncoder().encode(identityProfiles) { defaults.set(data, forKey: profilesKey) }
+    }
+
     func setIdentity(name: String, email: String, onSuccess: @escaping () -> Void) {
         runRepositoryAction({ git, url in try git.setIdentity(name: name, email: email, in: url) }, onSuccess: onSuccess)
     }
 
     func addRemote(name: String, address: String, onSuccess: @escaping () -> Void) {
         runRepositoryAction({ git, url in try git.addRemote(name: name, address: address, in: url) }, onSuccess: onSuccess)
+    }
+
+    /// Changes a remote's address and name in one action; the address changes first so a failed
+    /// rename leaves the remote usable under its old name.
+    func updateRemote(_ name: String, name newName: String, address: String, expectedAddress: String?, onSuccess: @escaping () -> Void) {
+        runRepositoryAction({ git, url in
+            var current = expectedAddress
+            if address != expectedAddress {
+                try git.setRemoteAddress(name, to: address, expectedAddress: current, in: url)
+                current = address
+            }
+            if newName != name { try git.renameRemote(name, to: newName, expectedAddress: current, in: url) }
+        }, onSuccess: onSuccess)
+    }
+
+    func removeRemote(_ name: String, expectedAddress: String?) {
+        runRepositoryAction { git, url in try git.removeRemote(name, expectedAddress: expectedAddress, in: url) }
     }
 
     func publish(remote: String) {
@@ -159,12 +226,24 @@ final class AppModel: ObservableObject {
         }, onSuccess: { self.showingPublish = false })
     }
 
+    func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String) {
+        guard requireSavedFileEdits(before: "cherry-picking") else { return }
+        runRepositoryAction { git, url in try git.cherryPick(commits, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url) }
+    }
+
     func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil) {
         guard requireSavedFileEdits(before: "starting a Git operation") else { return }
         let head = expectedHead ?? snapshot?.headHash
         let branch = expectedBranch ?? snapshot?.currentBranch
         runRepositoryAction { git, url in
             try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, expectedSourceBranch: expectedSourceBranch, in: url)
+        }
+    }
+
+    func interactiveRebase(_ steps: [GitRebaseStep], plan: GitRebasePlan, expectedBranch: String, expectedHead: String) {
+        guard requireSavedFileEdits(before: "rewriting commits") else { return }
+        runRepositoryAction { git, url in
+            try git.interactiveRebase(steps, plan: plan, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }
     }
 
@@ -188,6 +267,49 @@ final class AppModel: ObservableObject {
         guard requireSavedFileEdits(before: "aborting the Git operation") else { return }
         guard let operation = snapshot?.operation else { return }
         runRepositoryAction { git, url in try git.abortOperation(operation, in: url) }
+    }
+
+    func saveStash(paths: [String], message: String, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "stashing") else { return }
+        runRepositoryAction({ git, url in try git.saveStash(paths: paths, message: message, in: url) }, onSuccess: onSuccess)
+    }
+
+    func initializeGitFlow(_ configuration: GitFlowConfiguration) {
+        runRepositoryAction { git, url in try git.initializeGitFlow(configuration, in: url) }
+    }
+
+    func startGitFlow(_ kind: GitFlowKind, name: String, expectedBranch: String, expectedHead: String?, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "starting a branch") else { return }
+        runRepositoryAction({ git, url in
+            try git.startGitFlow(kind, name: name, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
+        }, onSuccess: onSuccess)
+    }
+
+    func finishGitFlow(expectedBranch: String, expectedHead: String?, tagMessage: String?, onSuccess: @escaping () -> Void) {
+        guard requireSavedFileEdits(before: "finishing a branch") else { return }
+        runRepositoryAction({ git, url in
+            try git.finishGitFlow(expectedBranch: expectedBranch, expectedHead: expectedHead, tagMessage: tagMessage, in: url)
+        }, onSuccess: onSuccess)
+    }
+
+    func trackLFS(_ pattern: String, onSuccess: @escaping () -> Void) {
+        runRepositoryAction({ git, url in try git.trackLFS(pattern, in: url) }, onSuccess: onSuccess)
+    }
+
+    func untrackLFS(_ pattern: String) {
+        runRepositoryAction { git, url in try git.untrackLFS(pattern, in: url) }
+    }
+
+    func updateSubmodule(_ path: String) {
+        runRepositoryAction { git, url in try git.updateSubmodule(path, in: url) }
+    }
+
+    func removeWorktree(at path: String) {
+        runRepositoryAction { git, url in try git.removeWorktree(at: path, in: url) }
+    }
+
+    func pruneWorktrees() {
+        runRepositoryAction { git, url in try git.pruneWorktrees(in: url) }
     }
 
     func saveStash(message: String, includeUntracked: Bool, onSuccess: @escaping () -> Void) {
@@ -301,6 +423,10 @@ final class AppModel: ObservableObject {
            let saved = try? JSONDecoder().decode([RepositoryBookmark].self, from: data) {
             var seen = Set<String>()
             openRepositories = saved.filter { $0.path.hasPrefix("/") && seen.insert($0.path).inserted }
+        }
+        if let data = defaults.data(forKey: profilesKey),
+           let profiles = try? JSONDecoder().decode([IdentityProfile].self, from: data) {
+            identityProfiles = profiles
         }
         if let data = defaults.data(forKey: recentKey),
            let bookmarks = try? JSONDecoder().decode([RepositoryBookmark].self, from: data) {
@@ -425,9 +551,51 @@ final class AppModel: ObservableObject {
             guard confirmDiscardFileEdits() else { return }
             fileReviewSelection = nil
         }
-        runWorkingTreeAction { git, url in
-            try git.discard(entry, in: url)
-        }
+        guard let url = repositoryURL else { return }
+        let outcome = DiscardOutcome()
+        perform(at: url, action: { git, url in
+            outcome.record(try git.discardKeepingUndo(entry, in: url))
+        }, statusOnly: true, onActionSuccess: {
+            if let undo = outcome.value {
+                self.discardUndos.append((url.path, undo))
+                self.discardUndos = Array(self.discardUndos.suffix(20))
+            }
+        })
+    }
+
+    /// The newest discard in the open repository that can be undone.
+    var latestDiscardUndo: GitDiscardUndo? {
+        guard let root = snapshot?.rootPath else { return nil }
+        return discardUndos.last { $0.path == root }?.undo
+    }
+
+    func undoLatestDiscard() {
+        guard !isLoading, let url = repositoryURL, let undo = latestDiscardUndo else { return }
+        guard requireSavedFileEdits(before: "undoing a discard") else { return }
+        perform(at: url, action: { git, url in try git.undoDiscard(undo, in: url) }, statusOnly: true, onActionSuccess: {
+            self.discardUndos.removeAll { $0.undo == undo }
+        })
+    }
+
+    func forgetDiscardUndos() {
+        guard let root = snapshot?.rootPath else { return }
+        discardUndos.removeAll { $0.path == root }
+    }
+
+    func ignore(_ entry: GitStatusEntry, rule: GitIgnoreRule, scope: GitIgnoreScope) {
+        guard !isLoading else { return }
+        runWorkingTreeAction { git, url in try git.ignore(path: entry.path, rule: rule, scope: scope, in: url) }
+    }
+
+    func restore(path: String, from source: String, expectedBranch: String, expectedHead: String?) {
+        guard !isLoading, let url = repositoryURL else { return }
+        guard requireSavedFileEdits(before: "restoring a file") else { return }
+        let reviewID = fileReviewSelection?.path == path ? fileReviewSelection?.id : nil
+        perform(at: url, action: { git, url in
+            try git.restore(path: path, from: source, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
+        }, statusOnly: true, onActionSuccess: {
+            if let reviewID, self.fileReviewSelection?.id == reviewID { self.fileReviewSelection = nil }
+        })
     }
 
     func commit(message: String, onSuccess: @escaping () -> Void) {
@@ -451,6 +619,14 @@ final class AppModel: ObservableObject {
                 self.commitHistoryStep = CommitHistoryStep(path: updated.rootPath, branch: updated.currentBranch, before: before, after: after)
             }
         })
+    }
+
+    func amendCommit(message: String, expectedBranch: String, expectedHead: String, onSuccess: @escaping () -> Void) {
+        guard !isLoading, let url = repositoryURL else { return }
+        guard requireSavedFileEdits(before: "amending") else { return }
+        perform(at: url, action: { git, url in
+            try git.amendCommit(message: message, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
+        }, onActionSuccess: onSuccess, onSuccess: { self.commitHistoryStep = nil })
     }
 
     func checkout(branch: GitBranch) {
@@ -494,6 +670,11 @@ final class AppModel: ObservableObject {
         runRepositoryAction({ git, url in
             try git.createBranch(named: name, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }, onSuccess: onSuccess)
+    }
+
+    /// Creates a branch at a commit without changing the checkout.
+    func createBranch(named name: String, at commit: String) {
+        runRepositoryAction { git, url in try git.createBranch(named: name, startingAt: commit, in: url) }
     }
 
     func createBranch(named name: String, from branch: GitBranch, onSuccess: @escaping () -> Void) {
@@ -666,3 +847,30 @@ struct RepositoryBookmark: Codable, Identifiable, Equatable {
         URL(fileURLWithPath: path).lastPathComponent
     }
 }
+
+private final class DiscardOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: GitDiscardUndo?
+
+    func record(_ undo: GitDiscardUndo?) {
+        lock.lock()
+        stored = undo
+        lock.unlock()
+    }
+
+    var value: GitDiscardUndo? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+}
+
+struct IdentityProfile: Codable, Identifiable, Equatable, Sendable {
+    var id = UUID()
+    var name: String
+    var email: String
+    /// A GPG key ID or SSH key path; applying the profile turns on commit signing with it.
+    var signingKey: String?
+    var label: String { "\(name) <\(email)>" }
+}
+

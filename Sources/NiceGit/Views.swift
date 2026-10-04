@@ -10,8 +10,12 @@ private struct RepositorySidebar: View {
     @State private var branchToDelete: GitBranch?
     @State private var pushRequest: (branch: GitBranch, remote: String)?
     @State private var integrationRequest: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?)?
+    /// A branch dropped onto the current branch, awaiting a choice of merge or rebase.
+    @State private var droppedBranch: (branch: GitBranch, currentBranch: String, head: String?)?
     @State private var renamedBranchName = ""
     @State private var tagToDelete: (name: String, tip: String)?
+    @State private var worktreeToRemove: String?
+    @State private var remoteTagToDelete: (name: String, remote: String, tip: String, addresses: [String: [String]])?
     @State private var referenceQuery = ""
     @State private var resetRequest: ResetRequest?
 
@@ -72,6 +76,7 @@ private struct RepositorySidebar: View {
                             }
                             if snapshot.remotes.isEmpty { empty("No remotes configured") }
                         }
+                        SubmodulesSidebarSection(snapshot: snapshot)
                         SidebarSection(title: "Worktrees", icon: "square.split.2x2", count: snapshot.worktrees.count) {
                             ForEach(snapshot.worktrees.filter { matches($0.branch ?? "") || matches($0.path) }) { worktree in
                                 SidebarButton(
@@ -96,6 +101,12 @@ private struct RepositorySidebar: View {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(worktree.path, forType: .string)
                                     }
+                                    Divider()
+                                    Button("Remove worktree...", role: .destructive) { worktreeToRemove = worktree.path }
+                                        .disabled(worktree.path == snapshot.rootPath || worktree.id == snapshot.worktrees.first?.id || worktree.isLocked || worktree.isBare)
+                                    if snapshot.worktrees.contains(where: \.isPrunable) {
+                                        Button("Forget missing worktrees") { model.pruneWorktrees() }
+                                    }
                                 }
                             }
                         }
@@ -105,8 +116,21 @@ private struct RepositorySidebar: View {
                             ForEach(tags, id: \.self) { tag in
                                 SidebarButton(title: tag, subtitle: "", systemImage: "tag", isSelected: false) { model.inspectTag(tag) }
                                     .contextMenu {
+                                        ForEach(snapshot.remotes, id: \.self) { remote in
+                                            Button("Push tag to \(remote)") {
+                                                if let tip = snapshot.tagTips[tag] {
+                                                    model.pushTag(tag, to: remote, expectedTip: tip, expectedPushAddresses: snapshot.remotePushAddresses)
+                                                }
+                                            }
+                                        }
+                                        Divider()
                                         Button("Delete local tag...", role: .destructive) {
                                             if let tip = snapshot.tagTips[tag] { tagToDelete = (tag, tip) }
+                                        }
+                                        ForEach(snapshot.remotes, id: \.self) { remote in
+                                            Button("Delete tag from \(remote)...", role: .destructive) {
+                                                if let tip = snapshot.tagTips[tag] { remoteTagToDelete = (tag, remote, tip, snapshot.remotePushAddresses) }
+                                            }
                                         }
                                     }
                             }
@@ -154,6 +178,7 @@ private struct RepositorySidebar: View {
                     : "Merges \(request.branch.displayName) at \(request.branch.tip.prefix(8)) into \(request.currentBranch). Conflicts may need resolving before the merge can finish.")
             }
         }
+        .modifier(BranchDropConfirmation(drop: $droppedBranch))
         .confirmationDialog("Push \(pushRequest?.branch.name ?? "")?", isPresented: Binding(get: { pushRequest != nil }, set: { if !$0 { pushRequest = nil } })) {
             if let request = pushRequest {
                 Button("Push to \(request.remote)/\(request.branch.name)") { model.push(request.branch, to: request.remote) }
@@ -179,6 +204,23 @@ private struct RepositorySidebar: View {
             if let tagToDelete {
                 Button("Delete local tag", role: .destructive) { model.deleteTag(name: tagToDelete.name, expectedTip: tagToDelete.tip) }
             }
+        }
+        .confirmationDialog("Remove worktree?", isPresented: Binding(get: { worktreeToRemove != nil }, set: { if !$0 { worktreeToRemove = nil } })) {
+            if let path = worktreeToRemove {
+                Button("Remove worktree", role: .destructive) { model.removeWorktree(at: path) }
+            }
+        } message: {
+            Text("Deletes the folder \(worktreeToRemove ?? "") and unregisters it. Git refuses if it has uncommitted or untracked files. Its branch and commits are kept.")
+        }
+        .confirmationDialog("Delete tag \(remoteTagToDelete?.name ?? "") from \(remoteTagToDelete?.remote ?? "")?",
+                            isPresented: Binding(get: { remoteTagToDelete != nil }, set: { if !$0 { remoteTagToDelete = nil } })) {
+            if let request = remoteTagToDelete {
+                Button("Delete from \(request.remote)", role: .destructive) {
+                    model.deleteRemoteTag(request.name, from: request.remote, expectedTip: request.tip, expectedPushAddresses: request.addresses)
+                }
+            }
+        } message: {
+            Text("The tag is removed from the remote for everyone who fetches from it, but only if it still points where your local tag does. Your local tag is kept.")
         }
         .alert("Rename branch", isPresented: Binding(get: { branchToRename != nil }, set: { if !$0 { branchToRename = nil } })) {
             TextField("Branch name", text: $renamedBranchName)
@@ -209,7 +251,16 @@ private struct RepositorySidebar: View {
     private func branchRow(_ branch: GitBranch, snapshot: RepositorySnapshot) -> some View {
         SidebarButton(title: branch.displayName, subtitle: "", systemImage: branch.isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch", isSelected: branch.isCurrent, isDisabled: branch.isCurrent || snapshot.operation != nil) {
             model.checkout(branch: branch)
-        }.contextMenu {
+        }
+        .draggable(branchDragIdentity(branch))
+        .dropDestination(for: String.self) { items, _ in
+            // Dropping another branch on the current one offers to merge or rebase with it.
+            guard branch.isCurrent, snapshot.operation == nil, let item = items.first,
+                  let dropped = snapshot.branches.first(where: { branchDragIdentity($0) == item }), !dropped.isCurrent else { return false }
+            droppedBranch = (dropped, snapshot.currentBranch, snapshot.headHash)
+            return true
+        } isTargeted: { _ in }
+        .contextMenu {
             Button(branch.isRemote ? "Checkout tracking branch" : "Checkout branch") { model.checkout(branch: branch) }
                 .disabled(branch.isCurrent || snapshot.operation != nil)
             if branch.isCurrent {
@@ -369,6 +420,16 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingRepositorySettings, onDismiss: model.refreshAfterReview) { RepositorySettingsView() }
         .sheet(item: $model.taggingCommit, onDismiss: model.refreshAfterReview) { TagView(commit: $0) }
         .sheet(item: $model.editingCommitMessage, onDismiss: model.refreshAfterReview) { CommitMessageView(commit: $0) }
+        .sheet(item: $model.fileHistoryRequest) { FileHistoryView(request: $0) }
+        .sheet(item: $model.blameRequest) { BlameView(request: $0) }
+        .sheet(item: $model.rebaseRequest, onDismiss: model.refreshAfterReview) { InteractiveRebaseView(request: $0) }
+        .sheet(isPresented: $model.showingCommandPalette) { CommandPaletteView() }
+        .sheet(item: $model.compareRequest) { CompareView(request: $0) }
+        .sheet(isPresented: $model.showingGitFlow, onDismiss: model.refreshAfterReview) { GitFlowView() }
+        .sheet(isPresented: $model.showingLFS, onDismiss: model.refreshAfterReview) { LFSView() }
+        .sheet(isPresented: $model.showingReflog, onDismiss: model.refreshAfterReview) {
+            if let url = model.repositoryURL { ReflogView(repositoryURL: url) }
+        }
         .alert(
             model.errorMessage == nil ? "Branch switched" : "Git needs attention",
             isPresented: Binding(
@@ -537,12 +598,16 @@ private struct WorkbenchView: View {
         }
         .onChange(of: snapshot.rootPath) {
             commitDiff = nil
+            model.compareMark = nil
             selectedCommit = nil
             selectedStash = nil
         }
-        .onChange(of: snapshot.commits) { _, commits in
+        .onChange(of: snapshot.commits) { previous, commits in
+            // A commit opened from history search may lie outside the loaded page; keep it
+            // unless it was on the page and has now left it.
             if let selected = selectedCommit {
                 selectedCommit = commits.first { $0.hash == selected.hash }
+                    ?? (previous.contains { $0.hash == selected.hash } ? nil : selected)
             }
         }
         .onChange(of: selectedCommit?.hash) { commitDiff = nil }
@@ -601,6 +666,9 @@ private struct ChangesPanel: View {
     @Binding var commitMessage: String
     @State private var treeMode = false
     @State private var ascending = true
+    /// The checkout captured when amending was switched on; the amend is refused if it moves.
+    @State private var amendTarget: (branch: String, head: String, published: Bool)?
+    @State private var messageBeforeAmend = ""
 
     private var summary: Binding<String> {
         Binding(get: { commitMessage.components(separatedBy: "\n").first ?? "" }, set: {
@@ -615,6 +683,30 @@ private struct ChangesPanel: View {
             if lines.first == "" { lines = lines.dropFirst() }
             return lines.joined(separator: "\n")
         }, set: { commitMessage = summary.wrappedValue + ($0.isEmpty ? "" : "\n\n" + $0) })
+    }
+
+    /// Switching amend on loads the last commit's message into an empty draft; switching it
+    /// off restores the draft that was there before.
+    private func setAmending(_ on: Bool) {
+        guard on else {
+            if amendTarget != nil { commitMessage = messageBeforeAmend }
+            amendTarget = nil
+            return
+        }
+        guard let head = snapshot.headHash else { return }
+        let branch = snapshot.currentBranch, url = URL(fileURLWithPath: snapshot.rootPath)
+        messageBeforeAmend = commitMessage
+        amendTarget = (branch, head, false)
+        Task {
+            let loaded = await Task.detached { () -> (String, Bool)? in
+                let git = GitClient()
+                guard let message = try? git.commitMessage(hash: head, in: url) else { return nil }
+                return (message.trimmingCharacters(in: .whitespacesAndNewlines), (try? git.isPublished(head, in: url)) ?? false)
+            }.value
+            guard let loaded, amendTarget?.head == head else { return }
+            amendTarget = (branch, head, loaded.1)
+            if commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { commitMessage = loaded.0 }
+        }
     }
 
     private func sorted(_ entries: [GitStatusEntry]) -> [GitStatusEntry] {
@@ -661,6 +753,19 @@ private struct ChangesPanel: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
 
+            if let undo = model.latestDiscardUndo {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.uturn.backward.circle").foregroundStyle(.secondary)
+                    Text("Discarded changes to \(undo.path)").font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Button("Undo") { model.undoLatestDiscard() }.disabled(model.isLoading)
+                        .help("Put back the staged and unstaged changes, if the file has not changed since")
+                    Button { model.forgetDiscardUndos() } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+                        .help("Dismiss").accessibilityLabel("Dismiss undo")
+                }
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .background(AppPalette.signal.opacity(0.10))
+            }
             VSplitView {
                     ChangeSection(title: "Unstaged Files", entries: unstaged, emptyText: "No local changes", treeMode: treeMode, actionTitle: "Stage All Changes", actionColor: AppPalette.signal, action: { model.stageAll() }) { entry in
                         FileChangeRow(entry: entry, treeMode: treeMode, primarySystemImage: "plus.circle", primaryHelp: "Stage file") {
@@ -702,19 +807,38 @@ private struct ChangesPanel: View {
                 .background(AppPalette.canvas, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(AppPalette.line))
 
+                Toggle("Amend last commit", isOn: Binding(get: { amendTarget != nil }, set: { setAmending($0) }))
+                    .toggleStyle(.checkbox).font(.system(size: 12))
+                    .disabled(snapshot.headHash == nil || snapshot.operation != nil || model.isLoading)
+                    .help("Replace the last commit with one that also includes the staged changes")
+                if let amendTarget, amendTarget.published {
+                    Label("The last commit is already on a remote. Amending it means you will need to force-push.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 Button {
-                    model.commit(message: commitMessage) { commitMessage = "" }
+                    if let amendTarget {
+                        model.amendCommit(message: commitMessage, expectedBranch: amendTarget.branch, expectedHead: amendTarget.head) {
+                            self.amendTarget = nil
+                            commitMessage = ""
+                        }
+                    } else {
+                        model.commit(message: commitMessage) { commitMessage = "" }
+                    }
                 } label: {
-                    Label(summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Type a Message to Commit" : "Commit Changes", systemImage: "checkmark.circle")
+                    Label(summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Type a Message to Commit"
+                          : amendTarget != nil ? "Amend Last Commit" : "Commit Changes", systemImage: "checkmark.circle")
                         .frame(maxWidth: .infinity).padding(.vertical, 7)
                 }
-                .buttonStyle(.borderedProminent).tint(AppPalette.signal)
-                .disabled(staged.isEmpty || summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.borderedProminent).tint(amendTarget != nil ? .orange : AppPalette.signal)
+                .disabled((staged.isEmpty && amendTarget == nil) || summary.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(14)
             .background(AppPalette.toolbar)
         }
         .background(AppPalette.panel)
+        .onChange(of: snapshot.headHash) { _, head in
+            if let amendTarget, amendTarget.head != head { setAmending(false) }
+        }
     }
 }
 
@@ -812,12 +936,40 @@ private struct FileChangeRow: View {
         }
         .padding(.horizontal, 6).padding(.vertical, 7)
         .frame(minHeight: 34)
+        .contextMenu {
+            // A staged rename has no history under its new name until it is committed.
+            let historyPath = entry.kind == .renamed ? entry.originalPath ?? entry.path : entry.path
+            Button("Show file history") {
+                if let url = model.repositoryURL { model.fileHistoryRequest = FileHistoryRequest(path: historyPath, repositoryURL: url) }
+            }.disabled(entry.kind == .untracked || entry.kind == .added)
+            Button("Blame") {
+                if let url = model.repositoryURL { model.blameRequest = BlameRequest(path: entry.path, repositoryURL: url) }
+            }.disabled(entry.kind == .untracked || entry.kind == .added || entry.kind == .deleted || entry.kind == .conflicted)
+            if entry.kind == .untracked {
+                Divider()
+                Button("Ignore in .gitignore") { model.ignore(entry, rule: .path, scope: .shared) }
+                    .disabled(GitClient.ignorePattern(for: entry.path, rule: .path) == nil)
+                if let pattern = GitClient.ignorePattern(for: entry.path, rule: .fileExtension) {
+                    Button("Ignore all \(pattern) files in .gitignore") { model.ignore(entry, rule: .fileExtension, scope: .shared) }
+                }
+                Button("Ignore on this computer only") { model.ignore(entry, rule: .path, scope: .local) }
+                    .disabled(GitClient.ignorePattern(for: entry.path, rule: .path) == nil)
+                    .help("Adds the rule to this repository's info/exclude file, which is not committed")
+            }
+            Divider()
+            Button("Copy path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.path, forType: .string)
+            }
+        }
         .confirmationDialog("Discard changes to \(entry.fileName)?", isPresented: $confirmingDiscard) {
             Button("Discard changes", role: .destructive, action: discard)
         } message: {
-            Text(entry.kind == .untracked
+            let undoable = entry.originalPath == nil && entry.kind != .renamed && entry.kind != .conflicted && !entry.path.hasSuffix("/")
+            Text((entry.kind == .untracked
                 ? "This untracked file will be deleted."
-                : "All staged and unstaged changes to this file will be lost. Newly added files will be deleted.")
+                : "All staged and unstaged changes to this file will be discarded. Newly added files will be deleted.")
+                + (undoable ? " You can undo this from the Changes panel until the file changes again." : " This cannot be undone."))
         }
     }
 
@@ -869,10 +1021,178 @@ enum AppPalette {
     static let branchTag = Color.green.opacity(0.16)
     static let changeRow = Color(nsColor: .controlBackgroundColor)
 
-    static let laneColors: [Color] = [
-        signal,
-        Color(red: 0.157, green: 0.478, blue: 0.812),
-        merge,
-        conflict
-    ]
+    /// Graph line colours from the chosen palette. The first belongs to the checkout's line;
+    /// yellow and red stay reserved for change and conflict states.
+    static var laneColors: [Color] { LanePalette.current.colors }
 }
+
+enum LanePalette: String, CaseIterable, Identifiable {
+    case standard, colorBlindSafe, muted
+    static let storageKey = "NiceGit.lanePalette"
+    var id: String { rawValue }
+
+    static var current: LanePalette {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(LanePalette.init(rawValue:)) ?? .standard
+    }
+
+    var title: String {
+        switch self {
+        case .standard: "Standard"
+        case .colorBlindSafe: "Colour-blind safe"
+        case .muted: "Muted"
+        }
+    }
+
+    var colors: [Color] {
+        switch self {
+        case .standard:
+            [AppPalette.signal, Color(nsColor: .systemBlue), Color(nsColor: .systemPurple), Color(nsColor: .systemTeal),
+             Color(nsColor: .systemPink), Color(nsColor: .systemIndigo), Color(nsColor: .systemBrown)]
+        case .colorBlindSafe:
+            // Okabe-Ito colours, distinguishable with the common forms of colour blindness.
+            [Color(red: 0, green: 0.447, blue: 0.698), Color(red: 0.902, green: 0.624, blue: 0), Color(red: 0.337, green: 0.706, blue: 0.914),
+             Color(red: 0, green: 0.620, blue: 0.451), Color(red: 0.800, green: 0.475, blue: 0.655), Color(red: 0.835, green: 0.369, blue: 0),
+             Color(red: 0.6, green: 0.6, blue: 0.6)]
+        case .muted:
+            [Color(red: 0.42, green: 0.66, blue: 0.52), Color(red: 0.45, green: 0.56, blue: 0.72), Color(red: 0.62, green: 0.52, blue: 0.70),
+             Color(red: 0.44, green: 0.64, blue: 0.66), Color(red: 0.74, green: 0.52, blue: 0.60), Color(red: 0.52, green: 0.52, blue: 0.68),
+             Color(red: 0.62, green: 0.54, blue: 0.46)]
+        }
+    }
+}
+
+enum AppearanceSetting: String, CaseIterable, Identifiable {
+    case system, light, dark
+    static let storageKey = "NiceGit.appearance"
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+struct SettingsView: View {
+    @AppStorage(AppearanceSetting.storageKey) private var appearance = AppearanceSetting.system
+    @AppStorage(LanePalette.storageKey) private var palette = LanePalette.standard
+    @AppStorage("NiceGit.splitDiff") private var splitDiff = false
+    @AppStorage("NiceGit.diffIgnoresWhitespace") private var ignoreWhitespace = false
+
+    var body: some View {
+        Form {
+            Picker("Appearance", selection: $appearance) {
+                ForEach(AppearanceSetting.allCases) { Text($0.title).tag($0) }
+            }
+            Picker("Graph colours", selection: $palette) {
+                ForEach(LanePalette.allCases) { Text($0.title).tag($0) }
+            }
+            HStack(spacing: 6) {
+                ForEach(Array(palette.colors.enumerated()), id: \.offset) { _, color in
+                    Circle().fill(color).frame(width: 14, height: 14)
+                }
+            }.accessibilityHidden(true)
+            Toggle("Show diffs side by side", isOn: $splitDiff)
+            Toggle("Hide whitespace-only changes in diffs", isOn: $ignoreWhitespace)
+        }
+        .formStyle(.grouped)
+        .frame(width: 420)
+        .padding()
+    }
+}
+
+/// Submodules load on their own when the repository refreshes, so repositories without any
+/// pay nothing and those with many do not slow every refresh.
+private struct SubmodulesSidebarSection: View {
+    let snapshot: RepositorySnapshot
+    @EnvironmentObject private var model: AppModel
+    @State private var submodules: [GitSubmodule] = []
+    @State private var pendingUpdate: GitSubmodule?
+
+    var body: some View {
+        Group {
+            if !submodules.isEmpty {
+                SidebarSection(title: "Submodules", icon: "shippingbox", count: submodules.count) {
+                    ForEach(submodules) { submodule in
+                        SidebarButton(title: submodule.path, subtitle: summary(submodule), systemImage: icon(submodule), isSelected: false) {
+                            open(submodule)
+                        }
+                        .help(submodule.path + " · recorded " + String(submodule.recordedCommit.prefix(7)))
+                        .contextMenu {
+                            Button("Open submodule") { open(submodule) }.disabled(submodule.state == .uninitialized)
+                            Button(submodule.state == .uninitialized ? "Initialize and check out" : "Check out recorded commit...") {
+                                if case .differentCommit = submodule.state { pendingUpdate = submodule } else { model.updateSubmodule(submodule.path) }
+                            }.disabled(submodule.state == .upToDate || model.isLoading || snapshot.operation != nil)
+                        }
+                    }
+                }
+            }
+        }
+        .task(id: snapshot.lastUpdated) {
+            let url = URL(fileURLWithPath: snapshot.rootPath)
+            submodules = (try? await Task.detached { try GitClient().submodules(in: url) }.value) ?? []
+        }
+        .confirmationDialog("Check out the recorded commit in \(pendingUpdate?.path ?? "")?", isPresented: Binding(get: { pendingUpdate != nil }, set: { if !$0 { pendingUpdate = nil } })) {
+            if let submodule = pendingUpdate {
+                Button("Check out \(submodule.recordedCommit.prefix(7))") { model.updateSubmodule(submodule.path) }
+            }
+        } message: {
+            Text("The submodule moves from its current commit to the one this repository records, leaving its HEAD detached. Commits on its branches are kept; Git refuses if uncommitted changes would be overwritten.")
+        }
+    }
+
+    private func open(_ submodule: GitSubmodule) {
+        guard submodule.state != .uninitialized, !model.isLoading, model.confirmDiscardFileEdits() else { return }
+        model.loadRepository(at: URL(fileURLWithPath: snapshot.rootPath).appendingPathComponent(submodule.path))
+    }
+
+    private func summary(_ submodule: GitSubmodule) -> String {
+        let state = switch submodule.state {
+        case .uninitialized: "Not checked out"
+        case .upToDate: "At recorded commit"
+        case let .differentCommit(head): "At \(head.prefix(7)), recorded \(submodule.recordedCommit.prefix(7))"
+        }
+        return state + (submodule.hasLocalChanges ? " · uncommitted changes" : "")
+    }
+
+    private func icon(_ submodule: GitSubmodule) -> String {
+        switch submodule.state {
+        case .uninitialized: "shippingbox"
+        case .upToDate: submodule.hasLocalChanges ? "shippingbox.circle" : "shippingbox.fill"
+        case .differentCommit: "exclamationmark.triangle"
+        }
+    }
+}
+
+/// Confirms merging or rebasing after a branch is dropped onto the current branch, using the
+/// branch and HEAD captured at the drop.
+private struct BranchDropConfirmation: ViewModifier {
+    @Binding var drop: (branch: GitBranch, currentBranch: String, head: String?)?
+    @EnvironmentObject private var model: AppModel
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog("Combine \(drop?.branch.displayName ?? "") with \(drop?.currentBranch ?? "")?",
+                                   isPresented: Binding(get: { drop != nil }, set: { if !$0 { drop = nil } })) {
+            if let drop {
+                Button("Merge \(drop.branch.displayName) into \(drop.currentBranch)") {
+                    model.start(.merge, target: drop.branch.tip, expectedHead: drop.head, expectedBranch: drop.currentBranch, expectedSourceBranch: drop.branch)
+                }
+                Button("Rebase \(drop.currentBranch) onto \(drop.branch.displayName)") {
+                    model.start(.rebase, target: drop.branch.tip, expectedHead: drop.head, expectedBranch: drop.currentBranch, expectedSourceBranch: drop.branch)
+                }
+            }
+        } message: {
+            if let drop {
+                Text("Merge adds \(drop.branch.displayName) at \(drop.branch.tip.prefix(8)) to \(drop.currentBranch), with a merge commit when needed. Rebase replays \(drop.currentBranch)'s commits on top of it and rewrites their IDs. Either may stop for conflicts.")
+            }
+        }
+    }
+}
+
+/// Identifies a dragged branch unambiguously; local and remote names can look alike.
+func branchDragIdentity(_ branch: GitBranch) -> String {
+    "nicegit-branch\0" + (branch.isRemote ? "remote" : "local") + "\0" + branch.name
+}
+

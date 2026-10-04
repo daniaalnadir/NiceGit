@@ -740,4 +740,110 @@ private enum RefreshFailure: Error { case injected }
     #expect(!afterRename.contains { $0.name == "renamed" })
 }
 
+
+@Test @MainActor func restoreFromCommitWaitsForUnsavedEditsThenRefreshesStatus() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let file = root.appendingPathComponent("file.txt")
+    try "one\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    try "two\n".write(to: file, atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Two", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let branch = try #require(model.snapshot?.currentBranch)
+    let head = model.snapshot?.headHash
+
+    model.fileReviewSelection = DiffSelection(title: "file.txt", repositoryURL: root, path: "file.txt")
+    model.fileReviewHasEdits = true
+    model.restore(path: "file.txt", from: first, expectedBranch: branch, expectedHead: head)
+    #expect(!model.isLoading)
+    #expect(model.errorMessage != nil)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "two\n")
+
+    model.fileReviewHasEdits = false
+    model.restore(path: "file.txt", from: first, expectedBranch: branch, expectedHead: head)
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(10))
+    while model.isLoading && clock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    #expect(model.errorMessage == nil)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "one\n")
+    #expect(model.snapshot?.status.contains { $0.path == "file.txt" && $0.indexStatus == "M" } == true)
+    #expect(model.fileReviewSelection == nil)
+}
+
+@Test @MainActor func updatingARemoteChangesAddressAndNameTogether() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.addRemote(name: "origin", address: "/tmp/old.git", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    var finished = false
+    model.updateRemote("origin", name: "upstream", address: "/tmp/new.git", expectedAddress: "/tmp/old.git") { finished = true }
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(10))
+    while model.isLoading && clock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    #expect(model.errorMessage == nil)
+    #expect(finished)
+    #expect(model.snapshot?.remotes == ["upstream"])
+    #expect(try git.remoteAddress(name: "upstream", in: root) == "/tmp/new.git")
+}
+
+@Test @MainActor func commandPaletteRanksWordStartsAndRequiresOrderedCharacters() {
+    let commands = ["Fetch", "Push", "Pull", "Switch to feature/push-fix", "Show terminal", "Stage all changes"].map { title in
+        CommandPaletteView.Command(id: title, title: title, detail: "", systemImage: "circle") {}
+    }
+    #expect(CommandPaletteView.ranked(commands, query: "").map(\.title) == commands.map(\.title))
+    #expect(CommandPaletteView.ranked(commands, query: "push").map(\.title) == ["Push", "Switch to feature/push-fix"])
+    #expect(CommandPaletteView.ranked(commands, query: "sac").first?.title == "Stage all changes")
+    #expect(CommandPaletteView.ranked(commands, query: "st").first?.title == "Stage all changes")
+    #expect(CommandPaletteView.ranked(commands, query: "zzz").isEmpty)
+}
+
+@Test func imageComparisonReadsTheSameVersionsAsTheTextDiff() {
+    let url = URL(fileURLWithPath: "/tmp")
+    func describe(_ selection: DiffSelection) -> [String] {
+        let versions = ImageComparisonView.versions(for: selection)
+        return [versions.old, versions.new].map { side in side.map { "\($0.0)@\($0.1)" } ?? "none" }
+    }
+    #expect(ImageComparisonView.isImage("icons/App.PNG") && !ImageComparisonView.isImage("notes.txt"))
+    #expect(describe(DiffSelection(title: "", repositoryURL: url, path: "a.png")) == ["a.png@index", "a.png@workingFile"])
+    #expect(describe(DiffSelection(title: "", repositoryURL: url, path: "a.png", staged: true, originalPath: "old.png"))
+        == ["old.png@revision(\"HEAD\")", "a.png@index"])
+    #expect(describe(DiffSelection(title: "", repositoryURL: url, path: "a.png", untracked: true)) == ["none", "a.png@workingFile"])
+    #expect(describe(DiffSelection(title: "", repositoryURL: url, path: "a.png", commitHash: "abc")) == ["a.png@revision(\"abc^1\")", "a.png@revision(\"abc\")"])
+    #expect(describe(DiffSelection(title: "", repositoryURL: url, path: "a.png", compareFrom: "old")) == ["a.png@revision(\"old\")", "a.png@workingFile"])
+}
+
+@Test @MainActor func identityProfilesPersistAndReplaceMatchingEntries() throws {
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let model = AppModel(defaults: defaults)
+    model.saveIdentityProfile(IdentityProfile(name: "Zed", email: "z@example.invalid"))
+    model.saveIdentityProfile(IdentityProfile(name: "Ada", email: "a@example.invalid"))
+    model.saveIdentityProfile(IdentityProfile(name: "Ada", email: "a@example.invalid", signingKey: "KEY"))
+    #expect(model.identityProfiles.map(\.name) == ["Ada", "Zed"])
+    #expect(model.identityProfiles.first?.signingKey == "KEY")
+    let reloaded = AppModel(defaults: defaults)
+    #expect(reloaded.identityProfiles == model.identityProfiles)
+    reloaded.deleteIdentityProfile(reloaded.identityProfiles[0])
+    #expect(AppModel(defaults: defaults).identityProfiles.map(\.name) == ["Zed"])
+}
 }

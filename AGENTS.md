@@ -58,3 +58,18 @@
 - When remotes share a branch name, create a distinct local tracking branch for the second remote.
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
+- Pin the checkout's first-parent line to the leftmost graph lane in colour 0, keep each other line's colour from tip to end, and never reserve a lane for a HEAD appended below its page.
+- Build working-file URLs with `appendingPathComponent` on the repository URL; `URL(fileURLWithPath:relativeTo:)` resolves against the parent folder when the base lacks a trailing slash, so safety checks can inspect the wrong file.
+- Restore from a commit only after checking the captured branch and HEAD, no unfinished operation or conflict stages, and no untracked, ignored, or folder entry at the path; verify both index and working file match the source afterwards.
+- Parse `log -z --name-status` file history by NUL tokens only; paths can contain newlines and Git's field separators, and renames list two paths.
+- Split Git output that carries file contents (such as blame) on bytes; Swift treats CRLF as one character, so splitting a String on newline merges lines of Windows-format files.
+- Resolve user-selected revisions to object IDs before passing them to commands with their own argument parsing: `git blame` misreads paths after `--end-of-options`, and `rev-list` treats `--not` after it as a revision.
+- `git check-ignore` rejects literal pathspec magic; it takes plain pathnames, so leave it out of `GIT_LITERAL_PATHSPECS` commands.
+- Interactive rebase writes the todo through `GIT_SEQUENCE_EDITOR`, stores new messages as blobs applied by `exec` lines so stopped rebases can continue, disables update-refs, auto-stash, and auto-squash, and keeps `#` lines in messages with whitespace cleanup.
+- Pass selected paths to `git stash push` as `:(literal)` pathspecs; stash cannot use `GIT_LITERAL_PATHSPECS`, and a glob-like name must not stash other files. Verify only the selected paths changed afterwards.
+- Save discarded files with `hash-object --no-filters -w` and restore only while both the index entry and the working file still match the post-discard state; never overwrite newer work.
+- List submodules from index gitlinks (`ls-files --stage -z`, mode 160000), not `submodule status`, whose unquoted paths are ambiguous. Keep Git's file-transport protection for submodule clones.
+- GitFlow finish must be resumable: skip targets that already contain the branch, reuse a version tag only if it already includes the branch, and delete the branch only after every merge succeeds.
+- Refuse to add `filter=lfs` patterns while git-lfs is missing; Git would silently commit the full files.
+- Check layout at a typical 1440-point window: with both sidebars and the Changes panel open, the graph pane is under 500 points wide. Use `UIDriverTests` to click and type through the real window when a change affects interaction.
+- Scroll the graph to a selected row vertically only (anchor x 0); centring it horizontally hides the branch column.

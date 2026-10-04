@@ -5,11 +5,13 @@ import SwiftUI
 struct NiceGitApp: App {
     @NSApplicationDelegateAdaptor(NiceGitApplicationDelegate.self) private var applicationDelegate
     @StateObject private var model = AppModel()
+    @AppStorage(AppearanceSetting.storageKey) private var appearance = AppearanceSetting.system
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                .preferredColorScheme(appearance.colorScheme)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
@@ -21,6 +23,9 @@ struct NiceGitApp: App {
                 .disabled(model.snapshot == nil || model.isLoading)
             }
             CommandMenu("Repository") {
+                Button("Command Palette...") { model.showingCommandPalette = true }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                Divider()
                 Button("New Repository...") { model.initializeRepository() }
                 Button("Repository Settings...") { model.showingRepositorySettings = true }
                     .disabled(model.snapshot == nil)
@@ -38,6 +43,13 @@ struct NiceGitApp: App {
 
                 Divider()
 
+                Button("GitFlow...") { model.showingGitFlow = true }
+                    .disabled(model.snapshot == nil)
+                Button("Git LFS...") { model.showingLFS = true }
+                    .disabled(model.snapshot == nil)
+                Button("Recover Lost Work...") { model.showingReflog = true }
+                    .disabled(model.snapshot == nil)
+
                 Button("Apply Patch...") { model.importPatch() }
                     .disabled(model.snapshot == nil || model.isLoading || model.snapshot?.operation != nil)
 
@@ -49,6 +61,9 @@ struct NiceGitApp: App {
                 }
                 .disabled(model.snapshot == nil)
             }
+        }
+        Settings {
+            SettingsView().preferredColorScheme(appearance.colorScheme)
         }
     }
 }
