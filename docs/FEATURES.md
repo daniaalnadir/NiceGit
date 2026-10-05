@@ -49,6 +49,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   is already on a remote.
 - Show diffs side by side (old left, new right, long lines wrapped) or in one column; the
   choice is remembered.
+- See what a merge or rebase would do before confirming it: already up to date, a
+  fast-forward, a clean merge with the number of files that would change, or the files
+  expected to conflict. Rebase predictions are marked as estimates.
+- Refresh automatically when files, staging, branches, or tags change outside NiceGit,
+  such as edits in another app or commits and fetches in a terminal (Settings to turn off).
+- Find the commit that introduced a bug with bisect: start from a known-good commit in the
+  graph, then mark each checked-out commit good, bad, or skipped until NiceGit names the
+  first bad commit.
 - Save commit identities as profiles (name, email, optional signing key) and apply one to
   a repository from Repository Settings or the command palette.
 - Settings (Command-comma): System, Light, or Dark appearance; Standard, colour-blind safe,
@@ -179,6 +187,13 @@ Finishing a GitFlow branch deletes it only after every merge succeeds; if a merg
 a conflict, resolve and continue it, then check out the branch and finish again, and
 completed steps are skipped. Git LFS tracking requires git-lfs to be installed, because
 without it Git would commit matching files in full; NiceGit refuses to track until it is.
+
+Merge previews use Git's in-memory merge and never change files, the index, or refs.
+Automatic refresh waits about a second after the last change, skips changes NiceGit's own
+actions already refreshed, defers while a review dialog is open, and ignores Git's object
+storage, logs, and lock files. NiceGit runs Git with `GIT_OPTIONAL_LOCKS=0` so read-only
+commands do not rewrite the index. Bisect checks out commits with a detached HEAD, needs a
+clean working tree to start, and returns to the original checkout when it ends.
 
 Signature checks run locally with your Git signing setup and never contact a key server.
 NiceGit only asks Git to verify commits whose objects carry a signature; if your Git

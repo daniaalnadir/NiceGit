@@ -846,4 +846,56 @@ private enum RefreshFailure: Error { case injected }
     reloaded.deleteIdentityProfile(reloaded.identityProfiles[0])
     #expect(AppModel(defaults: defaults).identityProfiles.map(\.name) == ["Zed"])
 }
+
+@Test func watcherIgnoresGitHousekeepingAndSeparatesRefsFromFiles() {
+    let git = ["/repo/.git", "/shared/.git"]
+    #expect(RepositoryWatcher.classify(["/repo/.git/objects/ab/cdef", "/repo/.git/logs/HEAD", "/repo/.git/index.lock"], gitDirectories: git) == nil)
+    #expect(RepositoryWatcher.classify(["/repo/Sources/app.swift"], gitDirectories: git) == .init(refsChanged: false))
+    #expect(RepositoryWatcher.classify(["/repo/.git/index"], gitDirectories: git) == .init(refsChanged: false))
+    #expect(RepositoryWatcher.classify(["/shared/.git/refs/heads/main"], gitDirectories: git) == .init(refsChanged: true))
+    #expect(RepositoryWatcher.classify(["/repo/.git/HEAD", "/repo/a.txt"], gitDirectories: git) == .init(refsChanged: true))
+    #expect(RepositoryWatcher.classify(["/repo/vendor/lib/.git/index"], gitDirectories: git) == nil)
+}
+
+@Test @MainActor func externalEditsAndCommitsRefreshTheRepositoryAutomatically() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    let model = AppModel(defaults: defaults)
+    model.loadRepository(at: root)
+    let clock = ContinuousClock()
+    func waitFor(_ condition: () -> Bool) async throws {
+        let deadline = clock.now.advanced(by: .seconds(15))
+        while !condition() && clock.now < deadline { try await Task.sleep(for: .milliseconds(100)) }
+    }
+    try await waitFor { model.snapshot != nil && !model.isLoading }
+    try await Task.sleep(for: .seconds(1))
+
+    // Another app edits a file.
+    try "two\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try await waitFor { model.snapshot?.status.contains { $0.path == "file.txt" } == true }
+    #expect(model.snapshot?.status.map(\.path) == ["file.txt"])
+
+    // A terminal commits it; history moves without a manual refresh.
+    try git.stageAll(in: root)
+    try git.commit(message: "Two", in: root)
+    try await waitFor { model.snapshot?.commits.first?.subject == "Two" && model.snapshot?.status.isEmpty == true }
+    #expect(model.snapshot?.commits.first?.subject == "Two")
+    #expect(model.snapshot?.status.isEmpty == true)
+
+    // NiceGit's own refreshes must not wake the watcher again.
+    try await Task.sleep(for: .seconds(2))
+    let settled = model.snapshot?.lastUpdated
+    try await Task.sleep(for: .seconds(3))
+    #expect(model.snapshot?.lastUpdated == settled)
+}
 }

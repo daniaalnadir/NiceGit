@@ -218,10 +218,18 @@ public struct GitClient: Sendable {
     }
 
     public func currentOperation(in url: URL) throws -> GitOperation? {
-        let markers: [(String, GitOperation)] = [("rebase-merge", .rebase), ("rebase-apply", .rebase), ("MERGE_HEAD", .merge), ("CHERRY_PICK_HEAD", .cherryPick), ("REVERT_HEAD", .revert)]
+        try currentOperation(gitDirectory: gitDirectory(in: url))
+    }
+
+    /// This checkout's own Git directory (per worktree), as an absolute path.
+    func gitDirectory(in url: URL) throws -> URL {
         var gitDirectory = try run(["rev-parse", "--absolute-git-dir"], in: url)
         if gitDirectory.hasSuffix("\n") { gitDirectory.removeLast() }
-        let directory = URL(fileURLWithPath: gitDirectory, isDirectory: true)
+        return URL(fileURLWithPath: gitDirectory, isDirectory: true)
+    }
+
+    func currentOperation(gitDirectory directory: URL) throws -> GitOperation? {
+        let markers: [(String, GitOperation)] = [("rebase-merge", .rebase), ("rebase-apply", .rebase), ("MERGE_HEAD", .merge), ("CHERRY_PICK_HEAD", .cherryPick), ("REVERT_HEAD", .revert)]
         for (marker, operation) in markers {
             if FileManager.default.fileExists(atPath: directory.appendingPathComponent(marker).path) { return operation }
         }
@@ -503,7 +511,12 @@ public struct GitClient: Sendable {
             }
         }
         snapshot.hasMoreCommits = commits.count > limit
-        snapshot.operation = try currentOperation(in: rootURL)
+        let gitDirectory = try gitDirectory(in: rootURL)
+        snapshot.operation = try currentOperation(gitDirectory: gitDirectory)
+        // Only read bisect details while one is running; most refreshes check a single file.
+        if FileManager.default.fileExists(atPath: gitDirectory.appendingPathComponent("BISECT_START").path) {
+            snapshot.bisect = try? bisectStatus(gitDirectory: gitDirectory, in: rootURL)
+        }
         return snapshot
     }
 
@@ -653,6 +666,18 @@ public struct GitClient: Sendable {
         if let expectedTip { try requireBranchTip(branch, expectedTip: expectedTip, in: repositoryURL) }
         else { try run(["show-ref", "--verify", "--quiet", "refs/heads/" + branch], in: repositoryURL) }
         try run(["worktree", "add", "--", destination.path, branch], in: repositoryURL)
+    }
+
+    /// The checkout's Git directory and, for a linked worktree, the shared one, as absolute paths.
+    public func gitDirectories(in url: URL) throws -> [String] {
+        var directories: [String] = []
+        for arguments in [["rev-parse", "--absolute-git-dir"], ["rev-parse", "--path-format=absolute", "--git-common-dir"]] {
+            var path = try run(arguments, in: url)
+            // Paths can contain newlines; remove only Git's final line terminator.
+            if path.hasSuffix("\n") { path.removeLast() }
+            if !directories.contains(path) { directories.append(path) }
+        }
+        return directories
     }
 
     /// Removes a linked worktree's folder and registration. Git refuses while it has uncommitted
@@ -1039,6 +1064,9 @@ public struct GitClient: Sendable {
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_EDITOR"] = "true"
         environment["GIT_SEQUENCE_EDITOR"] = "true"
+        // Read-only commands such as status must not rewrite the index: that would contend with
+        // the user's own Git commands and wake NiceGit's file watcher in a loop.
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
         // Stash invokes Git internally with its own pathspecs; do not override those.
         if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files", "ls-tree", "log"].contains(command) {
             environment["GIT_LITERAL_PATHSPECS"] = "1"

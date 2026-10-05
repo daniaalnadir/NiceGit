@@ -5,7 +5,9 @@ import NiceGitCore
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var snapshot: RepositorySnapshot?
+    @Published var snapshot: RepositorySnapshot? {
+        didSet { if oldValue?.rootPath != snapshot?.rootPath { updateWatcher() } }
+    }
     @Published var recentRepositories: [RepositoryBookmark]
     @Published private(set) var openRepositories: [RepositoryBookmark] = []
     @Published var errorMessage: String?
@@ -224,6 +226,29 @@ final class AppModel: ObservableObject {
         runRepositoryAction({ git, url in
             try git.publish(remote: remote, expectedBranch: branch, expectedHead: head, expectedPushAddresses: addresses, in: url)
         }, onSuccess: { self.showingPublish = false })
+    }
+
+    /// Predicts merging `commit` into the open checkout, or nil when it cannot be worked out.
+    func mergePreview(of commit: String) async -> GitMergePreview? {
+        guard let url = repositoryURL else { return nil }
+        return try? await Task.detached { try GitClient().previewMerge(of: commit, in: url) }.value
+    }
+
+    func startBisect(good: String, expectedBranch: String, expectedHead: String) {
+        guard requireSavedFileEdits(before: "bisecting") else { return }
+        runRepositoryAction { git, url in
+            try git.startBisect(bad: expectedHead, good: good, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
+        }
+    }
+
+    func markBisect(_ mark: GitBisectMark, commit: String? = nil) {
+        guard requireSavedFileEdits(before: "checking out the next commit to test") else { return }
+        runRepositoryAction { git, url in try git.markBisect(mark, commit: commit, in: url) }
+    }
+
+    func endBisect() {
+        guard requireSavedFileEdits(before: "ending the bisect") else { return }
+        runRepositoryAction { git, url in try git.endBisect(in: url) }
     }
 
     func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String) {
@@ -514,11 +539,78 @@ final class AppModel: ObservableObject {
     }
 
     func refreshAfterReview() {
-        guard activationRefreshPending, !isLoading, errorMessage == nil, diffSelection == nil,
-              !showingClone, !showingStashes, !showingPublish,
-              !showingRepositorySettings, taggingCommit == nil, editingCommitMessage == nil else { return }
+        guard activationRefreshPending, canRefreshQuietly else { return }
         activationRefreshPending = false
         refresh()
+    }
+
+    /// Refreshing now would not disturb an action, an error, or a dialog the user is reviewing.
+    private var canRefreshQuietly: Bool {
+        !isLoading && errorMessage == nil && diffSelection == nil && !showingClone && !showingStashes && !showingPublish
+            && !showingRepositorySettings && taggingCommit == nil && editingCommitMessage == nil
+    }
+
+    // MARK: Automatic refresh
+
+    static let autoRefreshKey = "NiceGit.autoRefresh"
+    private var watcher: RepositoryWatcher?
+    private var watchedRoot: String?
+    private var pendingWatchedChange: (refsChanged: Bool, since: Date)?
+    private var watchDebounce: Task<Void, Never>?
+
+    private var autoRefreshEnabled: Bool { UserDefaults.standard.object(forKey: Self.autoRefreshKey) as? Bool ?? true }
+
+    private func updateWatcher() {
+        let root = snapshot?.rootPath
+        guard root != watchedRoot else { return }
+        watchedRoot = root
+        watcher = nil
+        watchDebounce?.cancel()
+        pendingWatchedChange = nil
+        guard let root else { return }
+        Task {
+            let directories = await Task.detached { (try? GitClient().gitDirectories(in: URL(fileURLWithPath: root))) ?? [] }.value
+            guard watchedRoot == root else { return }
+            watcher = RepositoryWatcher(root: root, gitDirectories: directories) { [weak self] change in
+                self?.repositoryChanged(refsChanged: change.refsChanged)
+            }
+        }
+    }
+
+    /// Collects changes for a moment, then refreshes once. Changes made by NiceGit itself are
+    /// skipped: its own refresh after an action is newer than they are.
+    private func repositoryChanged(refsChanged: Bool) {
+        guard autoRefreshEnabled else { return }
+        let earlier = pendingWatchedChange
+        pendingWatchedChange = ((earlier?.refsChanged ?? false) || refsChanged, earlier?.since ?? Date())
+        watchDebounce?.cancel()
+        watchDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.applyWatchedChange()
+        }
+    }
+
+    private func applyWatchedChange() {
+        guard let change = pendingWatchedChange else { return }
+        guard let snapshot, snapshot.lastUpdated < change.since else { pendingWatchedChange = nil; return }
+        if isLoading {
+            // Try again after the current action; its own refresh may already cover the change.
+            watchDebounce = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                if !Task.isCancelled { self?.applyWatchedChange() }
+            }
+            return
+        }
+        pendingWatchedChange = nil
+        if change.refsChanged {
+            activationRefreshPending = true
+            refreshAfterReview()
+        } else if canRefreshQuietly {
+            refreshWorkingTree()
+        } else {
+            activationRefreshPending = true
+        }
     }
 
     func stage(_ entry: GitStatusEntry) {

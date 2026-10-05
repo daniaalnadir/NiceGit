@@ -32,6 +32,8 @@ public struct RepositorySnapshot: Equatable, Sendable {
     public var lastUpdated: Date
     public var stashes: [GitStash] = []
     public var operation: GitOperation?
+    /// A bisect in progress, if any.
+    public var bisect: GitBisectStatus?
     public var hasMoreCommits = false
     public var tags: [String] = []
     public var tagTips: [String: String] = [:]
@@ -179,7 +181,12 @@ public struct GitBranch: Identifiable, Equatable, Sendable {
     }
 
     public var displayName: String {
-        name.hasPrefix("remotes/") ? String(name.dropFirst("remotes/".count)) : name
+        // Git lists a detached HEAD as a parenthesised description rather than a branch name.
+        if !isRemote, name.hasPrefix("("), name.hasSuffix(")") {
+            if let range = name.range(of: "bisect started on ") { return "Bisecting from " + name[range.upperBound...].dropLast() }
+            return "Detached HEAD at \(tip.prefix(7))"
+        }
+        return name.hasPrefix("remotes/") ? String(name.dropFirst("remotes/".count)) : name
     }
 
     public func remoteName(among remotes: [String]) -> String? {

@@ -119,6 +119,14 @@ struct CommandPaletteView: View {
         if model.canRedoCommit {
             list.append(Command(id: "redo", title: "Redo commit", detail: "", systemImage: "arrow.uturn.forward") { model.moveCommitHistory(redo: true) })
         }
+        if let bisect = snapshot?.bisect {
+            if bisect.firstBad == nil {
+                list.append(Command(id: "bisect-good", title: "Bisect: mark good", detail: "This commit does not have the problem", systemImage: "checkmark.circle", enabled: idle) { model.markBisect(.good) })
+                list.append(Command(id: "bisect-bad", title: "Bisect: mark bad", detail: "This commit has the problem", systemImage: "xmark.circle", enabled: idle) { model.markBisect(.bad) })
+                list.append(Command(id: "bisect-skip", title: "Bisect: skip", detail: "This commit cannot be tested", systemImage: "forward", enabled: idle) { model.markBisect(.skip) })
+            }
+            list.append(Command(id: "bisect-end", title: "End bisect", detail: "Return to \(bisect.originalCheckout)", systemImage: "scope", enabled: idle) { model.endBisect() })
+        }
         if let operation = snapshot?.operation {
             list.append(Command(id: "continue", title: "Continue \(operation.rawValue)", detail: "After resolving conflicts", systemImage: "play",
                                 enabled: idle) { model.continueOperation() })

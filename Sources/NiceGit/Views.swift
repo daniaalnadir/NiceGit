@@ -9,9 +9,9 @@ private struct RepositorySidebar: View {
     @State private var branchToRename: GitBranch?
     @State private var branchToDelete: GitBranch?
     @State private var pushRequest: (branch: GitBranch, remote: String)?
-    @State private var integrationRequest: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?)?
+    @State private var integrationRequest: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?, preview: GitMergePreview?)?
     /// A branch dropped onto the current branch, awaiting a choice of merge or rebase.
-    @State private var droppedBranch: (branch: GitBranch, currentBranch: String, head: String?)?
+    @State private var droppedBranch: (branch: GitBranch, currentBranch: String, head: String?, preview: GitMergePreview?)?
     @State private var renamedBranchName = ""
     @State private var tagToDelete: (name: String, tip: String)?
     @State private var worktreeToRemove: String?
@@ -173,9 +173,7 @@ private struct RepositorySidebar: View {
             }
         } message: {
             if let request = integrationRequest {
-                Text(request.operation == .rebase
-                    ? "Replays commits from \(request.currentBranch) onto \(request.branch.displayName) at \(request.branch.tip.prefix(8)). This rewrites commit IDs. Coordinate before rebasing commits already shared with others."
-                    : "Merges \(request.branch.displayName) at \(request.branch.tip.prefix(8)) into \(request.currentBranch). Conflicts may need resolving before the merge can finish.")
+                Text(integrationMessage(request))
             }
         }
         .modifier(BranchDropConfirmation(drop: $droppedBranch))
@@ -257,7 +255,9 @@ private struct RepositorySidebar: View {
             // Dropping another branch on the current one offers to merge or rebase with it.
             guard branch.isCurrent, snapshot.operation == nil, let item = items.first,
                   let dropped = snapshot.branches.first(where: { branchDragIdentity($0) == item }), !dropped.isCurrent else { return false }
-            droppedBranch = (dropped, snapshot.currentBranch, snapshot.headHash)
+            // Capture the checkout now; the preview only adds information to the dialog.
+            let current = snapshot.currentBranch, head = snapshot.headHash
+            Task { droppedBranch = (dropped, current, head, await model.mergePreview(of: dropped.tip)) }
             return true
         } isTargeted: { _ in }
         .contextMenu {
@@ -301,9 +301,9 @@ private struct RepositorySidebar: View {
                 Button("Create worktree from branch...") { model.createWorktree(for: branch) }
                     .disabled(snapshot.worktrees.contains { $0.branch == branch.name })
             }
-            Button("Merge into \(snapshot.currentBranch)...") { integrationRequest = (.merge, branch, snapshot.currentBranch, snapshot.headHash) }
+            Button("Merge into \(snapshot.currentBranch)...") { requestIntegration(.merge, branch, snapshot: snapshot) }
                 .disabled(branch.isCurrent || snapshot.operation != nil)
-            Button("Rebase \(snapshot.currentBranch) onto this branch...") { integrationRequest = (.rebase, branch, snapshot.currentBranch, snapshot.headHash) }
+            Button("Rebase \(snapshot.currentBranch) onto this branch...") { requestIntegration(.rebase, branch, snapshot: snapshot) }
                 .disabled(branch.isCurrent || snapshot.operation != nil)
             Menu("Reset \(snapshot.currentBranch) to \(branch.displayName)") {
                 ForEach(GitResetMode.allCases, id: \.self) { mode in
@@ -337,6 +337,19 @@ private struct RepositorySidebar: View {
                 }
             }
         }
+    }
+
+    /// Captures the checkout at the click, then opens the confirmation once the preview is ready.
+    private func requestIntegration(_ operation: GitOperation, _ branch: GitBranch, snapshot: RepositorySnapshot) {
+        let current = snapshot.currentBranch, head = snapshot.headHash
+        Task { integrationRequest = (operation, branch, current, head, await model.mergePreview(of: branch.tip)) }
+    }
+
+    private func integrationMessage(_ request: (operation: GitOperation, branch: GitBranch, currentBranch: String, head: String?, preview: GitMergePreview?)) -> String {
+        let base = request.operation == .rebase
+            ? "Replays commits from \(request.currentBranch) onto \(request.branch.displayName) at \(request.branch.tip.prefix(8)). This rewrites commit IDs. Coordinate before rebasing commits already shared with others."
+            : "Merges \(request.branch.displayName) at \(request.branch.tip.prefix(8)) into \(request.currentBranch). Conflicts may need resolving before the merge can finish."
+        return base + (request.preview.map { "\n\n" + $0.summary(rebase: request.operation == .rebase) } ?? "")
     }
 
     private var integrationTitle: String {
@@ -559,6 +572,12 @@ private struct WorkbenchView: View {
                     RepositoryActionBar(snapshot: snapshot)
                     if let operation = snapshot.operation {
                         OperationBar(operation: operation, hasConflicts: snapshot.status.contains { $0.kind == .conflicted })
+                    }
+                    if let bisect = snapshot.bisect {
+                        BisectBar(bisect: bisect, commits: snapshot.commits) { commit in
+                            selectedStash = nil
+                            selectedCommit = commit
+                        }
                     }
                     Divider()
                 Group {
@@ -1080,9 +1099,12 @@ struct SettingsView: View {
     @AppStorage(LanePalette.storageKey) private var palette = LanePalette.standard
     @AppStorage("NiceGit.splitDiff") private var splitDiff = false
     @AppStorage("NiceGit.diffIgnoresWhitespace") private var ignoreWhitespace = false
+    @AppStorage(AppModel.autoRefreshKey) private var autoRefresh = true
 
     var body: some View {
         Form {
+            Toggle("Refresh when files change outside NiceGit", isOn: $autoRefresh)
+                .help("Watches the open repository and refreshes after edits, staging, commits, or fetches made in other apps")
             Picker("Appearance", selection: $appearance) {
                 ForEach(AppearanceSetting.allCases) { Text($0.title).tag($0) }
             }
@@ -1169,7 +1191,7 @@ private struct SubmodulesSidebarSection: View {
 /// Confirms merging or rebasing after a branch is dropped onto the current branch, using the
 /// branch and HEAD captured at the drop.
 private struct BranchDropConfirmation: ViewModifier {
-    @Binding var drop: (branch: GitBranch, currentBranch: String, head: String?)?
+    @Binding var drop: (branch: GitBranch, currentBranch: String, head: String?, preview: GitMergePreview?)?
     @EnvironmentObject private var model: AppModel
 
     func body(content: Content) -> some View {
@@ -1185,7 +1207,8 @@ private struct BranchDropConfirmation: ViewModifier {
             }
         } message: {
             if let drop {
-                Text("Merge adds \(drop.branch.displayName) at \(drop.branch.tip.prefix(8)) to \(drop.currentBranch), with a merge commit when needed. Rebase replays \(drop.currentBranch)'s commits on top of it and rewrites their IDs. Either may stop for conflicts.")
+                Text("Merge adds \(drop.branch.displayName) at \(drop.branch.tip.prefix(8)) to \(drop.currentBranch), with a merge commit when needed. Rebase replays \(drop.currentBranch)'s commits on top of it and rewrites their IDs. Either may stop for conflicts."
+                     + (drop.preview.map { "\n\n" + $0.summary(rebase: false) } ?? ""))
             }
         }
     }
@@ -1194,5 +1217,24 @@ private struct BranchDropConfirmation: ViewModifier {
 /// Identifies a dragged branch unambiguously; local and remote names can look alike.
 func branchDragIdentity(_ branch: GitBranch) -> String {
     "nicegit-branch\0" + (branch.isRemote ? "remote" : "local") + "\0" + branch.name
+}
+
+extension GitMergePreview {
+    /// A sentence for confirmation dialogs; rebases are marked as estimates.
+    func summary(rebase: Bool) -> String {
+        let files = "\(changedFileCount) \(changedFileCount == 1 ? "file" : "files")"
+        var text: String
+        switch outcome {
+        case .upToDate: text = "Nothing to do: the current branch already contains these commits."
+        case .fastForward: text = rebase ? "No conflicts: the branch only needs to move forward (\(files))." : "No conflicts: this fast-forwards the branch (\(files))."
+        case .clean: text = "No conflicts expected; \(files) would change."
+        case let .conflicts(paths):
+            let listed = paths.prefix(5).joined(separator: ", ") + (paths.count > 5 ? ", and \(paths.count - 5) more" : "")
+            text = "Conflicts expected in \(paths.count) \(paths.count == 1 ? "file" : "files"): \(listed)."
+        }
+        if rebase, case .conflicts = outcome { text += " Rebasing replays commits one by one, so the actual conflicts may differ." }
+        if blockedByIgnoredFiles { text += " Ignored local files are in the way of incoming files, so NiceGit will refuse until they are moved." }
+        return text
+    }
 }
 

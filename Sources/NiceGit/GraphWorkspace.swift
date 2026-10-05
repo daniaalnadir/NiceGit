@@ -17,6 +17,7 @@ struct GraphWorkspace: View {
     /// Commits gathered with Command-click for actions on several commits at once.
     @State private var multiSelection: Set<String> = []
     @State private var multiPickRequest: (hashes: [String], branch: String, head: String?)?
+    @State private var bisectRequest: (good: GitCommit, branch: String, head: String)?
 
     private func moveSelection(by offset: Int, proxy: ScrollViewProxy) -> KeyPress.Result {
         let listed = snapshot.commits.filter(matches)
@@ -226,6 +227,18 @@ struct GraphWorkspace: View {
                                                 model.compareMark = model.compareMark?.hash == commit.hash ? nil : commit
                                             }
                                         }
+                                        if snapshot.bisect != nil {
+                                            Menu("Bisect") {
+                                                Button("Mark as good") { model.markBisect(.good, commit: commit.hash) }
+                                                Button("Mark as bad") { model.markBisect(.bad, commit: commit.hash) }
+                                                Button("Skip") { model.markBisect(.skip, commit: commit.hash) }
+                                            }
+                                        } else {
+                                            Button("Find a bug introduced after this commit...") {
+                                                if let head = snapshot.headHash { bisectRequest = (commit, snapshot.currentBranch, head) }
+                                            }.disabled(snapshot.operation != nil || commit.hash == snapshot.headHash
+                                                       || snapshot.status.contains { $0.kind != .untracked })
+                                        }
                                         Button("Interactive rebase from this commit...") {
                                             if let head = snapshot.headHash {
                                                 model.rebaseRequest = InteractiveRebaseRequest(oldest: commit.hash, branch: snapshot.currentBranch,
@@ -286,6 +299,15 @@ struct GraphWorkspace: View {
         .onChange(of: snapshot.commits) { _, commits in
             let loaded = Set(commits.map(\.hash))
             multiSelection.formIntersection(loaded)
+        }
+        .confirmationDialog("Start a bisect?", isPresented: Binding(get: { bisectRequest != nil }, set: { if !$0 { bisectRequest = nil } })) {
+            if let request = bisectRequest {
+                Button("Start bisect") { model.startBisect(good: request.good.hash, expectedBranch: request.branch, expectedHead: request.head) }
+            }
+        } message: {
+            if let request = bisectRequest {
+                Text("\(request.good.shortHash) is marked good and the current checkout (\(request.head.prefix(7))) bad. NiceGit checks out commits in between for you to test and mark until the first bad one is found. End the bisect to return to \(request.branch).")
+            }
         }
         .confirmationDialog("Cherry-pick \(multiPickRequest?.hashes.count ?? 0) commits onto \(multiPickRequest?.branch ?? "")?",
                             isPresented: Binding(get: { multiPickRequest != nil }, set: { if !$0 { multiPickRequest = nil } })) {
