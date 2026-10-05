@@ -54,6 +54,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   expected to conflict. Rebase predictions are marked as estimates.
 - Refresh automatically when files, staging, branches, or tags change outside NiceGit,
   such as edits in another app or commits and fetches in a terminal (Settings to turn off).
+- Undo or redo the last NiceGit action that moved the current branch (commit, amend, reset,
+  merge, rebase, cherry-pick, revert, or pull) or deleted branches, from the action bar or
+  the command palette.
+- Clean up branches (Repository > Clean Up Branches): delete local branches merged into the
+  current branch, and optionally unmerged ones with no recent commits, as one undoable step.
+- Search file contents (Option-Command-F, or "Search files in this commit" in the graph):
+  find literal text in tracked files at any commit or in the working files, and open blame at
+  a match.
 - Find the commit that introduced a bug with bisect: start from a known-good commit in the
   graph, then mark each checked-out commit good, bad, or skipped until NiceGit names the
   first bad commit.
@@ -187,6 +195,15 @@ Finishing a GitFlow branch deletes it only after every merge succeeds; if a merg
 a conflict, resolve and continue it, then check out the branch and finish again, and
 completed steps are skipped. Git LFS tracking requires git-lfs to be installed, because
 without it Git would commit matching files in full; NiceGit refuses to track until it is.
+
+Undo is offered only while the branch still points where the action left it. Commits and
+amends undo softly, keeping their changes staged; soft and mixed resets undo in kind; other
+actions undo with `git reset --keep`, which keeps unrelated local edits and refuses to
+overwrite any. Edits discarded by a hard reset cannot be restored. Deleted branches come back
+at their old commits with their upstream settings, and only if no branch has taken the name.
+Branch clean-up never lists the current branch or branches checked out in other worktrees,
+selects merged branches only by default, and deletes unmerged ones only after a separate
+choice, each atomically against the tip that was listed.
 
 Merge previews use Git's in-memory merge and never change files, the index, or refs.
 Automatic refresh waits about a second after the last change, skips changes NiceGit's own

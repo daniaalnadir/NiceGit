@@ -210,6 +210,10 @@ struct GraphWorkspace: View {
                                         Button("Cherry-pick commit...") {
                                             cherryPickRequest = (commit, snapshot.currentBranch, snapshot.headHash)
                                         }.disabled(snapshot.operation != nil)
+                                        Button("Search files in this commit...") {
+                                            model.contentSearchRequest = ContentSearchRequest(repositoryURL: URL(fileURLWithPath: snapshot.rootPath),
+                                                                                              revision: commit.hash, label: "commit \(commit.shortHash)")
+                                        }
                                         Menu("Compare") {
                                             Button("With working files") {
                                                 model.compareRequest = CompareRequest(repositoryURL: URL(fileURLWithPath: snapshot.rootPath), older: commit, newer: nil)

@@ -76,3 +76,6 @@
 - Run Git with `GIT_OPTIONAL_LOCKS=0`; an index rewritten by `git status` contends with the user's commands and wakes the repository watcher in a loop.
 - Skip watched changes older than the snapshot's last refresh, so NiceGit's own actions do not refresh twice.
 - Compute a merge preview before opening its confirmation; macOS confirmation dialogs may not update their message after appearing.
+- Undo branch moves with the inverse of how they were made: soft for commits and amends, the same mode for soft and mixed resets, and `reset --keep` otherwise; never record a step when an operation stopped partway.
+- Restore deleted branches with `update-ref` against the all-zero object ID so a reused name is never replaced, and delete unmerged branches only atomically against the listed tip.
+- Parse `git grep --null` by NUL tokens and end each match's text at its first newline; paths can contain newlines.

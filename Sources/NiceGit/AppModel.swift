@@ -35,30 +35,97 @@ final class AppModel: ObservableObject {
         activeTerminal = terminalSessions[path]
         showingTerminal = true
     }
-    struct CommitHistoryStep {
+    /// The last NiceGit action that can be undone, and redone after undoing.
+    struct HistoryStep {
+        /// How a branch move is reversed. Commits undo softly so their changes stay staged;
+        /// soft and mixed resets reverse in kind; everything else uses `reset --keep`, which
+        /// keeps unrelated local edits and refuses to overwrite any.
+        enum UndoMode { case soft, mixed, keep }
+        enum Kind {
+            case branchMove(branch: String, before: String, after: String, mode: UndoMode)
+            case branchDeletions([GitBranchDeletion])
+        }
         let path: String
-        let branch: String
-        let before: String
-        let after: String
+        /// Names the action, such as "commit" or "rebase".
+        let label: String
+        let kind: Kind
         var undone = false
     }
-    @Published private(set) var commitHistoryStep: CommitHistoryStep?
+    @Published private(set) var historyStep: HistoryStep?
 
-    var canUndoCommit: Bool { canMoveCommitHistory(undone: false) }
-    var canRedoCommit: Bool { canMoveCommitHistory(undone: true) }
+    var canUndo: Bool { canMoveHistory(undone: false) }
+    var canRedo: Bool { canMoveHistory(undone: true) }
 
-    private func canMoveCommitHistory(undone: Bool) -> Bool {
-        guard !isLoading, !fileReviewHasEdits, let step = commitHistoryStep, let snapshot else { return false }
-        return step.undone == undone && snapshot.rootPath == step.path && snapshot.currentBranch == step.branch
-            && snapshot.headHash == (undone ? step.before : step.after) && snapshot.operation == nil
+    private func canMoveHistory(undone: Bool) -> Bool {
+        guard !isLoading, !fileReviewHasEdits, let step = historyStep, step.undone == undone, let snapshot,
+              snapshot.rootPath == step.path, snapshot.operation == nil else { return false }
+        switch step.kind {
+        case let .branchMove(branch, before, after, _):
+            return snapshot.currentBranch == branch && snapshot.headHash == (undone ? before : after)
+        case let .branchDeletions(deletions):
+            return deletions.allSatisfy { deletion in
+                let current = snapshot.branches.first { !$0.isRemote && $0.name == deletion.name }
+                return undone ? current?.tip == deletion.tip : current == nil
+            }
+        }
     }
 
-    func moveCommitHistory(redo: Bool) {
-        guard canMoveCommitHistory(undone: redo), let step = commitHistoryStep else { return }
+    /// What Undo or Redo would do, for menus and confirmations.
+    func historyDescription(redo: Bool) -> (title: String, detail: String)? {
+        guard let step = historyStep else { return nil }
+        switch step.kind {
+        case let .branchMove(branch, before, after, mode):
+            let target = String((redo ? after : before).prefix(7))
+            let detail: String = switch mode {
+            case .soft: "Moves \(branch) to \(target) without changing the index or working files, so the changes stay staged."
+            case .mixed: "Moves \(branch) to \(target) and resets the index. Working files are not changed."
+            case .keep: "Moves \(branch) to \(target) and updates working files. Unrelated local edits are kept; Git refuses if one would be overwritten."
+                + (step.label == "reset" && !redo ? " Local edits discarded by the reset itself cannot be restored." : "")
+            }
+            return ((redo ? "Redo " : "Undo ") + step.label, detail + " Remote branches are not changed.")
+        case let .branchDeletions(deletions):
+            let names = deletions.count == 1 ? "branch \(deletions[0].name)" : "\(deletions.count) branches"
+            let listed = deletions.prefix(5).map(\.name).joined(separator: ", ") + (deletions.count > 5 ? ", and \(deletions.count - 5) more" : "")
+            return redo
+                ? ("Delete \(names) again", "Deletes \(listed) again, if each still points where it did.")
+                : ("Restore \(names)", "Recreates \(listed) at their old commits, with their upstream settings.")
+        }
+    }
+
+    func moveHistory(redo: Bool) {
+        guard canMoveHistory(undone: redo), let step = historyStep else { return }
+        guard requireSavedFileEdits(before: redo ? "redoing" : "undoing") else { return }
         runRepositoryAction({ git, url in
-            try git.reset(to: redo ? step.after : step.before, mode: .soft,
-                          expectedHead: redo ? step.before : step.after, expectedBranch: step.branch, in: url)
-        }, onSuccess: { self.commitHistoryStep?.undone = !redo })
+            switch step.kind {
+            case let .branchMove(branch, before, after, mode):
+                let target = redo ? after : before, head = redo ? before : after
+                switch mode {
+                case .soft: try git.reset(to: target, mode: .soft, expectedHead: head, expectedBranch: branch, in: url)
+                case .mixed: try git.reset(to: target, mode: .mixed, expectedHead: head, expectedBranch: branch, in: url)
+                case .keep: try git.moveBranchKeepingChanges(to: target, expectedHead: head, expectedBranch: branch, in: url)
+                }
+            case let .branchDeletions(deletions):
+                for deletion in deletions {
+                    if redo { try git.deleteRestoredBranch(deletion, in: url) } else { try git.restoreBranch(deletion, in: url) }
+                }
+            }
+        }, onSuccess: { self.historyStep?.undone = !redo })
+    }
+
+    /// Runs an action that may move the current branch, offering it for undo when it does,
+    /// unless it stopped partway, for example on a conflict.
+    private func runRecordingBranchMove(_ label: String, mode: HistoryStep.UndoMode = .keep, onSuccess: @escaping () -> Void = {},
+                                        action: @escaping @Sendable (GitClient, URL) throws -> Void) {
+        let previous = snapshot
+        runRepositoryAction(action, onSuccess: onSuccess, onRefreshed: { self.recordBranchMove(label, from: previous, mode: mode) })
+    }
+
+    private func recordBranchMove(_ label: String, from previous: RepositorySnapshot?, mode: HistoryStep.UndoMode) {
+        guard let previous, previous.operation == nil, let before = previous.headHash, let updated = snapshot,
+              updated.rootPath == previous.rootPath, updated.operation == nil, updated.currentBranch == previous.currentBranch,
+              updated.branches.contains(where: { $0.isCurrent && !$0.isRemote && !$0.name.hasPrefix("(") }),
+              let after = updated.headHash, after != before else { return }
+        historyStep = HistoryStep(path: updated.rootPath, label: label, kind: .branchMove(branch: updated.currentBranch, before: before, after: after, mode: mode))
     }
     @Published var diffSelection: DiffSelection?
     @Published var fileReviewSelection: DiffSelection?
@@ -101,6 +168,14 @@ final class AppModel: ObservableObject {
     @Published var showingReflog = false
     @Published var showingGitFlow = false
     @Published var showingLFS = false
+    @Published var showingBranchCleanup = false
+    @Published var contentSearchRequest: ContentSearchRequest?
+
+    /// Opens content search for the working files.
+    func searchWorkingFiles() {
+        guard let url = repositoryURL else { return }
+        contentSearchRequest = ContentSearchRequest(repositoryURL: url, revision: nil, label: "the working files")
+    }
     /// Recent discards that can still be undone, newest last, with the repository they belong to.
     @Published private(set) var discardUndos: [(path: String, undo: GitDiscardUndo)] = []
     @Published var compareRequest: CompareRequest?
@@ -253,21 +328,21 @@ final class AppModel: ObservableObject {
 
     func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String) {
         guard requireSavedFileEdits(before: "cherry-picking") else { return }
-        runRepositoryAction { git, url in try git.cherryPick(commits, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url) }
+        runRecordingBranchMove("cherry-pick") { git, url in try git.cherryPick(commits, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url) }
     }
 
     func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil) {
         guard requireSavedFileEdits(before: "starting a Git operation") else { return }
         let head = expectedHead ?? snapshot?.headHash
         let branch = expectedBranch ?? snapshot?.currentBranch
-        runRepositoryAction { git, url in
+        runRecordingBranchMove(operation.rawValue) { git, url in
             try git.start(operation, target: target, mainline: mainline, expectedHead: head, expectedBranch: branch, expectedSourceBranch: expectedSourceBranch, in: url)
         }
     }
 
     func interactiveRebase(_ steps: [GitRebaseStep], plan: GitRebasePlan, expectedBranch: String, expectedHead: String) {
         guard requireSavedFileEdits(before: "rewriting commits") else { return }
-        runRepositoryAction { git, url in
+        runRecordingBranchMove("rebase") { git, url in
             try git.interactiveRebase(steps, plan: plan, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
         }
     }
@@ -275,11 +350,11 @@ final class AppModel: ObservableObject {
     func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String) {
         guard requireSavedFileEdits(before: "resetting") else { return }
         let reviewID = fileReviewSelection?.id
-        runRepositoryAction({ git, url in
-            try git.reset(to: target, mode: mode, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url)
-        }, onSuccess: {
+        runRecordingBranchMove("reset", mode: mode == .soft ? .soft : mode == .mixed ? .mixed : .keep, onSuccess: {
             if self.fileReviewSelection?.id == reviewID { self.fileReviewSelection = nil }
-        })
+        }) { git, url in
+            try git.reset(to: target, mode: mode, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url)
+        }
     }
 
     func continueOperation() {
@@ -703,12 +778,9 @@ final class AppModel: ObservableObject {
             }
             onSuccess()
         }, onSuccess: {
-            self.commitHistoryStep = nil
-            if let previous, previous.operation == nil, let before = previous.headHash,
-               let updated = self.snapshot, updated.currentBranch == previous.currentBranch,
-               let after = updated.headHash, after != before,
-               updated.commits.first(where: { $0.hash == after })?.parents.first == before {
-                self.commitHistoryStep = CommitHistoryStep(path: updated.rootPath, branch: updated.currentBranch, before: before, after: after)
+            // Only a new commit directly on top of the old HEAD undoes as a plain commit.
+            if let after = self.snapshot?.headHash, self.snapshot?.commits.first(where: { $0.hash == after })?.parents.first == previous?.headHash {
+                self.recordBranchMove("commit", from: previous, mode: .soft)
             }
         })
     }
@@ -716,9 +788,10 @@ final class AppModel: ObservableObject {
     func amendCommit(message: String, expectedBranch: String, expectedHead: String, onSuccess: @escaping () -> Void) {
         guard !isLoading, let url = repositoryURL else { return }
         guard requireSavedFileEdits(before: "amending") else { return }
+        let previous = snapshot
         perform(at: url, action: { git, url in
             try git.amendCommit(message: message, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
-        }, onActionSuccess: onSuccess, onSuccess: { self.commitHistoryStep = nil })
+        }, onActionSuccess: onSuccess, onSuccess: { self.recordBranchMove("amend", from: previous, mode: .soft) })
     }
 
     func checkout(branch: GitBranch) {
@@ -754,7 +827,36 @@ final class AppModel: ObservableObject {
     }
 
     func deleteBranch(_ branch: GitBranch) {
-        runRepositoryAction { git, url in try git.deleteBranch(branch.name, expectedTip: branch.tip, in: url) }
+        guard let url = repositoryURL else { return }
+        let outcome = ActionOutcome<GitBranchDeletion>()
+        perform(at: url, action: { git, url in
+            outcome.record(try git.deleteBranchKeepingUndo(branch.name, expectedTip: branch.tip, in: url))
+        }, onSuccess: {
+            if let deletion = outcome.value { self.historyStep = HistoryStep(path: url.path, label: "branch deletion", kind: .branchDeletions([deletion])) }
+        })
+    }
+
+    /// Deletes several branches as one undoable step. Branches that cannot be deleted, for
+    /// example because they moved, are reported, and the rest can still be restored together.
+    func deleteBranches(_ candidates: [GitCleanupCandidate], includeUnmerged: Bool, onSuccess: @escaping () -> Void = {}) {
+        guard let url = repositoryURL, !candidates.isEmpty else { return }
+        let outcome = ActionOutcome<(deleted: [GitBranchDeletion], failed: [String])>()
+        perform(at: url, action: { git, url in
+            var deleted: [GitBranchDeletion] = [], failed: [String] = []
+            for candidate in candidates {
+                do { deleted += try git.deleteBranchesKeepingUndo([candidate], includeUnmerged: includeUnmerged, in: url) }
+                catch { failed.append(candidate.name) }
+            }
+            outcome.record((deleted, failed))
+        }, onActionSuccess: onSuccess, onSuccess: {
+            guard let result = outcome.value else { return }
+            if !result.deleted.isEmpty {
+                self.historyStep = HistoryStep(path: url.path, label: "branch clean-up", kind: .branchDeletions(result.deleted))
+            }
+            if !result.failed.isEmpty {
+                self.errorMessage = "These branches were not deleted because they changed since they were listed or are not merged: \(result.failed.joined(separator: ", ")). Refresh and review them again."
+            }
+        })
     }
 
     func createBranch(named name: String, expectedBranch: String? = nil, expectedHead: String? = nil, onSuccess: @escaping () -> Void) {
@@ -795,7 +897,7 @@ final class AppModel: ObservableObject {
         let head = snapshot?.headHash
         let upstream = snapshot?.upstream
         let addresses = snapshot?.remoteFetchAddresses
-        runRepositoryAction { git, url in
+        runRecordingBranchMove("pull") { git, url in
             try git.pull(expectedBranch: branch, expectedHead: head, expectedUpstream: upstream, expectedFetchAddresses: addresses, in: url)
         }
     }
@@ -964,5 +1066,23 @@ struct IdentityProfile: Codable, Identifiable, Equatable, Sendable {
     /// A GPG key ID or SSH key path; applying the profile turns on commit signing with it.
     var signingKey: String?
     var label: String { "\(name) <\(email)>" }
+}
+
+/// Carries a value out of a background Git action.
+private final class ActionOutcome<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value?
+
+    func record(_ value: Value?) {
+        lock.lock()
+        stored = value
+        lock.unlock()
+    }
+
+    var value: Value? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
 }
 

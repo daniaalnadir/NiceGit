@@ -28,12 +28,13 @@ struct RepositoryActionBar: View {
         .padding(.horizontal, 14).padding(.vertical, 6)
         .background(AppPalette.toolbar)
         .disabled(model.isLoading)
-        .confirmationDialog(historyAction == true ? "Redo the last NiceGit commit?" : "Undo the last NiceGit commit?", isPresented: Binding(get: { historyAction != nil }, set: { if !$0 { historyAction = nil } })) {
-            if let redo = historyAction {
-                Button(redo ? "Redo commit" : "Undo commit") { model.moveCommitHistory(redo: redo) }
+        .confirmationDialog((historyAction.flatMap { model.historyDescription(redo: $0)?.title } ?? "Undo") + "?",
+                            isPresented: Binding(get: { historyAction != nil }, set: { if !$0 { historyAction = nil } })) {
+            if let redo = historyAction, let description = model.historyDescription(redo: redo) {
+                Button(description.title) { model.moveHistory(redo: redo) }
             }
         } message: {
-            Text("Moves the local branch only. The index and working files are preserved. Coordinate before changing history already shared with others. Remote branches are not changed.")
+            if let redo = historyAction, let description = model.historyDescription(redo: redo) { Text(description.detail) }
         }
         .alert("Create and checkout branch", isPresented: $newBranch) {
             TextField("Branch name", text: $branchName)
@@ -84,10 +85,10 @@ struct RepositoryActionBar: View {
 
     private var actions: some View {
         HStack(spacing: 4) {
-            action("Undo", icon: "arrow.uturn.backward", help: "Undo the last NiceGit commit; keep file changes") { historyAction = false }
-                .disabled(!model.canUndoCommit)
-            action("Redo", icon: "arrow.uturn.forward", help: "Restore the commit undone in this session") { historyAction = true }
-                .disabled(!model.canRedoCommit)
+            action("Undo", icon: "arrow.uturn.backward", help: model.canUndo ? model.historyDescription(redo: false)?.title ?? "Undo" : "Nothing to undo") { historyAction = false }
+                .disabled(!model.canUndo)
+            action("Redo", icon: "arrow.uturn.forward", help: model.canRedo ? model.historyDescription(redo: true)?.title ?? "Redo" : "Nothing to redo") { historyAction = true }
+                .disabled(!model.canRedo)
             HStack(spacing: 0) {
                 action("Fetch", icon: "arrow.down.to.line", help: "Fetch all remotes") { model.fetch() }
                     .disabled(snapshot.remotes.isEmpty)
