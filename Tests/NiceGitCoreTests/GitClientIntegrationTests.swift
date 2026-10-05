@@ -2849,3 +2849,124 @@ private func makeRebaseFixture() throws -> (GitClient, URL, [String]) {
     #expect(after.bisect == nil && after.currentBranch == "main" && after.headHash == hashes[7])
     #expect(throws: (any Error).self) { try git.markBisect(.good, in: root) }
 }
+
+@Test func deletedBranchesAndBranchMovesCanBeUndone() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("checkout")
+    let server = base.appendingPathComponent("server.git")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    try runGit(["init", "--quiet", "--bare", server.path], in: base)
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    try git.addRemote(name: "origin", address: server.path, in: root)
+    try runGit(["switch", "--quiet", "-c", "topic"], in: root)
+    try "topic\n".write(to: root.appendingPathComponent("topic.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Topic", in: root)
+    try runGit(["push", "--quiet", "--set-upstream", "origin", "topic"], in: root)
+    try runGit(["switch", "--quiet", "main"], in: root)
+    try runGit(["merge", "--quiet", "--no-ff", "--no-edit", "topic"], in: root)
+    let topic = try #require(try git.loadSnapshot(at: root).branches.first { $0.name == "topic" })
+
+    let deletion = try git.deleteBranchKeepingUndo("topic", expectedTip: topic.tip, in: root)
+    #expect(!(try git.loadSnapshot(at: root).branches.contains { $0.name == "topic" }))
+    try git.restoreBranch(deletion, in: root)
+    let restored = try #require(try git.loadSnapshot(at: root).branches.first { $0.name == "topic" })
+    #expect(restored.tip == topic.tip && restored.upstream == "refs/remotes/origin/topic")
+    // A branch created under the same name in the meantime is never replaced.
+    #expect(throws: (any Error).self) { try git.restoreBranch(deletion, in: root) }
+
+    // Undo a merge while keeping an unrelated local edit; refuse when an edit would be lost.
+    let merged = try #require(try git.loadSnapshot(at: root).headHash)
+    let before = try runGitOutput(["rev-parse", "HEAD^1"], in: root).trimmingCharacters(in: .whitespacesAndNewlines)
+    try "local\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.moveBranchKeepingChanges(to: before, expectedHead: merged, expectedBranch: "main", in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == before)
+    #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("topic.txt").path))
+    #expect(try String(contentsOf: root.appendingPathComponent("file.txt"), encoding: .utf8) == "local\n")
+    #expect(throws: (any Error).self) { try git.moveBranchKeepingChanges(to: merged, expectedHead: merged, expectedBranch: "main", in: root) }
+    try git.moveBranchKeepingChanges(to: merged, expectedHead: before, expectedBranch: "main", in: root)
+    #expect(try git.loadSnapshot(at: root).headHash == merged)
+}
+
+@Test func branchCleanupOffersMergedAndInactiveBranchesAndDeletesThemRecoverably() throws {
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let root = base.appendingPathComponent("main")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: base) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    func commit(_ name: String, on branch: String, date: String? = nil) throws {
+        try runGit(["switch", "--quiet", branch], in: root)
+        try name.write(to: root.appendingPathComponent(name + ".txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        let dateArguments = date.map { ["--date", $0] } ?? []
+        try runGit(["commit", "--quiet", "-m", name] + dateArguments, in: root, environment: date.map { ["GIT_COMMITTER_DATE": $0] } ?? [:])
+    }
+    try "base".write(to: root.appendingPathComponent("base.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Base", in: root)
+    for branch in ["merged-topic", "old-idea", "wip", "in-worktree"] { try runGit(["branch", branch], in: root) }
+    try commit("merged", on: "merged-topic")
+    try commit("old", on: "old-idea", date: "2020-01-01T00:00:00")
+    try commit("wip", on: "wip")
+    try runGit(["switch", "--quiet", "main"], in: root)
+    try runGit(["merge", "--quiet", "--no-edit", "merged-topic"], in: root)
+    try git.createWorktree(branch: "in-worktree", at: base.appendingPathComponent("wt"), in: root)
+
+    let candidates = try git.branchCleanupCandidates(inactiveDays: 90, in: root)
+    #expect(candidates.map(\.name) == ["old-idea", "merged-topic"])
+    #expect(candidates.map(\.isMerged) == [false, true])
+
+    var deleted = try git.deleteBranchesKeepingUndo(candidates, includeUnmerged: false, in: root)
+    #expect(deleted.map(\.name) == ["merged-topic"])
+    let oldIdea = try #require(candidates.first { $0.name == "old-idea" })
+    deleted += try git.deleteBranchesKeepingUndo([oldIdea], includeUnmerged: true, in: root)
+    let remaining = Set(try git.loadSnapshot(at: root).branches.filter { !$0.isRemote }.map(\.name))
+    #expect(remaining == ["main", "wip", "in-worktree"])
+
+    // A branch that moved after it was listed is not deleted.
+    let wip = try #require(try git.loadSnapshot(at: root).branches.first { $0.name == "wip" })
+    try commit("more", on: "wip")
+    try runGit(["switch", "--quiet", "main"], in: root)
+    #expect(throws: (any Error).self) {
+        try git.deleteBranchesKeepingUndo([GitCleanupCandidate(name: "wip", tip: wip.tip, lastCommitDate: nil, subject: "", isMerged: false)], includeUnmerged: true, in: root)
+    }
+
+    for deletion in deleted { try git.restoreBranch(deletion, in: root) }
+    let restored = try git.loadSnapshot(at: root).branches
+    #expect(restored.first { $0.name == "old-idea" }?.tip == oldIdea.tip)
+    #expect(restored.contains { $0.name == "merged-topic" })
+}
+
+@Test func contentSearchFindsLiteralTextAtACommitOrInWorkingFiles() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let odd = "dir/new\nline.swift"
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("dir"), withIntermediateDirectories: true)
+    try "let total = a.*b\nlet other = 1\n".write(to: root.appendingPathComponent(odd), atomically: true, encoding: .utf8)
+    try "TOTAL in caps\n".write(to: root.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+    try Data([0, 1, 0x74, 0x6f, 0x74, 0x61, 0x6c]).write(to: root.appendingPathComponent("blob.bin"))
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    let first = try #require(git.loadSnapshot(at: root).headHash)
+    try "let renamed = 2\n".write(to: root.appendingPathComponent(odd), atomically: true, encoding: .utf8)
+
+    let then = try git.searchContents("total", at: first, in: root)
+    #expect(then == [GitContentMatch(path: odd, line: 1, text: "let total = a.*b"), GitContentMatch(path: "notes.txt", line: 1, text: "TOTAL in caps")])
+    #expect(try git.searchContents("total", at: first, ignoreCase: false, in: root).map(\.path) == [odd])
+    #expect(try git.searchContents("a.*b", at: first, in: root).count == 1)
+    #expect(try git.searchContents("total", in: root).map(\.path) == ["notes.txt"])
+    #expect(try git.searchContents("nothing here", in: root).isEmpty)
+    #expect(try git.searchContents("total", at: first, limit: 1, in: root).count == 1)
+}

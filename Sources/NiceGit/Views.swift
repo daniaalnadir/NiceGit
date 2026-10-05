@@ -440,6 +440,8 @@ struct ContentView: View {
         .sheet(item: $model.compareRequest) { CompareView(request: $0) }
         .sheet(isPresented: $model.showingGitFlow, onDismiss: model.refreshAfterReview) { GitFlowView() }
         .sheet(isPresented: $model.showingLFS, onDismiss: model.refreshAfterReview) { LFSView() }
+        .sheet(isPresented: $model.showingBranchCleanup, onDismiss: model.refreshAfterReview) { BranchCleanupView() }
+        .sheet(item: $model.contentSearchRequest) { ContentSearchView(request: $0) }
         .sheet(isPresented: $model.showingReflog, onDismiss: model.refreshAfterReview) {
             if let url = model.repositoryURL { ReflogView(repositoryURL: url) }
         }

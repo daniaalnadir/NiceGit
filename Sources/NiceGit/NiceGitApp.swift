@@ -43,6 +43,11 @@ struct NiceGitApp: App {
 
                 Divider()
 
+                Button("Search File Contents...") { model.searchWorkingFiles() }
+                    .keyboardShortcut("f", modifiers: [.command, .option])
+                    .disabled(model.snapshot == nil)
+                Button("Clean Up Branches...") { model.showingBranchCleanup = true }
+                    .disabled(model.snapshot == nil)
                 Button("GitFlow...") { model.showingGitFlow = true }
                     .disabled(model.snapshot == nil)
                 Button("Git LFS...") { model.showingLFS = true }

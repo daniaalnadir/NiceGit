@@ -263,17 +263,17 @@ struct AppModelTests {
     model.commit(message: "App commit") {}
     try await wait()
     #expect(model.errorMessage == nil)
-    #expect(model.canUndoCommit)
+    #expect(model.canUndo)
     let committed = try #require(model.snapshot?.headHash)
     try "later edits\n".write(to: file, atomically: true, encoding: .utf8)
-    model.moveCommitHistory(redo: false)
+    model.moveHistory(redo: false)
     try await wait()
     #expect(model.errorMessage == nil)
     #expect(model.snapshot?.headHash == base)
-    #expect(model.canRedoCommit)
+    #expect(model.canRedo)
     #expect(try git.diff(path: "file.txt", staged: true, in: root).contains("+committed"))
     #expect(try String(contentsOf: file, encoding: .utf8) == "later edits\n")
-    model.moveCommitHistory(redo: true)
+    model.moveHistory(redo: true)
     try await wait()
     #expect(model.errorMessage == nil)
     #expect(model.snapshot?.headHash == committed)
@@ -281,11 +281,11 @@ struct AppModelTests {
     try git.stageAll(in: root)
     try git.commit(message: "External commit", in: root)
     let external = try git.loadSnapshot(at: root).headHash
-    model.moveCommitHistory(redo: false)
+    model.moveHistory(redo: false)
     try await wait()
     #expect(model.errorMessage != nil)
     #expect(try git.loadSnapshot(at: root).headHash == external)
-    #expect(!model.canUndoCommit)
+    #expect(!model.canUndo)
 }
 
 @Test @MainActor func hardResetDoesNotRunWhileFileEditorHasUnsavedChanges() async throws {
@@ -897,5 +897,96 @@ private enum RefreshFailure: Error { case injected }
     let settled = model.snapshot?.lastUpdated
     try await Task.sleep(for: .seconds(3))
     #expect(model.snapshot?.lastUpdated == settled)
+}
+
+@Test @MainActor func mergesAndBranchDeletionsCanBeUndoneAndRedone() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    try git.createBranch(named: "topic", in: root)
+    try "topic\n".write(to: root.appendingPathComponent("topic.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Topic", in: root)
+    try git.checkout(branch: "main", in: root)
+    try "main\n".write(to: root.appendingPathComponent("main.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "Main", in: root)
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let before = try #require(model.snapshot?.headHash)
+    let clock = ContinuousClock()
+    func settle() async throws {
+        let deadline = clock.now.advanced(by: .seconds(15))
+        try await Task.sleep(for: .milliseconds(50))
+        while model.isLoading && clock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    let topic = try #require(model.snapshot?.branches.first { $0.name == "topic" })
+    model.start(.merge, target: topic.tip, expectedHead: before, expectedBranch: "main", expectedSourceBranch: topic)
+    try await settle()
+    let merged = try #require(model.snapshot?.headHash)
+    #expect(merged != before && model.canUndo && !model.canRedo)
+    #expect(model.historyDescription(redo: false)?.title == "Undo merge")
+    model.moveHistory(redo: false)
+    try await settle()
+    #expect(model.snapshot?.headHash == before && model.canRedo)
+    #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("topic.txt").path))
+    model.moveHistory(redo: true)
+    try await settle()
+    #expect(model.snapshot?.headHash == merged)
+
+    let mergedTopic = try #require(model.snapshot?.branches.first { $0.name == "topic" })
+    model.deleteBranch(mergedTopic)
+    try await settle()
+    #expect(!(model.snapshot?.branches.contains { $0.name == "topic" } ?? true))
+    #expect(model.historyDescription(redo: false)?.title == "Restore branch topic")
+    model.moveHistory(redo: false)
+    try await settle()
+    #expect(model.snapshot?.branches.first { $0.name == "topic" }?.tip == mergedTopic.tip)
+}
+
+@Test @MainActor func branchCleanupDeletesSeveralBranchesAsOneUndoableStep() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let suite = "NiceGitTests-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    try "one\n".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+    try git.stageAll(in: root)
+    try git.commit(message: "One", in: root)
+    for branch in ["done-a", "done-b"] { try git.createBranch(named: branch, startingAt: "HEAD", in: root) }
+    let model = AppModel(defaults: defaults)
+    model.snapshot = try git.loadSnapshot(at: root)
+    let candidates = try git.branchCleanupCandidates(in: root)
+    #expect(candidates.map(\.name).sorted() == ["done-a", "done-b"])
+    let clock = ContinuousClock()
+    func settle() async throws {
+        let deadline = clock.now.advanced(by: .seconds(15))
+        try await Task.sleep(for: .milliseconds(50))
+        while model.isLoading && clock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+    }
+    model.deleteBranches(candidates, includeUnmerged: false)
+    try await settle()
+    #expect(model.snapshot?.branches.map(\.name) == ["main"])
+    #expect(model.historyDescription(redo: false)?.title == "Restore 2 branches")
+    model.moveHistory(redo: false)
+    try await settle()
+    #expect(model.snapshot?.branches.map(\.name).sorted() == ["done-a", "done-b", "main"])
+    model.moveHistory(redo: true)
+    try await settle()
+    #expect(model.snapshot?.branches.map(\.name) == ["main"])
 }
 }

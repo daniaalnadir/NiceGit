@@ -98,6 +98,10 @@ struct CommandPaletteView: View {
                     enabled: hasRepository) { model.showingRepositorySettings = true },
             Command(id: "open", title: "Open repository...", detail: "⌘O", systemImage: "folder") { model.openRepository() },
             Command(id: "clone", title: "Clone repository...", detail: "", systemImage: "square.and.arrow.down") { model.showingClone = true },
+            Command(id: "content-search", title: "Search file contents", detail: "⌥⌘F · text in tracked files", systemImage: "text.magnifyingglass",
+                    enabled: hasRepository) { model.searchWorkingFiles() },
+            Command(id: "cleanup", title: "Clean up branches", detail: "Delete merged or inactive local branches", systemImage: "scissors",
+                    enabled: hasRepository && idle) { model.showingBranchCleanup = true },
             Command(id: "gitflow", title: "GitFlow", detail: "Start or finish feature, release, and hotfix branches", systemImage: "arrow.triangle.branch",
                     enabled: hasRepository) { model.showingGitFlow = true },
             Command(id: "lfs", title: "Git LFS", detail: "Tracked patterns and large files", systemImage: "externaldrive.badge.plus",
@@ -111,13 +115,11 @@ struct CommandPaletteView: View {
             list.append(Command(id: "prune-worktrees", title: "Forget missing worktrees", detail: "Worktree folders deleted outside Git",
                                 systemImage: "folder.badge.minus", enabled: idle) { model.pruneWorktrees() })
         }
-        if model.canUndoCommit {
-            list.append(Command(id: "undo", title: "Undo last commit", detail: "Keeps its changes staged", systemImage: "arrow.uturn.backward") {
-                model.moveCommitHistory(redo: false)
-            })
+        if model.canUndo, let undo = model.historyDescription(redo: false) {
+            list.append(Command(id: "undo", title: undo.title, detail: undo.detail, systemImage: "arrow.uturn.backward") { model.moveHistory(redo: false) })
         }
-        if model.canRedoCommit {
-            list.append(Command(id: "redo", title: "Redo commit", detail: "", systemImage: "arrow.uturn.forward") { model.moveCommitHistory(redo: true) })
+        if model.canRedo, let redo = model.historyDescription(redo: true) {
+            list.append(Command(id: "redo", title: redo.title, detail: redo.detail, systemImage: "arrow.uturn.forward") { model.moveHistory(redo: true) })
         }
         if let bisect = snapshot?.bisect {
             if bisect.firstBad == nil {

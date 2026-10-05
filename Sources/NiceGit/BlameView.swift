@@ -8,6 +8,8 @@ struct BlameRequest: Identifiable {
     /// The commit to blame, or nil for the working file.
     var revision: String?
     var revisionLabel: String?
+    /// A one-based line to scroll to and highlight, such as a search match.
+    var focusLine: Int?
 }
 
 /// Each line of a file beside the commit that last changed it. Newer changes are tinted more
@@ -49,13 +51,23 @@ struct BlameView: View {
                         Text("This file is empty.").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         GeometryReader { geometry in
-                            ScrollView([.vertical, .horizontal]) {
-                                LazyVStack(alignment: .leading, spacing: 0) {
-                                    ForEach(lines.indices, id: \.self) { index in
-                                        // Rows fill the view so separators and highlights span it.
-                                        row(index, ages: ages).frame(minWidth: geometry.size.width, alignment: .leading)
-                                    }
-                                }.padding(.vertical, 6)
+                            ScrollViewReader { proxy in
+                                ScrollView([.vertical, .horizontal]) {
+                                    LazyVStack(alignment: .leading, spacing: 0) {
+                                        ForEach(lines.indices, id: \.self) { index in
+                                            // Rows fill the view so separators and highlights span it.
+                                            row(index, ages: ages).frame(minWidth: geometry.size.width, alignment: .leading)
+                                                .overlay {
+                                                    if lines[index].number == request.focusLine { Color.yellow.opacity(0.18).allowsHitTesting(false) }
+                                                }
+                                                .id(lines[index].number)
+                                        }
+                                    }.padding(.vertical, 6)
+                                }
+                                .onAppear {
+                                    // Scroll vertically only, keeping the commit column in view.
+                                    if let line = request.focusLine { proxy.scrollTo(line, anchor: UnitPoint(x: 0, y: 0.3)) }
+                                }
                             }
                         }
                     }

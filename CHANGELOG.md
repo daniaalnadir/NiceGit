@@ -17,6 +17,8 @@
 - Undoable discards, a submodules sidebar section, and multi-commit cherry-pick.
 - Keyboard navigation in the graph and drag-and-drop merge or rebase.
 - Merge and rebase previews, automatic refresh after outside changes, and bisect.
+- Undo for merges, rebases, resets, pulls, cherry-picks, and branch deletions; branch
+  clean-up; and file content search at any commit.
 - Identity profiles, a Settings window with appearance and colour-blind-safe graph colours,
   GitFlow, and Git LFS tracking.
 - Amend with staged changes, side-by-side diffs, reflog recovery, stashing selected
