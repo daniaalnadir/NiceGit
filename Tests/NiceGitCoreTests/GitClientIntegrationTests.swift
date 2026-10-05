@@ -2772,3 +2772,80 @@ private func makeRebaseFixture() throws -> (GitClient, URL, [String]) {
     #expect(attributes.hasPrefix("*.txt text\n\"art files/*.png\" filter=lfs"))
     #expect(!attributes.contains("*.psd"))
 }
+
+@Test func mergePreviewPredictsConflictsWithoutTouchingTheCheckout() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    let write = { (name: String, text: String) in try text.write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
+    let commit = { (message: String) in try git.stageAll(in: root); try git.commit(message: message, in: root) }
+    try write("shared file.txt", "a\nb\n"); try write("other.txt", "x\n")
+    try commit("Base")
+    try git.createBranch(named: "clean", in: root)
+    try write("added.txt", "new\n"); try commit("Add file")
+    try git.checkout(branch: "main", in: root)
+    try git.createBranch(named: "clash", in: root)
+    try write("shared file.txt", "a\nCLASH\n"); try commit("Clash")
+    try git.checkout(branch: "main", in: root)
+
+    #expect(try git.previewMerge(of: "clean", in: root) == GitMergePreview(outcome: .fastForward, changedFileCount: 1, blockedByIgnoredFiles: false))
+    try write("shared file.txt", "a\nMAIN\n"); try commit("Main change")
+    #expect(try git.previewMerge(of: "clean", in: root) == GitMergePreview(outcome: .clean, changedFileCount: 1, blockedByIgnoredFiles: false))
+    try write("local.txt", "edit\n")
+    let before = try git.loadStatus(in: root)
+    let clash = try git.previewMerge(of: "clash", in: root)
+    #expect(clash.outcome == .conflicts(["shared file.txt"]))
+    #expect(try git.loadStatus(in: root) == before)
+    #expect(try git.currentOperation(in: root) == nil)
+    #expect(try git.previewMerge(of: "HEAD~1", in: root).outcome == .upToDate)
+
+    // An ignored local file where the incoming branch adds one blocks the merge.
+    try write(".gitignore", "added.txt\n"); try commit("Ignore")
+    try write("added.txt", "mine\n")
+    #expect(try git.previewMerge(of: "clean", in: root).blockedByIgnoredFiles)
+    #expect(throws: (any Error).self) { try git.previewMerge(of: "--output=x", in: root) }
+}
+
+@Test func bisectFindsTheFirstBadCommitAndReturnsToTheBranch() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let git = GitClient()
+    try git.initialize(at: root)
+    try git.setIdentity(name: "Test", email: "test@example.invalid", in: root)
+    var hashes: [String] = []
+    for number in 1...8 {
+        try (number >= 5 ? "broken \(number)\n" : "fine \(number)\n").write(to: root.appendingPathComponent("state.txt"), atomically: true, encoding: .utf8)
+        try git.stageAll(in: root)
+        try git.commit(message: "Change \(number)", in: root)
+        hashes.append(try #require(git.loadSnapshot(at: root).headHash))
+    }
+    #expect(try git.bisectStatus(in: root) == nil)
+    #expect(throws: (any Error).self) { try git.startBisect(bad: hashes[0], good: hashes[7], expectedBranch: "main", expectedHead: hashes[7], in: root) }
+    try "dirty\n".write(to: root.appendingPathComponent("state.txt"), atomically: true, encoding: .utf8)
+    #expect(throws: (any Error).self) { try git.startBisect(bad: "HEAD", good: hashes[0], expectedBranch: "main", expectedHead: hashes[7], in: root) }
+    try runGit(["checkout", "--quiet", "--", "state.txt"], in: root)
+
+    try git.startBisect(bad: "HEAD", good: hashes[0], expectedBranch: "main", expectedHead: hashes[7], in: root)
+    var status = try #require(try git.bisectStatus(in: root))
+    #expect(status.originalCheckout == "main" && status.bad == hashes[7] && status.good == [hashes[0]])
+    #expect((status.remainingSteps ?? 0) >= 2)
+    #expect(try git.loadSnapshot(at: root).bisect == status)
+    var marks = 0
+    while status.firstBad == nil && marks < 10 {
+        let content = try String(contentsOf: root.appendingPathComponent("state.txt"), encoding: .utf8)
+        try git.markBisect(content.hasPrefix("broken") ? .bad : .good, in: root)
+        status = try #require(try git.bisectStatus(in: root))
+        marks += 1
+    }
+    #expect(status.firstBad == hashes[4])
+    #expect(marks <= 3)
+
+    try git.endBisect(in: root)
+    let after = try git.loadSnapshot(at: root)
+    #expect(after.bisect == nil && after.currentBranch == "main" && after.headHash == hashes[7])
+    #expect(throws: (any Error).self) { try git.markBisect(.good, in: root) }
+}
