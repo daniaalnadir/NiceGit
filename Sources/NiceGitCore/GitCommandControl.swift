@@ -21,12 +21,22 @@ public final class GitCommandControl: @unchecked Sendable {
 }
 
 enum GitProcessWaiter {
-    static func wait(_ process: Process, control: GitCommandControl?, timeout: TimeInterval) throws {
+    /// Prepares `process` so the waiter learns of its exit as soon as it happens. Call before
+    /// `run()`: a handler installed afterwards could miss a process that has already exited.
+    static func prepare(_ process: Process) -> DispatchSemaphore {
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        return finished
+    }
+
+    /// Waits for a process started after `prepare`, waking only to check for cancellation and
+    /// the time limit. Polling `isRunning` instead added tens of milliseconds to every command.
+    static func wait(_ process: Process, finished: DispatchSemaphore, control: GitCommandControl?, timeout: TimeInterval) throws {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         let pid = process.processIdentifier
         // Only signal a group led by our own child, never the app's process group.
         let isolatedGroup = getpgid(pid) == pid
-        while process.isRunning {
+        while finished.wait(timeout: .now() + 0.05) == .timedOut {
             if control?.isCancelled == true || ProcessInfo.processInfo.systemUptime >= deadline {
                 let cancelled = control?.isCancelled == true
                 if isolatedGroup { kill(-pid, SIGTERM) }
@@ -40,8 +50,6 @@ enum GitProcessWaiter {
                 process.waitUntilExit()
                 throw GitClientError.commandFailed(command: "git", message: cancelled ? "Operation cancelled. Check the repository state before retrying." : "Git exceeded the command time limit. Refresh the repository before retrying.")
             }
-            Thread.sleep(forTimeInterval: 0.01)
         }
-        process.waitUntilExit()
     }
 }

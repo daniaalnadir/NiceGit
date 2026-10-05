@@ -9,6 +9,7 @@ import Darwin
     process.arguments = ["-c", "sleep 20 >/dev/null 2>&1 & echo $!; wait"]
     let output = Pipe()
     process.standardOutput = output
+    let finished = GitProcessWaiter.prepare(process)
     try process.run()
     let data = output.fileHandleForReading.availableData
     let child = try #require(Int32(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -16,7 +17,7 @@ import Darwin
     #expect(getpgid(process.processIdentifier) == process.processIdentifier)
     let control = GitCommandControl()
     control.cancel()
-    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, control: control, timeout: 30) }
+    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, finished: finished, control: control, timeout: 30) }
     #expect(!process.isRunning)
     let deadline = Date().addingTimeInterval(2)
     while kill(child, 0) == 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
@@ -27,9 +28,10 @@ import Darwin
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sleep")
     process.arguments = ["20"]
+    let finished = GitProcessWaiter.prepare(process)
     try process.run()
     let start = Date()
-    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, control: nil, timeout: 0.05) }
+    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, finished: finished, control: nil, timeout: 0.05) }
     #expect(!process.isRunning)
     #expect(Date().timeIntervalSince(start) < 3)
 }
@@ -38,9 +40,10 @@ import Darwin
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sleep")
     process.arguments = ["20"]
+    let finished = GitProcessWaiter.prepare(process)
     try process.run()
     let control = GitCommandControl()
     control.cancel()
-    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, control: control, timeout: 30) }
+    #expect(throws: (any Error).self) { try GitProcessWaiter.wait(process, finished: finished, control: control, timeout: 30) }
     #expect(!process.isRunning)
 }

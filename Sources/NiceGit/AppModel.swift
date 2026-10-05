@@ -109,15 +109,16 @@ final class AppModel: ObservableObject {
                     if redo { try git.deleteRestoredBranch(deletion, in: url) } else { try git.restoreBranch(deletion, in: url) }
                 }
             }
-        }, onSuccess: { self.historyStep?.undone = !redo })
+        }, reusingSnapshot: true, onSuccess: { self.historyStep?.undone = !redo })
     }
 
     /// Runs an action that may move the current branch, offering it for undo when it does,
     /// unless it stopped partway, for example on a conflict.
-    private func runRecordingBranchMove(_ label: String, mode: HistoryStep.UndoMode = .keep, onSuccess: @escaping () -> Void = {},
+    private func runRecordingBranchMove(_ label: String, mode: HistoryStep.UndoMode = .keep, reusingSnapshot: Bool = false, onSuccess: @escaping () -> Void = {},
                                         action: @escaping @Sendable (GitClient, URL) throws -> Void) {
         let previous = snapshot
-        runRepositoryAction(action, onSuccess: onSuccess, onRefreshed: { self.recordBranchMove(label, from: previous, mode: mode) })
+        runRepositoryAction(action, reusingSnapshot: reusingSnapshot, onSuccess: onSuccess,
+                            onRefreshed: { self.recordBranchMove(label, from: previous, mode: mode) })
     }
 
     private func recordBranchMove(_ label: String, from previous: RepositorySnapshot?, mode: HistoryStep.UndoMode) {
@@ -191,6 +192,7 @@ final class AppModel: ObservableObject {
     }
     private var activationRefreshPending = false
     private let snapshotLoader: @Sendable (GitClient, URL, Int) throws -> RepositorySnapshot
+    private let canReuseSnapshots: Bool
 
     func createTag(name: String, target: String, message: String? = nil) {
         runRepositoryAction({ git, url in try git.createTag(name: name, target: target, message: message, in: url) }, onSuccess: { self.taggingCommit = nil })
@@ -328,7 +330,7 @@ final class AppModel: ObservableObject {
 
     func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String) {
         guard requireSavedFileEdits(before: "cherry-picking") else { return }
-        runRecordingBranchMove("cherry-pick") { git, url in try git.cherryPick(commits, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url) }
+        runRecordingBranchMove("cherry-pick", reusingSnapshot: true) { git, url in try git.cherryPick(commits, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url) }
     }
 
     func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil) {
@@ -350,7 +352,7 @@ final class AppModel: ObservableObject {
     func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String) {
         guard requireSavedFileEdits(before: "resetting") else { return }
         let reviewID = fileReviewSelection?.id
-        runRecordingBranchMove("reset", mode: mode == .soft ? .soft : mode == .mixed ? .mixed : .keep, onSuccess: {
+        runRecordingBranchMove("reset", mode: mode == .soft ? .soft : mode == .mixed ? .mixed : .keep, reusingSnapshot: true, onSuccess: {
             if self.fileReviewSelection?.id == reviewID { self.fileReviewSelection = nil }
         }) { git, url in
             try git.reset(to: target, mode: mode, expectedHead: expectedHead, expectedBranch: expectedBranch, in: url)
@@ -513,10 +515,11 @@ final class AppModel: ObservableObject {
     private var didRestoreSession = false
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard, snapshotLoader: @escaping @Sendable (GitClient, URL, Int) throws -> RepositorySnapshot = { git, url, limit in
-        try git.loadSnapshot(at: url, historyLimit: limit)
-    }) {
-        self.snapshotLoader = snapshotLoader
+    /// A custom `snapshotLoader` (as in tests) handles every refresh; the built-in one can also
+    /// carry over unchanged parts of the previous snapshot after commits and resets.
+    init(defaults: UserDefaults = .standard, snapshotLoader: (@Sendable (GitClient, URL, Int) throws -> RepositorySnapshot)? = nil) {
+        self.snapshotLoader = snapshotLoader ?? { git, url, limit in try git.loadSnapshot(at: url, historyLimit: limit) }
+        self.canReuseSnapshots = snapshotLoader == nil
         self.defaults = defaults
         commitDrafts = defaults.dictionary(forKey: draftKey) as? [String: String] ?? [:]
         if let data = defaults.data(forKey: tabsKey),
@@ -589,22 +592,24 @@ final class AppModel: ObservableObject {
         loadRepository(at: url)
     }
 
-    func loadRepository(at url: URL) {
+    /// Opens or reloads a repository. Deliberate loads also refresh the index's cached file
+    /// information; automatic refreshes leave the index alone so they never contend for its lock.
+    func loadRepository(at url: URL, refreshingIndex: Bool = true) {
         guard !isLoading else { return }
         if url.standardizedFileURL.path != repositoryURL?.standardizedFileURL.path {
             guard confirmDiscardFileEdits() else { return }
             historyLimit = 200
             fileReviewSelection = nil
         }
-        perform(at: url, action: { _, _ in }, reportsActionCompletion: false)
+        perform(at: url, action: { _, _ in }, refreshingIndex: refreshingIndex, reportsActionCompletion: false)
     }
 
-    func refresh() {
+    func refresh(refreshingIndex: Bool = true) {
         guard let repositoryURL else {
             return
         }
 
-        loadRepository(at: repositoryURL)
+        loadRepository(at: repositoryURL, refreshingIndex: refreshingIndex)
     }
 
     func refreshOnActivation() {
@@ -616,7 +621,7 @@ final class AppModel: ObservableObject {
     func refreshAfterReview() {
         guard activationRefreshPending, canRefreshQuietly else { return }
         activationRefreshPending = false
-        refresh()
+        refresh(refreshingIndex: false)
     }
 
     /// Refreshing now would not disturb an action, an error, or a dialog the user is reviewing.
@@ -701,8 +706,9 @@ final class AppModel: ObservableObject {
     }
 
     func unstage(_ entry: GitStatusEntry) {
+        let hasHead = snapshot?.headHash != nil
         runWorkingTreeAction { git, url in
-            try git.unstage(path: entry.path, originalPath: entry.originalPath, in: url)
+            try git.unstage(path: entry.path, originalPath: entry.originalPath, headKnownToExist: hasHead, in: url)
         }
     }
 
@@ -720,9 +726,12 @@ final class AppModel: ObservableObject {
         }
         guard let url = repositoryURL else { return }
         let outcome = DiscardOutcome()
+        let prefetched = PrefetchedStatus()
         perform(at: url, action: { git, url in
-            outcome.record(try git.discardKeepingUndo(entry, in: url))
-        }, statusOnly: true, onActionSuccess: {
+            let result = try git.discardKeepingUndoWithStatus(entry, in: url)
+            outcome.record(result.undo)
+            prefetched.store((result.status, result.operation))
+        }, statusOnly: true, prefetchedStatus: prefetched, onActionSuccess: {
             if let undo = outcome.value {
                 self.discardUndos.append((url.path, undo))
                 self.discardUndos = Array(self.discardUndos.suffix(20))
@@ -772,7 +781,7 @@ final class AppModel: ObservableObject {
         let previous = snapshot
         perform(at: url, action: { git, url in
             try git.commit(message: message, in: url)
-        }, onActionSuccess: {
+        }, reusingSnapshot: true, onActionSuccess: {
             if self.fileReviewSelection?.id == reviewID && !self.fileReviewHasEdits {
                 self.fileReviewSelection = nil
             }
@@ -791,7 +800,7 @@ final class AppModel: ObservableObject {
         let previous = snapshot
         perform(at: url, action: { git, url in
             try git.amendCommit(message: message, expectedBranch: expectedBranch, expectedHead: expectedHead, in: url)
-        }, onActionSuccess: onSuccess, onSuccess: { self.recordBranchMove("amend", from: previous, mode: .soft) })
+        }, reusingSnapshot: true, onActionSuccess: onSuccess, onSuccess: { self.recordBranchMove("amend", from: previous, mode: .soft) })
     }
 
     func checkout(branch: GitBranch) {
@@ -943,17 +952,23 @@ final class AppModel: ObservableObject {
         perform(at: repositoryURL, action: action, statusOnly: true)
     }
 
-    private func runRepositoryAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void, onSuccess: @escaping () -> Void = {}, onRefreshed: @escaping () -> Void = {}) {
+    private func runRepositoryAction(_ action: @escaping @Sendable (GitClient, URL) throws -> Void, reusingSnapshot: Bool = false,
+                                     onSuccess: @escaping () -> Void = {}, onRefreshed: @escaping () -> Void = {}) {
         guard let repositoryURL else { return }
-        perform(at: repositoryURL, action: action, onActionSuccess: onSuccess, onSuccess: onRefreshed)
+        perform(at: repositoryURL, action: action, reusingSnapshot: reusingSnapshot, onActionSuccess: onSuccess, onSuccess: onRefreshed)
     }
 
-    func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, reportsActionCompletion: Bool = true, onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
+    /// Runs a Git action, then refreshes. `reusingSnapshot` is for actions that cannot change
+    /// remotes, worktrees, tags, or stashes, so the refresh carries those over.
+    func perform(at url: URL, action: @escaping @Sendable (GitClient, URL) throws -> Void, statusOnly: Bool = false, prefetchedStatus: PrefetchedStatus? = nil,
+                 reusingSnapshot: Bool = false, refreshingIndex: Bool = false, reportsActionCompletion: Bool = true,
+                 onActionSuccess: (() -> Void)? = nil, onSuccess: @escaping () -> Void = {}) {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         let limit = historyLimit
         let loadSnapshot = snapshotLoader
+        let canReuse = canReuseSnapshots
         let previous = snapshot
         Task {
             defer { isLoading = false }
@@ -966,17 +981,22 @@ final class AppModel: ObservableObject {
                 actionCompleted = true
                 onActionSuccess?()
                 let updated = try await Task.detached {
-                    let git = GitClient()
+                    // A deliberate load lets status refresh the index in the same pass.
+                    let git = GitClient(statusUpdatesIndex: refreshingIndex)
                     if statusOnly, var cached = previous, cached.rootPath == url.path {
-                        let current = try git.loadStatusWithCheckout(in: url)
+                        // An action that already read the status afterwards supplies it, saving a second read.
+                        let (current, operation) = try prefetchedStatus?.value ?? git.loadStatusWithCheckoutAndOperation(in: url)
                         let sameBranch = current.branch == cached.currentBranch ||
                             (current.branch == "(detached)" && cached.currentBranch.hasPrefix("Detached HEAD "))
                         if current.isComplete, sameBranch, current.headHash == cached.headHash,
-                           try git.currentOperation(in: url) == cached.operation {
+                           operation == cached.operation {
                             cached.status = current.entries
                             cached.lastUpdated = Date()
                             return cached
                         }
+                    }
+                    if reusingSnapshot, canReuse, let previous, previous.rootPath == url.path {
+                        return try git.loadSnapshot(at: url, historyLimit: limit, reusing: previous)
                     }
                     return try loadSnapshot(git, url, limit)
                 }.value
@@ -1082,6 +1102,22 @@ private final class ActionOutcome<Value: Sendable>: @unchecked Sendable {
     var value: Value? {
         lock.lock()
         defer { lock.unlock() }
+        return stored
+    }
+}
+
+/// The status an action read after changing files, offered to the refresh that follows.
+final class PrefetchedStatus: @unchecked Sendable {
+    typealias Value = (status: (entries: [GitStatusEntry], branch: String?, headHash: String?, isComplete: Bool), operation: GitOperation?)
+    private let lock = NSLock()
+    private var stored: Value?
+
+    func store(_ value: Value) {
+        lock.lock(); stored = value; lock.unlock()
+    }
+
+    var value: Value? {
+        lock.lock(); defer { lock.unlock() }
         return stored
     }
 }

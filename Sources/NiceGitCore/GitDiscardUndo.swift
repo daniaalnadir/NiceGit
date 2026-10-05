@@ -19,12 +19,41 @@ extension GitClient {
     /// still discards) for paths that cannot be restored exactly: renames, copies, conflicts,
     /// submodules, and folders.
     public func discardKeepingUndo(_ entry: GitStatusEntry, in url: URL) throws -> GitDiscardUndo? {
+        try discardKeepingUndoWithStatus(entry, in: url).undo
+    }
+
+    /// Discards like `discardKeepingUndo` and also returns the status read to verify it, with
+    /// branch headers and operation, so the caller need not read the status again.
+    public func discardKeepingUndoWithStatus(_ entry: GitStatusEntry, in url: URL) throws
+        -> (undo: GitDiscardUndo?, status: (entries: [GitStatusEntry], branch: String?, headHash: String?, isComplete: Bool), operation: GitOperation?) {
         let supported = entry.originalPath == nil && entry.kind != .conflicted && entry.kind != .renamed && !entry.path.hasSuffix("/")
-        let before = supported ? try? (indexVersion(entry.path, in: url), workingVersion(entry.path, in: url, store: true)) : nil
-        try discard(entry, in: url)
-        guard let before, before.0?.mode != "160000", before.0 != nil || before.1 != nil else { return nil }
-        return GitDiscardUndo(path: entry.path, indexBefore: before.0, workingBefore: before.1,
-                              indexAfter: try indexVersion(entry.path, in: url), workingAfter: try workingVersion(entry.path, in: url, store: false))
+        // Validate, check for HEAD, and save both versions of the file at the same time.
+        var status: Result<[GitStatusEntry], Error> = .success([])
+        var hasHead = false
+        var indexBefore: Result<GitDiscardUndo.Version?, Error> = .success(nil)
+        var workingBefore: Result<GitDiscardUndo.Version?, Error> = .success(nil)
+        inParallel(
+            { status = Result { try self.loadStatus(in: url, paths: [entry.path] + [entry.originalPath].compactMap { $0 }) } },
+            { hasHead = (try? self.run(["rev-parse", "--verify", "HEAD"], in: url)) != nil },
+            { if supported { indexBefore = Result { try self.indexVersion(entry.path, in: url) } } },
+            { if supported { workingBefore = Result { try self.workingVersion(entry.path, in: url, store: true) } } })
+        try discard(entry, statusBefore: status.get(), hasHead: hasHead, in: url)
+
+        var statusAfter: Result<(status: (entries: [GitStatusEntry], branch: String?, headHash: String?, isComplete: Bool), operation: GitOperation?), Error> = .success(((entries: [], branch: nil, headHash: nil, isComplete: false), nil))
+        var indexAfter: Result<GitDiscardUndo.Version?, Error> = .success(nil)
+        var workingAfter: Result<GitDiscardUndo.Version?, Error> = .success(nil)
+        inParallel(
+            { statusAfter = Result { try self.loadStatusWithCheckoutAndOperation(in: url) } },
+            { if supported { indexAfter = Result { try self.indexVersion(entry.path, in: url) } } },
+            { if supported { workingAfter = Result { try self.workingVersion(entry.path, in: url, store: false) } } })
+        let after = try statusAfter.get()
+        try verifyDiscard(entry, statusAfter: after.status.entries)
+
+        // Paths whose versions could not be saved, such as folders, are discarded without undo.
+        guard supported, let before = try? (indexBefore.get(), workingBefore.get()),
+              before.0?.mode != "160000", before.0 != nil || before.1 != nil else { return (nil, after.status, after.operation) }
+        return (GitDiscardUndo(path: entry.path, indexBefore: before.0, workingBefore: before.1,
+                               indexAfter: try indexAfter.get(), workingAfter: try workingAfter.get()), after.status, after.operation)
     }
 
     /// Puts back the staged and working versions a discard removed. Refuses if the path has

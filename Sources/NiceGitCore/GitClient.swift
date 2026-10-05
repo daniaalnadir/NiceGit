@@ -5,10 +5,15 @@ public struct GitClient: Sendable {
 
     private let control: GitCommandControl?
     private let commandTimeout: TimeInterval
+    /// Lets `git status` save refreshed file information to the index, as it normally would.
+    /// Only deliberate loads use this; automatic refreshes leave the index untouched so they
+    /// never contend for its lock with the user's own Git commands.
+    private let statusUpdatesIndex: Bool
 
-    public init(control: GitCommandControl? = nil, commandTimeout: TimeInterval = 600) {
+    public init(control: GitCommandControl? = nil, commandTimeout: TimeInterval = 600, statusUpdatesIndex: Bool = false) {
         self.control = control
         self.commandTimeout = commandTimeout
+        self.statusUpdatesIndex = statusUpdatesIndex
     }
 
     public func resolveConflictSide(path: String, incoming: Bool, in url: URL) throws {
@@ -23,7 +28,7 @@ public struct GitClient: Sendable {
     }
 
     private func requireConflict(path: String, in url: URL) throws {
-        guard try loadSnapshot(at: url).status.contains(where: { $0.path == path && $0.kind == .conflicted }) else {
+        guard try loadStatus(in: url).contains(where: { $0.path == path && $0.kind == .conflicted }) else {
             throw GitClientError.commandFailed(command: "resolve conflict", message: "This file no longer has an unresolved conflict.")
         }
     }
@@ -125,7 +130,7 @@ public struct GitClient: Sendable {
     /// commits are refused because each needs a chosen parent. Conflicts stop the sequence for
     /// Continue or Abort, like a single cherry-pick.
     public func cherryPick(_ commits: [String], expectedHead: String?, expectedBranch: String, in url: URL) throws {
-        let snapshot = try loadSnapshot(at: url)
+        let snapshot = try checkoutState(in: url, includingStatus: true)
         guard snapshot.headHash == expectedHead, snapshot.currentBranch == expectedBranch else {
             throw GitClientError.commandFailed(command: "cherry-pick", message: "The current branch or HEAD changed since this action was selected. Refresh and review the operation again.")
         }
@@ -146,7 +151,7 @@ public struct GitClient: Sendable {
     }
 
     public func start(_ operation: GitOperation, target: String, mainline: Int? = nil, expectedHead: String? = nil, expectedBranch: String? = nil, expectedSourceBranch: GitBranch? = nil, in url: URL) throws {
-        let snapshot = try loadSnapshot(at: url)
+        let snapshot = try checkoutState(in: url, includingStatus: true)
         guard expectedHead == nil || snapshot.headHash == expectedHead,
               expectedBranch == nil || snapshot.currentBranch == expectedBranch else {
             throw GitClientError.commandFailed(command: operation.rawValue, message: "The current branch or HEAD changed since this action was selected. Refresh and review the operation again.")
@@ -200,12 +205,10 @@ public struct GitClient: Sendable {
     }
 
     public func reset(to target: String, mode: GitResetMode, expectedHead: String, expectedBranch: String, in url: URL) throws {
-        let snapshot = try loadSnapshot(at: url)
+        let (snapshot, hash) = try checkoutState(in: url, resolving: target)
         guard snapshot.operation == nil, snapshot.headHash == expectedHead, snapshot.currentBranch == expectedBranch else {
             throw GitClientError.commandFailed(command: "reset", message: "The checkout changed or a Git operation is in progress. Refresh and review the reset again.")
         }
-        let hash = try run(["rev-parse", "--verify", "--end-of-options", target + "^{commit}"], in: url)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
         try run(["reset", "--" + mode.rawValue, hash, "--"], in: url)
     }
 
@@ -221,11 +224,16 @@ public struct GitClient: Sendable {
         try currentOperation(gitDirectory: gitDirectory(in: url))
     }
 
-    /// This checkout's own Git directory (per worktree), as an absolute path.
+    /// This checkout's own Git directory (per worktree), as an absolute path. Remembered per
+    /// checkout while it still holds a HEAD file, so routine refreshes need not ask Git again.
     func gitDirectory(in url: URL) throws -> URL {
+        if let cached = GitDirectoryCache.shared[url.path],
+           FileManager.default.fileExists(atPath: cached.appendingPathComponent("HEAD").path) { return cached }
         var gitDirectory = try run(["rev-parse", "--absolute-git-dir"], in: url)
         if gitDirectory.hasSuffix("\n") { gitDirectory.removeLast() }
-        return URL(fileURLWithPath: gitDirectory, isDirectory: true)
+        let directory = URL(fileURLWithPath: gitDirectory, isDirectory: true)
+        GitDirectoryCache.shared[url.path] = directory
+        return directory
     }
 
     func currentOperation(gitDirectory directory: URL) throws -> GitOperation? {
@@ -443,28 +451,45 @@ public struct GitClient: Sendable {
             .split(separator: "\0").map(String.init).sorted()
     }
 
-    public func loadSnapshot(at selectedURL: URL, historyLimit: Int = 200) throws -> RepositorySnapshot {
-        let rootPath = try repositoryRoot(for: selectedURL)
+    /// Reads the repository's state. With `reusing`, a snapshot of the same repository taken just
+    /// before an action that cannot change remotes, worktrees, tags, or stashes (such as a commit
+    /// or reset), those are carried over instead of read again.
+    public func loadSnapshot(at selectedURL: URL, historyLimit: Int = 200, reusing previous: RepositorySnapshot? = nil) throws -> RepositorySnapshot {
+        let rootPath = try knownRepositoryRoot(selectedURL) ?? repositoryRoot(for: selectedURL)
         let rootURL = URL(fileURLWithPath: rootPath)
-        let status = try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], in: rootURL))
-        let branches = try GitBranchParser.parse(run(["branch", "--all", "--format=" + GitBranchParser.format], in: rootURL), includesSymref: true)
+        let limit = max(1, historyLimit)
+        let logFormat = "%H%x1f%h%x1f%P%x1f%(decorate:prefix=,suffix=,separator=%x1d,pointer=%x1c,tag=tag: )%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
+        // These reads are independent, so run them together: a refresh then takes about as long
+        // as its slowest command rather than the sum of all of them. `--all` includes HEAD.
+        let reused = previous?.rootPath == rootPath ? previous : nil
+        // A Git directory already found for this checkout needs no `rev-parse`.
+        let cachedGitDirectory = GitDirectoryCache.shared[rootURL.path].flatMap {
+            FileManager.default.fileExists(atPath: $0.appendingPathComponent("HEAD").path) ? $0 : nil
+        }
+        // Index 3-5 are skipped (left empty) when reusing; their results come from `reused`.
+        let skipped: [[String]] = reused == nil ? [] : [[], [], []]
+        let reads = try runConcurrently([
+            ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+            ["branch", "--all", "--format=" + GitBranchParser.format],
+            ["log", "--exclude=refs/stash", "--all", "--topo-order", "--decorate=short", "--date=relative",
+             "-n", String(limit + 1), "--pretty=format:" + logFormat, "--"],
+        ] + (reused == nil ? [
+            ["remote", "-v"],
+            ["worktree", "list", "--porcelain", "-z"],
+            ["for-each-ref", "--sort=-version:refname", "--format=%(refname:strip=2)%09%(objectname)", "refs/tags"],
+        ] : skipped) + [
+            ["rev-parse", "--absolute-git-dir"],
+            // Git resolves the current branch's upstream itself, so this need not wait for the
+            // branch listing; it fails harmlessly when there is no upstream.
+            ["rev-list", "--left-right", "--count", "HEAD...@{upstream}", "--"],
+        ], in: rootURL, optional: [7], skipping: Set(reused == nil ? [] : [3, 4, 5]).union(cachedGitDirectory == nil ? [] : [6]),
+           alongside: { try reused?.stashes ?? self.listStashes(in: rootURL) })
+        let status = try GitStatusParser.parseNullTerminated(reads.outputs[0])
+        let branches = GitBranchParser.parse(reads.outputs[1], includesSymref: true)
         let current = branches.first(where: \.isCurrent)
         let branch = current.flatMap { $0.name.hasPrefix("(") ? nil : $0.name } ?? currentBranch(in: rootURL)
         let headHash = current?.tip
-        let head = headHash != nil ? ["HEAD"] : []
-        let limit = max(1, historyLimit)
-        let logFormat = "%H%x1f%h%x1f%P%x1f%(decorate:prefix=,suffix=,separator=%x1d,pointer=%x1c,tag=tag: )%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e"
-        let commits = GitLogParser.parse(try run([
-            "log",
-            "--exclude=refs/stash",
-            "--all",
-            "--topo-order",
-            "--decorate=short",
-            "--date=relative",
-            "-n",
-            String(limit + 1),
-            "--pretty=format:" + logFormat
-        ] + head + ["--"], in: rootURL))
+        let commits = GitLogParser.parse(reads.outputs[2])
         var visibleCommits = Array(commits.prefix(limit))
         if let headHash, !visibleCommits.contains(where: { $0.hash == headHash }) {
             if let headCommit = commits.first(where: { $0.hash == headHash }) {
@@ -474,7 +499,8 @@ public struct GitClient: Sendable {
                 visibleCommits.append(contentsOf: headCommit.prefix(1))
             }
         }
-        let remoteOutput = try run(["remote", "-v"], in: rootURL)
+        let remoteOutput = reads.outputs[3]
+        let reusedRemotes = reused.map { ($0.remotes, $0.remoteAddresses, $0.remoteFetchAddresses, $0.remotePushAddresses) }
         let remotes = GitRemoteParser.parse(remoteOutput)
 
         var snapshot = RepositorySnapshot(
@@ -489,10 +515,17 @@ public struct GitClient: Sendable {
         snapshot.remoteAddresses = GitRemoteParser.addresses(remoteOutput)
         snapshot.remoteFetchAddresses = GitRemoteParser.allAddresses(remoteOutput, direction: "fetch")
         snapshot.remotePushAddresses = GitRemoteParser.allAddresses(remoteOutput, direction: "push")
-        snapshot.stashes = try listStashes(in: rootURL)
+        if let reusedRemotes {
+            (snapshot.remotes, snapshot.remoteAddresses, snapshot.remoteFetchAddresses, snapshot.remotePushAddresses) = reusedRemotes
+        }
+        snapshot.stashes = try reads.alongside.get()
         snapshot.headHash = headHash
-        snapshot.worktrees = GitWorktree.parse(try run(["worktree", "list", "--porcelain", "-z"], in: rootURL))
-        let tagLines = try run(["for-each-ref", "--sort=-version:refname", "--format=%(refname:strip=2)%09%(objectname)", "refs/tags"], in: rootURL)
+        snapshot.worktrees = reused?.worktrees ?? GitWorktree.parse(reads.outputs[4])
+        if let reused {
+            snapshot.tags = reused.tags
+            snapshot.tagTips = reused.tagTips
+        }
+        let tagLines = reused == nil ? reads.outputs[5] : ""
         for line in tagLines.split(separator: "\n") {
             let parts = line.split(separator: "\t", maxSplits: 1)
             guard parts.count == 2 else { continue }
@@ -500,8 +533,8 @@ public struct GitClient: Sendable {
             snapshot.tags.append(name)
             snapshot.tagTips[name] = String(parts[1])
         }
-        if let upstream = current?.upstream,
-           let counts = try? run(["rev-list", "--left-right", "--count", "HEAD..." + upstream, "--"], in: rootURL) {
+        if let upstream = current?.upstream, !reads.outputs[7].isEmpty {
+            let counts = reads.outputs[7]
             let values = counts.split(whereSeparator: { $0.isWhitespace }).compactMap { Int($0) }
             snapshot.upstream = upstream.hasPrefix("refs/remotes/") ? String(upstream.dropFirst("refs/remotes/".count)) :
                 (upstream.hasPrefix("refs/heads/") ? String(upstream.dropFirst("refs/heads/".count)) : upstream)
@@ -511,13 +544,88 @@ public struct GitClient: Sendable {
             }
         }
         snapshot.hasMoreCommits = commits.count > limit
-        let gitDirectory = try gitDirectory(in: rootURL)
+        var gitPath = reads.outputs[6]
+        // Paths can contain newlines; remove only Git's final line terminator.
+        if gitPath.hasSuffix("\n") { gitPath.removeLast() }
+        let gitDirectory = cachedGitDirectory ?? URL(fileURLWithPath: gitPath, isDirectory: true)
+        GitDirectoryCache.shared[rootURL.path] = gitDirectory
         snapshot.operation = try currentOperation(gitDirectory: gitDirectory)
         // Only read bisect details while one is running; most refreshes check a single file.
         if FileManager.default.fileExists(atPath: gitDirectory.appendingPathComponent("BISECT_START").path) {
             snapshot.bisect = try? bisectStatus(gitDirectory: gitDirectory, in: rootURL)
         }
         return snapshot
+    }
+
+    /// Runs independent read-only commands at the same time, plus one extra piece of work,
+    /// returning outputs in order. The first failure is rethrown after all have finished.
+    func runConcurrently<Extra: Sendable>(_ commands: [[String]], in url: URL, optional: Set<Int> = [], skipping: Set<Int> = [],
+                                          alongside: @escaping @Sendable () throws -> Extra) throws -> (outputs: [String], alongside: Result<Extra, Error>) {
+        let results = ConcurrentResults<Extra>(count: commands.count)
+        // Starting every process at once makes each slower; a few at a time finishes sooner.
+        let slots = DispatchSemaphore(value: Self.concurrentCommandLimit)
+        DispatchQueue.concurrentPerform(iterations: commands.count + 1) { index in
+            slots.wait()
+            defer { slots.signal() }
+            if index == commands.count {
+                let value = Result { try alongside() }
+                results.lock.lock(); results.extra = value; results.lock.unlock()
+            } else {
+                // Skipped slots keep their position so callers can index results; they stay empty.
+                let value = skipping.contains(index) ? .success("") : Result { try self.run(commands[index], in: url) }
+                results.lock.lock(); results.outputs[index] = value; results.lock.unlock()
+            }
+        }
+        // Commands listed in `optional` may fail; their output is then empty.
+        return (try results.outputs.enumerated().map { index, result in optional.contains(index) ? ((try? result!.get()) ?? "") : try result!.get() }, results.extra!)
+    }
+
+    /// The checkout's branch, HEAD, unfinished operation, and optionally its file status, read
+    /// together. Actions use this to confirm the checkout they were chosen for; a full snapshot
+    /// would read far more than they need.
+    public struct CheckoutState: Sendable {
+        public let currentBranch: String
+        public let headHash: String?
+        public let operation: GitOperation?
+        public let status: [GitStatusEntry]
+    }
+
+    public func checkoutState(in url: URL, includingStatus: Bool = false) throws -> CheckoutState {
+        let reads = try runConcurrently(
+            [["branch", "--show-current"], ["rev-parse", "--verify", "--quiet", "HEAD"]]
+                + (includingStatus ? [["status", "--porcelain=v1", "-z", "--untracked-files=all"]] : []),
+            in: url, optional: [1], alongside: { try self.currentOperation(in: url) })
+        let head = reads.outputs[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        var branch = reads.outputs[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        // A detached HEAD has no branch name; describe it as the snapshot does.
+        if branch.isEmpty { branch = currentBranch(in: url) }
+        return CheckoutState(currentBranch: branch, headHash: head.isEmpty ? nil : head, operation: try reads.alongside.get(),
+                             status: includingStatus ? try GitStatusParser.parseNullTerminated(reads.outputs[2]) : [])
+    }
+
+    /// The checkout state, and `revision` resolved to a commit, read at the same time.
+    func checkoutState(in url: URL, resolving revision: String) throws -> (CheckoutState, String) {
+        var state: Result<CheckoutState, Error> = .success(CheckoutState(currentBranch: "", headHash: nil, operation: nil, status: []))
+        var commit: Result<String, Error> = .success("")
+        inParallel(
+            { state = Result { try self.checkoutState(in: url) } },
+            { commit = Result { try self.run(["rev-parse", "--verify", "--end-of-options", revision + "^{commit}"], in: url).trimmingCharacters(in: .whitespacesAndNewlines) } })
+        return (try state.get(), try commit.get())
+    }
+
+    /// The repository root without running Git, when `url` itself holds the `.git` entry of a
+    /// checkout, linked worktree, or submodule. Resolved like Git's own `--show-toplevel`.
+    private func knownRepositoryRoot(_ url: URL) throws -> String? {
+        guard (try? FileManager.default.attributesOfItem(atPath: url.appendingPathComponent(".git").path)) != nil,
+              let resolved = realpath(url.path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    /// Status for just these paths, for confirming a selected file has not changed. Cheaper
+    /// than a full status, which also walks every other directory for untracked files.
+    func loadStatus(in repositoryURL: URL, paths: [String]) throws -> [GitStatusEntry] {
+        try GitStatusParser.parseNullTerminated(run(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--"] + paths, in: repositoryURL))
     }
 
     public func loadStatus(in repositoryURL: URL) throws -> [GitStatusEntry] {
@@ -528,6 +636,13 @@ public struct GitClient: Sendable {
         GitStatusParser.parseWithCheckout(try run(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], in: repositoryURL))
     }
 
+    /// Status with branch headers and the unfinished operation, read at the same time.
+    public func loadStatusWithCheckoutAndOperation(in repositoryURL: URL) throws -> (status: (entries: [GitStatusEntry], branch: String?, headHash: String?, isComplete: Bool), operation: GitOperation?) {
+        let reads = try runConcurrently([["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"]], in: repositoryURL,
+                                        alongside: { try self.currentOperation(in: repositoryURL) })
+        return (GitStatusParser.parseWithCheckout(reads.outputs[0]), try reads.alongside.get())
+    }
+
     public func stage(path: String, in repositoryURL: URL) throws {
         try run(["add", "--", path], in: repositoryURL)
     }
@@ -536,7 +651,9 @@ public struct GitClient: Sendable {
         try run(["add", "--all"], in: repositoryURL)
     }
 
-    public func unstage(path: String, originalPath: String? = nil, in repositoryURL: URL) throws {
+    /// With `headKnownToExist`, the usual restore runs straight away; the check for a repository
+    /// without commits happens only if that restore fails.
+    public func unstage(path: String, originalPath: String? = nil, headKnownToExist: Bool = false, in repositoryURL: URL) throws {
         var renameSource: String?
         if let originalPath {
             guard let entry = try loadStatus(in: repositoryURL).first(where: { $0.path == path && $0.originalPath == originalPath }) else {
@@ -544,10 +661,12 @@ public struct GitClient: Sendable {
             }
             if entry.kind == .renamed { renameSource = originalPath }
         }
+        let restore = ["restore", "--staged", "--", path] + (renameSource.map { [$0] } ?? [])
+        if headKnownToExist, (try? run(restore, in: repositoryURL)) != nil { return }
         if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
             try run(["rm", "--cached", "--force", "--", path], in: repositoryURL)
         } else {
-            try run(["restore", "--staged", "--", path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
+            try run(restore, in: repositoryURL)
         }
     }
 
@@ -560,23 +679,45 @@ public struct GitClient: Sendable {
     }
 
     public func discard(_ entry: GitStatusEntry, in repositoryURL: URL) throws {
-        guard try loadStatus(in: repositoryURL).contains(entry) else {
+        var status: Result<[GitStatusEntry], Error> = .success([])
+        var hasHead = false
+        inParallel(
+            { status = Result { try self.loadStatus(in: repositoryURL, paths: [entry.path] + [entry.originalPath].compactMap { $0 }) } },
+            { hasHead = (try? self.run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) != nil })
+        try discard(entry, statusBefore: status.get(), hasHead: hasHead, in: repositoryURL)
+        try verifyDiscard(entry, statusAfter: loadStatus(in: repositoryURL))
+    }
+
+    /// Runs the discard itself once the caller has confirmed the status still lists `entry`.
+    func discard(_ entry: GitStatusEntry, statusBefore: [GitStatusEntry], hasHead: Bool, in repositoryURL: URL) throws {
+        guard statusBefore.contains(entry) else {
             throw GitClientError.commandFailed(command: "discard", message: "This file changed since it was selected. Refresh and review it again.")
         }
         let renameSource = entry.kind == .renamed ? entry.originalPath : nil
         if entry.kind == .untracked {
             try run(["clean", "--force", "--", entry.path], in: repositoryURL)
-        } else if (try? run(["rev-parse", "--verify", "HEAD"], in: repositoryURL)) == nil {
+        } else if !hasHead {
             try run(["rm", "--force", "--", entry.path], in: repositoryURL)
         } else {
             try run(["restore", "--source=HEAD", "--staged", "--worktree", "--", entry.path] + (renameSource.map { [$0] } ?? []), in: repositoryURL)
         }
-        if try loadStatus(in: repositoryURL).contains(where: { $0.path == entry.path || $0.path == renameSource }) {
+    }
+
+    /// Git can report success while changes remain, for example in a dirty submodule.
+    func verifyDiscard(_ entry: GitStatusEntry, statusAfter: [GitStatusEntry]) throws {
+        let renameSource = entry.kind == .renamed ? entry.originalPath : nil
+        if statusAfter.contains(where: { $0.path == entry.path || $0.path == renameSource }) {
             let message = entry.kind == .untracked
                 ? "Git could not remove this untracked path. Nested repositories require manual removal."
                 : "Changes remain after Git restored this path. If it is a submodule, open it and discard its changes there."
             throw GitClientError.commandFailed(command: "discard", message: message)
         }
+    }
+
+    /// Runs independent pieces of work at the same time and returns when all have finished.
+    func inParallel(_ work: (() -> Void)...) {
+        let tasks = work
+        DispatchQueue.concurrentPerform(iterations: tasks.count) { tasks[$0]() }
     }
 
     /// Restores one path's staged and working copies to its version in `source`, removing it when
@@ -627,7 +768,8 @@ public struct GitClient: Sendable {
             throw GitClientError.emptyCommitMessage
         }
 
-        try run(["commit", "-m", trimmedMessage], in: repositoryURL)
+        // --quiet skips the summary and its diffstat, which NiceGit does not show.
+        try run(["commit", "--quiet", "-m", trimmedMessage], in: repositoryURL)
     }
 
     @discardableResult
@@ -655,7 +797,7 @@ public struct GitClient: Sendable {
 
     public func amendMessage(_ message: String, expectedHead: String, in url: URL) throws {
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw GitClientError.emptyCommitMessage }
-        let snapshot = try loadSnapshot(at: url)
+        let snapshot = try checkoutState(in: url)
         guard snapshot.operation == nil, snapshot.headHash == expectedHead else {
             throw GitClientError.commandFailed(command: "amend message", message: "HEAD changed or a Git operation is in progress. Refresh and select the current HEAD commit.")
         }
@@ -1056,8 +1198,15 @@ public struct GitClient: Sendable {
     func runData(_ arguments: [String], in directory: URL, acceptedStatuses: Set<Int32> = [0], environmentOverrides: [String: String] = [:]) throws -> Data {
         guard control?.isCancelled != true else { throw CancellationError() }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git"] + arguments
+        // Launch Git directly when found: going through /usr/bin/env costs an extra program
+        // start and PATH search on every command.
+        if let git = Self.gitExecutable(searching: pathEnvironment) {
+            process.executableURL = git
+            process.arguments = arguments
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["git"] + arguments
+        }
         process.currentDirectoryURL = directory
         var environment = Self.repositoryEnvironment(ProcessInfo.processInfo.environment)
         environment["PATH"] = pathEnvironment
@@ -1066,9 +1215,9 @@ public struct GitClient: Sendable {
         environment["GIT_SEQUENCE_EDITOR"] = "true"
         // Read-only commands such as status must not rewrite the index: that would contend with
         // the user's own Git commands and wake NiceGit's file watcher in a loop.
-        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        if !(statusUpdatesIndex && arguments.first == "status") { environment["GIT_OPTIONAL_LOCKS"] = "0" }
         // Stash invokes Git internally with its own pathspecs; do not override those.
-        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files", "ls-tree", "log"].contains(command) {
+        if let command = arguments.first, ["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files", "ls-tree", "log", "status"].contains(command) {
             environment["GIT_LITERAL_PATHSPECS"] = "1"
         }
         environment.merge(environmentOverrides) { _, override in override }
@@ -1089,9 +1238,17 @@ public struct GitClient: Sendable {
         process.standardError = errorOutput
         process.standardInput = FileHandle.nullDevice
 
+        let started = GitCommandLog.shared.isRecording ? ContinuousClock.now : nil
+        defer {
+            if let started {
+                let elapsed = ContinuousClock.now - started
+                GitCommandLog.shared.record(arguments, seconds: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18, started: started)
+            }
+        }
+        let finished = GitProcessWaiter.prepare(process)
         do {
             try process.run()
-            try GitProcessWaiter.wait(process, control: control, timeout: commandTimeout)
+            try GitProcessWaiter.wait(process, finished: finished, control: control, timeout: commandTimeout)
         } catch {
             throw GitClientError.commandFailed(command: "git \(arguments.joined(separator: " "))", message: error.localizedDescription)
         }
@@ -1111,3 +1268,55 @@ public struct GitClient: Sendable {
         return outputData
     }
 }
+
+/// Collects results from concurrent Git reads.
+private final class ConcurrentResults<Extra>: @unchecked Sendable {
+    let lock = NSLock()
+    var outputs: [Result<String, Error>?]
+    var extra: Result<Extra, Error>?
+    init(count: Int) { outputs = Array(repeating: nil, count: count) }
+}
+
+/// Git directories already found, by checkout path.
+final class GitDirectoryCache: @unchecked Sendable {
+    static let shared = GitDirectoryCache()
+    private let lock = NSLock()
+    private var directories: [String: URL] = [:]
+
+    subscript(path: String) -> URL? {
+        get { lock.lock(); defer { lock.unlock() }; return directories[path] }
+        set { lock.lock(); directories[path] = newValue; lock.unlock() }
+    }
+}
+
+extension GitClient {
+    /// The first executable `git` in `path`, in the same order `env` would search. Found once;
+    /// a missing Git is looked for again next time, so installing it later still works.
+    static func gitExecutable(searching path: String) -> URL? {
+        GitExecutableCache.shared.lock.lock()
+        defer { GitExecutableCache.shared.lock.unlock() }
+        if let found = GitExecutableCache.shared.paths[path] { return found }
+        for directory in path.split(separator: ":") where !directory.isEmpty {
+            let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent("git")
+            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                GitExecutableCache.shared.paths[path] = candidate
+                return candidate
+            }
+        }
+        return nil
+    }
+}
+
+final class GitExecutableCache: @unchecked Sendable {
+    static let shared = GitExecutableCache()
+    let lock = NSLock()
+    var paths: [String: URL] = [:]
+}
+
+extension GitClient {
+    /// How many Git processes a refresh starts at once. Measured on a 14-core Mac, five to seven
+    /// finished a refresh about 10% sooner than nine, and three took a third longer; this
+    /// scales the limit to the machine.
+    static let concurrentCommandLimit = min(6, max(2, ProcessInfo.processInfo.activeProcessorCount / 2))
+}
+

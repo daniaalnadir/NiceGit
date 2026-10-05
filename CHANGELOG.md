@@ -17,6 +17,9 @@
 - Undoable discards, a submodules sidebar section, and multi-commit cherry-pick.
 - Keyboard navigation in the graph and drag-and-drop merge or rebase.
 - Merge and rebase previews, automatic refresh after outside changes, and bisect.
+- Everyday actions are 4 to 40 times faster on a 3,000-file repository: committing went
+  from about 1,050 ms to 57 ms, undo from 2,030 ms to 49 ms, staging a file from 370 ms to
+  29 ms, and a refresh from 1,030 ms to 29 ms.
 - Undo for merges, rebases, resets, pulls, cherry-picks, and branch deletions; branch
   clean-up; and file content search at any commit.
 - Identity profiles, a Settings window with appearance and colour-blind-safe graph colours,
