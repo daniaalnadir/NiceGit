@@ -73,3 +73,6 @@
 - Refuse to add `filter=lfs` patterns while git-lfs is missing; Git would silently commit the full files.
 - Check layout at a typical 1440-point window: with both sidebars and the Changes panel open, the graph pane is under 500 points wide. Use `UIDriverTests` to click and type through the real window when a change affects interaction.
 - Scroll the graph to a selected row vertically only (anchor x 0); centring it horizontally hides the branch column.
+- Run Git with `GIT_OPTIONAL_LOCKS=0`; an index rewritten by `git status` contends with the user's commands and wakes the repository watcher in a loop.
+- Skip watched changes older than the snapshot's last refresh, so NiceGit's own actions do not refresh twice.
+- Compute a merge preview before opening its confirmation; macOS confirmation dialogs may not update their message after appearing.
