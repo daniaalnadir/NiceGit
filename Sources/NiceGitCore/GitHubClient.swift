@@ -116,8 +116,9 @@ public struct GitHubClient: Sendable {
         process.standardOutput = stdout
         process.standardError = stderr
         guard !control.isCancelled else { throw GitHubClientError.message("GitHub request cancelled.") }
+        let finished = GitProcessWaiter.prepare(process)
         try process.run()
-        do { try GitProcessWaiter.wait(process, control: control, timeout: 30) }
+        do { try GitProcessWaiter.wait(process, finished: finished, control: control, timeout: 30) }
         catch { throw GitHubClientError.message(control.isCancelled ? "GitHub request cancelled." : "GitHub request timed out. Retry when the connection is available.") }
         guard process.terminationStatus == 0 else {
             let message = String(data: try Data(contentsOf: errors), encoding: .utf8) ?? "GitHub request failed."

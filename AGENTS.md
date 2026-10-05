@@ -79,3 +79,8 @@
 - Undo branch moves with the inverse of how they were made: soft for commits and amends, the same mode for soft and mixed resets, and `reset --keep` otherwise; never record a step when an operation stopped partway.
 - Restore deleted branches with `update-ref` against the all-zero object ID so a reused name is never replaced, and delete unmerged branches only atomically against the listed tip.
 - Parse `git grep --null` by NUL tokens and end each match's text at its first newline; paths can contain newlines.
+- Wait for Git with a termination handler installed before launch; polling `Process.isRunning` added about 80 ms to every command.
+- Launch Git by absolute path found once in NiceGit's PATH, keep independent reads concurrent (about six at a time), and validate actions with `checkoutState` rather than a full snapshot.
+- After commits, amends, resets, and cherry-picks, refresh with `loadSnapshot(reusing:)`; only merges, rebases, pulls, and explicit refreshes reread remotes, worktrees, tags, and stashes.
+- Let `git status` write the index only on deliberate loads (opening, Command-R); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
+- Measure with `PerformanceBenchmarkTests` against a generated repository before and after performance changes.

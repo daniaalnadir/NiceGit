@@ -17,11 +17,10 @@ extension GitClient {
     /// Moves the current branch to `target` as `git reset --keep` does: working files follow,
     /// unrelated local edits are kept, and Git refuses if an edit would be overwritten.
     public func moveBranchKeepingChanges(to target: String, expectedHead: String, expectedBranch: String, in url: URL) throws {
-        let snapshot = try loadSnapshot(at: url)
+        let (snapshot, hash) = try checkoutState(in: url, resolving: target)
         guard snapshot.operation == nil, snapshot.headHash == expectedHead, snapshot.currentBranch == expectedBranch else {
             throw GitClientError.commandFailed(command: "undo", message: "The checkout changed or a Git operation is in progress, so this can no longer be undone safely.")
         }
-        let hash = try run(["rev-parse", "--verify", "--end-of-options", target + "^{commit}"], in: url).trimmingCharacters(in: .whitespacesAndNewlines)
         try run(["reset", "--keep", hash, "--"], in: url)
     }
 
