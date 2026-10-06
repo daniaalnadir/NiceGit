@@ -1,86 +1,109 @@
 # NiceGit
 
-**A free, open-source Git client for macOS.**
+**A fast, native Git client for macOS. Free and open source.**
 
-NiceGit brings your repositories, branches, worktrees, and changes into one native
-desktop workspace. See how commits connect, review your changes, and keep a real
-terminal close by without leaving the app. No subscription or paid feature tiers.
+![NiceGit showing a repository's commit graph, branches, and staged changes](docs/images/nicegit-window.png)
 
-Built with SwiftUI and AppKit. Released under the [MIT License](LICENSE).
+NiceGit puts your repositories, branches, history, and changes in one native Mac window.
+Follow how commits connect, review and stage changes line by line, and rewrite history
+with confidence: destructive actions confirm first, check that nothing changed behind
+your back, and can usually be undone.
 
-> **Preview software:** NiceGit is under active development. Back up important
-> work before trying history-changing operations. The current version is 0.1.0.
+There is no account, subscription, or paid tier, and nothing is sent anywhere except by
+Git itself. Built with SwiftUI and AppKit, and released under the [MIT License](LICENSE).
 
-## Features
+> **Preview software:** NiceGit is under active development. Back up important work
+> before trying history-changing operations. The current version is 0.1.0.
 
-| Workspace | What you can do |
-| --- | --- |
-| Visual history | Follow a parent-linked branch and merge graph, inspect commits, and see the working tree connected to HEAD. |
-| Repositories | Open, initialize, or clone repositories; switch between saved tabs in a separate collapsible sidebar. |
-| Branches and worktrees | Browse local and remote branches, create linked worktrees, switch checkouts, and use context menus for branch actions. Switching with uncommitted changes saves staged, unstaged, and untracked files in a named stash for later restoration. |
-| Changes and commits | Separate resizable Unstaged and Staged panes, inline red/green diffs, editable working-file lines, individual-line staging and unstaging, and per-checkout commit drafts. |
-| Everyday Git | Fetch, pull, push, publish branches, manage stashes and tags, and import or export patches. |
-| History and conflicts | Merge, rebase, cherry-pick, revert, reset with confirmation, and resolve text or binary conflicts. |
-| Embedded terminal | Open a resizable bottom panel with a separate shell for each checkout. Toggle with Control-backtick. |
-| GitHub | Load and filter pull requests and issues through your existing GitHub CLI login. |
+## Highlights
 
-See the [feature guide](docs/FEATURES.md) for behavior, safeguards, and limitations.
+**See your history**
+- A commit graph with stable lanes and colours, branch and tag labels, author initials,
+  and your uncommitted work connected to the commit it builds on.
+- Blame any file, browse a file's history across renames, and compare any two commits
+  or a commit with your working files, side by side or in one column.
+- Search every branch's history by message, author, code change, or commit ID
+  (Shift-Command-F), or search file contents at any commit (Option-Command-F).
 
-## Get Started
+**Make changes**
+- Stage and unstage whole files or individual lines, edit working files in place, and
+  keep a separate commit draft for each checkout.
+- Interactive rebase: drag to reorder, and pick, reword, squash, fix up, or drop commits.
+- Merge, rebase, cherry-pick one or many commits, revert, amend, reset, and resolve
+  conflicts, with a preview of which files will conflict before you start.
+- Find the commit that introduced a bug with bisect, guided from the graph.
+
+**Stay safe**
+- Undo the last commit, merge, rebase, reset, pull, cherry-pick, or branch deletion, and
+  undo discarding a file's changes.
+- Recover commits left behind by a reset or rebase from **Repository › Recover Lost Work**.
+- Every destructive action checks that the branch, commit, or remote you saw is still the
+  one it will change, and refuses if it is not.
+
+**Manage repositories**
+- Local and remote branches, tags, stashes (including selected files), linked worktrees,
+  submodules, remotes, GitFlow, and Git LFS tracking.
+- Branch clean-up for merged and inactive branches, identity profiles for work and
+  personal email addresses, and commit signature status.
+
+**Work quickly**
+- A command palette for actions, branches, and repositories (Shift-Command-P).
+- An embedded terminal for each checkout (Control-backtick).
+- Automatic refresh when files change in other apps.
+- Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
+- Pull requests and issues from github.com through your existing GitHub CLI login.
+
+The [feature guide](docs/FEATURES.md) describes each feature's behaviour and safeguards.
+
+## Install
+
+NiceGit is currently installed by building it from source.
 
 ### Requirements
 
-- macOS 14 or newer is the deployment target. Interactive testing currently
-  covers macOS 27 on Apple Silicon; older macOS versions and Intel Macs still
-  need runtime verification.
-- Xcode with **Swift 6.3 or newer**, its command-line tools selected, and initial
-  setup completed. Local builds have been verified with Xcode 27.
-- Git available on your PATH.
+- macOS 14 or newer. Day-to-day testing uses recent macOS on Apple Silicon; older macOS
+  versions and Intel Macs have not been verified at runtime.
+- Xcode with Swift 6.3 or newer, its command-line tools selected, and first-launch setup
+  completed.
+- Git on your `PATH`.
 - An internet connection for the first dependency download.
 
-### Build and Run
+### Build the app
 
 ```sh
 git clone https://github.com/daniaalnadir/NiceGit.git
 cd NiceGit
-swift run --build-system native NiceGit
-```
-
-To create the macOS app bundle:
-
-```sh
 bash scripts/build-app.sh release
 open dist/NiceGit.app
 ```
 
-The build creates an ad-hoc-signed app for the host architecture. It is not
-Developer ID signed or notarized, and downloaded copies may be blocked by macOS.
-Building the source locally is the currently documented installation route.
-Publishing source on GitHub does not require Apple signing.
+The app is ad-hoc signed for your Mac's architecture. It is not Developer ID signed or
+notarized, so copies downloaded from elsewhere may be blocked by macOS.
 
-The native SwiftPM build backend avoids a SwiftTerm shader-build issue encountered
-with the command-line SwiftPM default backend in Xcode 27. It currently emits a deprecation warning.
+### Run without packaging
 
-### Run in Xcode
+```sh
+swift run --build-system native NiceGit
+```
 
-Open `Package.swift`, select the **NiceGit** scheme and **My Mac**, then press
-**Command-R**. Select the executable scheme, not `NiceGitCore` or `NiceGit-Package`.
-Xcode runs a bare executable rather than the packaged `.app`; NiceGit explicitly
-activates its desktop interface for this launch mode. Use **Command-.** to stop an
-older run before restarting. Use the packaging script above for the distributable app.
+The native build backend avoids a SwiftTerm shader-build issue with the default
+command-line backend; it currently prints a deprecation warning.
 
-### Optional GitHub Integration
+To run from Xcode, open `Package.swift`, choose the **NiceGit** scheme (not
+`NiceGitCore` or `NiceGit-Package`) and **My Mac**, then press Command-R. Use Command-.
+to stop a previous run before starting another.
 
-Install GitHub CLI separately and authenticate locally:
+### Optional: GitHub pull requests and issues
+
+Install [GitHub CLI](https://cli.github.com) and sign in:
 
 ```sh
 gh auth login
 ```
 
-Then select a remote under **Pull Requests** or **Issues** in NiceGit. Only
-`github.com` is currently supported. NiceGit reuses the CLI's authentication and
-does not create its own token store. Ordinary Git operations use your existing
-Git authentication setup.
+Then choose a remote under **Pull Requests** or **Issues** in the sidebar. Only
+github.com is supported. NiceGit reuses the CLI's login and stores no token of its own;
+ordinary Git operations use your existing Git credentials.
 
 ## Development
 
@@ -88,30 +111,37 @@ Git authentication setup.
 swift test --build-system native
 ```
 
-Tests use disposable repositories. Live GitHub tests are opt-in; the normal suite
-requires no GitHub login. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+Tests run against disposable repositories and need no GitHub login. The opt-in
+`UIDriverTests` drives the real window with clicks and key presses and saves a screenshot
+after each step; its documentation comment explains how to run it.
 
-- `Sources/NiceGit`: native interface and application state.
-- `Sources/NiceGitCore`: Git commands, parsers, commit graph, and GitHub reads.
-- `Tests`: integration and regression tests.
-- `scripts`: packaging, icons, and preview fixtures.
+| Folder | Contents |
+| --- | --- |
+| `Sources/NiceGit` | The interface and application state |
+| `Sources/NiceGitCore` | Git commands, parsers, the commit graph, and GitHub reads |
+| `Tests` | Integration, regression, and interface tests |
+| `scripts` | Packaging, icons, and preview fixtures |
 
-## Current Limitations
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow, and [AGENTS.md](AGENTS.md)
+records hard-won rules about Git edge cases that changes must respect.
 
-- This is not full GitKraken feature parity. NiceGit is an independent project
-  and is not affiliated with GitKraken.
-- Undo/Redo covers the last eligible commit made in the current NiceGit session,
-  not every Git operation. Commit-message editing is limited to HEAD.
-- GitHub Enterprise and other providers' issue/PR APIs are not supported.
-- Public app signing, notarization, and automatic updates are not configured.
-- The embedded terminal is a real local shell. Git hooks, filters, and shell
-  startup files can execute code; only open repositories you trust.
+## Limitations
 
-## Contributing and Support
+- NiceGit runs only on macOS.
+- Pull requests and issues support github.com only, not GitHub Enterprise, GitLab, or
+  Bitbucket. Pushing and pulling work with any Git remote.
+- Undo covers the most recent undoable action, not a full history of every operation.
+- Releases are not notarized and there are no automatic updates.
+- The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
+  can run code. Only open repositories you trust.
 
-Bug reports and focused pull requests are welcome. Include your macOS version,
-NiceGit version, and steps to reproduce using a disposable repository. Remove
-private paths, repository content, and credentials from screenshots and logs.
+NiceGit is an independent project and is not affiliated with any other Git client.
+
+## Contributing
+
+Bug reports and focused pull requests are welcome. Please include your macOS version, the
+NiceGit version, and steps to reproduce with a disposable repository, and remove private
+paths, repository content, and credentials from screenshots and logs.
 
 - [Contribution guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -121,10 +151,7 @@ private paths, repository content, and credentials from screenshots and logs.
 
 ## License
 
-Copyright (c) 2026 Daniaal. Licensed under the [MIT License](LICENSE).
-
-MIT permits use, modification, redistribution, and commercial use, provided its
-copyright and license notices are retained. It does not require forks to remain
-open source or free of charge. NiceGit itself is offered free of charge.
-
-Dependencies retain their own licenses. See [Third-Party Notices](THIRD_PARTY_NOTICES.md).
+Copyright (c) 2026 Daniaal. Licensed under the [MIT License](LICENSE), which permits use,
+modification, redistribution, and commercial use as long as the copyright and license
+notices are kept. Dependencies keep their own licenses; see
+[Third-Party Notices](THIRD_PARTY_NOTICES.md).
