@@ -84,3 +84,4 @@
 - After commits, amends, resets, and cherry-picks, refresh with `loadSnapshot(reusing:)`; only merges, rebases, pulls, and explicit refreshes reread remotes, worktrees, tags, and stashes.
 - Let `git status` write the index only on deliberate loads (opening, Command-R); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
 - Measure with `PerformanceBenchmarkTests` against a generated repository before and after performance changes.
+- Build draggable dividers from an AppKit view that tracks the drag with `nextEvent(matching:)` and shows the cursor through cursor rects; SwiftUI overlays outside a parent's frame do not receive hits, so a SwiftUI drag handle is effectively one point wide.

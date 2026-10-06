@@ -3,6 +3,8 @@ import SwiftUI
 struct OpenRepositoryTabs: View {
     @EnvironmentObject private var model: AppModel
     @Binding var isCollapsed: Bool
+    /// The expanded width; collapsed, the column shows only its icons.
+    var width: Double = 220
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,7 +65,7 @@ struct OpenRepositoryTabs: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: isCollapsed ? 44 : 220)
+        .frame(width: isCollapsed ? 44 : width)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(AppPalette.sidebar)
     }

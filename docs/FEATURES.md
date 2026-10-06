@@ -54,6 +54,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   expected to conflict. Rebase predictions are marked as estimates.
 - Refresh automatically when files, staging, branches, or tags change outside NiceGit,
   such as edits in another app or commits and fetches in a terminal (Settings to turn off).
+- Resize the repositories column and the branches sidebar by dragging their dividers;
+  double-click a divider to restore its default width. Widths are remembered.
 - Undo or redo the last NiceGit action that moved the current branch (commit, amend, reset,
   merge, rebase, cherry-pick, revert, or pull) or deleted branches, from the action bar or
   the command palette.
