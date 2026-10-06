@@ -387,14 +387,20 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("NiceGit.repositorySidebarCollapsed") private var repositorySidebarCollapsed = false
+    @AppStorage("NiceGit.repositoryTabsWidth") private var repositoryTabsWidth = 220.0
+    @AppStorage("NiceGit.referenceSidebarWidth") private var referenceSidebarWidth = 240.0
 
     var body: some View {
         HStack(spacing: 0) {
-            OpenRepositoryTabs(isCollapsed: $repositorySidebarCollapsed)
-            Divider()
-        HSplitView {
+            OpenRepositoryTabs(isCollapsed: $repositorySidebarCollapsed, width: min(max(repositoryTabsWidth, 160), 360))
+            if repositorySidebarCollapsed {
+                Divider()
+            } else {
+                ResizableDivider(width: $repositoryTabsWidth, range: 160...360, defaultWidth: 220, label: "Repositories width")
+            }
             RepositorySidebar()
-                .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
+                .frame(width: min(max(referenceSidebarWidth, 180), 460))
+            ResizableDivider(width: $referenceSidebarWidth, range: 180...460, defaultWidth: 240, label: "Branches sidebar width")
             Group {
                 if let snapshot = model.snapshot {
                     WorkbenchView(snapshot: snapshot)
@@ -404,7 +410,6 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AppPalette.canvas)
-        }
         }
         .frame(minWidth: 1120, minHeight: 720)
         .toolbar(.hidden, for: .windowToolbar)
