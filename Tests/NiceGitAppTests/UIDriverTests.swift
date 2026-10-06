@@ -26,7 +26,9 @@ import Testing
     init(repo: URL, out: String, defaults: UserDefaults) {
         model = AppModel(defaults: defaults)
         host = NSHostingView(rootView: AnyView(ContentView().environmentObject(model)))
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        // DRIVE_SIZE=WIDTHxHEIGHT changes the window size from 1440x900.
+        let size = (ProcessInfo.processInfo.environment["DRIVE_SIZE"] ?? "1440x900").split(separator: "x").compactMap { Double($0) }
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: size.first ?? 1440, height: size.last ?? 900), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = host
         self.out = out
