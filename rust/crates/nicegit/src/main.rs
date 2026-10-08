@@ -4,6 +4,8 @@
 mod app;
 mod diff_view;
 mod graph_view;
+mod theme;
+mod tools;
 mod worker;
 
 use std::path::PathBuf;

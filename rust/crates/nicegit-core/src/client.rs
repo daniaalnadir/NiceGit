@@ -30,7 +30,7 @@ impl GitClient {
         Self { status_updates_index: true }
     }
 
-    fn options(&self) -> RunOptions<'static> {
+    pub(crate) fn options(&self) -> RunOptions<'static> {
         RunOptions { accepted: &[], status_updates_index: self.status_updates_index, env: &[] }
     }
 
@@ -38,15 +38,15 @@ impl GitClient {
         runner::run(arguments, directory, &self.options())
     }
 
-    fn run_accepting(&self, arguments: &[&str], directory: &Path, accepted: &[i32]) -> Result<String> {
+    pub(crate) fn run_accepting(&self, arguments: &[&str], directory: &Path, accepted: &[i32]) -> Result<String> {
         runner::run(arguments, directory, &RunOptions { accepted, ..self.options() })
     }
 
-    fn run_trimmed(&self, arguments: &[&str], directory: &Path) -> Result<String> {
+    pub(crate) fn run_trimmed(&self, arguments: &[&str], directory: &Path) -> Result<String> {
         Ok(self.run(arguments, directory)?.trim().to_string())
     }
 
-    fn try_trimmed(&self, arguments: &[&str], directory: &Path) -> Option<String> {
+    pub(crate) fn try_trimmed(&self, arguments: &[&str], directory: &Path) -> Option<String> {
         self.run_trimmed(arguments, directory).ok().filter(|value| !value.is_empty())
     }
 
@@ -81,7 +81,7 @@ impl GitClient {
         Ok(operation_in(&self.git_directory(directory)?))
     }
 
-    fn current_branch(&self, directory: &Path) -> String {
+    pub(crate) fn current_branch(&self, directory: &Path) -> String {
         if let Some(branch) = self.try_trimmed(&["branch", "--show-current"], directory) {
             return branch;
         }
@@ -91,7 +91,7 @@ impl GitClient {
         }
     }
 
-    fn head(&self, directory: &Path) -> Option<String> {
+    pub(crate) fn head(&self, directory: &Path) -> Option<String> {
         self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD"], directory)
     }
 
@@ -128,14 +128,14 @@ impl GitClient {
         Ok(state)
     }
 
-    fn require_finished_operation(&self, command: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn require_finished_operation(&self, command: &str, directory: &Path) -> Result<()> {
         if self.current_operation(directory)?.is_some() {
             return Err(GitError::failed(command, "Finish or abort the current Git operation before changing the working tree."));
         }
         Ok(())
     }
 
-    fn resolve_commit(&self, revision: &str, directory: &Path) -> Result<String> {
+    pub(crate) fn resolve_commit(&self, revision: &str, directory: &Path) -> Result<String> {
         self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &format!("{revision}^{{commit}}")], directory)
     }
 
@@ -237,7 +237,7 @@ impl GitClient {
         Ok(parse_status(&self.run(&["status", "--porcelain=v1", "-z", "--untracked-files=all"], directory)?))
     }
 
-    fn load_status_for(&self, directory: &Path, paths: &[&str]) -> Result<Vec<StatusEntry>> {
+    pub(crate) fn load_status_for(&self, directory: &Path, paths: &[&str]) -> Result<Vec<StatusEntry>> {
         let mut arguments = vec!["status", "--porcelain=v1", "-z", "--untracked-files=all", "--"];
         arguments.extend_from_slice(paths);
         Ok(parse_status(&self.run(&arguments, directory)?))
@@ -413,7 +413,7 @@ impl GitClient {
 
     // MARK: Branches
 
-    fn require_branch_tip(&self, branch: &str, expected_tip: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn require_branch_tip(&self, branch: &str, expected_tip: &str, directory: &Path) -> Result<()> {
         let current = self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &format!("refs/heads/{branch}")], directory)?;
         if current != expected_tip {
             return Err(GitError::failed("branch", BRANCH_CHANGED));
@@ -498,7 +498,7 @@ impl GitClient {
         )
     }
 
-    fn switch_preserving_changes(&self, arguments: &[&str], target: &str, directory: &Path) -> Result<bool> {
+    pub(crate) fn switch_preserving_changes(&self, arguments: &[&str], target: &str, directory: &Path) -> Result<bool> {
         self.require_finished_operation("switch branch", directory)?;
         if self.load_status(directory)?.is_empty() {
             self.run(arguments, directory)?;
@@ -623,7 +623,7 @@ impl GitClient {
 
     /// `--no-overwrite-ignore` does not protect divergent merges with the ort strategy, so check
     /// incoming paths against ignored local files first.
-    fn require_no_ignored_merge_collisions(&self, target: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn require_no_ignored_merge_collisions(&self, target: &str, directory: &Path) -> Result<()> {
         let bases = self.run_accepting(&["merge-base", "--all", "HEAD", target], directory, &[0, 1])?;
         let mut candidates: Vec<String> = Vec::new();
         for base in bases.split_whitespace() {
@@ -676,7 +676,7 @@ impl GitClient {
         self.run(&["fetch", "--all", "--prune"], directory).map(drop)
     }
 
-    fn require_upstream(&self, expected: &str, command: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn require_upstream(&self, expected: &str, command: &str, directory: &Path) -> Result<()> {
         let current = self.try_trimmed(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], directory);
         if current.as_deref() != Some(expected) {
             return Err(GitError::failed(
@@ -687,7 +687,7 @@ impl GitClient {
         Ok(())
     }
 
-    fn require_remote_addresses(
+    pub(crate) fn require_remote_addresses(
         &self,
         expected: &BTreeMap<String, Vec<String>>,
         remote: &str,
@@ -707,7 +707,7 @@ impl GitClient {
         }
     }
 
-    fn config(&self, key: &str, boolean: bool, directory: &Path) -> Result<Option<String>> {
+    pub(crate) fn config(&self, key: &str, boolean: bool, directory: &Path) -> Result<Option<String>> {
         let mut arguments = vec!["config"];
         if boolean {
             arguments.push("--bool");
@@ -719,7 +719,7 @@ impl GitClient {
 
     /// Whether `git pull` would auto-stash: `pull.autoStash` overrides the merge or rebase
     /// default, and a branch's rebase setting overrides `pull.rebase`.
-    fn pull_auto_stash(&self, directory: &Path) -> Result<bool> {
+    pub(crate) fn pull_auto_stash(&self, directory: &Path) -> Result<bool> {
         if let Some(value) = self.config("pull.autostash", true, directory)? {
             return Ok(value == "true");
         }
@@ -845,7 +845,7 @@ impl GitClient {
         Ok(())
     }
 
-    fn require_listed_stash(&self, stash: &Stash, command: &str, directory: &Path) -> Result<Stash> {
+    pub(crate) fn require_listed_stash(&self, stash: &Stash, command: &str, directory: &Path) -> Result<Stash> {
         self.list_stashes(directory)?
             .into_iter()
             .find(|listed| listed.hash == stash.hash)
@@ -871,7 +871,7 @@ impl GitClient {
         self.run(&["stash", "drop", &current.reference], directory).map(drop)
     }
 
-    fn drop_stash_by_hash(&self, hash: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn drop_stash_by_hash(&self, hash: &str, directory: &Path) -> Result<()> {
         if let Some(saved) = self.list_stashes(directory)?.into_iter().find(|stash| stash.hash == hash) {
             self.run(&["stash", "drop", &saved.reference], directory).map_err(|error| {
                 GitError::failed(

@@ -1,0 +1,1 @@
+//! Conflict editor.

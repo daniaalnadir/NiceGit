@@ -8,6 +8,7 @@ use nicegit_core::{Branch, GitClient, Operation, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::{self, DiffContent};
 use crate::graph_view;
+use crate::tools::{Ctx, Request, ToolWindow};
 use crate::worker::{ActionResult, Message, Worker};
 
 const PAGE: usize = 500;
@@ -88,6 +89,7 @@ pub struct NiceGitApp {
     was_focused: bool,
     last_load: Instant,
     git_missing: bool,
+    tools: Vec<Box<dyn ToolWindow>>,
 }
 
 impl NiceGitApp {
@@ -121,7 +123,10 @@ impl NiceGitApp {
             was_focused: true,
             last_load: Instant::now(),
             git_missing: nicegit_core::runner::git_executable().is_none(),
+            tools: Vec::new(),
         };
+        crate::theme::install_fonts(&creation.egui_ctx);
+        crate::theme::apply(&creation.egui_ctx, crate::theme::Appearance::System);
         let start = initial.or_else(|| app.recent.first().cloned()).filter(|path| path.exists());
         if let Some(path) = start {
             app.open(path);
@@ -253,6 +258,9 @@ impl NiceGitApp {
             Selection::Stash(hash) => snapshot.stashes.iter().any(|s| &s.hash == hash),
         };
         let reload_change = matches!(self.selection, Selection::Change { .. }) && keep;
+        for tool in &mut self.tools {
+            tool.repository_changed(&snapshot);
+        }
         self.snapshot = Some(snapshot);
         if !keep {
             self.clear_selection();
@@ -1303,6 +1311,55 @@ impl NiceGitApp {
         });
     }
 
+    /// Opens a tool window, or brings forward the one already open with the same id.
+    pub fn open_tool(&mut self, tool: Box<dyn ToolWindow>) {
+        let id = tool.id();
+        self.tools.retain(|open| open.id() != id);
+        self.tools.push(tool);
+    }
+
+    fn tool_windows(&mut self, ctx: &egui::Context) {
+        let (Some(snapshot), Some(repo)) = (self.snapshot.clone(), self.repository.clone()) else {
+            return;
+        };
+        let idle = self.busy.is_none();
+        let mut requests = Vec::new();
+        let mut closed = Vec::new();
+        for (index, tool) in self.tools.iter_mut().enumerate() {
+            let mut open = true;
+            egui::Window::new(tool.title())
+                .id(egui::Id::new(("tool", tool.id())))
+                .default_size(tool.default_size())
+                .collapsible(false)
+                .resizable(true)
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    let mut cx = Ctx::new(&repo, &snapshot, idle, &mut requests);
+                    tool.ui(ui, &mut cx);
+                });
+            if !open || tool.wants_close() {
+                closed.push(index);
+            }
+        }
+        for index in closed.into_iter().rev() {
+            self.tools.remove(index);
+        }
+        for request in requests {
+            self.handle(request);
+        }
+    }
+
+    fn handle(&mut self, request: Request) {
+        match request {
+            Request::Act { label, action } => self.act(&label, action),
+            Request::Notice { text, is_error } => self.notice = Some(Notice { text, is_error }),
+            Request::SelectCommit(hash) => self.select_commit(hash),
+            Request::OpenRepository(path) => self.open(path),
+            Request::Open(tool) => self.open_tool(tool),
+            Request::Refresh => self.load(true),
+        }
+    }
+
     /// Refreshes when the window regains focus, and now and then while it has it, so changes
     /// made in other apps appear without a manual refresh.
     fn auto_refresh(&mut self, ctx: &egui::Context) {
@@ -1368,6 +1425,7 @@ impl eframe::App for NiceGitApp {
             }
             self.history(ui);
         });
+        self.tool_windows(&ctx);
         self.dialogs(&ctx);
     }
 

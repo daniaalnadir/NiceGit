@@ -1,0 +1,1 @@
+//! Commit signature verification status.
