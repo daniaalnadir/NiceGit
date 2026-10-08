@@ -194,7 +194,8 @@ fn file_content_that_looks_like_patch_headers_is_staged_as_content() {
 #[test]
 fn filenames_with_spaces_unicode_tabs_and_glob_characters_stage_only_the_selected_file() {
     let repo = Repo::new();
-    let awkward = "dir/café file\tname.txt";
+    // Windows does not allow tabs in file names; other systems test one.
+    let awkward = if cfg!(windows) { "dir/café file name.txt" } else { "dir/café file\tname.txt" };
     let glob = "x[1].txt";
     let lookalike = "x1.txt";
     repo.commit(awkward, "one\ntwo\n", "Base awkward");
