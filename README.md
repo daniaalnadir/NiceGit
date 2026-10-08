@@ -69,12 +69,14 @@ Download the latest build for your system from
 | Debian, Ubuntu, and derivatives | `NiceGit-…-linux-amd64.deb` |
 | Other Linux (x86_64) | `NiceGit-…-linux-x86_64.tar.gz` |
 
-These are the cross-platform version, built in Rust from [`rust/`](rust). It covers
-the everyday workflow: the commit graph, branches, remotes, tags, stashes, staging,
-discarding, committing and amending, undoing the last commit, switching branches,
-merging, fetch, pull, push, and publish. The full feature list above describes the
-original Mac app, which you can build from source as described below. Every version
-needs Git installed and on your `PATH`.
+These are the cross-platform version, built in Rust from [`rust/`](rust). It has the
+same features as the original Mac app described above: the commit graph and inspector,
+line-by-line staging, interactive rebase, conflict editing, undo, blame, file history,
+search, bisect, comparisons, worktrees, submodules, GitFlow, Git LFS, pull requests and
+issues, the command palette, and an embedded terminal. Every version needs Git installed
+and on your `PATH`.
+
+![The cross-platform NiceGit showing a repository's commit graph, branches, and changes](docs/images/nicegit-cross-platform.png)
 
 Until the macOS download is notarized, macOS blocks it the first time it opens:
 open it once, then choose **Open Anyway** in System Settings › Privacy & Security.
@@ -155,14 +157,13 @@ after each step; its documentation comment explains how to run it.
 | `Tests` | Integration, regression, and interface tests |
 | `scripts` | Packaging, icons, and preview fixtures |
 | `rust/crates/nicegit-core` | The cross-platform Git commands, parsers, and commit graph |
-| `rust/crates/nicegit` | The cross-platform interface |
+| `rust/crates/nicegit` | The cross-platform interface; `src/tools` holds each feature window |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow, and [AGENTS.md](AGENTS.md)
 records hard-won rules about Git edge cases that changes must respect.
 
 ## Limitations
 
-- The cross-platform version has fewer features than the Mac app; see Install.
 - Pull requests and issues support github.com only, not GitHub Enterprise, GitLab, or
   Bitbucket. Pushing and pulling work with any Git remote.
 - Undo covers the most recent undoable action, not a full history of every operation.

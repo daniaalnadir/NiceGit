@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 - Cross-platform feature parity
+
+- The cross-platform app now matches the Mac app: repository tabs, a branches sidebar
+  with filtering and drag-to-merge, a commit graph with branch labels and author
+  initials, a commit inspector with signatures, path and tree change views, staging
+  individual lines, undo and redo, interactive rebase, reset, cherry-pick and revert,
+  merge and rebase previews, a conflict editor, blame, file history, history and file
+  content search, comparisons with image previews, bisect, recover lost work, branch
+  clean-up, worktrees, submodules, GitFlow, Git LFS, repository settings and identity
+  profiles, GitHub pull requests and issues, a command palette, settings with light,
+  dark, and colour-blind safe palettes, per-checkout drafts, a file editor, automatic
+  refresh, and an embedded terminal.
+
 ## 0.2.0 - Cross-platform preview
 
 - New cross-platform NiceGit for macOS, Windows, and Linux, written in Rust with
