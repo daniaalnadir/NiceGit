@@ -168,7 +168,11 @@ impl TerminalSession {
     /// The window title the shell set, or "Shell", with " (exited)" once the shell has ended.
     pub fn title(&self) -> String {
         let title = lock(&self.shared.title).clone().unwrap_or_else(|| "Shell".to_string());
-        if self.is_exited() { format!("{title} (exited)") } else { title }
+        if self.is_exited() {
+            format!("{title} (exited)")
+        } else {
+            title
+        }
     }
 
     /// Whether the shell has ended.
@@ -430,7 +434,11 @@ fn csi_final(final_char: char, modifiers: Modifiers, app_cursor: bool) -> String
 /// Keys such as Insert, Delete, PageUp, and the function keys from F5: `ESC [ n ~`.
 fn tilde(number: u8, modifiers: Modifiers) -> String {
     let param = modifier_param(modifiers);
-    if param > 1 { format!("\x1b[{number};{param}~") } else { format!("\x1b[{number}~") }
+    if param > 1 {
+        format!("\x1b[{number};{param}~")
+    } else {
+        format!("\x1b[{number}~")
+    }
 }
 
 /// The bytes a key press sends to the shell, or None when the key is typed as text instead.
@@ -576,7 +584,13 @@ impl Palette {
 fn xterm_256(index: usize) -> Color32 {
     if index < 232 {
         let cube = index - 16;
-        let level = |v: usize| -> u8 { if v == 0 { 0 } else { (55 + 40 * v) as u8 } };
+        let level = |v: usize| -> u8 {
+            if v == 0 {
+                0
+            } else {
+                (55 + 40 * v) as u8
+            }
+        };
         Color32::from_rgb(level(cube / 36), level((cube / 6) % 6), level(cube % 6))
     } else {
         let grey = (8 + 10 * (index - 232)) as u8;

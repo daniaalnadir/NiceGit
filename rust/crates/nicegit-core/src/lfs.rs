@@ -93,10 +93,7 @@ impl GitClient {
 /// The patterns in the root `.gitattributes` that use `filter=lfs`. A missing file has none.
 fn lfs_patterns(root: &Path) -> Vec<String> {
     let text = std::fs::read_to_string(root.join(ATTRIBUTES_FILE)).unwrap_or_default();
-    text.lines()
-        .filter(|line| line.split_whitespace().any(|token| token == "filter=lfs"))
-        .filter_map(attribute_pattern)
-        .collect()
+    text.lines().filter(|line| line.split_whitespace().any(|token| token == "filter=lfs")).filter_map(attribute_pattern).collect()
 }
 
 /// Applies `change` to the attribute file's lines and writes it back only if something changed.

@@ -3,9 +3,12 @@
 
 mod app;
 mod diff_view;
+mod git_ext;
 mod graph_view;
+mod settings;
 mod theme;
 mod tools;
+mod ui;
 mod worker;
 
 use std::path::PathBuf;

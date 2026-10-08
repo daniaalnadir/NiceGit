@@ -120,7 +120,6 @@ pub struct Colors {
     pub tag: Color32,
     pub local_branch: Color32,
     pub remote_branch: Color32,
-    pub head: Color32,
 }
 
 pub fn colors(dark: bool) -> Colors {
@@ -147,7 +146,6 @@ pub fn colors(dark: bool) -> Colors {
             tag: Color32::from_rgb(0x8e, 0x6d, 0x18),
             local_branch: Color32::from_rgb(0x2c, 0x7a, 0x52),
             remote_branch: Color32::from_rgb(0x2f, 0x5c, 0x9e),
-            head: Color32::from_rgb(0x3f, 0xc1, 0x7f),
         }
     } else {
         Colors {
@@ -172,7 +170,6 @@ pub fn colors(dark: bool) -> Colors {
             tag: Color32::from_rgb(0xb0, 0x86, 0x14),
             local_branch: Color32::from_rgb(0x1f, 0x8a, 0x55),
             remote_branch: Color32::from_rgb(0x2f, 0x6f, 0xd6),
-            head: Color32::from_rgb(0x1f, 0x9d, 0x5f),
         }
     }
 }

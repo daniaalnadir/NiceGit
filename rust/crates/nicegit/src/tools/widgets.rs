@@ -2,7 +2,6 @@
 
 use egui::{Color32, RichText, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::StatusKind;
 
 use crate::theme;
 
@@ -80,19 +79,6 @@ pub fn pill(ui: &mut Ui, text: &str, fill: Color32) -> egui::Response {
         .inner_margin(egui::Margin::symmetric(6, 1))
         .show(ui, |ui| ui.label(RichText::new(text).small().color(Color32::WHITE)))
         .response
-}
-
-/// The one-letter badge and colour for a file's change kind.
-pub fn status_badge(ui: &mut Ui, kind: StatusKind) -> egui::Response {
-    let c = theme::of(ui);
-    let color = match kind {
-        StatusKind::Added | StatusKind::Untracked => c.added,
-        StatusKind::Deleted => c.removed,
-        StatusKind::Renamed => c.renamed,
-        StatusKind::Conflicted => c.conflict,
-        StatusKind::Modified => c.modified,
-    };
-    ui.label(RichText::new(kind.letter()).monospace().strong().color(color)).on_hover_text(kind.title())
 }
 
 /// The colour for one of Git's change letters (A, M, D, R, C, T, U).

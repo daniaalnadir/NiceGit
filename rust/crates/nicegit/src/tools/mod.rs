@@ -12,18 +12,19 @@ use crate::worker::ActionResult;
 pub mod bisect;
 pub mod blame;
 pub mod branch_cleanup;
+pub mod commit_search;
 pub mod compare;
 pub mod conflict;
 pub mod content_search;
+pub mod editor;
 pub mod file_history;
-pub mod github;
 pub mod gitflow;
+pub mod github;
 pub mod interactive_rebase;
 pub mod lfs;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;
-pub mod commit_search;
 pub mod submodules;
 pub mod terminal;
 pub mod widgets;
@@ -103,6 +104,11 @@ pub trait ToolWindow {
     fn wants_close(&self) -> bool {
         false
     }
+    /// True while the tool holds edits that would be lost, such as unsaved text in an editor.
+    /// The app then refuses actions that could rewrite working files.
+    fn has_unsaved_changes(&self) -> bool {
+        false
+    }
     /// Called after the repository is reloaded, so the tool can reread its data.
     fn repository_changed(&mut self, _snapshot: &Snapshot) {}
 }
@@ -126,6 +132,7 @@ impl<T: Send + 'static> Task<T> {
     }
 
     /// A task that already has its value.
+    #[allow(dead_code)]
     pub fn ready(value: T) -> Self {
         Self { receiver: None, value: Some(value) }
     }
@@ -136,6 +143,7 @@ impl<T: Send + 'static> Task<T> {
         self.value.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn get_mut(&mut self) -> Option<&mut T> {
         self.poll();
         self.value.as_mut()

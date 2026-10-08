@@ -32,7 +32,7 @@ pub enum Message {
 pub struct Worker {
     sender: Sender<Message>,
     pub receiver: Receiver<Message>,
-    context: egui::Context,
+    pub context: egui::Context,
 }
 
 impl Worker {

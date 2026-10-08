@@ -136,13 +136,14 @@ impl GitClient {
         let reference = format!("refs/heads/{}", deletion.name);
         // An all-zero old value makes the update fail if the branch exists again.
         let missing = "0".repeat(deletion.tip.len());
-        self.run(&["update-ref", "--create-reflog", "-m", RESTORED_MESSAGE, &reference, &deletion.tip, &missing], directory)
-            .map_err(|_| {
+        self.run(&["update-ref", "--create-reflog", "-m", RESTORED_MESSAGE, &reference, &deletion.tip, &missing], directory).map_err(
+            |_| {
                 GitError::failed(
                     "restore branch",
                     format!("A branch named {} exists again, so the deleted one was not restored.", deletion.name),
                 )
-            })?;
+            },
+        )?;
         if let Some(remote) = &deletion.upstream_remote {
             self.run(&["config", &format!("branch.{}.remote", deletion.name), remote], directory)?;
         }

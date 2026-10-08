@@ -172,9 +172,8 @@ impl ReflogWindow {
                             ui.add(egui::Label::new(RichText::new(&entry.subject).strong()).truncate());
                             if is_unreachable {
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    widgets::pill(ui, "Not on any branch", c.conflict).on_hover_text(
-                                        "Only the reflog keeps this commit. Git may delete it after the reflog expires.",
-                                    );
+                                    widgets::pill(ui, "Not on any branch", c.conflict)
+                                        .on_hover_text("Only the reflog keeps this commit. Git may delete it after the reflog expires.");
                                 });
                             }
                         });
@@ -223,7 +222,9 @@ impl ReflogWindow {
             ui.label(RichText::new(&entry.hash).monospace().color(c.muted));
             ui.add_space(8.0);
             ui.label(RichText::new(&entry.action).color(c.muted));
-            ui.label(RichText::new(format!("{}  ·  {}", entry.selector, entry.time.map(age_text).unwrap_or_default())).small().color(c.muted));
+            ui.label(
+                RichText::new(format!("{}  ·  {}", entry.selector, entry.time.map(age_text).unwrap_or_default())).small().color(c.muted),
+            );
             ui.add_space(10.0);
             if self.unreachable.contains(&entry.hash) {
                 widgets::callout(

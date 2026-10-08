@@ -124,7 +124,8 @@ fn let_clock_pass() {
 
 // MARK: Git LFS
 
-const POINTER: &str = "version https://git-lfs.github.com/spec/v1\noid sha256:0000000000000000000000000000000000000000000000000000000000000000\nsize 3\n";
+const POINTER: &str =
+    "version https://git-lfs.github.com/spec/v1\noid sha256:0000000000000000000000000000000000000000000000000000000000000000\nsize 3\n";
 
 #[test]
 fn lfs_status_reads_patterns_quoted_patterns_and_pointer_files() {
@@ -253,9 +254,7 @@ fn gitflow_feature_start_and_finish_merges_without_fast_forward() {
     repo.commit("login.txt", "login\n", "Add login");
     let feature_head = current_head(repo.path());
 
-    client()
-        .finish_gitflow("feature/login", Some(&feature_head), None, repo.path())
-        .expect("finish");
+    client().finish_gitflow("feature/login", Some(&feature_head), None, repo.path()).expect("finish");
 
     assert!(!branch_exists(repo.path(), "feature/login"), "the feature branch is deleted after finishing");
     assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "develop");
@@ -283,9 +282,7 @@ fn gitflow_release_finish_tags_merges_both_branches_and_deletes_the_release() {
     repo.commit("CHANGELOG.md", "1.0.0\n", "Release notes");
     let release_head = current_head(repo.path());
 
-    client()
-        .finish_gitflow("release/1.0.0", Some(&release_head), Some("  Shipped  "), repo.path())
-        .expect("finish release");
+    client().finish_gitflow("release/1.0.0", Some(&release_head), Some("  Shipped  "), repo.path()).expect("finish release");
 
     assert!(!branch_exists(repo.path(), "release/1.0.0"));
     assert!(tag_exists(repo.path(), "v1.0.0"), "the version tag is created with the configured prefix");
@@ -346,9 +343,7 @@ fn gitflow_finish_stops_on_conflict_and_finishes_after_it_is_resolved() {
     repo.commit("a.txt", "develop\n", "Develop change");
     repo.git(&["switch", "release/3.0.0"]);
 
-    let error = client()
-        .finish_gitflow("release/3.0.0", Some(&release_head), None, repo.path())
-        .expect_err("the develop merge conflicts");
+    let error = client().finish_gitflow("release/3.0.0", Some(&release_head), None, repo.path()).expect_err("the develop merge conflicts");
     assert!(error.to_string().contains("stopped"), "unexpected message: {error}");
     assert!(tag_exists(repo.path(), "3.0.0"), "production was merged and tagged before the conflict");
     assert!(branch_exists(repo.path(), "release/3.0.0"), "the branch is kept for the retry");

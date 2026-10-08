@@ -18,6 +18,19 @@ pub struct GitClient {
     pub status_updates_index: bool,
 }
 
+/// Full details of one commit, for the inspector.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitDetails {
+    pub hash: String,
+    pub parents: Vec<String>,
+    pub author: String,
+    pub author_email: String,
+    pub author_date: String,
+    pub committer: String,
+    pub committer_date: String,
+    pub message: String,
+}
+
 /// A selected file's change, as the action that was chosen for it last saw it.
 pub type Selected<'a> = &'a StatusEntry;
 
@@ -307,6 +320,22 @@ impl GitClient {
         Ok(())
     }
 
+    /// Like [`Self::diff`], optionally hiding whitespace-only changes.
+    pub fn diff_with(&self, entry: Selected, staged: bool, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+        if !ignore_whitespace || entry.kind == StatusKind::Untracked {
+            return self.diff(entry, staged, directory);
+        }
+        let mut arguments = vec!["diff", "--no-ext-diff", "--no-color", "-w"];
+        if staged {
+            arguments.push("--cached");
+        }
+        arguments.extend(["--", entry.path.as_str()]);
+        if entry.kind == StatusKind::Renamed && staged {
+            arguments.extend(entry.original_path.as_deref());
+        }
+        self.run(&arguments, directory)
+    }
+
     pub fn diff(&self, entry: Selected, staged: bool, directory: &Path) -> Result<String> {
         if entry.kind == StatusKind::Untracked {
             return self.run_accepting(
@@ -350,6 +379,40 @@ impl GitClient {
         self.run(&["commit", "--quiet", "--amend", "--message", message], directory).map(drop)
     }
 
+    /// The commit HEAD points to, if any.
+    pub fn head_commit(&self, directory: &Path) -> Option<String> {
+        self.head(directory)
+    }
+
+    pub fn commit_details(&self, hash: &str, directory: &Path) -> Result<CommitDetails> {
+        let output = self.run(
+            &[
+                "show",
+                "--no-patch",
+                "--no-color",
+                "--date=format:%e %b %Y, %H:%M",
+                "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%ad%x1f%cn%x1f%cd%x1f%B",
+                hash,
+                "--",
+            ],
+            directory,
+        )?;
+        let fields: Vec<&str> = output.splitn(8, '\u{1f}').collect();
+        let [hash, parents, author, email, author_date, committer, committer_date, message] = fields[..] else {
+            return Err(GitError::failed("show", "Git returned commit details in an unexpected format."));
+        };
+        Ok(CommitDetails {
+            hash: hash.to_string(),
+            parents: parents.split_whitespace().map(str::to_string).collect(),
+            author: author.to_string(),
+            author_email: email.to_string(),
+            author_date: author_date.trim().to_string(),
+            committer: committer.to_string(),
+            committer_date: committer_date.trim().to_string(),
+            message: message.trim_end().to_string(),
+        })
+    }
+
     pub fn commit_message(&self, hash: &str, directory: &Path) -> Result<String> {
         self.run(&["show", "--no-patch", "--format=%B", "--no-color", hash, "--"], directory)
     }
@@ -390,6 +453,16 @@ impl GitClient {
     /// Patch and summary for a commit; merges show changes against their first parent.
     pub fn commit_diff(&self, hash: &str, path: Option<&str>, directory: &Path) -> Result<String> {
         let mut arguments = vec!["show", "--first-parent", "-m", "--format=", "--patch", "--no-ext-diff", "--no-color", hash, "--"];
+        arguments.extend(path);
+        self.run(&arguments, directory)
+    }
+
+    pub fn commit_diff_with(&self, hash: &str, path: Option<&str>, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+        let mut arguments = vec!["show", "--first-parent", "-m", "--format=", "--patch", "--no-ext-diff", "--no-color"];
+        if ignore_whitespace {
+            arguments.push("-w");
+        }
+        arguments.extend([hash, "--"]);
         arguments.extend(path);
         self.run(&arguments, directory)
     }
@@ -888,6 +961,63 @@ impl GitClient {
 
     pub fn stash_diff(&self, stash: &Stash, directory: &Path) -> Result<String> {
         self.run(&["stash", "show", "--include-untracked", "--patch", "--no-ext-diff", "--no-color", &stash.hash], directory)
+    }
+
+    // MARK: Patches
+
+    /// Applies a patch file to the working files, checking it applies cleanly first. Both
+    /// steps read the same captured bytes, not a file that could change in between.
+    pub fn apply_patch(&self, contents: &[u8], directory: &Path) -> Result<()> {
+        self.require_finished_operation("apply", directory)?;
+        let file = std::env::temp_dir().join(format!(
+            "nicegit-{}-{}.patch",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        ));
+        std::fs::write(&file, contents).map_err(|e| GitError::failed("apply", e.to_string()))?;
+        let path = file.to_string_lossy().into_owned();
+        let result = self.run(&["apply", "--check", "--", &path], directory).and_then(|_| self.run(&["apply", "--", &path], directory));
+        let _ = std::fs::remove_file(&file);
+        result.map(drop)
+    }
+
+    /// One commit as an email-style patch, as `git format-patch` writes it.
+    pub fn export_commit_patch(&self, hash: &str, directory: &Path) -> Result<String> {
+        let resolved = self.resolve_commit(hash, directory)?;
+        let parents = self.run(&["rev-list", "--parents", "-n", "1", &resolved], directory)?;
+        if parents.split_whitespace().count() > 2 {
+            return Err(GitError::failed(
+                "format-patch",
+                "Merge commits cannot be exported as a single patch. Select an individual commit.",
+            ));
+        }
+        let files = self.run(&["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", &resolved, "--"], directory)?;
+        if files.is_empty() {
+            return Err(GitError::failed("format-patch", "This commit has no file changes to export."));
+        }
+        let patch = self.run(
+            &[
+                "format-patch",
+                "--stdout",
+                "--root",
+                "--no-cover-letter",
+                "--no-signature",
+                "--no-thread",
+                "--no-attach",
+                "--binary",
+                "--full-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "-1",
+                &resolved,
+                "--",
+            ],
+            directory,
+        )?;
+        if patch.is_empty() {
+            return Err(GitError::failed("format-patch", "This commit has no exportable patch."));
+        }
+        Ok(patch)
     }
 
     // MARK: Tags

@@ -1,0 +1,57 @@
+//! Small adaptations of core Git operations to what the interface asks for.
+
+use std::path::Path;
+
+use nicegit_core::merge_preview::MergeOutcome;
+use nicegit_core::rebase::Expectation;
+use nicegit_core::signature::SignatureStatus;
+use nicegit_core::{Branch, GitClient, Operation, Result};
+
+/// Rebases the current branch onto `onto`, after confirming both are as displayed.
+pub fn rebase_onto(client: &GitClient, onto: &Branch, branch: &str, head: Option<&str>, directory: &Path) -> Result<()> {
+    let expected = Expectation { branch: Some(branch), head, source_branch: Some(onto) };
+    client.start(Operation::Rebase, &onto.tip, None, expected, directory)
+}
+
+/// Reverts one commit; a merge is reverted against its first parent.
+pub fn revert(client: &GitClient, commit: &str, branch: &str, head: Option<&str>, directory: &Path) -> Result<()> {
+    let merge = client.commit_details(commit, directory)?.parents.len() > 1;
+    let expected = Expectation { branch: Some(branch), head, source_branch: None };
+    client.start(Operation::Revert, commit, merge.then_some(1), expected, directory)
+}
+
+/// A sentence describing what merging or rebasing onto `source` would do.
+pub fn merge_preview_text(source: &str, rebase: bool, directory: &Path) -> Result<String> {
+    let client = GitClient::new();
+    let preview = if rebase { client.preview_rebase(source, directory)? } else { client.preview_merge(source, directory)? };
+    let estimate = if preview.is_estimate { " This is an estimate: rebasing replays each commit, so results can differ." } else { "" };
+    let ignored =
+        if preview.blocked_by_ignored_files { " Ignored local files would be overwritten; move or back them up first." } else { "" };
+    let text = match preview.outcome {
+        MergeOutcome::UpToDate => "Already up to date: there is nothing to integrate.".to_string(),
+        MergeOutcome::FastForward if rebase => "Your branch has no commits of its own, so it simply moves forward.".to_string(),
+        MergeOutcome::FastForward => "Fast-forward: your branch moves forward with no merge commit.".to_string(),
+        MergeOutcome::Clean => {
+            let files = preview.changed_file_count;
+            format!("No conflicts expected. {files} file{} would change.", if files == 1 { "" } else { "s" })
+        }
+        MergeOutcome::Conflicts(paths) => {
+            let shown: Vec<&str> = paths.iter().take(6).map(String::as_str).collect();
+            let more = if paths.len() > shown.len() { format!(" and {} more", paths.len() - shown.len()) } else { String::new() };
+            format!("Expected conflicts in {}{more}. You can resolve them, or abort to return to where you started.", shown.join(", "))
+        }
+    };
+    Ok(format!("{text}{estimate}{ignored}"))
+}
+
+/// A commit's signature as display text and a level: 0 verified, 1 untrusted or unverifiable, 2 bad.
+pub fn signature_summary(hash: &str, directory: &Path) -> Option<(String, u8)> {
+    let signature = GitClient::new().signature(hash, directory).ok()??;
+    let level = match signature.status {
+        SignatureStatus::Verified => 0,
+        SignatureStatus::Bad => 2,
+        _ => 1,
+    };
+    let signer = if signature.signer.is_empty() { String::new() } else { format!(" · {}", signature.signer) };
+    Some((format!("{}{signer}", signature.status.title()), level))
+}

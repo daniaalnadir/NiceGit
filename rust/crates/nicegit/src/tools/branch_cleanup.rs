@@ -145,24 +145,20 @@ impl ToolWindow for BranchCleanupWindow {
         let selected_unmerged = selected_candidates.iter().filter(|candidate| !candidate.is_merged).count();
 
         if let Some(deletions) = self.undo.clone() {
-            egui::Frame::new()
-                .fill(c.subtle_bg)
-                .corner_radius(6.0)
-                .inner_margin(Margin::symmetric(10, 8))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("{}  Deleted {} {}.", icon::TRASH, deletions.len(), noun(deletions.len()))));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if widgets::labeled_button(ui, icon::ARROW_COUNTER_CLOCKWISE, "Undo", idle).clicked() {
-                                self.undo = None;
-                                cx.act(format!("Restore {} {}", deletions.len(), noun(deletions.len())), move |client, directory| {
-                                    restore_all(client, &deletions, directory)
-                                });
-                            }
-                        });
+            egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{}  Deleted {} {}.", icon::TRASH, deletions.len(), noun(deletions.len()))));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::labeled_button(ui, icon::ARROW_COUNTER_CLOCKWISE, "Undo", idle).clicked() {
+                            self.undo = None;
+                            cx.act(format!("Restore {} {}", deletions.len(), noun(deletions.len())), move |client, directory| {
+                                restore_all(client, &deletions, directory)
+                            });
+                        }
                     });
                 });
+            });
             ui.add_space(6.0);
         }
 
@@ -249,52 +245,48 @@ impl BranchCleanupWindow {
     fn confirm(&mut self, ui: &mut Ui, cx: &mut Ctx, chosen: &[BranchCandidate], includes_unmerged: bool) {
         let c = theme::of(ui);
         let count = chosen.len();
-        egui::Frame::new()
-            .fill(c.banner_bg)
-            .corner_radius(6.0)
-            .inner_margin(Margin::symmetric(12, 10))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.label(RichText::new(format!("Delete {count} local {}?", noun(count))).strong());
-                let mut detail = String::from("Remote branches are not changed. ");
-                if includes_unmerged {
-                    detail.push_str("Unmerged branches hold commits found on no other branch. ");
+        egui::Frame::new().fill(c.banner_bg).corner_radius(6.0).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(format!("Delete {count} local {}?", noun(count))).strong());
+            let mut detail = String::from("Remote branches are not changed. ");
+            if includes_unmerged {
+                detail.push_str("Unmerged branches hold commits found on no other branch. ");
+            }
+            detail.push_str("Undo restores them until you take another undoable action.");
+            ui.label(RichText::new(detail).small());
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    self.confirming = false;
                 }
-                detail.push_str("Undo restores them until you take another undoable action.");
-                ui.label(RichText::new(detail).small());
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let label = if includes_unmerged { "Delete, including unmerged" } else { "Delete branches" };
+                    if widgets::danger_button(ui, label, cx.idle).clicked() {
+                        let chosen = chosen.to_vec();
+                        let slot = Arc::clone(&self.deleted);
+                        let total = chosen.len();
+                        cx.act(format!("Delete {total} {}", noun(total)), move |client, directory| {
+                            let report = client.delete_branches_keeping_undo(&chosen, includes_unmerged, directory);
+                            let deleted = report.deleted.len();
+                            if deleted > 0 {
+                                if let Ok(mut slot) = slot.lock() {
+                                    *slot = Some(report.deleted.clone());
+                                }
+                            }
+                            match report.failure {
+                                None => Ok(Some(format!("Deleted {deleted} {}. Undo restores them.", noun(deleted)))),
+                                Some(error) => Err(GitError::failed(
+                                    "delete branches",
+                                    format!("Deleted {deleted} of {total} before stopping. Undo restores those. {error}"),
+                                )),
+                            }
+                        });
+                        self.selected.clear();
                         self.confirming = false;
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let label = if includes_unmerged { "Delete, including unmerged" } else { "Delete branches" };
-                        if widgets::danger_button(ui, label, cx.idle).clicked() {
-                            let chosen = chosen.to_vec();
-                            let slot = Arc::clone(&self.deleted);
-                            let total = chosen.len();
-                            cx.act(format!("Delete {total} {}", noun(total)), move |client, directory| {
-                                let report = client.delete_branches_keeping_undo(&chosen, includes_unmerged, directory);
-                                let deleted = report.deleted.len();
-                                if deleted > 0 {
-                                    if let Ok(mut slot) = slot.lock() {
-                                        *slot = Some(report.deleted.clone());
-                                    }
-                                }
-                                match report.failure {
-                                    None => Ok(Some(format!("Deleted {deleted} {}. Undo restores them.", noun(deleted)))),
-                                    Some(error) => Err(GitError::failed(
-                                        "delete branches",
-                                        format!("Deleted {deleted} of {total} before stopping. Undo restores those. {error}"),
-                                    )),
-                                }
-                            });
-                            self.selected.clear();
-                            self.confirming = false;
-                        }
-                    });
                 });
             });
+        });
     }
 }
 
@@ -302,7 +294,10 @@ impl BranchCleanupWindow {
 fn restore_all(client: &GitClient, deletions: &[BranchDeletion], directory: &Path) -> Result<Option<String>, GitError> {
     for (restored, deletion) in deletions.iter().enumerate() {
         if let Err(error) = client.restore_deleted_branch(deletion, directory) {
-            return Err(GitError::failed("restore branches", format!("Restored {restored} of {} before stopping. {error}", deletions.len())));
+            return Err(GitError::failed(
+                "restore branches",
+                format!("Restored {restored} of {} before stopping. {error}", deletions.len()),
+            ));
         }
     }
     Ok(Some(format!("Restored {} {}.", deletions.len(), noun(deletions.len()))))

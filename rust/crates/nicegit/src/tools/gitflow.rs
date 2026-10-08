@@ -169,9 +169,7 @@ impl GitFlowWindow {
         let base = configuration.start_branch(self.kind).to_string();
         let shown_name = if name.is_empty() { "…".to_string() } else { name.clone() };
         ui.add_space(2.0);
-        ui.label(
-            RichText::new(format!("Creates {prefix}{shown_name} from {base} and checks it out.")).small().color(c.muted),
-        );
+        ui.label(RichText::new(format!("Creates {prefix}{shown_name} from {base} and checks it out.")).small().color(c.muted));
         ui.add_space(6.0);
         let can_start = cx.idle && !name.is_empty() && cx.snapshot.operation.is_none();
         ui.horizontal(|ui| {
@@ -241,9 +239,7 @@ impl GitFlowWindow {
                 let tag_message = (!message.is_empty()).then_some(message);
                 self.pending_finish = Some(current.clone());
                 cx.act(format!("Finish {current}"), move |client, directory| {
-                    client
-                        .finish_gitflow(&expected_branch, expected_head.as_deref(), tag_message.as_deref(), directory)
-                        .map(Some)
+                    client.finish_gitflow(&expected_branch, expected_head.as_deref(), tag_message.as_deref(), directory).map(Some)
                 });
             }
         });
