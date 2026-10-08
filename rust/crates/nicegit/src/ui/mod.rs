@@ -144,7 +144,7 @@ impl NiceGitApp {
                 egui::Panel::bottom("diff")
                     .resizable(true)
                     .default_size(340.0)
-                    .size_range(140.0..=900.0)
+                    .size_range(260.0..=900.0)
                     .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(0, 0)))
                     .show(ui, |ui| self.diff_panel(ui));
             }

@@ -156,7 +156,8 @@ impl ToolWindow for ResetWindow {
             if let Some(head) = self.head.clone() {
                 let (target, branch, mode) = (self.target.clone(), self.branch.clone(), self.mode);
                 let short_target = self.short_target().to_string();
-                cx.act(format!("Reset {}", self.branch), move |client, repo| {
+                let undo = nicegit_core::undo::UndoMode::for_reset(mode);
+                cx.act_recording(format!("Reset {}", self.branch), "Reset", undo, move |client, repo| {
                     client.reset(&target, mode, &branch, &head, repo)?;
                     Ok(Some(format!("Reset {branch} to {short_target}.")))
                 });

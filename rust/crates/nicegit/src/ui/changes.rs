@@ -194,7 +194,9 @@ impl NiceGitApp {
         let (glyph, color) = kind_icon(&child, entry.kind);
         child.label(RichText::new(glyph).color(color)).on_hover_text(entry.kind.title());
         let text = match &entry.original_path {
-            Some(original) if entry.kind == StatusKind::Renamed => format!("{} → {label}", original.rsplit('/').next().unwrap_or(original)),
+            Some(original) if entry.kind == StatusKind::Renamed => {
+                format!("{} {} {label}", original.rsplit('/').next().unwrap_or(original), egui_phosphor::regular::ARROW_RIGHT)
+            }
             _ => label,
         };
         let mut stage_clicked = false;

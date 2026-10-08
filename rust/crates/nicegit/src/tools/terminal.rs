@@ -967,7 +967,7 @@ impl ToolWindow for TerminalWindow {
                 actions.push(TabAction::Add);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(group.cwd.display().to_string()).small().color(theme::of(ui).muted));
+                ui.add(egui::Label::new(RichText::new(group.cwd.display().to_string()).small().color(theme::of(ui).muted)).truncate());
             });
         });
         for action in actions {

@@ -14,7 +14,7 @@ use crate::diff_view::{self, DiffContent};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
-/// Extensions shown as images. Only PNG can be decoded in this build; the others report that
+/// Extensions shown as images. TIFF and ICO cannot be decoded in this build; they report that
 /// the preview is unavailable.
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "ico"];
 
@@ -170,7 +170,15 @@ impl CompareWindow {
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::SCALES).size(16.0).color(c.muted));
             ui.vertical(|ui| {
-                ui.label(RichText::new(format!("{} → {}", Self::label_for(snapshot, &self.from), to_label)).strong());
+                ui.label(
+                    RichText::new(format!(
+                        "{} {} {}",
+                        Self::label_for(snapshot, &self.from),
+                        egui_phosphor::regular::ARROW_RIGHT,
+                        to_label
+                    ))
+                    .strong(),
+                );
                 let count = match self.files.value(&()) {
                     Some(Ok(files)) => format!("{} changed {}", files.len(), if files.len() == 1 { "file" } else { "files" }),
                     Some(Err(_)) => "Comparison unavailable".to_string(),

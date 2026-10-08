@@ -206,6 +206,53 @@ impl NiceGitApp {
         }
     }
 
+    /// Opens windows named in `NICEGIT_DEBUG_OPEN` (comma-separated) once the repository loads,
+    /// so screenshots of each window can be taken without clicking. Debug builds only.
+    pub fn debug_open(&mut self, ctx: &egui::Context) {
+        if !cfg!(debug_assertions) || self.snapshot().is_none() {
+            return;
+        }
+        let Some(names) = std::env::var("NICEGIT_DEBUG_OPEN").ok() else { return };
+        // SAFETY: only read once at start-up in debug builds, before other threads use it.
+        unsafe { std::env::remove_var("NICEGIT_DEBUG_OPEN") };
+        let snapshot = self.snapshot().cloned().expect("loaded");
+        let head = snapshot.head_hash.clone().unwrap_or_default();
+        // Three commits back along HEAD's first parents.
+        let mut base = head.clone();
+        for _ in 0..3 {
+            base = snapshot.commits.iter().find(|c| c.hash == base).and_then(|c| c.parents.first().cloned()).unwrap_or(base);
+        }
+        let file = snapshot.status.first().map(|e| e.path.clone()).unwrap_or_else(|| "README.md".into());
+        for name in names.split(',') {
+            match name {
+                "palette" => self.palette = Some(PaletteState::default()),
+                "settings" => self.show_settings = true,
+                "light" => self.applied_light_preview(ctx),
+                "repository" => self.run_command(Run::Tool("settings"), ctx),
+                "terminal" => self.toggle_terminal(ctx),
+                "inspector" => self.select_commit(head.clone()),
+                "change" => self.select_working_tree(),
+                "blame" => self.open_tool(Box::new(tools::blame::BlameWindow::new("README.md".into(), None))),
+                "history" => self.open_tool(Box::new(tools::file_history::FileHistoryWindow::new("README.md".into()))),
+                "rebase" => self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::new(base.clone(), &snapshot))),
+                "reset" => self.open_tool(Box::new(tools::reset::ResetWindow::new(base.clone(), "An older commit".into(), &snapshot))),
+                "compare" => self.open_tool(Box::new(tools::compare::CompareWindow::new(base.clone(), None))),
+                "editor" => self.open_tool(Box::new(tools::editor::EditorWindow::new(
+                    self.repo().map(|r| r.path.clone()).unwrap_or_default(),
+                    file.clone(),
+                ))),
+                other => self.run_command(Run::Tool(Box::leak(other.to_string().into_boxed_str())), ctx),
+            }
+        }
+    }
+
+    /// Shows the light appearance for this session only, without changing saved settings.
+    fn applied_light_preview(&mut self, ctx: &egui::Context) {
+        crate::theme::apply(ctx, crate::theme::Appearance::Light);
+        ctx.set_theme(egui::ThemePreference::Light);
+        self.preview_light = true;
+    }
+
     pub fn palette_window(&mut self, ctx: &egui::Context) {
         let Some(mut state) = self.palette.take() else { return };
         let matches = ranked(self.commands(), &state.query);

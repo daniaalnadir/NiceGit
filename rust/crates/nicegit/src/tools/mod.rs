@@ -37,6 +37,8 @@ pub type Action = Box<dyn FnOnce(&GitClient, &Path) -> ActionResult + Send>;
 pub enum Request {
     /// Run an action that changes the repository, then refresh. Ignored while another runs.
     Act { label: String, action: Action },
+    /// Like `Act`, but the branch move it makes is recorded so Undo can reverse it.
+    ActRecording { label: String, title: String, mode: nicegit_core::undo::UndoMode, action: Action },
     /// Show a message in the status bar.
     Notice { text: String, is_error: bool },
     /// Select a commit in the graph and show it in the inspector.
@@ -68,6 +70,17 @@ impl<'a> Ctx<'a> {
 
     pub fn act(&mut self, label: impl Into<String>, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
         self.requests.push(Request::Act { label: label.into(), action: Box::new(action) });
+    }
+
+    /// Runs an action that moves the current branch and records it for Undo, reversed with `mode`.
+    pub fn act_recording(
+        &mut self,
+        label: impl Into<String>,
+        title: impl Into<String>,
+        mode: nicegit_core::undo::UndoMode,
+        action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
+    ) {
+        self.requests.push(Request::ActRecording { label: label.into(), title: title.into(), mode, action: Box::new(action) });
     }
 
     pub fn notice(&mut self, text: impl Into<String>, is_error: bool) {

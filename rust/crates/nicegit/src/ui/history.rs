@@ -341,7 +341,7 @@ impl NiceGitApp {
                 let pill = egui::Rect::from_min_size(egui::pos2(x, y - 10.0), egui::vec2(galley.size().x + 12.0, 20.0));
                 let fill = match label.kind {
                     LabelKind::Tag => c.tag,
-                    _ => lane_color.gamma_multiply(0.75),
+                    _ => shade(lane_color, 0.78),
                 };
                 painter.rect_filled(pill, 5.0, fill);
                 if label.kind == LabelKind::Head || label.kind == LabelKind::Both && label.branch.as_ref().is_some_and(|b| b.is_current) {
@@ -586,4 +586,10 @@ fn truncate_to(painter: &egui::Painter, text: &str, width: f32, font: FontId) ->
         }
     }
     "…".into()
+}
+
+/// An opaque, darker version of `color`, so white label text stays readable on it.
+fn shade(color: Color32, factor: f32) -> Color32 {
+    let scale = |v: u8| (v as f32 * factor).round() as u8;
+    Color32::from_rgb(scale(color.r()), scale(color.g()), scale(color.b()))
 }

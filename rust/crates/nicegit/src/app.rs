@@ -173,6 +173,8 @@ pub struct NiceGitApp {
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
     recorded: RecordSlot,
+    /// A debug-only light preview that does not touch saved settings.
+    pub preview_light: bool,
 }
 
 struct Watch {
@@ -204,6 +206,7 @@ impl NiceGitApp {
             applied_appearance: None,
             pending_clone: None,
             recorded: Arc::new(Mutex::new(None)),
+            preview_light: false,
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
         app.active = app.settings.active.min(open.len().saturating_sub(1));
@@ -256,7 +259,13 @@ impl NiceGitApp {
     }
 
     pub fn switch_to(&mut self, index: usize) {
-        if index == self.active || index >= self.repos.len() || self.busy.is_some() {
+        if index >= self.repos.len() || self.busy.is_some() {
+            return;
+        }
+        if index == self.active {
+            if self.repos[index].snapshot.is_none() && !self.repos[index].loading {
+                self.load_repo(index, true);
+            }
             return;
         }
         if self.has_unsaved_editor() {
@@ -821,6 +830,7 @@ impl NiceGitApp {
     pub fn handle(&mut self, request: Request) {
         match request {
             Request::Act { label, action } => self.act(&label, action),
+            Request::ActRecording { label, title, mode, action } => self.act_recording_mode(&label, &title, mode, action),
             Request::Notice { text, is_error } => self.notify(text, is_error),
             Request::SelectCommit(hash) => self.select_commit(hash),
             Request::OpenRepository(path) => self.open(path),
@@ -907,7 +917,8 @@ impl NiceGitApp {
     }
 
     fn apply_theme(&mut self, ctx: &egui::Context) {
-        let wanted = (self.settings.appearance, self.settings.graph_palette);
+        let appearance = if self.preview_light { theme::Appearance::Light } else { self.settings.appearance };
+        let wanted = (appearance, self.settings.graph_palette);
         if self.applied_appearance != Some(wanted) {
             theme::apply(ctx, wanted.0);
             theme::set_graph_palette(wanted.1);
@@ -960,6 +971,7 @@ impl eframe::App for NiceGitApp {
         self.finish_clone();
         self.shortcuts(&ctx);
         self.auto_refresh(&ctx);
+        self.debug_open(&ctx);
         self.layout(ui);
         self.tool_windows(&ctx);
         self.dialogs(&ctx);

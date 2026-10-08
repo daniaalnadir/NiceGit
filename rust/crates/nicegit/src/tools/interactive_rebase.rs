@@ -339,10 +339,15 @@ impl ToolWindow for InteractiveRebaseWindow {
                     self.entries.iter().map(|entry| RebaseStep { commit: entry.commit.clone(), action: entry.action() }).collect();
                 let branch = self.branch.clone();
                 let rewritten = steps.len();
-                cx.act(format!("Rewrite commits on {branch}"), move |client, repo| {
-                    client.interactive_rebase(&steps, &plan, &branch, &head, repo)?;
-                    Ok(Some(format!("Rewrote {rewritten} commits on {branch}.")))
-                });
+                cx.act_recording(
+                    format!("Rewrite commits on {branch}"),
+                    "Interactive rebase",
+                    nicegit_core::undo::UndoMode::Keep,
+                    move |client, repo| {
+                        client.interactive_rebase(&steps, &plan, &branch, &head, repo)?;
+                        Ok(Some(format!("Rewrote {rewritten} commits on {branch}.")))
+                    },
+                );
                 self.closing = true;
             }
         }
