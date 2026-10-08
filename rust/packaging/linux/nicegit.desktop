@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NiceGit
+Comment=A fast, cross-platform Git client
+Exec=nicegit
+Icon=nicegit
+Terminal=false
+Categories=Development;RevisionControl;

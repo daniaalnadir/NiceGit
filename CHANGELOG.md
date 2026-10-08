@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 - Cross-platform preview
+
+- New cross-platform NiceGit for macOS, Windows, and Linux, written in Rust with
+  egui, in `rust/`. It covers the everyday workflow: the commit graph, branches,
+  remotes, tags, stashes, staging, discarding, committing and amending, undoing
+  the last commit, switching branches with changes carried in a stash, merging,
+  fetch, pull, push, and publish, with the same safety checks as the Mac app.
+- Release builds for all three platforms are published from tags by GitHub
+  Actions: a universal macOS DMG, a Windows ZIP, and a Linux tarball and .deb.
+
 ## 0.1.0 - Unreleased Preview
 
 - Native macOS repository browser with a parent-linked commit graph and working

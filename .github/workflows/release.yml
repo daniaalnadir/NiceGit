@@ -1,0 +1,225 @@
+name: Release
+
+"on":
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, for example v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS universal app
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+      DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Derive version
+        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Import signing certificate
+        if: env.DEVELOPER_ID_P12 != ''
+        run: |
+          set -euo pipefail
+          keychain_password="$(openssl rand -base64 32)"
+          cert_path="$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$DEVELOPER_ID_P12" | base64 --decode > "$cert_path"
+
+          security create-keychain -p "$keychain_password" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$keychain_password" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed 's/"//g')
+
+          security import "$cert_path" -k build.keychain -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" build.keychain
+          rm -f "$cert_path"
+
+          identity="$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n1)"
+          if [ -z "$identity" ]; then
+            echo "No Developer ID Application identity found in the imported certificate." >&2
+            exit 1
+          fi
+          echo "MACOS_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization key
+        if: env.NOTARY_KEY_P8 != ''
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$NOTARY_KEY_P8" | base64 --decode > "$key_path"
+          echo "NOTARY_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "NOTARY_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
+          echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Build and package
+        run: bash rust/scripts/package-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: rust/dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: pwsh
+        working-directory: rust
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:TAG -replace '^v', ''
+          $stage = Join-Path $env:RUNNER_TEMP "NiceGit-$version-windows-x64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item -Path 'target/release/nicegit.exe' -Destination $stage
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'LICENSE') -Destination $stage
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'README.md') -Destination $stage
+          $zip = Join-Path (Get-Location) "dist/NiceGit-$version-windows-x64.zip"
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+          Write-Host "Created $zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: rust/dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev libssl-dev pkg-config
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: Package tarball and deb
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          root="$GITHUB_WORKSPACE"
+          stage="$RUNNER_TEMP/NiceGit-$version-linux-x86_64"
+          rm -rf "$stage"
+          mkdir -p "$stage" dist
+
+          cp target/release/nicegit "$stage/nicegit"
+          cp "$root/LICENSE" "$root/README.md" "$stage/"
+          cp packaging/linux/nicegit.desktop "$stage/"
+          cp assets/icon-256.png "$stage/nicegit.png"
+          tar -czf "dist/NiceGit-$version-linux-x86_64.tar.gz" -C "$stage" .
+
+          cargo deb -p nicegit --no-build --output dist/
+          deb="$(find dist -maxdepth 1 -name '*.deb' -print -quit)"
+          if [ -z "$deb" ]; then
+            echo "cargo deb did not produce a .deb package" >&2
+            exit 1
+          fi
+          mv "$deb" "dist/NiceGit-$version-linux-amd64.deb"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            rust/dist/*.tar.gz
+            rust/dist/*.deb
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Derive version
+        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Create or update release
+        run: |
+          set -euo pipefail
+          ls -l release
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/* \
+              --title "NiceGit $VERSION" \
+              --generate-notes \
+              --prerelease \
+              --repo "$GITHUB_REPOSITORY"
+          fi
