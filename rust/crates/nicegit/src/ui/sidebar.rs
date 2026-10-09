@@ -212,7 +212,7 @@ impl NiceGitApp {
         });
 
         let worktrees: Vec<&nicegit_core::Worktree> =
-            snapshot.worktrees.iter().filter(|w| matches(&w.path) || w.branch.as_deref().is_some_and(|b| matches(b))).collect();
+            snapshot.worktrees.iter().filter(|w| matches(&w.path) || w.branch.as_deref().is_some_and(&matches)).collect();
         {
             section(ui, "worktrees", icon::FOLDERS, "Worktrees", worktrees.len(), true, |ui| {
                 for worktree in worktrees {
