@@ -939,7 +939,10 @@ impl NiceGitApp {
                 // and working files are what change the visible state.
                 let relevant = event.paths.iter().any(|p| {
                     let text = p.to_string_lossy().replace('\\', "/");
-                    !text.contains("/.git/objects/") && !text.ends_with(".lock") && !text.contains("/target/")
+                    !text.contains("/.git/objects/")
+                        && !text.contains("/.git/logs/")
+                        && !text.ends_with(".lock")
+                        && !text.contains("/target/")
                 });
                 if relevant && last_load.elapsed() > WATCH_DEBOUNCE {
                     self.watched_change.get_or_insert_with(Instant::now);
@@ -985,6 +988,12 @@ impl NiceGitApp {
             theme::set_graph_palette(wanted.1);
             self.applied_appearance = Some(wanted);
         }
+    }
+
+    /// The running bisect, once its status has been read after the last refresh.
+    pub fn bisect_status(&self) -> Option<nicegit_core::bisect::BisectStatus> {
+        let task = self.repos.get(self.active)?.bisect.as_ref()?;
+        task.peek().cloned().flatten()
     }
 
     /// Whether the branch tip is in the loaded history of the current checkout.

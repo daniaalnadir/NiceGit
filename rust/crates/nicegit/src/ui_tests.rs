@@ -594,3 +594,49 @@ fn github_pull_requests_and_issues_load_from_github() {
             || h.query_by_label_contains("No issues").is_some()
     });
 }
+
+#[test]
+fn double_clicking_a_panel_edge_restores_its_width() {
+    use egui::containers::panel::PanelState;
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+    let id = egui::Id::new("sidebar");
+    let width = |h: &Harness<'static, NiceGitApp>| PanelState::load(&h.ctx, id).map(|s| s.size().x).unwrap_or_default();
+    let default = width(&harness);
+
+    // Drag the sidebar's edge wider.
+    let edge = PanelState::load(&harness.ctx, id).expect("sidebar shown").outer_rect.right_center();
+    harness.hover_at(edge);
+    harness.step();
+    let pressed = |down: bool, pos: egui::Pos2| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed: down,
+        modifiers: Modifiers::NONE,
+    };
+    harness.event(pressed(true, edge));
+    harness.step();
+    for step in 1..=10 {
+        harness.event(egui::Event::PointerMoved(edge + egui::vec2(8.0 * step as f32, 0.0)));
+        harness.step();
+    }
+    harness.event(pressed(false, edge + egui::vec2(80.0, 0.0)));
+    settle(&mut harness);
+    let dragged = width(&harness);
+    assert!(dragged > default + 40.0, "the drag widened the sidebar: {default} -> {dragged}");
+
+    // Double-click the edge: the default width comes back.
+    let edge = PanelState::load(&harness.ctx, id).unwrap().outer_rect.right_center();
+    harness.hover_at(edge);
+    harness.step();
+    for _ in 0..2 {
+        harness.event(pressed(true, edge));
+        harness.event(pressed(false, edge));
+        harness.step();
+    }
+    settle(&mut harness);
+    let restored = width(&harness);
+    assert!((restored - default).abs() < 2.0, "restored {restored} to the default {default}");
+}

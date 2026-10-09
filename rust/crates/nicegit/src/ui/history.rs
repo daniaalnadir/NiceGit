@@ -453,8 +453,8 @@ impl NiceGitApp {
             self.dialog = Some(Dialog::with_second(
                 "New tag",
                 "Tag name",
-                "Message (optional; makes an annotated tag)",
-                InputKind::CreateTag { target: commit.hash.clone() },
+                "Tag message",
+                InputKind::CreateTag { target: commit.hash.clone(), annotated: false },
             ));
         }
         ui.separator();

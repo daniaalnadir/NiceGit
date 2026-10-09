@@ -38,6 +38,12 @@ enum Run {
     Repository(PathBuf),
     ApplyPatch,
     Identity { name: String, email: String, signing_key: Option<String> },
+    Publish,
+    Continue(nicegit_core::Operation),
+    Abort(nicegit_core::Operation),
+    Bisect(nicegit_core::bisect::BisectMark),
+    EndBisect,
+    PruneWorktrees,
 }
 
 struct Command {
@@ -133,6 +139,51 @@ impl NiceGitApp {
             ),
             command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
         ];
+        if let Some(snapshot) = snapshot {
+            if snapshot.upstream.is_none() && snapshot.is_on_branch() && !snapshot.remotes.is_empty() {
+                list.push(command("Publish branch", "Push it to a remote and track it", icon::UPLOAD_SIMPLE, idle, Run::Publish));
+            }
+            if let Some(operation) = snapshot.operation {
+                list.push(command(
+                    &format!("Continue {}", operation.name()),
+                    "After resolving conflicts",
+                    icon::PLAY,
+                    idle,
+                    Run::Continue(operation),
+                ));
+                list.push(command(
+                    &format!("Abort {}", operation.name()),
+                    "Return to the state before it started",
+                    icon::X_CIRCLE,
+                    idle,
+                    Run::Abort(operation),
+                ));
+            }
+            if snapshot.worktrees.iter().any(|w| w.is_prunable) {
+                list.push(command(
+                    "Forget missing worktrees",
+                    "Worktree folders deleted outside Git",
+                    icon::BROOM,
+                    idle,
+                    Run::PruneWorktrees,
+                ));
+            }
+        }
+        if self.bisect_status().is_some() {
+            use nicegit_core::bisect::BisectMark;
+            if self.bisect_status().is_some_and(|s| s.first_bad.is_none() && s.testing.is_some()) {
+                list.push(command(
+                    "Bisect: mark good",
+                    "This commit does not have the problem",
+                    icon::CHECK_CIRCLE,
+                    idle,
+                    Run::Bisect(BisectMark::Good),
+                ));
+                list.push(command("Bisect: mark bad", "This commit has the problem", icon::X_CIRCLE, idle, Run::Bisect(BisectMark::Bad)));
+                list.push(command("Bisect: skip", "This commit cannot be tested", icon::SKIP_FORWARD, idle, Run::Bisect(BisectMark::Skip)));
+            }
+            list.push(command("End bisect", "Return to the original checkout", icon::BUG, idle, Run::EndBisect));
+        }
         if let Some(step) = self.repo().and_then(|r| r.undo.as_ref()) {
             list.push(command(&format!("Undo {}", step.title.to_lowercase()), "", icon::ARROW_COUNTER_CLOCKWISE, idle, Run::Undo));
         }
@@ -199,6 +250,24 @@ impl NiceGitApp {
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
             Run::NewRepository => self.create_repository(),
             Run::ApplyPatch => self.apply_patch(),
+            Run::Publish => self.push(),
+            Run::Continue(operation) => self
+                .act_recording("Continue", operation.name(), move |client, path| client.continue_operation(operation, path).map(|_| None)),
+            Run::Abort(operation) => self.confirm(
+                format!("Abort the {}?", operation.name()),
+                "Git returns the branch and files to the state before it started. Resolutions you made are lost.",
+                "Abort",
+                crate::ui::dialogs::Pending::Abort(operation),
+            ),
+            Run::Bisect(mark) => {
+                if let Some(testing) = self.bisect_status().and_then(|s| s.testing) {
+                    self.act("Mark bisect", move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
+                }
+            }
+            Run::EndBisect => self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into()))),
+            Run::PruneWorktrees => self.act("Forget missing worktrees", |client, path| {
+                client.prune_worktrees(path).map(|_| Some("Forgot missing worktrees.".into()))
+            }),
             Run::Identity { name, email, signing_key } => self.act("Apply identity", move |client, path| {
                 client
                     .apply_identity(&name, &email, signing_key.as_deref(), path)

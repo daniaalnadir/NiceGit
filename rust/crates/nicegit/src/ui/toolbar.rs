@@ -279,7 +279,12 @@ impl NiceGitApp {
             Some(ToolAction::Stash) => self.dialog = Some(Dialog::input("Stash changes", "Message (optional)", "", InputKind::SaveStash)),
             Some(ToolAction::Pop) => {
                 if let Some(stash) = snapshot.stashes.first().cloned() {
-                    self.act("Pop stash", move |client, path| client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into())));
+                    self.confirm(
+                        format!("Pop {}?", stash.reference),
+                        format!("“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.", stash.message),
+                        "Pop",
+                        crate::ui::dialogs::Pending::PopStash(stash),
+                    );
                 }
             }
             Some(ToolAction::Terminal) => self.toggle_terminal(ui.ctx()),
@@ -334,6 +339,15 @@ impl NiceGitApp {
             });
         }
         ui.separator();
+        let can_publish = self.snapshot().is_some_and(|s| s.upstream.is_none() && s.is_on_branch() && !s.remotes.is_empty()) && self.idle();
+        if ui
+            .add_enabled(can_publish, egui::Button::new(format!("{}  Publish branch…", icon::UPLOAD_SIMPLE)))
+            .on_disabled_hover_text("The branch already has an upstream, or there is no remote")
+            .clicked()
+        {
+            ui.close();
+            self.push();
+        }
         if ui.add_enabled(has_repo, egui::Button::new(format!("{}  Apply patch…", icon::FILE_PLUS))).clicked() {
             ui.close();
             self.apply_patch();

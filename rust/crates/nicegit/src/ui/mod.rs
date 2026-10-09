@@ -140,22 +140,26 @@ impl NiceGitApp {
         let panel = egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::ZERO);
         // Side panels scale with the window so the history keeps a usable width on small screens.
         let width = ui.ctx().content_rect().width();
+        // Each panel's draggable edge; double-clicking one restores that panel's default size.
+        let mut edges: Vec<(&str, PanelEdge)> = Vec::new();
         if self.settings.show_repositories {
-            egui::Panel::left("repositories")
+            let shown = egui::Panel::left("repositories")
                 .resizable(true)
                 .default_size(220.0_f32.min(width * 0.16))
                 .size_range(150.0..=320.0_f32.min(width * 0.22).max(150.0))
                 .frame(panel.fill(c.subtle_bg))
                 .show(ui, |ui| self.repositories_column(ui));
+            edges.push(("repositories", PanelEdge::Right(shown.response.rect)));
         }
         if self.snapshot().is_some() {
-            egui::Panel::left("sidebar")
+            let shown = egui::Panel::left("sidebar")
                 .resizable(true)
                 .default_size(260.0_f32.min(width * 0.2))
                 .size_range(180.0..=440.0_f32.min(width * 0.3).max(180.0))
                 .frame(panel)
                 .show(ui, |ui| self.sidebar(ui));
-            egui::Panel::right("changes")
+            edges.push(("sidebar", PanelEdge::Right(shown.response.rect)));
+            let shown = egui::Panel::right("changes")
                 .resizable(true)
                 .default_size(400.0_f32.min(width * 0.28))
                 .size_range(260.0..=640.0_f32.min(width * 0.4).max(260.0))
@@ -167,6 +171,7 @@ impl NiceGitApp {
                         self.changes_panel(ui);
                     }
                 });
+            edges.push(("changes", PanelEdge::Left(shown.response.rect)));
         }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(ui.visuals().window_fill)).show(ui, |ui| {
             if self.snapshot().is_none() {
@@ -183,18 +188,20 @@ impl NiceGitApp {
                 matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
             });
             if showing_diff {
-                egui::Panel::bottom("diff")
+                let shown = egui::Panel::bottom("diff")
                     .resizable(true)
                     .default_size(340.0)
                     .size_range(260.0..=900.0)
                     .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(0, 0)))
                     .show(ui, |ui| self.diff_panel(ui));
+                edges.push(("diff", PanelEdge::Top(shown.response.rect)));
             }
             self.terminal_panel(ui);
             self.operation_banner(ui);
             self.bisect_banner(ui);
             self.history(ui);
         });
+        restore_on_double_click(ui.ctx(), &edges);
     }
 
     fn empty_window(&mut self, ui: &mut egui::Ui) {
@@ -484,6 +491,39 @@ impl NiceGitApp {
             crate::diff_view::show_with(ui, diff, &mut repo.diff_options);
         } else {
             ui.take_available_space();
+        }
+    }
+}
+
+/// The edge of a panel that the user drags to resize it.
+#[allow(dead_code)]
+enum PanelEdge {
+    Left(egui::Rect),
+    Right(egui::Rect),
+    Top(egui::Rect),
+}
+
+/// Double-clicking a panel's edge restores its default size, as double-clicking a divider
+/// does in the Mac app. egui registers the resize handle as a widget with its own id.
+fn restore_on_double_click(ctx: &egui::Context, edges: &[(&str, PanelEdge)]) {
+    let now = ctx.input(|i| i.time);
+    for (id, _) in edges {
+        let handle = egui::Id::new(*id).with("__resize");
+        let Some(response) = ctx.read_response(handle) else { continue };
+        if !response.clicked() && !response.double_clicked() {
+            continue;
+        }
+        // Two clicks on the same edge in quick succession count as a double-click.
+        let last_click = egui::Id::new(("panel_edge_click", *id));
+        let previous: Option<f64> = ctx.data(|d| d.get_temp(last_click));
+        if response.double_clicked() || previous.is_some_and(|at| now - at <= 0.6) {
+            ctx.data_mut(|data| {
+                data.remove::<egui::containers::panel::PanelState>(egui::Id::new(*id));
+                data.remove::<f64>(last_click);
+            });
+            ctx.request_repaint();
+        } else {
+            ctx.data_mut(|data| data.insert_temp(last_click, now));
         }
     }
 }

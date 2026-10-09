@@ -26,13 +26,22 @@ pub enum Pending {
     Undo,
     Redo,
     RestoreFile { path: String, source: String, branch: String, head: Option<String> },
+    DeleteRemoteTag { tag: String, tip: String, remote: String, addresses: std::collections::BTreeMap<String, Vec<String>> },
+    PopStash(Stash),
 }
 
 pub enum InputKind {
-    CreateBranch { branch: String, head: Option<String> },
+    CreateBranch {
+        branch: String,
+        head: Option<String>,
+    },
     CreateBranchFrom(Branch),
     RenameBranch(Branch),
-    CreateTag { target: String },
+    /// A lightweight tag, or an annotated one with a message.
+    CreateTag {
+        target: String,
+        annotated: bool,
+    },
     SaveStash,
     Clone,
 }
@@ -118,6 +127,7 @@ impl NiceGitApp {
         let mut close = false;
         let mut run = false;
         let mut integrate: Option<bool> = None;
+        let published = self.head_published();
         let mut snapshot_commits: Vec<(String, String)> = Vec::new();
         if let Some(snapshot) = self.snapshot() {
             snapshot_commits = snapshot.commits.iter().map(|c| (c.hash.clone(), c.subject.clone())).collect();
@@ -159,14 +169,25 @@ impl NiceGitApp {
                     if ui.memory(|m| m.focused().is_none()) {
                         first.request_focus();
                     }
-                    if let Some(second_label) = second_label {
+                    let mut show_second = second_label.is_some();
+                    if let InputKind::CreateTag { annotated, .. } = kind {
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            ui.radio_value(annotated, false, "Lightweight");
+                            ui.radio_value(annotated, true, "Annotated, with a message");
+                        });
+                        show_second = *annotated;
+                    }
+                    let tag_needs_message = matches!(kind, InputKind::CreateTag { annotated: true, .. }) && second.trim().is_empty();
+                    if let Some(second_label) = second_label.as_ref().filter(|_| show_second) {
                         ui.add_space(6.0);
                         ui.label(RichText::new(second_label.as_str()).color(c.muted));
                         ui.horizontal(|ui| {
                             let browse = matches!(kind, InputKind::Clone);
                             let width = ui.available_width() - if browse { 90.0 } else { 0.0 };
                             if matches!(kind, InputKind::CreateTag { .. }) {
-                                ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width));
+                                ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width))
+                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tag message"));
                             } else {
                                 let second_name = second_label.clone();
                                 ui.add(egui::TextEdit::singleline(second).desired_width(width))
@@ -189,7 +210,8 @@ impl NiceGitApp {
                     ui.add_space(16.0);
                     let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "OK", !value.trim().is_empty()).clicked() || (enter && !value.trim().is_empty()) {
+                        let ready = !value.trim().is_empty() && !tag_needs_message;
+                        if widgets::primary_button(ui, "OK", ready).clicked() || (enter && ready) {
                             run = true;
                         }
                         if ui.button("Cancel").clicked() {
@@ -242,6 +264,13 @@ impl NiceGitApp {
                     ui.heading("Edit commit message");
                     ui.add_space(8.0);
                     ui.label(RichText::new("Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.").color(c.muted));
+                    if published {
+                        widgets::callout(
+                            ui,
+                            "This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile.",
+                            true,
+                        );
+                    }
                     ui.add_space(6.0);
                     ui.add(egui::TextEdit::multiline(message).desired_rows(6).desired_width(f32::INFINITY));
                     ui.add_space(16.0);
@@ -396,6 +425,13 @@ impl NiceGitApp {
                     .restore(&path, &source, &branch, head.as_deref(), repo)
                     .map(|_| Some(format!("Restored {path}. Review and commit the staged change.")))
             }),
+            Pending::DeleteRemoteTag { tag, tip, remote, addresses } => self.act("Delete remote tag", move |client, path| {
+                let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
+                client.delete_remote_tag(&tag, &remote, &tip, expected, path).map(|_| Some(format!("Deleted {tag} from {remote}.")))
+            }),
+            Pending::PopStash(stash) => self.act("Pop stash", move |client, path| {
+                client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
+            }),
             Pending::Undo => self.undo(),
             Pending::Redo => self.redo(),
             Pending::UndoCommit { branch, head } => self.act_recording("Undo commit", "Undo commit", move |client, path| {
@@ -417,8 +453,8 @@ impl NiceGitApp {
             InputKind::RenameBranch(branch) => {
                 self.act("Rename branch", move |client, path| client.rename_branch(&branch, &value, path).map(|_| None))
             }
-            InputKind::CreateTag { target } => self.act("Create tag", move |client, path| {
-                let message = (!second.trim().is_empty()).then_some(second.as_str());
+            InputKind::CreateTag { target, annotated } => self.act("Create tag", move |client, path| {
+                let message = annotated.then_some(second.as_str());
                 client.create_tag(&value, &target, message, path).map(|_| Some(format!("Created tag {}.", value.trim())))
             }),
             InputKind::SaveStash => self

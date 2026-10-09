@@ -169,6 +169,11 @@ impl<T: Send + 'static> Task<T> {
         self.value.as_mut()
     }
 
+    /// The value if it has already arrived, without polling for it.
+    pub fn peek(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
+
     pub fn is_pending(&mut self) -> bool {
         self.poll();
         self.value.is_none()

@@ -249,13 +249,19 @@ impl NiceGitApp {
     }
 
     fn confirm_discard(&mut self, entry: StatusEntry) {
-        let what = if entry.kind == StatusKind::Untracked {
-            format!("{} is untracked and will be deleted.", entry.path)
+        // Renames, conflicts, folders, and submodules are discarded without a saved copy.
+        let undoable = entry.original_path.is_none()
+            && !matches!(entry.kind, StatusKind::Conflicted | StatusKind::Renamed)
+            && !entry.path.ends_with('/');
+        let undo_note = if undoable {
+            "You can undo this from the Changes panel until the file changes again."
         } else {
-            format!(
-                "Staged and unstaged changes to {} are discarded. You can undo this from the Changes panel until the file changes again.",
-                entry.path
-            )
+            "This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy."
+        };
+        let what = if entry.kind == StatusKind::Untracked {
+            format!("{} is untracked and will be deleted. {undo_note}", entry.path)
+        } else {
+            format!("Staged and unstaged changes to {} are discarded. {undo_note}", entry.path)
         };
         self.confirm("Discard changes?", what, "Discard", Pending::Discard(entry));
     }
@@ -419,7 +425,7 @@ impl NiceGitApp {
     }
 
     /// Whether HEAD is already on a remote-tracking branch, judged from the loaded history.
-    fn head_published(&self) -> bool {
+    pub(crate) fn head_published(&self) -> bool {
         let Some(snapshot) = self.snapshot() else { return false };
         let Some(head) = &snapshot.head_hash else { return false };
         snapshot

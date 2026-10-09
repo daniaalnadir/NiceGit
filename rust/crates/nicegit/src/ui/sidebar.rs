@@ -211,9 +211,11 @@ impl NiceGitApp {
             }
         });
 
-        if snapshot.worktrees.len() > 1 {
-            section(ui, "worktrees", icon::FOLDERS, "Worktrees", snapshot.worktrees.len(), true, |ui| {
-                for worktree in &snapshot.worktrees {
+        let worktrees: Vec<&nicegit_core::Worktree> =
+            snapshot.worktrees.iter().filter(|w| matches(&w.path) || w.branch.as_deref().is_some_and(|b| matches(b))).collect();
+        {
+            section(ui, "worktrees", icon::FOLDERS, "Worktrees", worktrees.len(), true, |ui| {
+                for worktree in worktrees {
                     let current = worktree.path == snapshot.root_path;
                     let label = worktree.branch.clone().unwrap_or_else(|| "Detached HEAD".into());
                     let response = row(
@@ -239,6 +241,13 @@ impl NiceGitApp {
                         if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
                             ui.close();
                             ui.ctx().copy_text(worktree.path.clone());
+                        }
+                        if ui
+                            .add_enabled(!worktree.is_prunable, egui::Button::new(format!("{}  Show in file manager", icon::FOLDER)))
+                            .clicked()
+                        {
+                            ui.close();
+                            crate::ui::changes::reveal(std::path::Path::new(&worktree.path));
                         }
                         if ui.button(format!("{}  Manage worktrees…", icon::GEAR)).clicked() {
                             ui.close();
@@ -295,9 +304,15 @@ impl NiceGitApp {
                     if ui.add_enabled(allowed, egui::Button::new(format!("{}  Pop (apply and delete)", icon::TRAY_ARROW_UP))).clicked() {
                         ui.close();
                         let stash = stash.clone();
-                        self.act("Pop stash", move |client, path| {
-                            client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
-                        });
+                        self.confirm(
+                            format!("Pop {}?", stash.reference),
+                            format!(
+                                "“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
+                                stash.message
+                            ),
+                            "Pop",
+                            Pending::PopStash(stash),
+                        );
                     }
                     ui.separator();
                     if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
@@ -414,15 +429,16 @@ impl NiceGitApp {
                         .map(|_| Some(format!("Pushed {tag} to {remote}.")))
                 });
             }
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete from {remote}", icon::CLOUD_X))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete from {remote}…", icon::CLOUD_X))).clicked() {
                 ui.close();
                 let (tag, tip, remote, addresses) =
                     (tag.to_string(), tip.to_string(), remote.clone(), snapshot.remote_push_addresses.clone());
-                self.act("Delete remote tag", move |client, path| {
-                    client
-                        .delete_remote_tag(&tag, &remote, &tip, addresses.get(&remote).map(Vec::as_slice).unwrap_or_default(), path)
-                        .map(|_| Some(format!("Deleted {tag} from {remote}.")))
-                });
+                self.confirm(
+                    format!("Delete {tag} from {remote}?"),
+                    format!("The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept."),
+                    "Delete from remote",
+                    Pending::DeleteRemoteTag { tag, tip, remote, addresses },
+                );
             }
         }
         ui.separator();
@@ -525,8 +541,8 @@ impl NiceGitApp {
             self.dialog = Some(Dialog::with_second(
                 "New tag",
                 "Tag name",
-                "Message (optional; makes an annotated tag)",
-                InputKind::CreateTag { target: branch.tip.clone() },
+                "Tag message",
+                InputKind::CreateTag { target: branch.tip.clone(), annotated: false },
             ));
         }
         if !branch.is_remote && !branch.is_detached() {
@@ -568,11 +584,13 @@ impl NiceGitApp {
             if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
                 ui.close();
                 let merged = Self::branch_is_merged(branch, snapshot);
+                // Like the Mac app, this is Git's safe delete: an unmerged branch is refused.
+                // Clean Up Branches can delete unmerged branches after a separate choice.
                 let message = if merged {
                     "This branch is merged into the current branch, so no commits are lost.".to_string()
                 } else {
                     format!(
-                        "This branch has commits that are not in the current branch. Its tip is {}; you can recover it from Recover Lost Work.",
+                        "This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {}.",
                         short(&branch.tip)
                     )
                 };
@@ -580,7 +598,7 @@ impl NiceGitApp {
                     format!("Delete branch {}?", branch.name),
                     message,
                     "Delete",
-                    Pending::DeleteBranch { branch: branch.clone(), force: !merged },
+                    Pending::DeleteBranch { branch: branch.clone(), force: false },
                 );
             }
         }
