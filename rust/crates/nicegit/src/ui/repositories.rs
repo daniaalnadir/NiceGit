@@ -60,16 +60,16 @@ impl NiceGitApp {
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                             if repo.loading {
                                                 ui.spinner();
-                                            } else if {
+                                            } else {
                                                 let close_button = ui
                                                     .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
                                                     .on_hover_text("Close tab");
                                                 let name = format!("Close {}", repo.name());
                                                 close_button
                                                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
-                                                close_button.clicked()
-                                            } {
-                                                close = Some(index);
+                                                if close_button.clicked() {
+                                                    close = Some(index);
+                                                }
                                             }
                                         });
                                     });
