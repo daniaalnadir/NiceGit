@@ -162,8 +162,9 @@ fn edit_and_save_a_working_file_in_the_built_in_editor() {
     let edit = format!("{}  Edit", icon::PENCIL_SIMPLE);
     wait(&mut harness, "the Edit button", |h| h.query_by_label(&edit).is_some());
     idle(&mut harness);
-    settle(&mut harness);
-    harness.get_by_label(&edit).click();
+    // An accessibility click, like a screen reader's, does not depend on where the diff header
+    // is laid out in the frame the click arrives.
+    harness.get_by_label(&edit).click_accesskit();
     wait(&mut harness, "the editor", |h| h.query_by_role_and_label(Role::TextInput, "File contents").is_some());
     settle(&mut harness);
 
