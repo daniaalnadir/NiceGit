@@ -945,16 +945,7 @@ impl NiceGitApp {
             let last_load = self.repo().map(|r| r.last_load).unwrap_or_else(Instant::now);
             while let Ok(event) = watch.events.try_recv() {
                 let Ok(event) = event else { continue };
-                // Object writes and lock files come with every Git command; the index, refs,
-                // and working files are what change the visible state.
-                let relevant = event.paths.iter().any(|p| {
-                    let text = p.to_string_lossy().replace('\\', "/");
-                    !text.contains("/.git/objects/")
-                        && !text.contains("/.git/logs/")
-                        && !text.ends_with(".lock")
-                        && !text.contains("/target/")
-                });
-                if relevant && last_load.elapsed() > WATCH_DEBOUNCE {
+                if changes_visible_state(&event) && last_load.elapsed() > WATCH_DEBOUNCE {
                     self.watched_change.get_or_insert_with(Instant::now);
                 }
             }
@@ -1069,5 +1060,54 @@ impl eframe::App for NiceGitApp {
         self.settings.open = self.repos.iter().map(|r| r.path.clone()).collect();
         self.settings.active = self.active;
         eframe::set_value(storage, STORAGE_KEY, &self.settings);
+    }
+}
+
+/// Whether a file system event can change what NiceGit shows. Reading a file is not a change:
+/// on Linux every open is reported, and reacting to the reads of NiceGit's own refresh would
+/// refresh again in a loop. Object writes and lock files come with every Git command; the
+/// index, refs, and working files are what change the visible state.
+fn changes_visible_state(event: &notify::Event) -> bool {
+    use notify::event::{AccessKind, AccessMode, EventKind};
+    let changed = match event.kind {
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        EventKind::Access(_) => false,
+        _ => true,
+    };
+    changed
+        && event.paths.iter().any(|path| {
+            let text = path.to_string_lossy().replace('\\', "/");
+            !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, EventKind, ModifyKind};
+    use notify::Event;
+
+    use super::changes_visible_state;
+
+    fn event(kind: EventKind, path: &str) -> Event {
+        Event::new(kind).add_path(path.into())
+    }
+
+    #[test]
+    fn reads_never_trigger_a_refresh_but_writes_do() {
+        let file = "/repo/src/main.rs";
+        assert!(!changes_visible_state(&event(EventKind::Access(AccessKind::Open(AccessMode::Any)), file)));
+        assert!(!changes_visible_state(&event(EventKind::Access(AccessKind::Close(AccessMode::Read)), file)));
+        assert!(changes_visible_state(&event(EventKind::Access(AccessKind::Close(AccessMode::Write)), file)));
+        assert!(changes_visible_state(&event(EventKind::Modify(ModifyKind::Data(DataChange::Content)), file)));
+        assert!(changes_visible_state(&event(EventKind::Create(CreateKind::File), "/repo/.git/index")));
+    }
+
+    #[test]
+    fn git_internals_that_change_with_every_command_are_ignored() {
+        let write = EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        for path in ["/repo/.git/objects/ab/cdef", "/repo/.git/logs/HEAD", "/repo/.git/index.lock", "/repo/target/debug/app"] {
+            assert!(!changes_visible_state(&event(write, path)), "{path}");
+        }
+        assert!(changes_visible_state(&event(write, "/repo/.git/refs/heads/main")));
     }
 }

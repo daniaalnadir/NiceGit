@@ -701,3 +701,28 @@ fn interactive_rebase_drops_a_commit_through_its_window() {
     assert!(log.starts_with("Keep this one too\nKeep this commit\nAdd a second line"), "{log}");
     assert!(!path.join("mistake.txt").exists());
 }
+
+#[test]
+fn an_idle_repository_does_not_keep_refreshing_itself() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    // Let the opening load's own file activity pass.
+    std::thread::sleep(Duration::from_millis(600));
+    harness.run_steps(3);
+    idle(&mut harness);
+    let loads = harness.state().repo().unwrap().generation;
+
+    // Showing a diff reads files, which Linux reports as file events. NiceGit's own reads must
+    // not look like outside changes, or each one starts a refresh.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| diff_has_changes(h) == Some(true));
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        harness.step();
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    assert_eq!(harness.state().repo().unwrap().generation, loads, "no refresh happened while nothing changed");
+}
