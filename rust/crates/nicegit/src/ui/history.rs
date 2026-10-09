@@ -122,7 +122,8 @@ impl NiceGitApp {
                                     .hint_text("Filter loaded commits by message, author, ID, or branch")
                                     .frame(egui::Frame::NONE)
                                     .desired_width(f32::INFINITY),
-                            );
+                            )
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter loaded commits"));
                         });
                     },
                 );

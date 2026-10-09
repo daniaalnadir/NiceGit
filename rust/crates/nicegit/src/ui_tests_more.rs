@@ -761,3 +761,92 @@ fn an_idle_repository_does_not_keep_refreshing_itself() {
     }
     assert_eq!(harness.state().repo().unwrap().generation, loads, "no refresh happened while nothing changed");
 }
+
+#[test]
+fn filter_loaded_commits_by_message() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    assert!(harness.query_by_label("Start the notes").is_some());
+
+    type_into(&mut harness, "Filter loaded commits", "second");
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Add a second line").is_some(), "the matching commit stays");
+    assert!(harness.query_by_label("Start the notes").is_none(), "other commits are hidden");
+}
+
+#[test]
+fn command_f_moves_to_find_in_diff() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| diff_has_changes(h) == Some(true));
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::F);
+    wait(&mut harness, "the find field to take focus", |h| {
+        h.get_by_role_and_label(Role::TextInput, "Find in diff").accesskit_node().is_focused()
+    });
+}
+
+#[test]
+fn publish_a_branch_through_its_dialog() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(path), "Publish branch");
+    wait(&mut harness, "the publish dialog", |h| shows(h, "Push main to a remote and track it there."));
+    // The toolbar has a Publish button too; the dialog's is drawn last.
+    harness.query_all(By::new().role(Role::Button).label("Publish")).last().expect("the dialog's Publish").click();
+    idle(&mut harness);
+    wait(&mut harness, "the upstream", |_| {
+        Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "main@{upstream}"])
+            .current_dir(path)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    });
+    assert_eq!(git(path, &["rev-parse", "--abbrev-ref", "main@{upstream}"]), "origin/main");
+    assert_eq!(git(remote.path(), &["rev-parse", "main"]), git(path, &["rev-parse", "main"]), "the remote has the branch");
+}
+
+#[test]
+fn drag_a_branch_onto_the_current_branch_to_rebase_onto_it() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "side.txt", b"from feature\n", "Work on the feature");
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    let from = harness.get_all_by_label("feature").next().expect("feature row").rect().center();
+    let to = harness.get_all_by_label("main").next().expect("main row").rect().center();
+    harness.hover_at(from);
+    harness.step();
+    harness.drag_at(from);
+    harness.step();
+    for step in 1..=6 {
+        harness.hover_at(from + (to - from) * (step as f32 / 6.0));
+        harness.step();
+    }
+    harness.drop_at(to);
+    harness.step();
+    wait(&mut harness, "the merge or rebase choice", |h| shows(h, "Integrate feature"));
+    harness.get_by_label(&format!("{}  Rebase…", icon::GIT_PULL_REQUEST)).click();
+    wait(&mut harness, "the rebase confirmation", |h| shows(h, "Rebase main onto feature?"));
+    harness.get_by_role_and_label(Role::Button, "Rebase").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rebase", |_| {
+        Command::new("git").args(["merge-base", "--is-ancestor", "feature", "main"]).current_dir(path).status().is_ok_and(|s| s.success())
+    });
+    assert_eq!(git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count(), 2, "history stays linear");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "main's own commit is replayed on top");
+}

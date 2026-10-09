@@ -46,18 +46,18 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Check out local and remote branches; tracking branches | Branch menu, double-click, palette | UI `check_out_a_branch_from_its_menu`; core `client::checkout_*`, `coverage::checkout_remote_*` (6) |
 | Create, rename, delete branches; create at a selected tip | Toolbar Branch, branch and commit menus | UI `create_a_branch_from_the_toolbar`; core `client::create_branch_*`, `delete_*`, `coverage::rename_branch_*`, `create_branch_from_*` |
 | Upstream selector and removal | Branch menu › Upstream | core `settings::set_and_unset_upstream_checks_branch_tip`, `set_upstream_refuses_missing_remote_branch` |
-| Fetch, pull, push, publish; push a selected branch | Toolbar; branch menu | core `client::publish_sets_upstream_and_push_updates_remote`, `pull_*`, `push_refuses_stale_snapshot`, `coverage::fetch_*`, `push_branch_*` |
+| Fetch, pull, push, publish; push a selected branch | Toolbar; branch menu | UI `publish_a_branch_through_its_dialog`; core `client::publish_sets_upstream_and_push_updates_remote`, `pull_*`, `push_refuses_stale_snapshot`, `coverage::fetch_*`, `push_branch_*` |
 | Ahead and behind counts | Sidebar, toolbar Pull/Push labels | core `client::snapshot_counts_commits_ahead_of_and_behind_the_upstream` |
-| Drag a branch onto the current branch to merge or rebase | Sidebar rows and graph labels | UI `drag_a_branch_onto_the_current_branch_to_merge_it` |
+| Drag a branch onto the current branch to merge or rebase | Sidebar rows and graph labels | UI `drag_a_branch_onto_the_current_branch_to_merge_it`, `drag_a_branch_onto_the_current_branch_to_rebase_onto_it` |
 | Merge and rebase with previews | Branch menu; confirmation shows the preview | core `rewrite::merge_preview_*` (4), `rebase_preview_is_marked_as_an_estimate`, `rebase_onto_branch_replays_the_current_branch`, `client::merge_refuses_*` |
 | Worktrees: browse, open, reveal, copy path, create, remove, forget | Sidebar Worktrees, Worktrees window | UI `create_and_remove_a_worktree_from_the_interface`, `copy_reveal_and_open_a_worktree_from_the_sidebar`; core `settings::create_worktree_*`, `remove_worktree_*`, `prune_*` |
 | Submodules with state; check out recorded commit | Sidebar Submodules, Submodules window | core `settings::submodule*` (3), `missing_submodule_folder_*`, `update_submodule_*` |
 | Tags: create (lightweight or annotated), inspect, delete, push, delete from remote | Sidebar Tags, commit menu | UI `create_lightweight_and_annotated_tags_from_the_graph`; core `client::delete_tag_*`, `create_tag_*`, `settings::push_tag_*`, `delete_remote_tag_*` |
-| Stashes: save selected files and untracked, preview, apply, pop, delete | Sidebar Stashes, Stashes window, toolbar | UI `stash_window_saves_selected_changes`, `stash_only_the_ticked_files_then_preview_the_stash`; core `client::*stash*` (4), `settings::stash_selected_*` (3), `coverage::stash_diff_*`; unit `tools::stash::tests::*` (8) |
+| Stashes: save selected files and untracked, preview, apply, pop, delete | Sidebar Stashes, Stashes window, toolbar | UI `stash_window_saves_selected_changes`, `stash_only_the_ticked_files_then_preview_the_stash`; core `client::*stash*` (4), `client::pop_that_conflicts_keeps_the_stash`, `settings::stash_selected_*` (3), `coverage::stash_diff_*`; unit `tools::stash::tests::*` (8) |
 | GitHub pull requests and issues | Sidebar sections, GitHub window | UI `github_pull_requests_and_issues_load_from_github` (needs `gh` sign-in, so run with `--ignored`; passes against github.com); core `inspect::github_*` (3); unit `github::tests::*` (3) |
 | Copy a GitHub commit link | Branch and commit menus | UI `copy_a_github_commit_link_from_the_graph`; core `inspect::github_remote_addresses_are_parsed_in_every_supported_form` |
 | Clean up merged or inactive branches, undoable | Repository menu › Clean up branches; toolbar Undo | UI `clean_up_branches_deletes_a_merged_branch_and_undo_restores_it`; core `workflows::cleanup_*` (4) |
-| GitFlow | Repository menu › GitFlow | UI `gitflow_sets_up_develop_and_starts_a_feature`; core `workflows::gitflow_*` (8) |
+| GitFlow | Repository menu › GitFlow | UI `gitflow_sets_up_develop_and_starts_a_feature`; core `workflows::gitflow_*` (9, including a hotfix) |
 | Git LFS | Repository menu › Git LFS | UI `track_and_untrack_an_lfs_pattern`; core `workflows::lfs_*`, `track_*`, `untrack_*` |
 | Identity profiles | Repository Settings › Profiles, palette | UI `save_an_identity_profile_and_apply_it_from_the_palette`; core `settings::apply_identity_*` |
 
@@ -67,7 +67,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | --- | --- | --- |
 | Commit graph with stable lanes, labels, initials, working tree at HEAD | History | unit `graph::tests::*` (4), `graph_view::tests::initials_use_first_and_last_words`, `parsers::tests::log_keeps_commas_in_ref_names` |
 | Keyboard navigation (Up, Down, Escape) | History | UI `arrow_keys_move_through_the_graph_and_escape_clears` |
-| Load older history; filter loaded commits | History header and end of the graph | UI `load_older_history_reads_the_next_page` |
+| Load older history; filter loaded commits | History header and end of the graph | UI `load_older_history_reads_the_next_page`, `filter_loaded_commits_by_message` |
 | Search every branch's history | Search history window (Shift-Ctrl/Cmd-F) | UI `search_history_finds_a_commit_by_its_message`; core `history::search_*` (5) |
 | Search file contents; open blame at a match | Search file contents (Alt-Ctrl/Cmd-F) | core `history::content_search_*` (3); unit `search::tests::*` (3) |
 | Commit inspector: message, metadata, parents, files, patches | Right panel | UI `the_inspector_shows_the_whole_commit_message_as_written`, `restore_a_file_from_the_commit_inspector`, `revert_and_edit_message_from_the_graph`; core `history::commit_file_diff_*` |
@@ -85,7 +85,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Mac app feature | Cross-platform app | Verified by |
 | --- | --- | --- |
 | Staged and unstaged changes as a path list or folder tree | Changes panel | UI `stage_commit_and_undo_through_the_interface`, `folder_tree_groups_changed_files_by_folder`, `untracked_files_show_their_whole_content_as_added`; core `client::snapshot_*` (5) |
-| Diffs: unified or side by side (long lines wrapped), hide whitespace in every diff, find with Ctrl/Cmd-F | Diff panel, Compare, blame, file history, stash preview | UI `hide_whitespace_leaves_out_whitespace_only_changes`, `find_in_diff_counts_and_steps_through_matches`; unit `diff_view::tests::split_rows_are_as_tall_as_the_wrapped_text` and 3 more, `diff::tests::*` (3), `inline::tests::*` (6) |
+| Diffs: unified or side by side (long lines wrapped), hide whitespace in every diff, find with Ctrl/Cmd-F | Diff panel, Compare, blame, file history, stash preview | UI `hide_whitespace_leaves_out_whitespace_only_changes`, `find_in_diff_counts_and_steps_through_matches`, `command_f_moves_to_find_in_diff`; unit `diff_view::tests::split_rows_are_as_tall_as_the_wrapped_text` and 3 more, `diff::tests::*` (3), `inline::tests::*` (6) |
 | Stage, unstage, and commit | Changes panel, commit box | UI `stage_commit_and_undo_through_the_interface`; core `client::stage_*`, `unstage_*`, `commit_*`; CI run (OS keyboard input stages through the palette) |
 | Stage individual lines | Diff panel line selection | core `staging::*` (13 line-staging tests); unit `staging::tests::*` (4) |
 | Discard with confirmation; undo recent discards | Changes panel | UI `discard_asks_first_and_can_be_undone`, `discard_all_restores_every_changed_file`; core `client::discard_*` (5), `rewrite::discard_undo_*` (4) |

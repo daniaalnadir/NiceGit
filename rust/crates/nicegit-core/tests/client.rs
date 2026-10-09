@@ -756,3 +756,18 @@ fn snapshot_counts_commits_ahead_of_and_behind_the_upstream() {
     let diverged = snapshot(repo.path());
     assert_eq!((diverged.ahead, diverged.behind), (Some(2), Some(1)));
 }
+
+#[test]
+fn pop_that_conflicts_keeps_the_stash() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    client().save_stash("keep me", repo.path()).expect("save stash");
+    repo.commit("a.txt", "three\n", "Change the same line");
+    let stash = client().list_stashes(repo.path()).unwrap()[0].clone();
+
+    let result = client().pop_stash(&stash, repo.path());
+
+    assert!(result.is_err(), "the pop conflicts");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is kept to try again");
+}

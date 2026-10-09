@@ -518,3 +518,19 @@ fn creating_a_branch_at_a_reflog_entry_keeps_the_commit_reachable() {
     assert!(client().unreachable_commits(&hashes, repo.path()).expect("unreachable").is_empty());
     assert!(client().create_branch_at("rescued", &second, repo.path()).is_err(), "an existing name is refused");
 }
+
+#[test]
+fn gitflow_hotfix_finish_tags_and_merges_into_both_branches() {
+    let (repo, head) = gitflow_repo("v");
+    client().start_gitflow(GitFlowKind::Hotfix, "1.0.1", "main", Some(&head), repo.path()).expect("start hotfix");
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "hotfix/1.0.1", "a hotfix starts from production");
+    repo.commit("fix.txt", "fixed\n", "Fix the crash");
+    let hotfix_head = current_head(repo.path());
+
+    client().finish_gitflow("hotfix/1.0.1", Some(&hotfix_head), Some("Urgent fix"), repo.path()).expect("finish hotfix");
+
+    assert!(!branch_exists(repo.path(), "hotfix/1.0.1"));
+    assert!(tag_exists(repo.path(), "v1.0.1"), "the hotfix version is tagged");
+    assert!(is_ancestor(repo.path(), &hotfix_head, "refs/heads/main"), "production includes the fix");
+    assert!(is_ancestor(repo.path(), &hotfix_head, "refs/heads/develop"), "development includes the fix");
+}

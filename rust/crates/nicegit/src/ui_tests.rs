@@ -227,7 +227,8 @@ fn stash_window_saves_selected_changes() {
     wait(&mut harness, "the stash window", |h| h.state().tools.iter().any(|t| t.id() == "stashes"));
     harness.get_by_label_contains("Stash changes").click();
     idle(&mut harness);
-    assert!(git(repo.path(), &["stash", "list"]).contains("notes") || !git(repo.path(), &["stash", "list"]).is_empty());
+    assert_eq!(git(repo.path(), &["stash", "list"]).lines().count(), 1, "one stash was made");
+    assert_eq!(git(repo.path(), &["stash", "show", "--name-only", "stash@{0}"]), "notes.txt", "it holds the changed file");
     assert_eq!(std::fs::read_to_string(repo.path().join("notes.txt")).unwrap(), "first\nsecond\n");
 }
 

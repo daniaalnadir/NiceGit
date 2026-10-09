@@ -401,7 +401,8 @@ fn draw_unified_row(ui: &mut Ui, line: usize, row_rect: Rect, view: &View, optio
 /// Draws one row of a split diff into `row_rect`, each side wrapping its long lines.
 fn draw_split_row(ui: &mut Ui, row: usize, row_rect: Rect, view: &View, options: &mut DiffOptions, response: &mut DiffResponse) {
     match view.content.split[row] {
-        SplitRow::Banner(line) => view.paint_line(ui, row_rect, line, &[], false, false),
+        // Banners line up with the text beside the line numbers rather than the pane's edge.
+        SplitRow::Banner(line) => view.paint_line(ui, row_rect, line, &[None], false, false),
         SplitRow::Pair { left, right } => {
             let height = row_rect.height();
             let left_rect = Rect::from_min_size(row_rect.min, vec2(view.style.half, height));
