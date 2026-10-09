@@ -430,8 +430,13 @@ impl NiceGitApp {
                         self.clear_selection();
                     }
                     let mut split = self.settings.split_diff;
-                    ui.selectable_value(&mut split, true, "Split");
-                    ui.selectable_value(&mut split, false, "Unified");
+                    // A diff with only one side always shows in one column.
+                    let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
+                    ui.add_enabled_ui(!one_sided, |ui| {
+                        ui.selectable_value(&mut split, true, "Split")
+                            .on_disabled_hover_text("A new or deleted file has only one side, so it is shown in one column");
+                        ui.selectable_value(&mut split, false, "Unified");
+                    });
                     self.settings.split_diff = split;
                     let mut ignore = self.settings.ignore_whitespace;
                     if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {

@@ -412,7 +412,7 @@ impl NiceGitApp {
         ui.add_space(6.0);
         let repo = &self.repos[self.active];
         let label = if repo.draft.summary.trim().is_empty() {
-            format!("{}  Type a message to commit", icon::CHECK_CIRCLE)
+            format!("{}  Write a summary to commit", icon::CHECK_CIRCLE)
         } else if repo.amend {
             format!("{}  Amend last commit", icon::CHECK_CIRCLE)
         } else if staged == 0 {
@@ -421,10 +421,18 @@ impl NiceGitApp {
             format!("{}  Commit {staged} file{} to {}", icon::CHECK_CIRCLE, if staged == 1 { "" } else { "s" }, snapshot.current_branch)
         };
         let enabled = self.can_commit();
+        // Outlined and centred even while disabled, so it reads as the commit button rather
+        // than another text field.
         let button = egui::Button::new(RichText::new(label).strong().color(if enabled { c.accent_text } else { c.muted }))
             .fill(if enabled { c.accent } else { ui.visuals().widgets.inactive.weak_bg_fill })
+            .stroke(egui::Stroke::new(1.0, if enabled { c.accent } else { c.border }))
             .min_size(egui::vec2(ui.available_width(), 36.0));
-        if ui.add_enabled(enabled, button).on_hover_text("Ctrl/Cmd-Enter").clicked() {
+        let clicked = ui
+            .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add_enabled(enabled, button))
+            .inner
+            .on_hover_text("Ctrl/Cmd-Enter")
+            .clicked();
+        if clicked {
             self.commit();
         }
     }

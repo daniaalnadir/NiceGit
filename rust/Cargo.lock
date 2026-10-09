@@ -933,10 +933,14 @@ checksum = "5eb3f3effb2726fee23449293e67acbf6cc6ce35525b1722bd5743bb348114d5"
 dependencies = [
  "eframe",
  "egui",
+ "egui-wgpu",
+ "image",
  "kittest",
  "log",
+ "pollster 1.0.1",
  "serde",
  "toml",
+ "wgpu",
 ]
 
 [[package]]
@@ -1887,7 +1891,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "alacritty_terminal",
  "eframe",
@@ -1905,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "tempfile",
 ]

@@ -1,7 +1,7 @@
 //! The diff view: unified or side by side, with word highlights, a find bar, and line selection
 //! for staging individual lines. Rows are virtualised, so large diffs stay responsive. Long
-//! lines wrap within each side of a split diff, as in the Mac app, and scroll horizontally in
-//! the unified view.
+//! lines wrap, within each side of a split diff as in the Mac app, and across the unified view,
+//! so no line is cut off at the panel edge.
 
 #![allow(dead_code)]
 
@@ -66,6 +66,15 @@ impl DiffContent {
         let max_columns = line_columns.iter().copied().max().unwrap_or(0);
         let highlights = inline::highlights(&lines);
         Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns }
+    }
+
+    /// Whether only one side has lines, as for a new or deleted file; such a diff is always
+    /// shown in one column, since the other would be blank.
+    pub fn is_one_sided(&self) -> bool {
+        // A changed file keeps unchanged lines on both sides; only an added or removed file has
+        // none, and lines of one kind.
+        let has = |kind: DiffLineKind| self.lines.iter().any(|line| line.kind == kind);
+        !has(DiffLineKind::Context) && (!has(DiffLineKind::Deletion) || !has(DiffLineKind::Addition))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -146,56 +155,43 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     response.match_count = occurrences.len();
     response.current_match_line = occurrences.get(options.find.current).map(|occurrence| occurrence.line);
 
-    // A new or deleted file has only one side; showing it beside an empty column would halve
-    // the room its lines have, so it is shown in one column.
-    let one_sided = !content.lines.iter().any(|line| line.kind == DiffLineKind::Deletion)
-        || !content.lines.iter().any(|line| line.kind == DiffLineKind::Addition);
-    let split = options.split && !one_sided;
-    let style = Style::new(ui, content, split);
+    // Beside an empty column, a new or deleted file's lines would have half the room.
+    let split = options.split && !content.is_one_sided();
+    let style = Style::new(ui, split);
     let rows = if split { content.split.len() } else { content.lines.len() };
-    // Where each row starts. Unified rows are one line high; split rows as high as their
-    // longer side wraps.
-    let tops: Vec<f32> = if split {
-        let mut tops = Vec::with_capacity(rows + 1);
-        let mut top = 0.0;
-        for row in &content.split {
-            tops.push(top);
-            top += style.split_row_height(content, row);
-        }
+    // Where each row starts: as high as its line wraps, or a split row's longer side.
+    let mut tops = Vec::with_capacity(rows + 1);
+    let mut top = 0.0;
+    for row in 0..rows {
         tops.push(top);
-        tops
-    } else {
-        Vec::new()
-    };
+        top += if split { style.split_row_height(content, &content.split[row]) } else { style.unified_row_height(content, row) };
+    }
+    tops.push(top);
     let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), split)).auto_shrink([false, false]);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
         let row = content.row_of(line, split);
-        let top = if split { tops[row] } else { row as f32 * style.row_height };
-        area = area.vertical_scroll_offset((top - ui.available_height() * 0.4).max(0.0));
+        area = area.vertical_scroll_offset((tops[row] - ui.available_height() * 0.4).max(0.0));
     }
     let view = View { content, occurrences: &occurrences, current: options.find.current, split, style, drag_id };
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
-        if split {
-            area.show_viewport(ui, |ui, viewport| {
-                let origin = ui.max_rect().min;
-                let height = tops[rows];
-                ui.allocate_rect(Rect::from_min_size(origin, vec2(view.style.total, height)), Sense::hover());
-                // The rows that overlap the visible part of the diff.
-                let first = tops.partition_point(|top| *top <= viewport.min.y).saturating_sub(1);
-                let last = tops.partition_point(|top| *top < viewport.max.y).min(rows);
-                for row in first..last {
-                    let rect = Rect::from_min_size(origin + vec2(0.0, tops[row]), vec2(view.style.total, tops[row + 1] - tops[row]));
+        area.show_viewport(ui, |ui, viewport| {
+            let origin = ui.max_rect().min;
+            ui.allocate_rect(Rect::from_min_size(origin, vec2(view.style.total, tops[rows])), Sense::hover());
+            // The rows that overlap the visible part of the diff.
+            let first = tops.partition_point(|top| *top <= viewport.min.y).saturating_sub(1);
+            let last = tops.partition_point(|top| *top < viewport.max.y).min(rows);
+            for row in first..last {
+                let rect = Rect::from_min_size(origin + vec2(0.0, tops[row]), vec2(view.style.total, tops[row + 1] - tops[row]));
+                if split {
                     draw_split_row(ui, row, rect, &view, options, &mut response);
+                } else {
+                    draw_unified_row(ui, row, rect, &view, options, &mut response);
                 }
-            });
-        } else {
-            area.show_rows(ui, view.style.row_height, rows, |ui, range| {
-                draw_rows(ui, range, &view, options, &mut response);
-            });
-        }
+            }
+        });
     });
     response
 }
@@ -213,29 +209,30 @@ struct Style {
     total: f32,
     /// Width of one side of a split diff.
     half: f32,
-    /// In a split diff, the columns of text that fit on one side before a line wraps.
+    /// The columns of text that fit before a line wraps: on one side of a split diff, or
+    /// across the unified view.
     wrap_columns: Option<usize>,
-    /// Width of the text on one side of a split diff, where its lines wrap.
+    /// Width of the text, where its lines wrap.
     wrap_width: f32,
 }
 
 impl Style {
-    fn new(ui: &Ui, content: &DiffContent, split: bool) -> Self {
+    fn new(ui: &Ui, split: bool) -> Self {
         let font = TextStyle::Monospace.resolve(ui.style());
         let char_width = ui.ctx().fonts_mut(|fonts| fonts.glyph_width(&font, '0'));
         let gutter = NUMBER_COLUMNS * char_width + PADDING;
-        let text_width = content.max_columns as f32 * char_width + 2.0 * PADDING;
         let available = (ui.available_width() - SCROLLBAR_ALLOWANCE).max(0.0);
-        let (total, half) = if split {
-            // Each side takes half the width and its long lines wrap, down to a narrow minimum.
-            let half = ((available - SPLIT_GAP) / 2.0).max(gutter + MIN_WRAP_COLUMNS as f32 * char_width + 2.0 * PADDING);
-            (2.0 * half + SPLIT_GAP, half)
+        // Text wraps to the room it has, down to a narrow minimum below which the view scrolls.
+        let minimum_text = MIN_WRAP_COLUMNS as f32 * char_width + 2.0 * PADDING;
+        let (total, half, gutters) = if split {
+            let half = ((available - SPLIT_GAP) / 2.0).max(gutter + minimum_text);
+            (2.0 * half + SPLIT_GAP, half, 1.0)
         } else {
-            let total = available.max(2.0 * gutter + text_width);
-            (total, total)
+            let total = available.max(2.0 * gutter + minimum_text);
+            (total, total, 2.0)
         };
-        let wrap_width = (half - gutter - 2.0 * PADDING).max(char_width);
-        let wrap_columns = split.then(|| ((wrap_width / char_width).floor() as usize).max(1));
+        let wrap_width = (half - gutters * gutter - 2.0 * PADDING).max(char_width);
+        let wrap_columns = Some(((wrap_width / char_width).floor() as usize).max(1));
         Self {
             font,
             colors: theme::of(ui),
@@ -250,12 +247,17 @@ impl Style {
         }
     }
 
-    /// How many lines of text `line` takes on one side of a split diff.
+    /// How many lines of text `line` wraps onto.
     fn wrapped_lines(&self, content: &DiffContent, line: usize) -> usize {
         match self.wrap_columns {
             Some(columns) => content.line_columns[line].div_ceil(columns).max(1),
             None => 1,
         }
+    }
+
+    /// The height of a unified row: its line, wrapped.
+    fn unified_row_height(&self, content: &DiffContent, line: usize) -> f32 {
+        self.wrapped_lines(content, line) as f32 * (self.row_height - 2.0) + 2.0
     }
 
     /// The height of a split row: its longer side, wrapped.
@@ -359,16 +361,12 @@ impl View<'_> {
     }
 }
 
-/// Draws the unified rows in `range`, handling pointer selection on changed lines.
-fn draw_rows(ui: &mut Ui, range: Range<usize>, view: &View, options: &mut DiffOptions, response: &mut DiffResponse) {
-    let height = view.style.row_height;
-    for line in range {
-        let row_rect = allocate_row(ui, view.style.total, height);
-        let selected = select_by_pointer(ui, view, row_rect, line, options, response);
-        let diff_line = &view.content.lines[line];
-        let numbers = [diff_line.old_number, diff_line.new_number];
-        view.paint_line(ui, row_rect, line, &numbers, selected, false);
-    }
+/// Draws one unified line into `row_rect`, handling pointer selection on changed lines.
+fn draw_unified_row(ui: &mut Ui, line: usize, row_rect: Rect, view: &View, options: &mut DiffOptions, response: &mut DiffResponse) {
+    let selected = select_by_pointer(ui, view, row_rect, line, options, response);
+    let diff_line = &view.content.lines[line];
+    let numbers = [diff_line.old_number, diff_line.new_number];
+    view.paint_line(ui, row_rect, line, &numbers, selected, true);
 }
 
 /// Draws one row of a split diff into `row_rect`, each side wrapping its long lines.
@@ -596,7 +594,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, true);
+            let style = Style::new(ui, true);
             let row = content.split[content.row_of(0, true)];
             let wrapped = style.wrapped_lines(&content, 0);
             assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
@@ -609,6 +607,33 @@ mod tests {
             assert_eq!(galley.rows.len(), wrapped);
         });
         // No renderer takes the font texture here.
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn only_new_and_deleted_files_are_one_sided() {
+        let line = |text: &str, kind| DiffLine { text: text.to_string(), kind, old_number: None, new_number: None };
+        let new_file = DiffContent::new("new".into(), vec![line("+a", DiffLineKind::Addition), line("+b", DiffLineKind::Addition)]);
+        let deleted = DiffContent::new("gone".into(), vec![line("-a", DiffLineKind::Deletion)]);
+        let grown = DiffContent::new("grown".into(), vec![line(" a", DiffLineKind::Context), line("+b", DiffLineKind::Addition)]);
+        let edited = DiffContent::new("edited".into(), vec![line("-a", DiffLineKind::Deletion), line("+b", DiffLineKind::Addition)]);
+        assert!(new_file.is_one_sided() && deleted.is_one_sided());
+        assert!(!grown.is_one_sided(), "a file that only gained lines still has its old lines on the left");
+        assert!(!edited.is_one_sided());
+    }
+
+    #[test]
+    fn unified_rows_wrap_long_lines_too() {
+        let long = format!("+{}", "word ".repeat(120));
+        let lines = vec![DiffLine { text: long, kind: DiffLineKind::Addition, old_number: None, new_number: Some(1) }];
+        let content = DiffContent::new("new.txt".to_string(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, false);
+            assert!(style.wrapped_lines(&content, 0) > 1, "a 600-column line wraps in a 700-point view");
+            assert!(style.total <= 700.0, "the view fits its width instead of scrolling sideways");
+        });
         output.textures_delta.clear();
     }
 

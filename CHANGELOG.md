@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 - Nothing cut off
+
+- Every diff wraps long lines, in one column as well as side by side, so no line is cut off
+  at the panel edge. The built-in editor wraps too, numbering only each line's first row.
+- A new or deleted file's diff uses one column, and the Split control says why it is
+  unavailable; a file that only gained lines still shows side by side.
+- Toolbar groups are separated by clear rules, the More menu matches the other toolbar
+  buttons, and the commit button reads as a button even before a summary is written.
+- Design-review screenshots render offscreen from a test, with no display needed.
+
 ## 0.6.0 - Every feature checked by an interface test
 
 - Side-by-side diffs wrap long lines within each side, as in the Mac app, and the diff

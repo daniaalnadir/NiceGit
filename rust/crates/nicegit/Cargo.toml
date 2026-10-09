@@ -28,7 +28,7 @@ eframe = { version = "0.36", default-features = false, features = ["wgpu"] }
 winresource = "0.1"
 
 [dev-dependencies]
-egui_kittest = { version = "0.36", features = ["eframe"] }
+egui_kittest = { version = "0.36", features = ["eframe", "wgpu"] }
 tempfile = "3"
 
 [package.metadata.deb]

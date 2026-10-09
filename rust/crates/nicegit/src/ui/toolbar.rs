@@ -85,7 +85,7 @@ fn group_rule(ui: &mut Ui) {
     let c = theme::of(ui);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 44.0), egui::Sense::hover());
     // Stronger than a panel border, so the groups read apart at a glance.
-    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 6.0)).y_range(), egui::Stroke::new(1.0, c.muted.gamma_multiply(0.5)));
+    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 6.0)).y_range(), egui::Stroke::new(1.0, c.muted.gamma_multiply(0.7)));
 }
 
 /// A labelled picker: a small caption above an accent-coloured value with a chevron.
