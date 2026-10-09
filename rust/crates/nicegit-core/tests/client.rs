@@ -728,3 +728,31 @@ fn pull_refuses_stale_snapshot() {
 
     assert!(error_text(client().pull(&stale, repo.path())).contains("changed since this action was selected"));
 }
+
+#[test]
+fn snapshot_counts_commits_ahead_of_and_behind_the_upstream() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    let published = snapshot(repo.path());
+    assert_eq!(published.upstream.as_deref(), Some("origin/main"));
+    assert_eq!((published.ahead, published.behind), (Some(0), Some(0)));
+
+    // Another clone pushes one commit, and this checkout makes two of its own.
+    let workspace = tempfile::tempdir().expect("create workspace");
+    git(workspace.path(), &["clone", &path_string(remote.path()), "clone"]);
+    let clone = workspace.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("remote.txt"), "from the other clone\n").expect("write file");
+    git(&clone, &["add", "--", "remote.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Remote work"]);
+    git(&clone, &["push", "origin", "main"]);
+    repo.commit("b.txt", "two\n", "Second");
+    repo.commit("c.txt", "three\n", "Third");
+    client().fetch(repo.path()).expect("fetch");
+
+    let diverged = snapshot(repo.path());
+    assert_eq!((diverged.ahead, diverged.behind), (Some(2), Some(1)));
+}
