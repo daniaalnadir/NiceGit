@@ -380,6 +380,17 @@ fn clicking_a_tag_selects_the_commit_it_points_to() {
     settle(&mut harness);
     harness.get_by_label("v1.0").click();
     wait(&mut harness, "the annotated tag's commit to be selected", |h| selected_commit(h) == Some(first.clone()));
+    wait(&mut harness, "the inspector to show the tagged commit's subject", |h| inspector_shows(h, "Start the notes"));
+    assert_eq!(selected_commit(&harness), Some(first.clone()), "the annotated tag selects the commit it peels to");
+
     harness.get_by_label("beta").click();
     wait(&mut harness, "the head tag's commit to be selected", |h| selected_commit(h) == Some(head.clone()));
+    wait(&mut harness, "the inspector to show the head commit's subject", |h| inspector_shows(h, "Add a second line"));
+    assert!(!inspector_shows(&harness, "Start the notes"), "the earlier commit's subject is no longer in the inspector");
+}
+
+/// Whether the commit inspector shows `subject`. The graph row for the selected commit always
+/// shows its subject once; the inspector's heading is the second copy.
+fn inspector_shows(harness: &App, subject: &str) -> bool {
+    harness.query_all(By::new().label(subject)).count() >= 2
 }

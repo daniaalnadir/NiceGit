@@ -789,6 +789,10 @@ fn command_f_moves_to_find_in_diff() {
     wait(&mut harness, "the find field to take focus", |h| {
         h.get_by_role_and_label(Role::TextInput, "Find in diff").accesskit_node().is_focused()
     });
+
+    // The focused field takes typed text; the one deleted line "second" is the only match.
+    harness.event(egui::Event::Text("second".into()));
+    wait(&mut harness, "the match count for the typed text", |h| h.query_by_label("1 of 1").is_some());
 }
 
 #[test]

@@ -229,6 +229,7 @@ fn stash_window_saves_selected_changes() {
     idle(&mut harness);
     assert_eq!(git(repo.path(), &["stash", "list"]).lines().count(), 1, "one stash was made");
     assert_eq!(git(repo.path(), &["stash", "show", "--name-only", "stash@{0}"]), "notes.txt", "it holds the changed file");
+    assert_eq!(git(repo.path(), &["show", "stash@{0}:notes.txt"]), "changed", "it holds the changed contents");
     assert_eq!(std::fs::read_to_string(repo.path().join("notes.txt")).unwrap(), "first\nsecond\n");
 }
 

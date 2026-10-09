@@ -294,15 +294,29 @@ fn clicking_a_blame_line_selects_its_commit_and_shows_its_change() {
     // The second line was written by "Add a second line"; its change opens beside the lines.
     harness.get_by_label(&second_line).click();
     wait(&mut harness, "the change for the clicked line", |h| {
-        selected_commit(h) == Some(head.clone()) && h.query_by_role_and_label(Role::CheckBox, "Side by side").is_some()
+        selected_commit(h) == Some(head.clone()) && change_for_commit_is_shown(h, &head)
     });
     settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(head.clone()), "the clicked line's commit is selected");
+    assert!(change_for_commit_is_shown(&harness, &head), "the change shown is the clicked line's commit");
 
     // The first line belongs to the first commit, so that change replaces it.
     harness.get_by_label(&first_line).click();
-    wait(&mut harness, "the change for the first line", |h| selected_commit(h) == Some(first.clone()));
+    wait(&mut harness, "the change for the first line", |h| {
+        selected_commit(h) == Some(first.clone()) && change_for_commit_is_shown(h, &first)
+    });
     settle(&mut harness);
-    assert!(harness.query_by_role_and_label(Role::CheckBox, "Side by side").is_some(), "the change stays open");
+    assert!(change_for_commit_is_shown(&harness, &first), "the change now shown is the first line's commit");
+    assert_eq!(harness.query_all(By::new().label(&head[..8])).count(), 0, "the earlier commit's change is replaced");
+}
+
+/// Whether the blame window draws the change for `hash`: its header shows the commit's
+/// eight-character hash, which only that header uses, and the change has loaded with lines.
+/// The diff's lines are painted without accessible labels, so the header identifies the commit.
+fn change_for_commit_is_shown(harness: &App, hash: &str) -> bool {
+    harness.query_all(By::new().label(&hash[..8])).count() == 1
+        && harness.query_by_label("Loading change").is_none()
+        && harness.query_by_label("No changes to show").is_none()
 }
 
 #[test]
