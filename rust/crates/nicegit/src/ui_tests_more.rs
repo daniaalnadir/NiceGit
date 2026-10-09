@@ -110,7 +110,20 @@ fn hide_whitespace_leaves_out_whitespace_only_changes() {
     settle(&mut harness);
 
     harness.get_by_role_and_label(Role::CheckBox, "Hide whitespace").click();
-    wait(&mut harness, "the full diff again", |h| !h.state().settings.ignore_whitespace && diff_has_changes(h) == Some(true));
+    let start = Instant::now();
+    while !(!harness.state().settings.ignore_whitespace && diff_has_changes(&harness) == Some(true)) {
+        harness.step();
+        std::thread::sleep(Duration::from_millis(15));
+        let repo = harness.state().repo().unwrap();
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "the full diff did not return: ignore_whitespace {}, diff loading {}, diff lines {:?}, selection {:?}",
+            harness.state().settings.ignore_whitespace,
+            repo.diff_loading,
+            repo.diff.as_ref().map(|d| d.lines.iter().map(|l| l.text.clone()).collect::<Vec<_>>()),
+            repo.selection,
+        );
+    }
 }
 
 #[test]

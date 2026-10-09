@@ -25,7 +25,7 @@ pub struct Notice {
     pub is_error: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Selection {
     None,
     WorkingTree,
