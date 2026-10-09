@@ -307,17 +307,82 @@ impl NiceGitApp {
             }
         });
 
-        section(ui, "github", icon::GITHUB_LOGO, "Pull requests & issues", 0, false, |ui| {
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                let remote = snapshot.remotes.iter().find(|r| *r == "origin").or(snapshot.remotes.first()).cloned();
-                if ui.add_enabled(remote.is_some(), egui::Button::new(format!("{}  Load from GitHub", icon::GITHUB_LOGO))).clicked() {
-                    if let Some(remote) = remote {
-                        self.open_tool(Box::new(tools::github::GitHubWindow::new(remote)));
+        let submodules =
+            self.repos.get_mut(self.active).and_then(|r| r.submodules.as_mut()).and_then(|t| t.get().cloned()).unwrap_or_default();
+        if !submodules.is_empty() {
+            section(ui, "submodules", icon::PACKAGE, "Submodules", submodules.len(), false, |ui| {
+                use nicegit_core::submodule::SubmoduleState;
+                for submodule in &submodules {
+                    let (state, color) = match &submodule.state {
+                        SubmoduleState::NotCheckedOut => ("not checked out".to_string(), c.muted),
+                        SubmoduleState::AtRecordedCommit => ("at recorded commit".to_string(), c.added),
+                        SubmoduleState::OnAnotherCommit(commit) => (format!("on {}", short(commit)), c.warning),
+                    };
+                    let state = if submodule.has_local_changes { format!("{state} · changed") } else { state };
+                    let response = row(
+                        ui,
+                        icon::PACKAGE,
+                        color,
+                        RichText::new(&submodule.path),
+                        Some(RichText::new(state).small().color(color)),
+                        false,
+                    )
+                    .on_hover_text(format!("Recorded commit {}", short(&submodule.recorded_commit)));
+                    let checked_out = submodule.state != SubmoduleState::NotCheckedOut;
+                    let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
+                    let folder = submodule.path.split('/').fold(repo_path, |path, part| path.join(part));
+                    if response.double_clicked() && checked_out {
+                        self.open(folder.clone());
                     }
+                    response.context_menu(|ui| {
+                        if ui.add_enabled(checked_out, egui::Button::new(format!("{}  Open", icon::FOLDER_OPEN))).clicked() {
+                            ui.close();
+                            self.open(folder.clone());
+                        }
+                        let label = if checked_out { "Check out recorded commit" } else { "Initialise and check out" };
+                        if ui.add_enabled(idle, egui::Button::new(format!("{}  {label}", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
+                            ui.close();
+                            let path = submodule.path.clone();
+                            self.act("Update submodule", move |client, repo| {
+                                client.update_submodule(&path, repo).map(|_| Some(format!("Checked out {path} at its recorded commit.")))
+                            });
+                        }
+                        if ui.button(format!("{}  Show in file manager", icon::FOLDER)).clicked() {
+                            ui.close();
+                            crate::ui::changes::reveal(&folder);
+                        }
+                    });
                 }
             });
-        });
+        }
+
+        // Pull requests and issues load on demand from a chosen github.com remote.
+        for (id, glyph, title, issues) in
+            [("pulls", icon::GIT_PULL_REQUEST, "Pull requests", false), ("issues", icon::CIRCLE_DASHED, "Issues", true)]
+        {
+            section(ui, id, glyph, title, 0, false, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if snapshot.remotes.is_empty() {
+                        ui.label(RichText::new("Add a github.com remote to load these").small().color(c.muted));
+                        return;
+                    }
+                    ui.menu_button(format!("{}  Load from GitHub {}", icon::GITHUB_LOGO, icon::CARET_DOWN), |ui| {
+                        for remote in &snapshot.remotes {
+                            if ui.button(remote).clicked() {
+                                ui.close();
+                                let window = if issues {
+                                    tools::github::GitHubWindow::issues(remote.clone())
+                                } else {
+                                    tools::github::GitHubWindow::new(remote.clone())
+                                };
+                                self.open_tool(Box::new(window));
+                            }
+                        }
+                    });
+                });
+            });
+        }
     }
 
     /// The commit a tag points to, from the loaded history's decorations.
@@ -372,6 +437,49 @@ impl NiceGitApp {
         if !branch.is_current && ui.add_enabled(can_switch, egui::Button::new(format!("{}  Check out", icon::CHECK))).clicked() {
             ui.close();
             self.checkout(branch.clone());
+        }
+        if !snapshot.remotes.is_empty() && ui.add_enabled(idle, egui::Button::new(format!("{}  Fetch", icon::CLOUD_ARROW_DOWN))).clicked() {
+            ui.close();
+            self.fetch();
+        }
+        if branch.is_current {
+            if ui
+                .add_enabled(
+                    idle && snapshot.operation.is_none() && snapshot.upstream.is_some(),
+                    egui::Button::new(format!("{}  Pull", icon::ARROW_LINE_DOWN)),
+                )
+                .clicked()
+            {
+                ui.close();
+                self.pull();
+            }
+            if ui.add_enabled(idle && !snapshot.remotes.is_empty(), egui::Button::new(format!("{}  Push", icon::ARROW_LINE_UP))).clicked() {
+                ui.close();
+                self.push();
+            }
+        }
+        if !branch.is_remote && !branch.is_detached() {
+            for remote in &snapshot.remotes {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  Push to {remote}/{}…", icon::UPLOAD_SIMPLE, branch.name))).clicked()
+                {
+                    ui.close();
+                    self.confirm(
+                        format!("Push {} to {remote}?", branch.name),
+                        format!(
+                            "Updates {remote}/{name} to {} ({}). Only this branch is pushed; tags are not.",
+                            short(&branch.tip),
+                            branch.subject,
+                            name = branch.name
+                        ),
+                        "Push",
+                        Pending::PushBranch {
+                            branch: branch.clone(),
+                            remote: remote.clone(),
+                            addresses: snapshot.remote_push_addresses.clone(),
+                        },
+                    );
+                }
+            }
         }
         if !branch.is_current && snapshot.is_on_branch() {
             if ui.add_enabled(can_switch, egui::Button::new(format!("{}  Merge into {current}…", icon::GIT_MERGE))).clicked() {
@@ -467,6 +575,7 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(branch.tip.clone());
         }
+        crate::git_ext::github_link_menu(ui, snapshot, &branch.tip);
     }
 
     pub fn request_merge(&mut self, source: Branch) {

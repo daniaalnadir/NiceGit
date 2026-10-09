@@ -37,6 +37,7 @@ enum Run {
     Checkout(Branch),
     Repository(PathBuf),
     ApplyPatch,
+    Identity { name: String, email: String, signing_key: Option<String> },
 }
 
 struct Command {
@@ -148,6 +149,22 @@ impl NiceGitApp {
                 });
             }
         }
+        // Saved identity profiles, from Repository Settings.
+        let profiles: Vec<tools::repository_settings::StoredProfile> = self
+            .worker
+            .context
+            .data_mut(|data| data.get_persisted(egui::Id::new(tools::repository_settings::PROFILES_KEY)))
+            .unwrap_or_default();
+        for profile in profiles {
+            let detail = if profile.signing_key.is_some() { format!("{} · signs commits", profile.email) } else { profile.email.clone() };
+            list.push(Command {
+                title: format!("Use identity {}", profile.name),
+                detail,
+                glyph: icon::USER_CIRCLE,
+                enabled: idle,
+                run: Run::Identity { name: profile.name, email: profile.email, signing_key: profile.signing_key },
+            });
+        }
         let open: Vec<PathBuf> = self.repos.iter().map(|r| r.path.clone()).collect();
         for path in self.settings.recent.iter().chain(open.iter()) {
             if self.repo().is_some_and(|r| &r.path == path) || list.iter().any(|c| matches!(&c.run, Run::Repository(p) if p == path)) {
@@ -181,6 +198,11 @@ impl NiceGitApp {
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
             Run::NewRepository => self.create_repository(),
             Run::ApplyPatch => self.apply_patch(),
+            Run::Identity { name, email, signing_key } => self.act("Apply identity", move |client, path| {
+                client
+                    .apply_identity(&name, &email, signing_key.as_deref(), path)
+                    .map(|_| Some(format!("This repository now commits as {name} <{email}>.")))
+            }),
             Run::Checkout(branch) => self.checkout(branch),
             Run::Repository(path) => self.open(path),
             Run::Tool(name) => {

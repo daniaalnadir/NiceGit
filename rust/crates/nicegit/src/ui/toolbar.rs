@@ -218,11 +218,18 @@ impl NiceGitApp {
     }
 
     pub fn apply_patch(&mut self) {
+        let Some(snapshot) = self.snapshot().cloned() else { return };
         if let Some(file) = rfd::FileDialog::new().set_title("Apply a patch").add_filter("Patch", &["patch", "diff"]).pick_file() {
-            self.act("Apply patch", move |client, path| {
-                let contents = std::fs::read(&file).map_err(|e| nicegit_core::GitError::failed("apply", e.to_string()))?;
-                client.apply_patch(&contents, path).map(|_| Some("Applied the patch.".into()))
-            });
+            let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            self.confirm(
+                format!("Apply {name}?"),
+                format!(
+                    "Git checks the patch, then applies it to the working files of {}. The changes stay unstaged.",
+                    snapshot.current_branch
+                ),
+                "Apply",
+                crate::ui::dialogs::Pending::ApplyPatch { file, branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
+            );
         }
     }
 

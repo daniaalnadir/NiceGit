@@ -55,3 +55,33 @@ pub fn signature_summary(hash: &str, directory: &Path) -> Option<(String, u8)> {
     let signer = if signature.signer.is_empty() { String::new() } else { format!(" · {}", signature.signer) };
     Some((format!("{}{signer}", signature.status.title()), level))
 }
+
+/// Remotes on github.com, with the web address of `commit` on each.
+pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str) -> Vec<(String, String)> {
+    snapshot
+        .remotes
+        .iter()
+        .filter_map(|remote| {
+            let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
+            let repository = nicegit_core::github::GitHubRepository::parse(address).ok()?;
+            Some((remote.clone(), format!("https://github.com/{}/commit/{commit}", repository.slug())))
+        })
+        .collect()
+}
+
+/// A submenu for copying a commit's github.com link, choosing the remote explicitly. Making a
+/// link neither publishes the commit nor checks that the remote has it.
+pub fn github_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, commit: &str) {
+    let links = github_commit_links(snapshot, commit);
+    if links.is_empty() {
+        return;
+    }
+    ui.menu_button(format!("{}  Copy GitHub commit link", egui_phosphor::regular::GITHUB_LOGO), |ui| {
+        for (remote, url) in links {
+            if ui.button(remote).on_hover_text(&url).clicked() {
+                ui.close();
+                ui.ctx().copy_text(url);
+            }
+        }
+    });
+}

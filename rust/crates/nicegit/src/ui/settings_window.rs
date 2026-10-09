@@ -40,6 +40,15 @@ impl NiceGitApp {
             ui.add_space(10.0);
             widgets::section(ui, "Repository");
             ui.checkbox(&mut self.settings.auto_refresh, "Refresh automatically when files change outside NiceGit");
+            ui.add_space(10.0);
+            widgets::section(ui, "Layout");
+            if ui.button("Restore default panel widths").on_hover_text("Columns and panels return to their original sizes").clicked() {
+                ctx.data_mut(|data| {
+                    for id in ["repositories", "sidebar", "changes", "diff", "terminal"] {
+                        data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id));
+                    }
+                });
+            }
             ui.add_space(12.0);
             ui.label(RichText::new(format!("NiceGit {}", env!("CARGO_PKG_VERSION"))).small().color(c.muted));
         });

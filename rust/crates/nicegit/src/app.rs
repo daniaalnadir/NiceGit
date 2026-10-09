@@ -92,8 +92,13 @@ pub struct Repo {
     pub undo: Option<HistoryEntry>,
     pub redo: Option<HistoryEntry>,
     /// A discard that can be reversed while the file is unchanged since.
-    pub discard_undo: Option<DiscardUndo>,
+    /// The last discards that can be reversed, newest last (at most 20).
+    pub discard_undo: Vec<DiscardUndo>,
     pub scroll_to_selection: bool,
+    /// A bisect in progress, read after each refresh.
+    pub bisect: Option<Task<Option<nicegit_core::bisect::BisectStatus>>>,
+    /// Submodules recorded in the index, read after each refresh.
+    pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
 }
 
 impl Repo {
@@ -125,8 +130,10 @@ impl Repo {
             branch_filter: String::new(),
             undo: None,
             redo: None,
-            discard_undo: None,
+            discard_undo: Vec::new(),
             scroll_to_selection: false,
+            bisect: None,
+            submodules: None,
         }
     }
 
@@ -175,6 +182,8 @@ pub struct NiceGitApp {
     recorded: RecordSlot,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
+    /// The terminal panel under the history, when shown.
+    pub terminal: Option<crate::tools::terminal::TerminalWindow>,
 }
 
 struct Watch {
@@ -207,6 +216,7 @@ impl NiceGitApp {
             pending_clone: None,
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
+            terminal: None,
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
         app.active = app.settings.active.min(open.len().saturating_sub(1));
@@ -485,7 +495,12 @@ impl NiceGitApp {
                 repo.redo = None;
             }
             Some(Recorded::Redo(entry)) => repo.redo = Some(entry),
-            Some(Recorded::Discard(undo)) => repo.discard_undo = Some(undo),
+            Some(Recorded::Discard(undo)) => {
+                repo.discard_undo.retain(|older| older.path != undo.path);
+                repo.discard_undo.push(undo);
+                let excess = repo.discard_undo.len().saturating_sub(20);
+                repo.discard_undo.drain(..excess);
+            }
             None => {}
         }
     }
@@ -534,6 +549,12 @@ impl NiceGitApp {
             }
         }
         self.repos[index].snapshot = Some(snapshot);
+        // Bisect state and submodules are read alongside, without delaying the snapshot.
+        let context = self.worker.context.clone();
+        let path = self.repos[index].path.clone();
+        let bisect_path = path.clone();
+        self.repos[index].bisect = Some(Task::spawn(&context, move || GitClient::new().bisect_status(&bisect_path).ok().flatten()));
+        self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
         if index != self.active {
             return;
         }
@@ -763,7 +784,7 @@ impl NiceGitApp {
 
     /// Reverses the last discard, if the file has not changed since.
     pub fn undo_discard(&mut self) {
-        let Some(undo) = self.repo_mut().and_then(|r| r.discard_undo.take()) else { return };
+        let Some(undo) = self.repo_mut().and_then(|r| r.discard_undo.pop()) else { return };
         let name = undo.path.clone();
         self.act("Undo discard", move |client, path| {
             client.undo_discard(&undo, path).map(|_| Some(format!("Restored your changes to {name}.")))
@@ -831,6 +852,12 @@ impl NiceGitApp {
         match request {
             Request::Act { label, action } => self.act(&label, action),
             Request::ActRecording { label, title, mode, action } => self.act_recording_mode(&label, &title, mode, action),
+            Request::RecordUndo { title, step } => {
+                if let Some(repo) = self.repo_mut() {
+                    repo.undo = Some(HistoryEntry { title, step });
+                    repo.redo = None;
+                }
+            }
             Request::Notice { text, is_error } => self.notify(text, is_error),
             Request::SelectCommit(hash) => self.select_commit(hash),
             Request::OpenRepository(path) => self.open(path),

@@ -885,6 +885,35 @@ impl GitClient {
         .map(drop)
     }
 
+    /// Pushes a local branch to the same-named branch on `remote`, with an explicit refspec,
+    /// after confirming its tip and the remote's push addresses are as displayed.
+    pub fn push_branch(
+        &self,
+        branch: &Branch,
+        remote: &str,
+        expected_push_addresses: &BTreeMap<String, Vec<String>>,
+        directory: &Path,
+    ) -> Result<()> {
+        self.require_branch_tip(&branch.name, &branch.tip, directory)?;
+        self.require_remote_addresses(expected_push_addresses, remote, true, "push", directory)?;
+        let reference = format!("refs/heads/{}", branch.name);
+        let mirror = format!("remote.{remote}.mirror=false");
+        let refspec = format!("{reference}:{reference}");
+        self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, &refspec], directory).map(drop)
+    }
+
+    /// Rewrites only the HEAD commit's message; staged and unstaged edits are left out.
+    pub fn amend_message(&self, message: &str, expected_branch: &str, expected_head: &str, directory: &Path) -> Result<()> {
+        if message.trim().is_empty() {
+            return Err(GitError::EmptyCommitMessage);
+        }
+        let state = self.require_checkout(expected_branch, Some(expected_head), "edit message", directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed("edit message", "Finish or abort the current Git operation first."));
+        }
+        self.run(&["commit", "--quiet", "--amend", "--only", "--message", message], directory).map(drop)
+    }
+
     pub fn add_remote(&self, name: &str, address: &str, directory: &Path) -> Result<()> {
         self.run(&["remote", "add", "--", name.trim(), address.trim()], directory).map(drop)
     }

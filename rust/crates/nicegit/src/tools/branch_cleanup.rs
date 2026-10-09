@@ -91,6 +91,19 @@ impl ToolWindow for BranchCleanupWindow {
         // Deletions made by a finished action become available to Undo.
         if let Ok(mut slot) = self.deleted.lock() {
             if let Some(deletions) = slot.take() {
+                // The deletions are also one step for the toolbar's Undo, as in the Mac app.
+                let step = nicegit_core::undo::UndoStep::BranchDeletions(
+                    deletions
+                        .iter()
+                        .map(|d| nicegit_core::undo::BranchDeletion {
+                            name: d.name.clone(),
+                            tip: d.tip.clone(),
+                            upstream_remote: d.upstream_remote.clone(),
+                            upstream_merge: d.upstream_merge.clone(),
+                        })
+                        .collect(),
+                );
+                cx.record_undo(format!("Clean up {} {}", deletions.len(), noun(deletions.len())), step);
                 self.undo = Some(deletions);
                 self.confirming = false;
             }

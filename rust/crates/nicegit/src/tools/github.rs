@@ -40,6 +40,13 @@ pub struct GitHubWindow {
 
 impl GitHubWindow {
     /// A window for the GitHub repository behind `remote`.
+    /// Opens on issues rather than pull requests.
+    pub fn issues(remote: String) -> Self {
+        let mut window = Self::new(remote);
+        window.kind = ItemKind::Issue;
+        window
+    }
+
     pub fn new(remote: String) -> Self {
         Self {
             remote,

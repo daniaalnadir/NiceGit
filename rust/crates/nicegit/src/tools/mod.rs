@@ -39,6 +39,8 @@ pub enum Request {
     Act { label: String, action: Action },
     /// Like `Act`, but the branch move it makes is recorded so Undo can reverse it.
     ActRecording { label: String, title: String, mode: nicegit_core::undo::UndoMode, action: Action },
+    /// Offer `step` through the toolbar's Undo, described by `title`.
+    RecordUndo { title: String, step: nicegit_core::undo::UndoStep },
     /// Show a message in the status bar.
     Notice { text: String, is_error: bool },
     /// Select a commit in the graph and show it in the inspector.
@@ -81,6 +83,10 @@ impl<'a> Ctx<'a> {
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
         self.requests.push(Request::ActRecording { label: label.into(), title: title.into(), mode, action: Box::new(action) });
+    }
+
+    pub fn record_undo(&mut self, title: impl Into<String>, step: nicegit_core::undo::UndoStep) {
+        self.requests.push(Request::RecordUndo { title: title.into(), step });
     }
 
     pub fn notice(&mut self, text: impl Into<String>, is_error: bool) {

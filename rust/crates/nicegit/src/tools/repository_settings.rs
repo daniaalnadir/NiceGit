@@ -15,16 +15,16 @@ use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 /// Where saved identity profiles are kept in egui's persisted memory. Profiles belong to the
 /// application rather than to any one repository.
-const PROFILES_KEY: &str = "nicegit.identity_profiles";
+pub const PROFILES_KEY: &str = "nicegit.identity_profiles";
 
 /// An identity profile as it is saved between sessions. The core profile type has no serde
 /// support, so the window keeps its own serialisable copy and converts it for display.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-struct StoredProfile {
-    name: String,
-    email: String,
-    signing_key: Option<String>,
+pub struct StoredProfile {
+    pub name: String,
+    pub email: String,
+    pub signing_key: Option<String>,
 }
 
 impl StoredProfile {

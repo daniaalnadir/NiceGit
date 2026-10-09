@@ -21,6 +21,10 @@ pub enum Pending {
     Revert { commit: String, branch: String, head: Option<String> },
     Abort(Operation),
     UndoCommit { branch: String, head: String },
+    PushBranch { branch: Branch, remote: String, addresses: std::collections::BTreeMap<String, Vec<String>> },
+    ApplyPatch { file: std::path::PathBuf, branch: String, head: Option<String> },
+    Undo,
+    Redo,
 }
 
 pub enum InputKind {
@@ -53,6 +57,22 @@ pub enum Dialog {
     /// A branch dropped onto the current branch: merge it in, or rebase onto it.
     Integrate {
         source: Branch,
+    },
+    /// Cherry-picking or reverting a merge needs the parent to compare against.
+    ChooseParent {
+        commit: String,
+        subject: String,
+        parents: Vec<(String, String)>,
+        selected: usize,
+        revert: bool,
+        branch: String,
+        head: Option<String>,
+    },
+    /// Rewrite the HEAD commit's message.
+    EditMessage {
+        message: String,
+        branch: String,
+        head: String,
     },
 }
 
@@ -97,6 +117,10 @@ impl NiceGitApp {
         let mut close = false;
         let mut run = false;
         let mut integrate: Option<bool> = None;
+        let mut snapshot_commits: Vec<(String, String)> = Vec::new();
+        if let Some(snapshot) = self.snapshot() {
+            snapshot_commits = snapshot.commits.iter().map(|c| (c.hash.clone(), c.subject.clone())).collect();
+        }
         let modal = egui::Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
             ui.set_width(440.0);
             let c = theme::of(ui);
@@ -186,6 +210,45 @@ impl NiceGitApp {
                         }
                     });
                 }
+                Dialog::ChooseParent { subject, parents, selected, revert, .. } => {
+                    ui.heading(if *revert { "Revert a merge" } else { "Cherry-pick a merge" });
+                    ui.add_space(8.0);
+                    ui.label(format!("“{subject}” has {} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.", parents.len()));
+                    ui.add_space(6.0);
+                    for (index, (hash, parent_subject)) in parents.iter().enumerate() {
+                        let subject = if parent_subject.is_empty() {
+                            snapshot_commits.iter().find(|(h, _)| h == hash).map(|(_, s)| s.clone()).unwrap_or_default()
+                        } else {
+                            parent_subject.clone()
+                        };
+                        ui.radio_value(selected, index, format!("Parent {} · {} {subject}", index + 1, nicegit_core::models::short(hash)));
+                    }
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        if widgets::primary_button(ui, if *revert { "Revert" } else { "Cherry-pick" }, true).clicked() {
+                            run = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                }
+                Dialog::EditMessage { message, .. } => {
+                    ui.heading("Edit commit message");
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.").color(c.muted));
+                    ui.add_space(6.0);
+                    ui.add(egui::TextEdit::multiline(message).desired_rows(6).desired_width(f32::INFINITY));
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        if widgets::primary_button(ui, "Save message", !message.trim().is_empty()).clicked() {
+                            run = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                }
                 Dialog::Publish { remote } => {
                     ui.heading("Publish branch");
                     ui.add_space(8.0);
@@ -227,6 +290,20 @@ impl NiceGitApp {
                 Dialog::Confirm { pending, .. } => self.run_pending(pending),
                 Dialog::Input { kind, value, second, .. } => self.run_input(kind, value, second),
                 Dialog::Integrate { .. } => {}
+                Dialog::ChooseParent { commit, selected, revert, branch, head, .. } => {
+                    let operation = if revert { Operation::Revert } else { Operation::CherryPick };
+                    let title = if revert { "Revert" } else { "Cherry-pick" };
+                    self.act_recording(title, title, move |client, path| {
+                        let expected =
+                            nicegit_core::rebase::Expectation { branch: Some(&branch), head: head.as_deref(), source_branch: None };
+                        client.start(operation, &commit, Some(selected + 1), expected, path).map(|_| None)
+                    });
+                }
+                Dialog::EditMessage { message, branch, head } => {
+                    self.act_recording("Edit message", "Edit message", move |client, path| {
+                        client.amend_message(&message, &branch, &head, path).map(|_| Some("Updated the commit message.".into()))
+                    });
+                }
                 Dialog::Publish { remote } => {
                     if let Some(snapshot) = self.snapshot().cloned() {
                         self.act("Publish", move |client, path| {
@@ -298,6 +375,19 @@ impl NiceGitApp {
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
                 client.abort_operation(operation, path).map(|_| Some(format!("Aborted the {}.", operation.name())))
             }),
+            Pending::PushBranch { branch, remote, addresses } => {
+                let name = branch.name.clone();
+                self.act("Push branch", move |client, path| {
+                    client.push_branch(&branch, &remote, &addresses, path).map(|_| Some(format!("Pushed {name} to {remote}.")))
+                })
+            }
+            Pending::ApplyPatch { file, branch, head } => self.act("Apply patch", move |client, path| {
+                client.require_checkout(&branch, head.as_deref(), "apply", path)?;
+                let contents = std::fs::read(&file).map_err(|e| nicegit_core::GitError::failed("apply", e.to_string()))?;
+                client.apply_patch(&contents, path).map(|_| Some("Applied the patch. Its changes are unstaged.".into()))
+            }),
+            Pending::Undo => self.undo(),
+            Pending::Redo => self.redo(),
             Pending::UndoCommit { branch, head } => self.act_recording("Undo commit", "Undo commit", move |client, path| {
                 client.undo_last_commit(&branch, &head, path).map(|_| Some("Undid the last commit. Its changes are staged.".into()))
             }),

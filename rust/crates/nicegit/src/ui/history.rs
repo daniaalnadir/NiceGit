@@ -324,6 +324,7 @@ impl NiceGitApp {
 
         // Branch and tag labels, joined to the node by a line in the lane colour.
         let all_labels = labels(&commit, snapshot);
+        let mut draggable: Vec<(egui::Rect, Branch)> = Vec::new();
         if !all_labels.is_empty() {
             let mut x = rect.left() + 10.0;
             let label_limit = rect.left() + LABEL_COLUMN - 8.0;
@@ -348,6 +349,9 @@ impl NiceGitApp {
                     painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.5, Color32::WHITE.gamma_multiply(0.85)), egui::StrokeKind::Inside);
                 }
                 painter.galley(egui::pos2(pill.left() + 6.0, y - galley.size().y / 2.0), galley, Color32::WHITE);
+                if let Some(branch) = label.branch.as_ref().filter(|b| !b.is_current && b.name != commit.hash) {
+                    draggable.push((pill, branch.clone()));
+                }
                 let _ = glyph;
                 last_right = pill.right();
                 x = pill.right() + 4.0;
@@ -378,6 +382,18 @@ impl NiceGitApp {
         painter.with_clip_rect(meta_rect).text(egui::pos2(meta_rect.right() - 6.0, y), egui::Align2::RIGHT_CENTER, meta, small, c.muted);
         painter.text(egui::pos2(rect.right() - 12.0, y), egui::Align2::RIGHT_CENTER, &commit.short_hash, mono, c.muted);
 
+        // Drag a branch label onto the current commit to merge it in or rebase onto it.
+        for (index, (pill, branch)) in draggable.into_iter().enumerate() {
+            let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::drag());
+            label.dnd_set_drag_payload(branch);
+        }
+        if is_head && snapshot.is_on_branch() {
+            if let Some(source) = response.dnd_release_payload::<Branch>() {
+                if self.idle() && snapshot.operation.is_none() && !source.is_current {
+                    self.dialog = Some(Dialog::Integrate { source: (*source).clone() });
+                }
+            }
+        }
         let response = response.on_hover_text_at_pointer(format!("{}\n{} <{}>", commit.subject, commit.author_name, commit.author_email));
         if response.clicked() {
             let toggle = ui.input(|i| i.modifiers.command);
@@ -545,6 +561,7 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(commit.hash.clone());
         }
+        crate::git_ext::github_link_menu(ui, snapshot, &commit.hash);
         if ui.button(format!("{}  Copy subject", icon::COPY)).clicked() {
             ui.close();
             ui.ctx().copy_text(commit.subject.clone());

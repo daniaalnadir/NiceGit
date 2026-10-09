@@ -887,12 +887,16 @@ enum TabAction {
     Select(usize),
     Close(usize),
     Add,
+    /// End the active shell; an exited shell can then be restarted.
+    Stop,
 }
 
 /// The terminal window. It shows the shells of the active repository.
 pub struct TerminalWindow {
     cwd: PathBuf,
     closing: bool,
+    /// Asking whether to end the active shell.
+    confirm_stop: bool,
 }
 
 impl TerminalWindow {
@@ -903,11 +907,16 @@ impl TerminalWindow {
         if group.tabs.is_empty() {
             add_tab(group, ctx);
         }
-        Self { cwd, closing: false }
+        Self { cwd, closing: false, confirm_stop: false }
     }
 
     pub fn cwd(&self) -> &Path {
         &self.cwd
+    }
+
+    /// Whether the user closed the last tab or ended the last shell; the panel then hides.
+    pub fn take_close_request(&mut self) -> bool {
+        std::mem::take(&mut self.closing)
     }
 
     /// Closes a tab. Closing a tab other than the last one ends its shell. The last tab is
@@ -966,6 +975,20 @@ impl ToolWindow for TerminalWindow {
             if widgets::icon_button(ui, icon::PLUS, "New shell tab", true).clicked() {
                 actions.push(TabAction::Add);
             }
+            let running = group.tabs.get(group.active).is_some_and(|session| !session.is_exited());
+            if widgets::icon_button(ui, icon::STOP, "End this shell…", running).clicked() {
+                self.confirm_stop = true;
+            }
+            if self.confirm_stop {
+                ui.label(RichText::new("End this shell? Programs running in it stop.").color(theme::of(ui).warning));
+                if widgets::danger_button(ui, "End shell", true).clicked() {
+                    actions.push(TabAction::Stop);
+                    self.confirm_stop = false;
+                }
+                if ui.button("Cancel").clicked() {
+                    self.confirm_stop = false;
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add(egui::Label::new(RichText::new(group.cwd.display().to_string()).small().color(theme::of(ui).muted)).truncate());
             });
@@ -976,6 +999,16 @@ impl ToolWindow for TerminalWindow {
                 TabAction::Add => add_tab(group, &ctx),
                 TabAction::Close(index) if index < group.tabs.len() => self.close_tab(group, index),
                 TabAction::Close(_) => {}
+                TabAction::Stop => {
+                    let index = group.active;
+                    if index < group.tabs.len() {
+                        group.tabs.remove(index);
+                        group.active = group.active.min(group.tabs.len().saturating_sub(1));
+                        if group.tabs.is_empty() {
+                            self.closing = true;
+                        }
+                    }
+                }
             }
         }
 

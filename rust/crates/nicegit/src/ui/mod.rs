@@ -91,12 +91,47 @@ impl NiceGitApp {
         }
     }
 
+    /// Shows or hides the terminal panel. Its shells keep running while hidden, and hiding it
+    /// refreshes the repository so changes made in the shell appear.
     pub fn toggle_terminal(&mut self, ctx: &egui::Context) {
-        if let Some(index) = self.tools.iter().position(|t| t.id() == "terminal") {
-            self.tools.remove(index);
+        if self.terminal.take().is_some() {
+            self.load(false);
         } else if let Some(repo) = self.repo() {
-            let path = repo.path.clone();
-            self.open_tool(Box::new(crate::tools::terminal::TerminalWindow::new(ctx, path)));
+            self.terminal = Some(crate::tools::terminal::TerminalWindow::new(ctx, repo.path.clone()));
+        }
+    }
+
+    fn terminal_panel(&mut self, ui: &mut egui::Ui) {
+        let (Some(repo), Some(_)) = (self.repo(), self.terminal.as_ref()) else { return };
+        let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
+        let idle = self.busy.is_none();
+        let mut requests = Vec::new();
+        let mut hide = false;
+        egui::Panel::bottom("terminal")
+            .resizable(true)
+            .default_size(280.0)
+            .size_range(140.0..=800.0)
+            .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(10, 6)))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{}  Terminal", icon::TERMINAL_WINDOW)).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        hide = widgets::icon_button(ui, icon::CARET_DOWN, "Hide the terminal (Ctrl-`); its shells keep running", true)
+                            .clicked();
+                    });
+                });
+                if let Some(terminal) = self.terminal.as_mut() {
+                    let mut cx = crate::tools::Ctx::new(&path, &snapshot, idle, &mut requests);
+                    crate::tools::ToolWindow::ui(terminal, ui, &mut cx);
+                    hide |= terminal.take_close_request();
+                }
+            });
+        for request in requests {
+            self.handle(request);
+        }
+        if hide {
+            self.terminal = None;
+            self.load(false);
         }
     }
 
@@ -148,7 +183,9 @@ impl NiceGitApp {
                     .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(0, 0)))
                     .show(ui, |ui| self.diff_panel(ui));
             }
+            self.terminal_panel(ui);
             self.operation_banner(ui);
+            self.bisect_banner(ui);
             self.history(ui);
         });
     }
@@ -297,6 +334,60 @@ impl NiceGitApp {
                         dialogs::Pending::Abort(operation),
                     );
                 }
+            });
+        });
+    }
+
+    /// While a bisect runs: the commit being tested, Good / Bad / Skip, and End.
+    fn bisect_banner(&mut self, ui: &mut egui::Ui) {
+        use nicegit_core::bisect::BisectMark;
+        let Some(status) = self.repos.get_mut(self.active).and_then(|r| r.bisect.as_mut()).and_then(|t| t.get().cloned()).flatten() else {
+            return;
+        };
+        let c = theme::of(ui);
+        let idle = self.idle();
+        egui::Frame::new().fill(c.subtle_bg).inner_margin(egui::Margin::symmetric(14, 8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(icon::BUG).size(16.0).color(c.accent));
+                match (&status.first_bad, &status.testing) {
+                    (Some(first_bad), _) => {
+                        let subject = self
+                            .snapshot()
+                            .and_then(|s| s.commits.iter().find(|c| &c.hash == first_bad))
+                            .map(|c| c.subject.clone())
+                            .unwrap_or_default();
+                        ui.label(RichText::new(format!("First bad commit: {} {subject}", nicegit_core::models::short(first_bad))).strong());
+                        if ui.button("Show").clicked() {
+                            self.select_commit(first_bad.clone());
+                        }
+                    }
+                    (None, Some(testing)) => {
+                        let steps = status
+                            .remaining_steps
+                            .map(|n| format!(" · about {n} step{} left", if n == 1 { "" } else { "s" }))
+                            .unwrap_or_default();
+                        ui.label(
+                            RichText::new(format!("Bisecting: test {} and mark it{steps}", nicegit_core::models::short(testing))).strong(),
+                        );
+                        for (mark, label) in [(BisectMark::Good, "Good"), (BisectMark::Bad, "Bad"), (BisectMark::Skip, "Skip")] {
+                            if ui.add_enabled(idle, egui::Button::new(label)).clicked() {
+                                let testing = testing.clone();
+                                self.act(&format!("Mark {}", label.to_lowercase()), move |client, path| {
+                                    client.mark_bisect(mark, &testing, path).map(Some)
+                                });
+                            }
+                        }
+                    }
+                    (None, None) => {
+                        ui.label(RichText::new("Bisecting: mark a good and a bad commit to begin.").strong());
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add_enabled(idle, egui::Button::new(format!("End bisect, return to {}", status.original_checkout))).clicked() {
+                        self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into())));
+                    }
+                });
             });
         });
     }

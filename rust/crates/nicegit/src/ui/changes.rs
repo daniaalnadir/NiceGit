@@ -91,13 +91,20 @@ impl NiceGitApp {
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 10, bottom: 14 }))
             .show(ui, |ui| self.commit_box(ui, &snapshot, staged.len()));
 
-        if let Some(undo) = self.repo().and_then(|r| r.discard_undo.clone()) {
+        if let Some(undo) = self.repo().and_then(|r| r.discard_undo.last().cloned()) {
+            let more = self.repo().map(|r| r.discard_undo.len().saturating_sub(1)).unwrap_or(0);
             egui::Frame::new().fill(c.subtle_bg).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Discarded changes to {}", icon::TRASH, undo.path)).color(c.muted));
+                    let more = if more > 0 { format!(" (and {more} earlier)") } else { String::new() };
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(format!("{}  Discarded changes to {}{more}", icon::TRASH, undo.path)).color(c.muted),
+                        )
+                        .truncate(),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if widgets::icon_button(ui, icon::X, "Dismiss", true).clicked() {
-                            self.repos[self.active].discard_undo = None;
+                            self.repos[self.active].discard_undo.clear();
                         }
                         if ui.add_enabled(idle, egui::Button::new(format!("{}  Undo", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
                             self.undo_discard();
