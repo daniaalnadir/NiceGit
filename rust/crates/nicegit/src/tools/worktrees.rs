@@ -34,7 +34,8 @@ pub struct WorktreesWindow {
     /// Set when a removal starts; the list confirms it once the worktree is gone.
     removing: Option<String>,
     choice: Option<BranchChoice>,
-    parent: Option<PathBuf>,
+    /// The folder that will contain the new worktree, typed or chosen with the folder dialog.
+    parent: String,
     folder_name: String,
     /// The branch tip read right after the folder dialog closed, and the choice it was read for.
     tip_check: Option<(BranchChoice, Task<nicegit_core::Result<String>>)>,
@@ -42,13 +43,18 @@ pub struct WorktreesWindow {
 
 impl WorktreesWindow {
     pub fn new() -> Self {
-        Self { confirming_removal: None, removing: None, choice: None, parent: None, folder_name: String::new(), tip_check: None }
+        Self { confirming_removal: None, removing: None, choice: None, parent: String::new(), folder_name: String::new(), tip_check: None }
     }
 
     /// Opens with `branch` already chosen for a new worktree, as its context menu does.
     pub fn for_branch(name: String, tip: String) -> Self {
         let folder_name = name.replace('/', "-");
         Self { choice: Some(BranchChoice { name, tip }), folder_name, ..Self::new() }
+    }
+
+    fn parent_folder(&self) -> Option<PathBuf> {
+        let text = self.parent.trim();
+        (!text.is_empty()).then(|| PathBuf::from(text))
     }
 
     fn worktree_list(&mut self, ui: &mut Ui, cx: &mut Ctx) {
@@ -156,7 +162,7 @@ impl WorktreesWindow {
                 if ui.add_enabled(idle, egui::Button::new(format!("{}  Choose folder", icon::FOLDER_OPEN))).clicked() {
                     let folder = rfd::FileDialog::new().set_title("Choose where the new worktree folder goes").pick_folder();
                     if let Some(folder) = folder {
-                        self.parent = Some(folder);
+                        self.parent = folder.display().to_string();
                         // The branch may have moved while the dialog was open; read it again.
                         if let Some(choice) = self.choice.clone() {
                             let reference = format!("refs/heads/{}", choice.name);
@@ -169,10 +175,11 @@ impl WorktreesWindow {
                         }
                     }
                 }
-                match &self.parent {
-                    Some(parent) => ui.label(RichText::new(parent.display().to_string()).monospace().small().color(c.muted)),
-                    None => ui.label(RichText::new("No folder chosen").color(c.muted)),
-                };
+                ui.add_enabled(
+                    idle,
+                    egui::TextEdit::singleline(&mut self.parent).hint_text("Type a path or choose a folder").desired_width(260.0),
+                )
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Parent folder"));
             });
             ui.end_row();
 
@@ -187,14 +194,14 @@ impl WorktreesWindow {
         }
 
         let folder = self.effective_folder();
-        if let (Some(parent), Some(folder)) = (&self.parent, &folder) {
+        if let (Some(parent), Some(folder)) = (&self.parent_folder(), &folder) {
             ui.add_space(4.0);
             ui.label(RichText::new(format!("Creates {}", parent.join(folder).display())).small().color(c.muted));
         }
 
         ui.add_space(8.0);
         let checking = self.tip_check.is_some();
-        let ready = idle && !checking && self.choice.is_some() && self.parent.is_some() && folder.is_some();
+        let ready = idle && !checking && self.choice.is_some() && self.parent_folder().is_some() && folder.is_some();
         let create = ui.horizontal(|ui| {
             if checking {
                 widgets::loading(ui, "Checking the branch");
@@ -205,7 +212,7 @@ impl WorktreesWindow {
             .inner
         });
         if create.inner {
-            if let (Some(choice), Some(parent), Some(folder)) = (self.choice.clone(), self.parent.clone(), folder) {
+            if let (Some(choice), Some(parent), Some(folder)) = (self.choice.clone(), self.parent_folder(), folder) {
                 let destination = parent.join(folder);
                 let BranchChoice { name, tip } = choice;
                 cx.act(format!("Create worktree for {name}"), move |client, dir| {

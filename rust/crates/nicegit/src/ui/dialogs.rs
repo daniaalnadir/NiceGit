@@ -154,6 +154,8 @@ impl NiceGitApp {
                     ui.add_space(8.0);
                     ui.label(RichText::new(label.as_str()).color(c.muted));
                     let first = widgets::text_field(ui, value, "");
+                    let first_label = label.clone();
+                    first.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &first_label));
                     if ui.memory(|m| m.focused().is_none()) {
                         first.request_focus();
                     }
@@ -166,7 +168,9 @@ impl NiceGitApp {
                             if matches!(kind, InputKind::CreateTag { .. }) {
                                 ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width));
                             } else {
-                                ui.add(egui::TextEdit::singleline(second).desired_width(width));
+                                let second_name = second_label.clone();
+                                ui.add(egui::TextEdit::singleline(second).desired_width(width))
+                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &second_name));
                             }
                             if browse && ui.button("Choose…").clicked() {
                                 if let Some(folder) = rfd::FileDialog::new().set_title("Clone into").pick_folder() {

@@ -187,10 +187,12 @@ impl RepositorySettingsWindow {
         }
         egui::Grid::new("repository_identity_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
             ui.label("Name");
-            ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.name).hint_text("Ada Lovelace").desired_width(320.0));
+            ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.name).hint_text("Ada Lovelace").desired_width(320.0))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Name"));
             ui.end_row();
             ui.label("Email");
-            ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.email).hint_text("ada@example.com").desired_width(320.0));
+            ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.email).hint_text("ada@example.com").desired_width(320.0))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Email"));
             ui.end_row();
         });
         if let Some(error) = self.identity_error.clone() {

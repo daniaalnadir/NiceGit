@@ -39,36 +39,43 @@ impl NiceGitApp {
                         let active = index == self.active;
                         let fill = if active { c.card_bg } else { egui::Color32::TRANSPARENT };
                         let frame = egui::Frame::new().fill(fill).corner_radius(8.0).inner_margin(egui::Margin::symmetric(8, 6));
-                        let response = frame
-                            .show(ui, |ui| {
-                                ui.set_width(ui.available_width());
-                                ui.horizontal(|ui| {
-                                    let glyph = if active { icon::FOLDER_OPEN } else { icon::FOLDER };
-                                    ui.label(RichText::new(glyph).size(17.0).color(if active { c.accent } else { c.muted }));
-                                    ui.vertical(|ui| {
-                                        ui.spacing_mut().item_spacing.y = 0.0;
-                                        let name = RichText::new(repo.name());
-                                        ui.add(egui::Label::new(if active { name.strong() } else { name }).truncate());
-                                        let path = repo.path.display().to_string();
-                                        ui.add(
-                                            egui::Label::new(RichText::new(middle_truncate(&path, 30)).small().color(c.muted)).truncate(),
-                                        );
+                        // The tab senses clicks underneath its contents, so its close button stays clickable.
+                        let response = ui
+                            .scope_builder(egui::UiBuilder::new().sense(egui::Sense::click()), |ui| {
+                                frame.show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        let glyph = if active { icon::FOLDER_OPEN } else { icon::FOLDER };
+                                        ui.label(RichText::new(glyph).size(17.0).color(if active { c.accent } else { c.muted }));
+                                        ui.vertical(|ui| {
+                                            ui.spacing_mut().item_spacing.y = 0.0;
+                                            let name = RichText::new(repo.name());
+                                            ui.add(egui::Label::new(if active { name.strong() } else { name }).truncate());
+                                            let path = repo.path.display().to_string();
+                                            ui.add(
+                                                egui::Label::new(RichText::new(middle_truncate(&path, 30)).small().color(c.muted))
+                                                    .truncate(),
+                                            );
+                                        });
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if repo.loading {
+                                                ui.spinner();
+                                            } else if {
+                                                let close_button = ui
+                                                    .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
+                                                    .on_hover_text("Close tab");
+                                                let name = format!("Close {}", repo.name());
+                                                close_button
+                                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+                                                close_button.clicked()
+                                            } {
+                                                close = Some(index);
+                                            }
+                                        });
                                     });
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if repo.loading {
-                                            ui.spinner();
-                                        } else if ui
-                                            .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
-                                            .on_hover_text("Close tab")
-                                            .clicked()
-                                        {
-                                            close = Some(index);
-                                        }
-                                    });
-                                });
+                                })
                             })
                             .response
-                            .interact(egui::Sense::click())
                             .on_hover_text(repo.path.display().to_string());
                         if response.clicked() {
                             switch = Some(index);

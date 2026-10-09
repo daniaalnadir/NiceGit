@@ -64,7 +64,7 @@ impl GitClient {
         if self.run(&["lfs", "version"], &root).is_err() {
             return Err(GitError::failed(
                 "lfs track",
-                "Git LFS is not installed. Install it (for example with `brew install git-lfs`) before tracking files.",
+                "Git LFS is not installed. Install git-lfs from https://git-lfs.com before tracking files.",
             ));
         }
         if lfs_patterns(&root).iter().any(|existing| existing == pattern) {

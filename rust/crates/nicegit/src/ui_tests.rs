@@ -394,3 +394,187 @@ fn smallest_window_lays_out_every_panel() {
     harness.state_mut().toggle_terminal(&ctx);
     settle(&mut harness);
 }
+
+/// Types into the text field with this accessible label.
+fn type_into(harness: &mut Harness<'static, NiceGitApp>, label: &str, text: &str) {
+    let role = egui::accesskit::Role::TextInput;
+    harness.get_by_role_and_label(role, label).focus();
+    harness.step();
+    harness.get_by_role_and_label(role, label).type_text(text);
+    harness.step();
+}
+
+/// Opens a Repository menu item from the toolbar's repository picker.
+fn repository_menu(harness: &mut Harness<'static, NiceGitApp>, name: &str, item: &str) {
+    let picker = format!("{name} {}", egui_phosphor::regular::CARET_DOWN);
+    harness.get_all_by_label(&picker).next().expect("repository picker").click();
+    settle(harness);
+    harness.get_by_label_contains(item).click();
+    settle(harness);
+}
+
+fn folder_name(path: &Path) -> String {
+    path.file_name().unwrap().to_string_lossy().into_owned()
+}
+
+#[test]
+fn clone_a_repository_through_its_dialog() {
+    let source = repository();
+    let target_parent = tempfile::tempdir().unwrap();
+    let destination = target_parent.path().join("cloned");
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(source.path()), "Clone repository");
+    wait(&mut harness, "the clone dialog", |h| h.state().dialog.is_some());
+    type_into(&mut harness, "Repository URL or local path", &source.path().display().to_string());
+    type_into(&mut harness, "Destination folder", &destination.display().to_string());
+    harness.get_by_label("OK").click();
+    wait(&mut harness, "the clone to open", |h| {
+        h.state().repo().is_some_and(|r| r.snapshot.as_ref().is_some_and(|s| s.name == "cloned")) && h.state().busy.is_none()
+    });
+    assert_eq!(git(&destination, &["log", "-1", "--format=%s"]), "Add a second line");
+    assert_eq!(harness.state().repos.len(), 2, "the clone opens in a new tab");
+}
+
+#[test]
+fn create_and_remove_a_worktree_from_the_interface() {
+    let repo = repository();
+    let parent = tempfile::tempdir().unwrap();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Create worktree").click();
+    wait(&mut harness, "the worktree window", |h| h.state().tools.iter().any(|t| t.id() == "worktrees"));
+    settle(&mut harness);
+    type_into(&mut harness, "Parent folder", &parent.path().display().to_string());
+    harness.get_by_label_contains("Create worktree").click();
+    idle(&mut harness);
+    let created = parent.path().join("feature");
+    assert!(created.join("notes.txt").exists(), "the worktree folder was created");
+    assert!(git(repo.path(), &["worktree", "list"]).contains("[feature]"));
+
+    // Remove it again from its card, after confirming.
+    settle(&mut harness);
+    // The new worktree's card comes after the main worktree's, whose Remove is disabled.
+    let remove = format!("{}  Remove", egui_phosphor::regular::TRASH);
+    harness.get_all_by_label(&remove).last().expect("remove button").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Remove worktree").click();
+    idle(&mut harness);
+    assert!(!git(repo.path(), &["worktree", "list"]).contains("[feature]"));
+    assert!(!created.exists());
+}
+
+#[test]
+fn track_and_untrack_an_lfs_pattern() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let lfs_installed = Command::new("git").args(["lfs", "version"]).output().is_ok_and(|o| o.status.success());
+
+    repository_menu(&mut harness, &folder_name(repo.path()), "Git LFS");
+    wait(&mut harness, "the LFS window", |h| h.query_by_role_and_label(egui::accesskit::Role::TextInput, "LFS pattern").is_some());
+    settle(&mut harness);
+    type_into(&mut harness, "LFS pattern", "*.psd");
+    if !lfs_installed {
+        // Without git-lfs, Git would commit matching files in full, so tracking is refused
+        // and the window says why.
+        assert!(format!("{:?}", harness.get_by_label("Track")).contains("disabled: true"));
+        assert!(harness.query_by_label_contains("Git LFS is not installed").is_some());
+        return;
+    }
+    harness.get_by_label("Track").click();
+    idle(&mut harness);
+    let attributes = std::fs::read_to_string(repo.path().join(".gitattributes")).unwrap_or_default();
+    assert!(attributes.contains("*.psd filter=lfs"), "tracked: {attributes}");
+    wait(&mut harness, "the tracked pattern", |h| h.query_by_label("Untrack").is_some());
+    settle(&mut harness);
+    harness.get_by_label("Untrack").click();
+    idle(&mut harness);
+    let attributes = std::fs::read_to_string(repo.path().join(".gitattributes")).unwrap_or_default();
+    assert!(!attributes.contains("*.psd filter=lfs"), "untracked: {attributes}");
+}
+
+#[test]
+fn recent_repositories_reopen_after_their_tab_closes() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    loaded(&mut harness);
+    assert_eq!(harness.state().repos.len(), 2);
+
+    let first_name = folder_name(first.path());
+    harness.get_by_label(&format!("Close {first_name}")).click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repos.len(), 1);
+
+    harness.get_by_label_contains(&format!("  {first_name}")).click();
+    loaded(&mut harness);
+    assert_eq!(harness.state().repos.len(), 2, "reopened from Recent");
+    assert_eq!(harness.state().snapshot().map(|s| s.name.clone()), Some(first_name));
+}
+
+#[test]
+fn save_an_identity_profile_and_apply_it_from_the_palette() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(repo.path()), "Repository settings");
+    wait(&mut harness, "the identity form", |h| h.query_by_role_and_label(egui::accesskit::Role::TextInput, "Name").is_some());
+    settle(&mut harness);
+    harness.get_by_label_contains("Profiles").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Save as profile").click();
+    settle(&mut harness);
+    harness.state_mut().tools.clear();
+
+    // Change the identity outside NiceGit, then put the saved profile back.
+    git(repo.path(), &["config", "user.name", "Someone Else"]);
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("use identity test".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    idle(&mut harness);
+    assert_eq!(git(repo.path(), &["config", "user.name"]), "Test");
+    assert_eq!(git(repo.path(), &["config", "user.email"]), "test@example.invalid");
+}
+
+/// Loads this project's own pull requests and issues from github.com with the signed-in
+/// GitHub CLI. Needs network access and `gh auth login`, so it runs only on request:
+/// `cargo test -p nicegit -- --ignored github`.
+#[test]
+#[ignore]
+fn github_pull_requests_and_issues_load_from_github() {
+    let repo = repository();
+    git(repo.path(), &["remote", "add", "origin", "https://github.com/daniaalnadir/NiceGit.git"]);
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("PULL REQUESTS").click();
+    settle(&mut harness);
+    harness.get_all_by_label_contains("Load from GitHub").next().expect("load button").click();
+    settle(&mut harness);
+    harness.get_by_label("origin").click();
+    // The project's open pull request (#34, this port) appears, read live from github.com.
+    wait(&mut harness, "pull requests from GitHub", |h| h.query_by_label_contains("Open in browser").is_some());
+    assert!(harness.query_by_label_contains("Port NiceGit to Rust").is_some(), "lists the open pull request");
+    // Closed and merged pull requests load when chosen, such as #33.
+    settle(&mut harness);
+    harness.get_by_label("Merged").click();
+    wait(&mut harness, "merged pull requests", |h| h.query_by_label_contains("Rewrite the README").is_some());
+    // The Issues tab loads too; this project may have none, which shows an empty state.
+    settle(&mut harness);
+    harness.get_by_label_contains("Issues").click();
+    wait(&mut harness, "issues from GitHub", |h| {
+        h.query_by_label_contains("Open in browser").is_some()
+            || h.query_by_label_contains("No open issues").is_some()
+            || h.query_by_label_contains("No issues").is_some()
+    });
+}

@@ -92,7 +92,7 @@ impl ToolWindow for LfsWindow {
             } else {
                 widgets::callout(
                     ui,
-                    "Git LFS is not installed, so new files cannot be stored with it. Install it with `brew install git-lfs`, then run `git lfs install` once.",
+                    "Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once.",
                     true,
                 );
             }
@@ -132,7 +132,8 @@ impl ToolWindow for LfsWindow {
                 ui.add_enabled(
                     idle,
                     egui::TextEdit::singleline(&mut self.pattern).hint_text("*.psd, docs/*.pdf").desired_width(width),
-                );
+                )
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "LFS pattern"));
                 let can_track = idle && status.version.is_some() && !self.pattern.trim().is_empty();
                 if widgets::primary_button(ui, "Track", can_track).clicked() {
                     track = Some(self.pattern.trim().to_string());
