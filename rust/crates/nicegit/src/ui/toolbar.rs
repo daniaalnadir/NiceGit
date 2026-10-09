@@ -62,7 +62,10 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
         if enabled && response.hovered() {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
         }
-        let color = if enabled { ui.visuals().text_color() } else { c.muted.gamma_multiply(0.6) };
+        // Disabled buttons use the muted token at full strength: it is clearly dimmer than enabled
+        // text in both themes and keeps about 3:1 contrast on the toolbar background. Scaling its
+        // alpha instead washed it out to near-invisible on light backgrounds.
+        let color = if enabled { ui.visuals().text_color() } else { c.muted };
         if style == ToolStyle::Full {
             ui.painter().text(
                 rect.center_top() + egui::vec2(0.0, 4.0),

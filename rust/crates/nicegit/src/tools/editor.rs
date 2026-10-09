@@ -93,7 +93,11 @@ impl ToolWindow for EditorWindow {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut Ctx) {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
-            ui.label(RichText::new(&self.path).monospace().color(c.muted));
+            // The window title already names the file, so the path only adds information when the
+            // file sits in a subfolder.
+            if self.path.contains('/') {
+                ui.label(RichText::new(&self.path).monospace().color(c.muted));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let dirty = self.has_unsaved_changes();
                 let save_shortcut =

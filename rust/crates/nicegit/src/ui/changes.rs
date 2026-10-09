@@ -372,13 +372,14 @@ impl NiceGitApp {
                         egui::TextEdit::singleline(&mut repo.draft.summary)
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
-                            .desired_width((ui.available_width() - 34.0).max(40.0)),
+                            .desired_width((ui.available_width() - 64.0).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
+                    // Characters used out of the 72-character guideline, e.g. "0/72".
                     let length = repo.draft.summary.chars().count();
                     let color = if length > 72 { c.warning } else { c.muted };
-                    ui.label(RichText::new((72_i64 - length as i64).to_string()).small().monospace().color(color))
-                        .on_hover_text("Keep summaries to 72 characters or fewer");
+                    ui.label(RichText::new(format!("{length}/72")).small().monospace().color(color))
+                        .on_hover_text("Summaries read best under 72 characters");
                 });
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
