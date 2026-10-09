@@ -146,11 +146,16 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     response.match_count = occurrences.len();
     response.current_match_line = occurrences.get(options.find.current).map(|occurrence| occurrence.line);
 
-    let style = Style::new(ui, content, options.split);
-    let rows = if options.split { content.split.len() } else { content.lines.len() };
+    // A new or deleted file has only one side; showing it beside an empty column would halve
+    // the room its lines have, so it is shown in one column.
+    let one_sided = !content.lines.iter().any(|line| line.kind == DiffLineKind::Deletion)
+        || !content.lines.iter().any(|line| line.kind == DiffLineKind::Addition);
+    let split = options.split && !one_sided;
+    let style = Style::new(ui, content, split);
+    let rows = if split { content.split.len() } else { content.lines.len() };
     // Where each row starts. Unified rows are one line high; split rows as high as their
     // longer side wraps.
-    let tops: Vec<f32> = if options.split {
+    let tops: Vec<f32> = if split {
         let mut tops = Vec::with_capacity(rows + 1);
         let mut top = 0.0;
         for row in &content.split {
@@ -162,18 +167,18 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     } else {
         Vec::new()
     };
-    let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), options.split)).auto_shrink([false, false]);
+    let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), split)).auto_shrink([false, false]);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
-        let row = content.row_of(line, options.split);
-        let top = if options.split { tops[row] } else { row as f32 * style.row_height };
+        let row = content.row_of(line, split);
+        let top = if split { tops[row] } else { row as f32 * style.row_height };
         area = area.vertical_scroll_offset((top - ui.available_height() * 0.4).max(0.0));
     }
-    let view = View { content, occurrences: &occurrences, current: options.find.current, split: options.split, style, drag_id };
+    let view = View { content, occurrences: &occurrences, current: options.find.current, split: split, style, drag_id };
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
-        if options.split {
+        if split {
             area.show_viewport(ui, |ui, viewport| {
                 let origin = ui.max_rect().min;
                 let height = tops[rows];
