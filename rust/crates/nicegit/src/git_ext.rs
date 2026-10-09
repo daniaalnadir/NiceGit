@@ -47,10 +47,12 @@ pub fn merge_preview_text(source: &str, rebase: bool, directory: &Path) -> Resul
 /// A commit's signature as display text and a level: 0 verified, 1 untrusted or unverifiable, 2 bad.
 pub fn signature_summary(hash: &str, directory: &Path) -> Option<SignatureSummary> {
     let signature = GitClient::new().signature(hash, directory).ok()??;
+    // The Mac app's colours: green, orange, red, and secondary for a signature it cannot check.
     let level = match signature.status {
         SignatureStatus::Verified => 0,
+        SignatureStatus::Untrusted => 1,
         SignatureStatus::Bad => 2,
-        _ => 1,
+        SignatureStatus::Unverifiable => 3,
     };
     // As in the Mac app, only a verified signature names its signer; the key and any problem
     // are in the tooltip.
@@ -70,7 +72,7 @@ pub fn signature_summary(hash: &str, directory: &Path) -> Option<SignatureSummar
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignatureSummary {
     pub text: String,
-    /// 0 verified, 1 a warning, 2 bad.
+    /// 0 verified, 1 untrusted, 2 bad, 3 cannot be checked.
     pub level: u8,
     /// The key and any problem Git reported, for the tooltip; empty when there is neither.
     pub help: String,

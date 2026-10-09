@@ -371,12 +371,7 @@ impl View<'_> {
         let painter = ui.painter().with_clip_rect(rect);
         let colors = self.style.colors;
         let diff_line = &self.content.lines[line];
-        let background = match diff_line.kind {
-            DiffLineKind::Addition => Some(colors.added_bg),
-            DiffLineKind::Deletion => Some(colors.removed_bg),
-            DiffLineKind::Hunk => Some(tint(colors.modified, 26)),
-            _ => None,
-        };
+        let background = line_background(diff_line.kind, &colors);
         // A side whose line is shorter than its partner's tints only its own rows; the rest of
         // the row is filler, so a one-line deletion does not look like a longer one.
         let own = if wrap { self.style.unified_row_height(line).min(rect.height()) } else { rect.height() };
@@ -632,6 +627,16 @@ fn append_run(job: &mut LayoutJob, run: &mut String, background: Option<Color32>
     run.clear();
 }
 
+/// The tint behind a whole line: green for added, red for removed, blue for a hunk header.
+fn line_background(kind: DiffLineKind, colors: &theme::Colors) -> Option<Color32> {
+    match kind {
+        DiffLineKind::Addition => Some(colors.added_bg),
+        DiffLineKind::Deletion => Some(colors.removed_bg),
+        DiffLineKind::Hunk => Some(tint(colors.modified, 26)),
+        DiffLineKind::Context | DiffLineKind::Metadata => None,
+    }
+}
+
 /// The colour with its opacity replaced by `alpha`.
 fn tint(color: Color32, alpha: u8) -> Color32 {
     let [red, green, blue, _] = color.to_array();
@@ -684,6 +689,40 @@ mod tests {
             }
         });
         // No renderer takes the font texture here.
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn lines_and_changed_words_are_coloured_by_kind() {
+        for dark in [false, true] {
+            let colors = theme::colors(dark);
+            assert_eq!(line_background(DiffLineKind::Addition, &colors), Some(colors.added_bg));
+            assert_eq!(line_background(DiffLineKind::Deletion, &colors), Some(colors.removed_bg));
+            assert!(line_background(DiffLineKind::Hunk, &colors).is_some());
+            assert_eq!(line_background(DiffLineKind::Context, &colors), None);
+            assert_eq!(line_background(DiffLineKind::Metadata, &colors), None);
+        }
+        // A changed word inside a replaced line gets its side's word highlight.
+        let lines = vec![
+            DiffLine { text: "-let speed = 10".into(), kind: DiffLineKind::Deletion, old_number: Some(1), new_number: None },
+            DiffLine { text: "+let speed = 12".into(), kind: DiffLineKind::Addition, old_number: None, new_number: Some(1) },
+        ];
+        let content = DiffContent::new("speed.rs".into(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 400.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, &content, false);
+            let colors = style.colors;
+            let view = View { content: &content, occurrences: &[], current: 0, split: false, style, drag_id: Id::new("test-diff") };
+            let removed = view.spans(0);
+            let added = view.spans(1);
+            assert!(removed
+                .iter()
+                .any(|(range, color)| *color == colors.removed_word_bg && content.lines[0].text[range.clone()].contains('0')));
+            assert!(added
+                .iter()
+                .any(|(range, color)| *color == colors.added_word_bg && content.lines[1].text[range.clone()].contains('2')));
+        });
         output.textures_delta.clear();
     }
 

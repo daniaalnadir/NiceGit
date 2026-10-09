@@ -407,3 +407,108 @@ fn the_smallest_window_keeps_the_key_controls_on_screen() {
     check("the first history row", harness.get_by_label("Start the notes").rect());
     check("the newest history row", harness.get_by_label("Add a second line").rect());
 }
+
+#[test]
+fn command_o_opens_a_repository_chosen_in_the_folder_dialog() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+
+    crate::file_dialog::answer_next(second.path());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::O);
+    wait(&mut harness, "the second repository", |h| h.state().repos.len() == 2);
+    loaded(&mut harness);
+    let active = harness.state().repo().map(|r| r.path.canonicalize().unwrap());
+    assert_eq!(active, Some(second.path().canonicalize().unwrap()), "the chosen repository opens in a new, active tab");
+}
+
+#[test]
+fn option_command_f_opens_file_content_search() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::ALT, Key::F);
+    wait(&mut harness, "the content search window", |h| h.state().tools.iter().any(|t| t.id().starts_with("content-search")));
+    assert!(harness.query_by_role_and_label(Role::TextInput, "Text in files").is_some());
+}
+
+#[test]
+fn shift_command_f_opens_history_search() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::F);
+    wait(&mut harness, "the history search window", |h| h.state().tools.iter().any(|t| t.id() == "commit-search"));
+}
+
+#[test]
+fn returning_to_the_app_waits_for_a_running_action() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.state_mut().settings.auto_refresh = false;
+    let focus = |harness: &mut Harness<'static, NiceGitApp>, focused: bool| {
+        harness.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().focused = Some(focused);
+        harness.run_steps(2);
+    };
+    let listed = |h: &Harness<'static, NiceGitApp>| {
+        h.state().snapshot().is_some_and(|s| s.status.iter().any(|entry| entry.path == "while-busy.txt"))
+    };
+
+    focus(&mut harness, false);
+    harness.state_mut().act("A slow action", |_, _| {
+        std::thread::sleep(Duration::from_millis(1500));
+        Ok(None)
+    });
+    std::fs::write(path.join("while-busy.txt"), "made while an action ran\n").unwrap();
+    focus(&mut harness, true);
+    // Returning to the app while the action runs does not start a second load alongside it.
+    let start = Instant::now();
+    while harness.state().busy.is_some() {
+        assert!(!listed(&harness), "nothing refreshes while an action is running");
+        assert!(start.elapsed() < Duration::from_secs(20), "the action finishes");
+        harness.step();
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    wait(&mut harness, "the refresh once the action is done", listed);
+}
+
+#[test]
+fn fetch_and_refresh_from_the_toolbar() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    git(path, &["push", "-q", "-u", "origin", "main"]);
+    let other = tempfile::tempdir().unwrap();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    std::fs::write(clone.join("theirs.txt"), "theirs\n").unwrap();
+    git(&clone, &["add", "theirs.txt"]);
+    git(&clone, &["commit", "-qm", "Work from elsewhere"]);
+    git(&clone, &["push", "-q", "origin", "main"]);
+    let theirs = git(&clone, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.state_mut().settings.auto_refresh = false;
+
+    toolbar_button(&mut harness, "Fetch");
+    idle(&mut harness);
+    wait(&mut harness, "the fetched commit", |_| git(path, &["rev-parse", "origin/main"]) == theirs);
+    wait(&mut harness, "one commit to pull", |h| h.state().snapshot().and_then(|s| s.behind) == Some(1));
+
+    // A change made outside, with automatic refresh off, appears after Refresh.
+    std::fs::write(path.join("outside.txt"), "outside\n").unwrap();
+    toolbar_button(&mut harness, "Refresh");
+    idle(&mut harness);
+    wait(&mut harness, "the refreshed changes", |h| {
+        h.state().snapshot().is_some_and(|s| s.status.iter().any(|entry| entry.path == "outside.txt"))
+    });
+}

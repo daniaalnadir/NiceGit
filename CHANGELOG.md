@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.6 - Last details
+
+- Long branch names in the graph lose their middle rather than their end, and hovering a
+  label shows the full name.
+- The diff's scroll bar stays visible, floating windows in the dark theme have a lighter
+  edge, and an unverifiable signature uses the Mac app's secondary colour.
+- Tests now cover opening a repository with Command-O, the search shortcuts, refreshing
+  after a running action, the Fetch and Refresh buttons, and diff colours. An independent
+  audit found all 71 of the Mac app's features implemented.
+
 ## 0.6.5 - Every detail checked
 
 - Commit signatures read as in the Mac app, name the signer only when verified, and show the
