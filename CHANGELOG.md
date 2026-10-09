@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 - Complete parity and cross-platform fixes
+
+- Every feature in the Mac app's guide is now in the cross-platform app; see
+  [docs/PARITY.md](docs/PARITY.md). New since 0.3.0: a Stashes window with selected files,
+  interactive rebase with drag-to-reorder, the terminal as a bottom panel, the bisect bar,
+  sidebar sections for submodules, pull requests, issues, and recent repositories, branch
+  menu fetch, pull, push, reset, and GitHub links, editing the HEAD message, choosing a
+  merge's parent, confirmations for undo, redo, restores, and patches, twenty undoable
+  discards, and dragging graph labels to merge.
+- Windows draws with wgpu, so NiceGit runs on machines without OpenGL drivers such as
+  virtual machines and Remote Desktop. The Linux package declares libxkbcommon-x11 and
+  OpenGL. Small screens get narrower panels, a wrapping toolbar, and a window that fits.
+- Interface tests click through the real app, and CI runs the app on macOS, Windows, and
+  Linux.
+
 ## 0.3.0 - Cross-platform feature parity
 
 - The cross-platform app now matches the Mac app: repository tabs, a branches sidebar

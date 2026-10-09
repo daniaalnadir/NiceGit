@@ -184,6 +184,7 @@ pub struct NiceGitApp {
     pub preview_light: bool,
     /// The terminal panel under the history, when shown.
     pub terminal: Option<crate::tools::terminal::TerminalWindow>,
+    fitted_to_monitor: bool,
 }
 
 struct Watch {
@@ -217,6 +218,7 @@ impl NiceGitApp {
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
             terminal: None,
+            fitted_to_monitor: false,
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
         app.active = app.settings.active.min(open.len().saturating_sub(1));
@@ -948,6 +950,22 @@ impl NiceGitApp {
         }
     }
 
+    /// On first launch the window may be larger than a small screen; shrink it to fit.
+    fn fit_to_monitor(&mut self, ctx: &egui::Context) {
+        if self.fitted_to_monitor {
+            return;
+        }
+        let (monitor, inner) = ctx.input(|i| (i.viewport().monitor_size, i.viewport().inner_rect));
+        let (Some(monitor), Some(inner)) = (monitor, inner) else { return };
+        self.fitted_to_monitor = true;
+        let fits = egui::vec2(monitor.x - 40.0, monitor.y - 80.0);
+        if inner.width() > fits.x || inner.height() > fits.y {
+            let size = inner.size().min(fits).max(egui::vec2(900.0, 560.0));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(20.0, 20.0)));
+        }
+    }
+
     fn apply_theme(&mut self, ctx: &egui::Context) {
         let appearance = if self.preview_light { theme::Appearance::Light } else { self.settings.appearance };
         let wanted = (appearance, self.settings.graph_palette);
@@ -999,6 +1017,7 @@ impl eframe::App for NiceGitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_theme(&ctx);
+        self.fit_to_monitor(&ctx);
         self.receive();
         self.finish_clone();
         self.shortcuts(&ctx);
