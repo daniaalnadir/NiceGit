@@ -22,6 +22,9 @@ alacritty_terminal = "0.26.0"
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
+[dev-dependencies]
+egui_kittest = { version = "0.36", features = ["eframe"] }
+
 [package.metadata.deb]
 maintainer = "Daniaal Nadir"
 section = "vcs"

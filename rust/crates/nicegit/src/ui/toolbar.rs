@@ -12,6 +12,8 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool) -> 
     let size = egui::vec2(50.0, 44.0);
     let (rect, response) = ui.allocate_exact_size(size, if enabled { egui::Sense::click() } else { egui::Sense::hover() });
     let response = response.on_hover_text(tooltip);
+    // Screen readers and UI tests find the button by its label.
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     if ui.is_rect_visible(rect) {
         if enabled && response.hovered() {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);

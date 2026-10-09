@@ -362,7 +362,8 @@ impl NiceGitApp {
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
                             .desired_width(ui.available_width() - 34.0),
-                    );
+                    )
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
                     let length = repo.draft.summary.chars().count();
                     let color = if length > 72 { c.warning } else { c.muted };
                     ui.label(RichText::new((72_i64 - length as i64).to_string()).small().monospace().color(color))
@@ -374,7 +375,8 @@ impl NiceGitApp {
                         .frame(egui::Frame::NONE)
                         .desired_rows(4)
                         .desired_width(f32::INFINITY),
-                );
+                )
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit description"));
             });
         ui.add_space(6.0);
         let mut amend = repo.amend;

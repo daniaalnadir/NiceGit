@@ -383,11 +383,10 @@ impl NiceGitApp {
                         ui.label(RichText::new("Bisecting: mark a good and a bad commit to begin.").strong());
                     }
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_enabled(idle, egui::Button::new(format!("End bisect, return to {}", status.original_checkout))).clicked() {
-                        self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into())));
-                    }
-                });
+                ui.add_space(12.0);
+                if ui.add_enabled(idle, egui::Button::new(format!("End bisect, return to {}", status.original_checkout))).clicked() {
+                    self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into())));
+                }
             });
         });
     }
