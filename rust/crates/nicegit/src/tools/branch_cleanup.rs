@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use egui::{Margin, RichText, Ui};
+use egui::{Margin, RichText, Stroke, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::cleanup::{BranchCandidate, BranchDeletion};
 use nicegit_core::{GitClient, GitError, Snapshot};
@@ -17,7 +17,37 @@ use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 const DEFAULT_INACTIVE_DAYS: i64 = 90;
 
+/// Branch names that are a repository's main line, whatever its settings.
+const MAIN_LINE_NAMES: [&str; 4] = ["main", "master", "develop", "trunk"];
+
 type Found = nicegit_core::Result<Vec<BranchCandidate>>;
+
+/// The main line branches of a repository: the usual names, the branch each remote's HEAD points
+/// to, and the GitFlow production and development branches. Reading the settings is best effort;
+/// the usual names always count.
+fn main_line_branches(client: &GitClient, remotes: &[String], directory: &Path) -> BTreeSet<String> {
+    let mut names: BTreeSet<String> = MAIN_LINE_NAMES.iter().map(|name| name.to_string()).collect();
+    if let Ok(Some(flow)) = client.gitflow_configuration(directory) {
+        names.insert(flow.main_branch);
+        names.insert(flow.develop_branch);
+    }
+    // Remote HEAD aliases are left out of the snapshot's branch list, so they are read here.
+    if let Ok(output) = client.run(&["for-each-ref", "--format=%(refname)%09%(symref)", "refs/remotes/"], directory) {
+        for line in output.lines() {
+            let Some((refname, symref)) = line.split_once('\t') else { continue };
+            if !refname.ends_with("/HEAD") || symref.is_empty() {
+                continue;
+            }
+            // With remote names that contain slashes, the longest matching remote name gives the branch.
+            let branch =
+                remotes.iter().filter_map(|remote| symref.strip_prefix(&format!("refs/remotes/{remote}/"))).min_by_key(|rest| rest.len());
+            if let Some(branch) = branch {
+                names.insert(branch.to_string());
+            }
+        }
+    }
+    names
+}
 
 /// Deletions that Undo can restore, shared with the background action that made them.
 type UndoSlot = Arc<Mutex<Option<Vec<BranchDeletion>>>>;
@@ -37,6 +67,9 @@ pub struct BranchCleanupWindow {
     deleted: UndoSlot,
     /// The last deletion, which Undo restores.
     undo: Option<Vec<BranchDeletion>>,
+    /// The main line branches, once read. Listed branches with these names are never preselected.
+    main_line: Option<BTreeSet<String>>,
+    main_line_task: Option<Task<nicegit_core::Result<BTreeSet<String>>>>,
 }
 
 impl Default for BranchCleanupWindow {
@@ -57,7 +90,14 @@ impl BranchCleanupWindow {
             confirming: false,
             deleted: Arc::new(Mutex::new(None)),
             undo: None,
+            main_line: None,
+            main_line_task: None,
         }
+    }
+
+    /// Whether `name` is a main line branch.
+    fn is_main_line(&self, name: &str) -> bool {
+        self.main_line.as_ref().is_some_and(|names| names.contains(name))
     }
 
     fn candidates(&self) -> &[BranchCandidate] {
@@ -85,6 +125,9 @@ impl ToolWindow for BranchCleanupWindow {
         // Read the list again; the rows already shown stay until the new list arrives.
         self.listing = None;
         self.found_days = None;
+        // The remotes and GitFlow settings may have changed too.
+        self.main_line = None;
+        self.main_line_task = None;
     }
 
     fn ui(&mut self, ui: &mut Ui, cx: &mut Ctx) {
@@ -109,17 +152,22 @@ impl ToolWindow for BranchCleanupWindow {
             }
         }
 
+        // Read the main line branches first, so a listing never preselects one of them.
+        if self.main_line.is_none() && self.main_line_task.is_none() {
+            let remotes = cx.snapshot.remotes.clone();
+            self.main_line_task =
+                Some(query(ui.ctx(), cx.repo, move |client, directory| Ok(main_line_branches(client, &remotes, directory))));
+        }
+        let ready = self.main_line_task.as_mut().and_then(|task| task.get().cloned());
+        if let Some(Ok(names)) = ready {
+            self.main_line = Some(names);
+            self.main_line_task = None;
+        }
+
         let mut slider_dragging = false;
         let c = theme::of(ui);
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.heading("Clean up branches");
-                let current = cx.snapshot.current_branch.as_str();
-                ui.label(
-                    RichText::new(format!("Local branches merged into {current}, or with no commits for a while.")).small().color(c.muted),
-                );
-            });
-        });
+        let current = cx.snapshot.current_branch.as_str();
+        ui.label(RichText::new(format!("Local branches merged into {current}, or with no commits for a while.")).small().color(c.muted));
         ui.add_space(6.0);
 
         ui.horizontal(|ui| {
@@ -136,16 +184,17 @@ impl ToolWindow for BranchCleanupWindow {
             self.listing_days = days;
             self.listing = Some(query(ui.ctx(), cx.repo, move |client, directory| client.branch_cleanup_candidates(days, directory)));
         }
-        let finished = self.listing.as_mut().and_then(|task| task.get().cloned());
+        // A listing waits for the main line branches, so they are known before anything is preselected.
+        let finished = if self.main_line.is_some() { self.listing.as_mut().and_then(|task| task.get().cloned()) } else { None };
         if let Some(found) = finished {
             self.listing = None;
             self.found_days = Some(self.listing_days);
             if let Ok(candidates) = &found {
-                // Merged branches start selected; unmerged ones need a deliberate choice.
+                // Merged branches start selected, except the main line; unmerged ones need a deliberate choice.
                 let previous = std::mem::take(&mut self.selected);
                 self.selected = candidates
                     .iter()
-                    .filter(|candidate| candidate.is_merged || previous.contains(&candidate.name))
+                    .filter(|candidate| (candidate.is_merged && !self.is_main_line(&candidate.name)) || previous.contains(&candidate.name))
                     .map(|candidate| candidate.name.clone())
                     .collect();
             }
@@ -156,6 +205,7 @@ impl ToolWindow for BranchCleanupWindow {
         let selected_candidates: Vec<BranchCandidate> =
             self.candidates().iter().filter(|candidate| self.selected.contains(&candidate.name)).cloned().collect();
         let selected_unmerged = selected_candidates.iter().filter(|candidate| !candidate.is_merged).count();
+        let selected_main = selected_candidates.iter().filter(|candidate| self.is_main_line(&candidate.name)).count();
 
         if let Some(deletions) = self.undo.clone() {
             egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
@@ -182,13 +232,17 @@ impl ToolWindow for BranchCleanupWindow {
                 widgets::empty_state(ui, icon::CHECK_CIRCLE, "No branches to clean up.");
             }
             Some(Ok(candidates)) => {
-                let merged_count = candidates.iter().filter(|candidate| candidate.is_merged).count();
+                let main_line = self.main_line.clone().unwrap_or_default();
+                let merged: Vec<String> = candidates
+                    .iter()
+                    .filter(|candidate| candidate.is_merged && !self.is_main_line(&candidate.name))
+                    .map(|candidate| candidate.name.clone())
+                    .collect();
                 ui.horizontal(|ui| {
                     widgets::section(ui, &format!("{} to review", candidates.len()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add_enabled(merged_count > 0, egui::Button::new("Select merged")).clicked() {
-                            self.selected =
-                                candidates.iter().filter(|candidate| candidate.is_merged).map(|candidate| candidate.name.clone()).collect();
+                        if ui.add_enabled(!merged.is_empty(), egui::Button::new("Select merged")).clicked() {
+                            self.selected = merged.iter().cloned().collect();
                         }
                         if ui.add_enabled(!self.selected.is_empty(), egui::Button::new("Clear")).clicked() {
                             self.selected.clear();
@@ -197,10 +251,20 @@ impl ToolWindow for BranchCleanupWindow {
                 });
                 egui::ScrollArea::vertical().id_salt("cleanup_candidates").max_height(300.0).auto_shrink([false, false]).show(ui, |ui| {
                     for candidate in candidates {
+                        let is_main = main_line.contains(&candidate.name);
                         ui.horizontal(|ui| {
                             let mut checked = self.selected.contains(&candidate.name);
+                            // A bordered box, so the checkbox stands out from the list.
                             let response = ui
-                                .checkbox(&mut checked, RichText::new(&candidate.name).monospace())
+                                .scope(|ui| {
+                                    let visuals = ui.visuals_mut();
+                                    for widget in [&mut visuals.widgets.inactive, &mut visuals.widgets.hovered, &mut visuals.widgets.active]
+                                    {
+                                        widget.bg_stroke = Stroke::new(1.0, c.muted);
+                                    }
+                                    ui.add(egui::Checkbox::new(&mut checked, RichText::new(&candidate.name).monospace()))
+                                })
+                                .inner
                                 .on_hover_text(candidate.subject.as_str());
                             if response.changed() {
                                 if checked {
@@ -208,6 +272,10 @@ impl ToolWindow for BranchCleanupWindow {
                                 } else {
                                     self.selected.remove(&candidate.name);
                                 }
+                            }
+                            if is_main {
+                                widgets::pill(ui, "Main branch", c.modified)
+                                    .on_hover_text("The main line is never selected automatically. Tick it only if you mean to delete it.");
                             }
                             let (label, fill) = if candidate.is_merged { ("Merged", c.added) } else { ("Not merged", c.conflict) };
                             widgets::pill(ui, label, fill);
@@ -224,6 +292,15 @@ impl ToolWindow for BranchCleanupWindow {
         }
 
         ui.add_space(8.0);
+        if selected_main > 0 {
+            let (branches, verb) = if selected_main == 1 { ("branch", "is") } else { ("branches", "are") };
+            widgets::callout(
+                ui,
+                &format!("{selected_main} selected {branches} {verb} the main line. Deleting it removes that line of work locally."),
+                true,
+            );
+            ui.add_space(6.0);
+        }
         if selected_unmerged > 0 {
             let (branches, verb, them) = if selected_unmerged == 1 { ("branch", "has", "it") } else { ("branches", "have", "them") };
             widgets::callout(

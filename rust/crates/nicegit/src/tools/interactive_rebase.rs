@@ -203,11 +203,11 @@ impl InteractiveRebaseWindow {
                         ui.label(RichText::new(icon::DOTS_SIX_VERTICAL).color(c.muted));
                     }
                     ui.label(RichText::new(format!("{}", index + 1)).monospace().color(c.muted));
-                    if widgets::icon_button(ui, icon::ARROW_UP, "Move up", idle && index > 0).clicked() {
+                    if move_button(ui, icon::ARROW_UP, "Move up", idle && index > 0).clicked() {
                         // The slot above the row before this one.
                         *moved = Some((index, index - 1));
                     }
-                    if widgets::icon_button(ui, icon::ARROW_DOWN, "Move down", idle && index + 1 < count).clicked() {
+                    if move_button(ui, icon::ARROW_DOWN, "Move down", idle && index + 1 < count).clicked() {
                         // The slot below the row after this one.
                         *moved = Some((index, index + 2));
                     }
@@ -228,7 +228,8 @@ impl InteractiveRebaseWindow {
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if published.contains(&entry.commit.hash) {
-                            ui.label(RichText::new(icon::NETWORK).color(c.warning)).on_hover_text("Already on a remote");
+                            ui.add(egui::Label::new(RichText::new(icon::NETWORK).color(c.warning)).sense(egui::Sense::hover()))
+                                .on_hover_text("Already on a remote");
                         }
                         ui.label(RichText::new(&entry.commit.author_name).small().color(c.muted));
                     });
@@ -285,7 +286,6 @@ impl ToolWindow for InteractiveRebaseWindow {
 
         let c = theme::of(ui);
         ui.add_space(4.0);
-        ui.label(RichText::new("Interactive rebase").size(16.0).strong());
         let count = self.entries.len();
         let commits = if count == 1 { "commit" } else { "commits" };
         ui.label(
@@ -326,6 +326,9 @@ impl ToolWindow for InteractiveRebaseWindow {
                     Self::row(&mut self.entries, index, &published, idle, &mut moved, ui);
                 }
             });
+            if self.published_count() > 0 {
+                ui.label(RichText::new(format!("{}  Already on a remote", icon::NETWORK)).small().color(c.warning));
+            }
             if let Some((from, gap)) = moved.filter(|_| idle) {
                 move_to_gap(&mut self.entries, from, gap);
             }
@@ -385,6 +388,15 @@ impl ToolWindow for InteractiveRebaseWindow {
     fn wants_close(&self) -> bool {
         self.closing
     }
+}
+
+/// A small icon button for moving a row. Enabled buttons use the normal text colour, so they stay
+/// legible; disabled ones are muted.
+fn move_button(ui: &mut egui::Ui, glyph: &str, tooltip: &str, enabled: bool) -> egui::Response {
+    let color = if enabled { ui.visuals().text_color() } else { theme::of(ui).muted };
+    ui.add_enabled(enabled, egui::Button::new(RichText::new(glyph).size(15.0).color(color)).frame(false).min_size(egui::vec2(24.0, 24.0)))
+        .on_hover_text(tooltip)
+        .on_disabled_hover_text(tooltip)
 }
 
 /// Whether dropping the row at `from` into insertion slot `gap` leaves the order unchanged.

@@ -215,7 +215,7 @@ impl StashWindow {
         if files.is_empty() {
             ui.label(RichText::new("No changed files.").small().color(c.muted));
         } else {
-            egui::ScrollArea::vertical().id_salt("stash_files").auto_shrink([false, false]).max_height(130.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("stash_files").auto_shrink([false, true]).max_height(180.0).show(ui, |ui| {
                 for file in files {
                     // Untracked files are shown but cannot be ticked while they are excluded.
                     let disabled = file.untracked && !self.include_untracked;
@@ -431,7 +431,6 @@ impl ToolWindow for StashWindow {
         let files = stashable_files(&cx.snapshot.status);
 
         ui.add_space(4.0);
-        ui.label(RichText::new("Stashes").size(16.0).strong());
         ui.label(RichText::new("Set changes aside to switch work or clean up, and restore them later.").small().color(c.muted));
         ui.add_space(8.0);
 

@@ -123,7 +123,31 @@ impl ToolWindow for EditorWindow {
             return;
         }
         egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-            ui.add(egui::TextEdit::multiline(&mut self.text).code_editor().desired_width(f32::INFINITY).desired_rows(30).lock_focus(true));
+            // The box has a margin around the text, and a muted gutter of line numbers that
+            // uses the editor's font, so each number sits beside its line.
+            egui::Frame::new()
+                .fill(ui.visuals().extreme_bg_color)
+                .stroke(egui::Stroke::new(1.0, c.border))
+                .corner_radius(6.0)
+                .inner_margin(egui::Margin::same(8))
+                .show(ui, |ui| {
+                    let lines = self.text.split('\n').count();
+                    let digits = lines.to_string().len();
+                    let numbers: Vec<String> = (1..=lines).map(|line| format!("{line:>digits$}")).collect();
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        let gutter = RichText::new(numbers.join("\n")).monospace().color(c.muted);
+                        ui.add(egui::Label::new(gutter).wrap_mode(egui::TextWrapMode::Extend));
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.text)
+                                .code_editor()
+                                .frame(egui::Frame::NONE)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(30)
+                                .lock_focus(true),
+                        );
+                    });
+                });
         });
     }
 }
