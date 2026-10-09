@@ -302,6 +302,12 @@ fn paint_row(
     painter.text(pos2(number_right + 12.0, middle), Align2::LEFT_CENTER, displayed(&line.content), FontId::monospace(12.0), text_color);
 
     let clicked = response.clicked();
+    // Described for screen readers and UI tests as the commit, author, and line text.
+    let described = if uncommitted { "Uncommitted".to_string() } else { commit.short_hash().to_string() };
+    let author_text = if uncommitted { "Your working changes" } else { commit.author_name.as_str() };
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{described} · {author_text} · {}", displayed(&line.content)))
+    });
     let tooltip = if uncommitted {
         "Not committed yet".to_string()
     } else {

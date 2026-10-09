@@ -158,7 +158,8 @@ impl GitFlowWindow {
         });
         ui.add_space(4.0);
         let hint = if self.kind == GitFlowKind::Feature { "Feature name" } else { "Version, such as 1.2.0" };
-        ui.add(egui::TextEdit::singleline(&mut self.name).hint_text(hint).desired_width(f32::INFINITY));
+        ui.add(egui::TextEdit::singleline(&mut self.name).hint_text(hint).desired_width(f32::INFINITY))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, hint));
         let name = self.name.trim().to_string();
         let prefix = configuration.prefix(self.kind).to_string();
         let base = configuration.start_branch(self.kind).to_string();

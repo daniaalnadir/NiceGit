@@ -343,5 +343,7 @@ pub fn result_row(
     if let Some(extra) = extra {
         painter.text(pos2(rect.left() + 14.0, rect.top() + 46.0), Align2::LEFT_TOP, extra, FontId::monospace(10.5), c.muted);
     }
+    // Described for screen readers and UI tests as the title and detail together.
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{title} · {detail}")));
     response.on_hover_cursor(CursorIcon::PointingHand)
 }

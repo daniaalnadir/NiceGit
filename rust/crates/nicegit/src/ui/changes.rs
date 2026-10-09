@@ -124,7 +124,10 @@ impl NiceGitApp {
                             self.act("Stage all", |client, path| client.stage_all(path).map(|_| None));
                         }
                         let discardable: Vec<StatusEntry> = unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
-                        if widgets::icon_button(ui, icon::TRASH, "Discard all changes…", idle && !discardable.is_empty()).clicked() {
+                        let discard_all_enabled = idle && !discardable.is_empty();
+                        let discard_all = widgets::icon_button(ui, icon::TRASH, "Discard all changes…", discard_all_enabled);
+                        discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, discard_all_enabled, "Discard all changes…"));
+                        if discard_all.clicked() {
                             self.confirm(
                                 "Discard all changes?",
                                 format!("Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.", discardable.len()),

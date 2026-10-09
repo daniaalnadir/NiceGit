@@ -258,7 +258,8 @@ impl ReflogWindow {
             .show(ui.ctx(), |ui| {
                 ui.label(RichText::new("The branch keeps this commit and its history. Your current checkout does not change.").small());
                 ui.add_space(6.0);
-                widgets::text_field(ui, &mut self.branch_name, "Branch name");
+                widgets::text_field(ui, &mut self.branch_name, "Branch name")
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Branch name"));
                 ui.add_space(8.0);
                 let name = self.branch_name.trim().to_string();
                 ui.horizontal(|ui| {
