@@ -166,12 +166,24 @@ impl NiceGitApp {
             {
                 ui.close();
                 let source = if before { format!("{hash}^") } else { hash.to_string() };
-                let (path, branch, head) = (path.to_string(), snapshot.current_branch.clone(), snapshot.head_hash.clone());
-                self.act("Restore file", move |client, repo| {
-                    client
-                        .restore(&path, &source, &branch, head.as_deref(), repo)
-                        .map(|_| Some(format!("Restored {path}. Review and commit the staged change.")))
-                });
+                // Say whether the file comes back or goes away, before anything changes.
+                let deleted = (status.starts_with('A') && before) || (status.starts_with('D') && !before);
+                let what = if deleted {
+                    format!("{path} does not exist in that version, so it will be deleted.")
+                } else {
+                    format!("{path} will be replaced with that version.")
+                };
+                self.confirm(
+                    format!("Restore {path}?"),
+                    format!("{what} Staged and unstaged changes to it are lost; other files and the branch are not changed."),
+                    "Restore",
+                    crate::ui::dialogs::Pending::RestoreFile {
+                        path: path.to_string(),
+                        source,
+                        branch: snapshot.current_branch.clone(),
+                        head: snapshot.head_hash.clone(),
+                    },
+                );
             }
         }
         ui.separator();

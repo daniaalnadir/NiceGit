@@ -25,6 +25,7 @@ pub enum Pending {
     ApplyPatch { file: std::path::PathBuf, branch: String, head: Option<String> },
     Undo,
     Redo,
+    RestoreFile { path: String, source: String, branch: String, head: Option<String> },
 }
 
 pub enum InputKind {
@@ -385,6 +386,11 @@ impl NiceGitApp {
                 client.require_checkout(&branch, head.as_deref(), "apply", path)?;
                 let contents = std::fs::read(&file).map_err(|e| nicegit_core::GitError::failed("apply", e.to_string()))?;
                 client.apply_patch(&contents, path).map(|_| Some("Applied the patch. Its changes are unstaged.".into()))
+            }),
+            Pending::RestoreFile { path, source, branch, head } => self.act("Restore file", move |client, repo| {
+                client
+                    .restore(&path, &source, &branch, head.as_deref(), repo)
+                    .map(|_| Some(format!("Restored {path}. Review and commit the staged change.")))
             }),
             Pending::Undo => self.undo(),
             Pending::Redo => self.redo(),

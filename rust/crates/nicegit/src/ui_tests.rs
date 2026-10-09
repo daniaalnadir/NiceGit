@@ -329,3 +329,22 @@ fn resolve_a_merge_conflict_in_the_editor() {
     assert!(harness.state().snapshot().is_some_and(|s| s.operation.is_none()));
     assert_eq!(git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count(), 3, "a merge commit");
 }
+
+#[test]
+fn restore_a_file_from_the_commit_inspector() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click();
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    settle(&mut harness);
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Restore version before this commit").click();
+    wait(&mut harness, "the restore confirmation", |h| h.state().dialog.is_some());
+    harness.get_by_label("Restore").click();
+    idle(&mut harness);
+    assert_eq!(std::fs::read_to_string(repo.path().join("notes.txt")).unwrap(), "first\n");
+    assert_eq!(git(repo.path(), &["diff", "--cached", "--name-only"]), "notes.txt");
+}

@@ -371,6 +371,10 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
     ui.horizontal(|ui| {
         ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(muted));
         let edit = ui.add(TextEdit::singleline(&mut options.find.query).hint_text("Find in diff").desired_width(180.0));
+        // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
+        if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {
+            edit.request_focus();
+        }
         if edit.changed() {
             occurrences = find_occurrences(&content.lines, &options.find.query);
             options.find.current = 0;

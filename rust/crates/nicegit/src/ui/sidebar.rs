@@ -498,6 +498,18 @@ impl NiceGitApp {
                 self.request_rebase(branch.clone());
             }
         }
+        if !branch.is_current
+            && snapshot.is_on_branch()
+            && ui
+                .add_enabled(
+                    idle && snapshot.operation.is_none(),
+                    egui::Button::new(format!("{}  Reset {current} to here…", icon::ARROW_ARC_LEFT)),
+                )
+                .clicked()
+        {
+            ui.close();
+            self.open_tool(Box::new(tools::reset::ResetWindow::new(branch.tip.clone(), branch.subject.clone(), snapshot)));
+        }
         ui.separator();
         if ui.add_enabled(idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
             ui.close();
@@ -520,7 +532,7 @@ impl NiceGitApp {
         if !branch.is_remote && !branch.is_detached() {
             if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Create worktree…", icon::FOLDERS))).clicked() {
                 ui.close();
-                self.open_tool(Box::new(tools::worktrees::WorktreesWindow::new()));
+                self.open_tool(Box::new(tools::worktrees::WorktreesWindow::for_branch(branch.name.clone(), branch.tip.clone())));
             }
             let remotes = snapshot.remotes.clone();
             if !remotes.is_empty() {

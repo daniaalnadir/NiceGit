@@ -45,6 +45,12 @@ impl WorktreesWindow {
         Self { confirming_removal: None, removing: None, choice: None, parent: None, folder_name: String::new(), tip_check: None }
     }
 
+    /// Opens with `branch` already chosen for a new worktree, as its context menu does.
+    pub fn for_branch(name: String, tip: String) -> Self {
+        let folder_name = name.replace('/', "-");
+        Self { choice: Some(BranchChoice { name, tip }), folder_name, ..Self::new() }
+    }
+
     fn worktree_list(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let snapshot: &Snapshot = cx.snapshot;
         let idle = cx.idle;
