@@ -48,7 +48,9 @@ pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done:
     loop {
         harness.step();
         if done(harness) {
-            harness.step();
+            // A window or menu that just appeared spends its first frames measuring itself and
+            // ignores clicks, so let it settle before the test acts on it.
+            harness.run_steps(3);
             return;
         }
         assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for {what}");
