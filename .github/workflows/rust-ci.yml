@@ -162,14 +162,23 @@ jobs:
             -RedirectStandardError "$env:RUNNER_TEMP\typed.log"
           Start-Sleep -Seconds 20
           $shell = New-Object -ComObject WScript.Shell
-          $null = $shell.AppActivate($app.Id)
-          Start-Sleep -Seconds 1
-          $shell.SendKeys("^+p")
-          Start-Sleep -Seconds 2
-          $shell.SendKeys("stage all")
-          Start-Sleep -Seconds 1
-          $shell.SendKeys("{ENTER}")
-          Start-Sleep -Seconds 5
+          # The runner's desktop can take focus back while the app starts, so the keystrokes are
+          # retried with the window activated again; each attempt starts by closing any palette.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $null = $shell.AppActivate($app.Id)
+            Start-Sleep -Seconds 1
+            $shell.SendKeys("{ESC}")
+            Start-Sleep -Milliseconds 500
+            $shell.SendKeys("^+p")
+            Start-Sleep -Seconds 2
+            $shell.SendKeys("stage all")
+            Start-Sleep -Seconds 1
+            $shell.SendKeys("{ENTER}")
+            Start-Sleep -Seconds 5
+            $staged = git -C "$env:RUNNER_TEMP\Typed" diff --cached --name-only
+            if ($staged -match "App/SettingsView.swift") { break }
+            Write-Host "Attempt $attempt did not reach the app; activating it again."
+          }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
