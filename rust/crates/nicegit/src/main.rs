@@ -32,6 +32,12 @@ fn main() -> eframe::Result {
     if let Some(icon) = icon() {
         viewport = viewport.with_icon(icon);
     }
-    let options = eframe::NativeOptions { viewport, ..Default::default() };
+    #[allow(unused_mut)]
+    let mut options = eframe::NativeOptions { viewport, ..Default::default() };
+    // On Windows, draw with wgpu (Direct3D 12) unless NICEGIT_RENDERER=glow asks otherwise.
+    #[cfg(windows)]
+    if std::env::var("NICEGIT_RENDERER").as_deref() != Ok("glow") {
+        options.renderer = eframe::Renderer::Wgpu;
+    }
     eframe::run_native("NiceGit", options, Box::new(move |creation| Ok(Box::new(app::NiceGitApp::new(creation, initial)))))
 }

@@ -19,6 +19,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 notify = "8.2.0"
 alacritty_terminal = "0.26.0"
 
+# Windows machines without GPU drivers (virtual machines, Remote Desktop) lack the OpenGL 2.0
+# the default renderer needs; wgpu draws through Direct3D 12, with a software fallback.
+[target.'cfg(windows)'.dependencies]
+eframe = { version = "0.36", default-features = false, features = ["wgpu"] }
+
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
@@ -30,7 +35,7 @@ tempfile = "3"
 maintainer = "Daniaal Nadir"
 section = "vcs"
 priority = "optional"
-depends = "git, libgtk-3-0, libxkbcommon0"
+depends = "git, libgtk-3-0, libxkbcommon0, libxkbcommon-x11-0, libgl1, libegl1"
 extended-description = "NiceGit is a fast, cross-platform Git client with a commit graph, staging, branches, stashes, and merge and rebase tools."
 assets = [
     ["target/release/nicegit", "usr/bin/", "755"],

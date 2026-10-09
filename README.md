@@ -92,7 +92,9 @@ cargo run --release
 ```
 
 On Linux, first install the GTK 3, xkbcommon, and Wayland or X11 development
-packages (for example `libgtk-3-dev libxkbcommon-dev libwayland-dev`).
+packages (for example `libgtk-3-dev libxkbcommon-dev libwayland-dev`). The tarball build
+also needs `libxkbcommon-x11-0` and OpenGL (`libgl1`, `libegl1`) at run time; the `.deb`
+installs them for you.
 
 ### Build the Mac app from source
 
