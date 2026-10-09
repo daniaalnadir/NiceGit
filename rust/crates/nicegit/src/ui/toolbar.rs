@@ -234,7 +234,7 @@ impl NiceGitApp {
             }
             if !overflow.is_empty() {
                 ui.add_space(6.0);
-                let more = ui.menu_button(RichText::new(format!("{}", icon::DOTS_THREE)).size(20.0), |ui| {
+                let more = ui.menu_button(RichText::new(icon::DOTS_THREE).size(20.0), |ui| {
                     for item in &overflow {
                         if ui
                             .add_enabled(item.enabled, egui::Button::new(format!("{}  {}", item.glyph, item.label)))
