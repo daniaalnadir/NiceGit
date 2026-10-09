@@ -355,6 +355,7 @@ fn open_a_submodule_as_a_repository_tab_from_its_window() {
     harness.get_by_role_and_label(Role::Button, &open_button).click_accesskit();
     wait(&mut harness, "the submodule's tab", |h| h.state().repos.len() == 2 && h.state().busy.is_none());
     loaded(&mut harness);
-    assert_eq!(harness.state().repo().map(|r| r.path.clone()), Some(submodule), "the submodule's tab is active");
+    // Both sides canonical: Windows spells a canonical path with a \\?\ prefix.
+    assert_eq!(harness.state().repo().map(|r| r.path.canonicalize().unwrap()), Some(submodule), "the submodule's tab is active");
     assert_eq!(harness.state().snapshot().map(|s| s.name.clone()).as_deref(), Some("library"));
 }
