@@ -393,6 +393,8 @@ impl NiceGitApp {
         // Drag a branch label onto the current commit to merge it in or rebase onto it.
         for (index, (pill, branch)) in draggable.into_iter().enumerate() {
             let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::drag());
+            let name = format!("Branch label {}", branch.display_name());
+            label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
             label.dnd_set_drag_payload(branch);
         }
         if is_head && snapshot.is_on_branch() {
