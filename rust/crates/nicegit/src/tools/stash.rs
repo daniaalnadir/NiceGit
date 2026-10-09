@@ -207,7 +207,7 @@ impl StashWindow {
         ui.add_space(4.0);
 
         ui.horizontal(|ui| {
-            ui.checkbox(&mut self.include_untracked, "Include untracked files");
+            crate::tools::widgets::checkbox(ui, true, &mut self.include_untracked, "Include untracked files");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.add_enabled(!files.is_empty(), egui::Button::new("None")).clicked() {
                     self.selected.clear();
@@ -230,7 +230,7 @@ impl StashWindow {
                     if file.untracked {
                         name.push_str("  (untracked)");
                     }
-                    let response = ui.add_enabled(!disabled, egui::Checkbox::new(&mut checked, RichText::new(name).monospace()));
+                    let response = crate::tools::widgets::checkbox(ui, !disabled, &mut checked, RichText::new(name).monospace());
                     if response.changed() {
                         if checked {
                             self.selected.insert(file.path.clone());

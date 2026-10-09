@@ -92,7 +92,7 @@ impl ToolWindow for ContentSearchWindow {
             if response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter)) {
                 run = true;
             }
-            if ui.checkbox(&mut self.match_case, "Match case").changed() {
+            if crate::tools::widgets::checkbox(ui, true, &mut self.match_case, "Match case").changed() {
                 match_case_changed = true;
             }
         });

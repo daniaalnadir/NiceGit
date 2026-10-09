@@ -207,7 +207,7 @@ impl CompareWindow {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Only text diffs can be shown side by side; images always use the two panes.
                 if !is_image(&path) {
-                    ui.checkbox(&mut self.split, "Side by side");
+                    crate::tools::widgets::checkbox(ui, true, &mut self.split, "Side by side");
                 }
             });
         });

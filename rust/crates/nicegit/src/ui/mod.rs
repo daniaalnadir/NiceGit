@@ -434,7 +434,7 @@ impl NiceGitApp {
                     ui.selectable_value(&mut split, false, "Unified");
                     self.settings.split_diff = split;
                     let mut ignore = self.settings.ignore_whitespace;
-                    if ui.checkbox(&mut ignore, "Hide whitespace").changed() {
+                    if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
                         self.settings.ignore_whitespace = ignore;
                         self.reload_diff();
                     }

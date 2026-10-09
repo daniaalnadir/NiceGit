@@ -251,7 +251,7 @@ fn diff_pane(ui: &mut Ui, cx: &mut Ctx, path: &str, selection: &mut Selected, sp
             cx.open(Box::new(BlameWindow::new(path.to_string(), Some(selection.hash.clone()))));
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.checkbox(split, "Side by side");
+            crate::tools::widgets::checkbox(ui, true, split, "Side by side");
         });
     });
     ui.add_space(2.0);

@@ -33,24 +33,33 @@ impl NiceGitApp {
                         // A fixed-width label column keeps every row's swatches at the same x.
                         let label_size = egui::vec2(150.0, ui.spacing().interact_size.y);
                         ui.allocate_ui_with_layout(label_size, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            // The space is otherwise shrunk to the label's own width.
+                            ui.set_min_width(label_size.x);
                             ui.radio_value(&mut self.settings.graph_palette, palette, palette.title());
                         });
                         let previous = theme::graph_palette();
                         theme::set_graph_palette(palette);
                         for index in 0..theme::GRAPH_COLOR_COUNT {
-                            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                            ui.painter().circle_filled(rect.center(), 5.5, theme::graph_color(index));
+                            let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+                            ui.painter().circle_filled(rect.center(), 6.5, theme::graph_color(index));
                         }
                         theme::set_graph_palette(previous);
                     });
                 }
                 ui.add_space(10.0);
                 widgets::section(ui, "Diffs");
-                reload_diff |= ui.checkbox(&mut self.settings.ignore_whitespace, "Hide whitespace-only changes").changed();
-                ui.checkbox(&mut self.settings.split_diff, "Show diffs side by side");
+                reload_diff |=
+                    crate::tools::widgets::checkbox(ui, true, &mut self.settings.ignore_whitespace, "Hide whitespace-only changes")
+                        .changed();
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.split_diff, "Show diffs side by side");
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
-                ui.checkbox(&mut self.settings.auto_refresh, "Refresh automatically when files change outside NiceGit");
+                crate::tools::widgets::checkbox(
+                    ui,
+                    true,
+                    &mut self.settings.auto_refresh,
+                    "Refresh automatically when files change outside NiceGit",
+                );
                 ui.add_space(10.0);
                 widgets::section(ui, "Layout");
                 if ui.button("Restore default panel widths").on_hover_text("Columns and panels return to their original sizes").clicked() {

@@ -391,7 +391,7 @@ impl NiceGitApp {
             });
         ui.add_space(6.0);
         let mut amend = repo.amend;
-        let amend_changed = ui.add_enabled(can_amend, egui::Checkbox::new(&mut amend, "Amend last commit")).changed();
+        let amend_changed = crate::tools::widgets::checkbox(ui, can_amend, &mut amend, "Amend last commit").changed();
         if amend && head_published {
             widgets::callout(
                 ui,

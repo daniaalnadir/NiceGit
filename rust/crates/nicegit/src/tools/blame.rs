@@ -92,8 +92,7 @@ impl BlameWindow {
                 ui.label(RichText::new(scope).small().color(c.muted));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let toggle = ui
-                    .checkbox(&mut self.ignore_whitespace, "Ignore whitespace")
+                let toggle = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_whitespace, "Ignore whitespace")
                     .on_hover_text("Attribute lines past whitespace-only changes to the commit that changed their content");
                 if toggle.changed() {
                     *reload = true;
@@ -345,7 +344,7 @@ fn diff_pane(ui: &mut Ui, selection: &mut Selected, split: &mut bool) -> bool {
             if widgets::icon_button(ui, icon::X, "Close this change", true).clicked() {
                 close = true;
             }
-            ui.checkbox(split, "Side by side");
+            crate::tools::widgets::checkbox(ui, true, split, "Side by side");
         });
     });
     ui.separator();

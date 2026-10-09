@@ -262,7 +262,7 @@ impl ToolWindow for BranchCleanupWindow {
                                     {
                                         widget.bg_stroke = Stroke::new(1.0, c.muted);
                                     }
-                                    ui.add(egui::Checkbox::new(&mut checked, RichText::new(&candidate.name).monospace()))
+                                    crate::tools::widgets::checkbox(ui, true, &mut checked, RichText::new(&candidate.name).monospace())
                                 })
                                 .inner
                                 .on_hover_text(candidate.subject.as_str());
