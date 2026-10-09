@@ -50,7 +50,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Ahead and behind counts | Sidebar, toolbar Pull/Push labels | core `client::snapshot_counts_commits_ahead_of_and_behind_the_upstream` |
 | Drag a branch onto the current branch to merge or rebase | Sidebar rows and graph labels | UI `drag_a_branch_onto_the_current_branch_to_merge_it` |
 | Merge and rebase with previews | Branch menu; confirmation shows the preview | core `rewrite::merge_preview_*` (4), `rebase_preview_is_marked_as_an_estimate`, `rebase_onto_branch_replays_the_current_branch`, `client::merge_refuses_*` |
-| Worktrees: browse, open, reveal, copy path, create, remove, forget | Sidebar Worktrees, Worktrees window | UI `create_and_remove_a_worktree_from_the_interface`, `copy_a_worktree_path_and_open_it_from_the_sidebar`; core `settings::create_worktree_*`, `remove_worktree_*`, `prune_*` |
+| Worktrees: browse, open, reveal, copy path, create, remove, forget | Sidebar Worktrees, Worktrees window | UI `create_and_remove_a_worktree_from_the_interface`, `copy_reveal_and_open_a_worktree_from_the_sidebar`; core `settings::create_worktree_*`, `remove_worktree_*`, `prune_*` |
 | Submodules with state; check out recorded commit | Sidebar Submodules, Submodules window | core `settings::submodule*` (3), `missing_submodule_folder_*`, `update_submodule_*` |
 | Tags: create (lightweight or annotated), inspect, delete, push, delete from remote | Sidebar Tags, commit menu | UI `create_lightweight_and_annotated_tags_from_the_graph`; core `client::delete_tag_*`, `create_tag_*`, `settings::push_tag_*`, `delete_remote_tag_*` |
 | Stashes: save selected files and untracked, preview, apply, pop, delete | Sidebar Stashes, Stashes window, toolbar | UI `stash_window_saves_selected_changes`, `stash_only_the_ticked_files_then_preview_the_stash`; core `client::*stash*` (4), `settings::stash_selected_*` (3), `coverage::stash_diff_*`; unit `tools::stash::tests::*` (8) |
@@ -90,7 +90,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Stage individual lines | Diff panel line selection | core `staging::*` (13 line-staging tests); unit `staging::tests::*` (4) |
 | Discard with confirmation; undo recent discards | Changes panel | UI `discard_asks_first_and_can_be_undone`, `discard_all_restores_every_changed_file`; core `client::discard_*` (5), `rewrite::discard_undo_*` (4) |
 | Ignore untracked files (.gitignore or this computer only) | Changes menu › Ignore | core `settings::ignore_*` (8) |
-| Edit working files | Diff panel › Edit, changes menu | UI `edit_and_save_a_working_file_in_the_built_in_editor` |
+| Edit working files | Diff panel › Edit, changes menu; long lines wrap | UI `edit_and_save_a_working_file_in_the_built_in_editor`; unit `tools::editor::tests::*` (2) |
 | Amend, with a warning when published | Commit box | UI `amend_the_last_commit_with_staged_changes`; core `rewrite::is_published_reports_commits_contained_by_a_remote_branch` |
 | Edit the HEAD message | Commit menu › Edit message | UI `revert_and_edit_message_from_the_graph`; core `coverage::amend_message_*` (2) |
 | Undo and redo commits, amends, resets, merges, deletions | Toolbar, with confirmation | UI `stage_commit_and_undo_through_the_interface`, `undo_a_merge_from_the_toolbar`, `clean_up_branches_deletes_a_merged_branch_and_undo_restores_it`; core `rewrite::undo_*`, `redo_*` (8) |
