@@ -33,7 +33,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Recent repositories | Repositories column › Recent, empty window, palette | UI `recent_repositories_reopen_after_their_tab_closes` |
 | Resizable, remembered columns; restore default width | Panel dividers; double-click a divider; Settings button | UI `double_clicking_a_panel_edge_restores_its_width`, `smallest_window_lays_out_every_panel` |
 | Settings: appearance, graph colours, diff defaults, auto refresh | Settings (Ctrl/Cmd-,) | UI `settings_change_the_theme_and_diff_options` |
-| Automatic refresh after outside changes; refresh on return to the app | File watcher, Settings toggle; returning always refreshes | UI `changes_made_in_another_app_appear_without_refreshing`, `returning_to_the_app_refreshes_even_with_automatic_refresh_off` |
+| Automatic refresh after outside changes; refresh on return to the app | File watcher, Settings toggle; returning always refreshes | UI `changes_made_in_another_app_appear_without_refreshing`, `returning_to_the_app_refreshes_even_with_automatic_refresh_off`, `an_idle_repository_does_not_keep_refreshing_itself`; unit `app::tests::*` (2) |
 | Command palette with fuzzy matching | Shift-Ctrl/Cmd-P | UI `command_palette_runs_a_command`; unit `ui::palette::tests::word_starts_and_runs_rank_higher`; CI run (OS keyboard input) |
 | Embedded terminal per checkout; hide keeps shells; stop with confirmation | Terminal panel (Ctrl-`) | UI `terminal_panel_opens_and_hides`; unit `tools::terminal::tests::*` (3) |
 | Per-checkout commit-message drafts | Commit box, kept per checkout folder | UI `a_message_draft_stays_with_the_checkout_across_branch_switches`; unit `settings::tests::drafts_round_trip_summary_and_description` |

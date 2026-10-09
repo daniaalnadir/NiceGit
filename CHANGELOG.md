@@ -16,6 +16,8 @@
   Unstage All is no longer drawn as destructive, palette swatches line up, the editor's line
   numbers stay beside their lines, and long branch names in the inspector stay on one line.
 - Icon buttons and form fields have accessible names for screen readers.
+- On Linux, selecting a file no longer triggers an extra repository refresh: the watcher
+  ignores NiceGit's own file reads. A new or deleted file's diff uses one column.
 - Every feature in the Mac app's guide is now exercised by an interface test, an
   integration test, or both; see [docs/PARITY.md](docs/PARITY.md).
 
