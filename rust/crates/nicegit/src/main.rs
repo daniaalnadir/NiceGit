@@ -23,6 +23,12 @@ mod ui_tests_parity_b;
 #[cfg(test)]
 mod ui_tests_parity_c;
 #[cfg(test)]
+mod ui_tests_parity_d;
+#[cfg(test)]
+mod ui_tests_parity_e;
+#[cfg(test)]
+mod ui_tests_parity_f;
+#[cfg(test)]
 mod ui_tests_tools;
 mod worker;
 
