@@ -422,9 +422,10 @@ impl NiceGitApp {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(icon::GIT_DIFF).color(c.muted));
                 ui.add(egui::Label::new(RichText::new(&title).strong()).truncate());
-                if loading {
-                    ui.spinner();
-                }
+                // The spinner's place is always taken, so the buttons after it keep the same
+                // identity whether or not the diff is reloading; otherwise a click or screen
+                // reader action aimed at Edit during a reload would miss it.
+                ui.add_visible(loading, egui::Spinner::new());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if widgets::icon_button(ui, icon::X, "Close diff", true).clicked() {
                         self.clear_selection();
