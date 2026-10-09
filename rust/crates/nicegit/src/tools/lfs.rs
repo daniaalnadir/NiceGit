@@ -56,15 +56,10 @@ impl ToolWindow for LfsWindow {
         let mut untrack: Option<String> = None;
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new(icon::CUBE).size(22.0).color(c.accent));
-            ui.vertical(|ui| {
-                ui.heading("Git LFS");
-                ui.label(
-                    RichText::new("Stores large files outside Git's history. Git keeps a small pointer in their place.")
-                        .small()
-                        .color(c.muted),
-                );
-            });
+            ui.label(RichText::new(icon::CUBE).size(16.0).color(c.accent));
+            ui.label(
+                RichText::new("Stores large files outside Git's history. Git keeps a small pointer in their place.").small().color(c.muted),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read Git LFS again", true).clicked() {
                     reload = true;

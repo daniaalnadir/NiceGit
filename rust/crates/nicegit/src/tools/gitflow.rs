@@ -70,16 +70,11 @@ impl ToolWindow for GitFlowWindow {
         let loaded = self.configuration.as_mut().and_then(|task| task.get().cloned());
 
         let c = theme::of(ui);
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.heading("GitFlow");
-                ui.label(
-                    RichText::new("Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.")
-                        .small()
-                        .color(c.muted),
-                );
-            });
-        });
+        ui.label(
+            RichText::new("Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.")
+                .small()
+                .color(c.muted),
+        );
         ui.add_space(8.0);
 
         match loaded {

@@ -95,15 +95,11 @@ impl ToolWindow for ResetWindow {
     fn ui(&mut self, ui: &mut egui::Ui, cx: &mut Ctx) {
         let c = theme::of(ui);
         ui.add_space(4.0);
-        ui.label(
-            RichText::new(format!("{}  Reset {} to {}?", icon::ARROW_COUNTER_CLOCKWISE, self.branch, self.short_target()))
-                .size(16.0)
-                .strong(),
-        );
         ui.horizontal(|ui| {
             widgets::hash_label(ui, &self.target);
             ui.label(RichText::new(&self.subject).color(ui.visuals().text_color()).strong());
         });
+        ui.label(RichText::new(format!("{}  Moves {} to this commit.", icon::ARROW_COUNTER_CLOCKWISE, self.branch)).small().color(c.muted));
         ui.add_space(10.0);
 
         widgets::section(ui, "Mode");
@@ -135,11 +131,11 @@ impl ToolWindow for ResetWindow {
         ui.horizontal(|ui| {
             let enabled = cx.idle && self.head.is_some();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let action_label = if self.mode == ResetMode::Hard { "Discard changes and reset" } else { "Reset branch" };
+                // Hard discards local changes, so it gets the danger style and a label that says so.
                 let clicked = if self.mode == ResetMode::Hard {
-                    widgets::danger_button(ui, action_label, enabled).clicked()
+                    widgets::danger_button(ui, "Reset and discard changes", enabled).clicked()
                 } else {
-                    widgets::primary_button(ui, action_label, enabled).clicked()
+                    widgets::primary_button(ui, "Reset branch", enabled).clicked()
                 };
                 confirmed = clicked;
                 if ui.button("Cancel").clicked() {

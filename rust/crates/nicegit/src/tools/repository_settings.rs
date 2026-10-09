@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use egui::{Context, RichText, Ui};
+use egui::{Color32, Context, RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::settings::IdentityProfile;
 use nicegit_core::{GitError, Snapshot};
@@ -157,7 +157,9 @@ impl RepositorySettingsWindow {
 
     fn header(&mut self, ui: &mut Ui, cx: &Ctx) {
         let c = theme::of(ui);
-        ui.label(RichText::new(cx.repo.display().to_string()).monospace().small().color(c.muted));
+        let full = cx.repo.display().to_string();
+        let shown = middle_truncated(ui, &full, ui.available_width());
+        ui.add(egui::Label::new(RichText::new(shown).monospace().small().color(c.muted)).truncate()).on_hover_text(full);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let tabs = [
@@ -495,6 +497,36 @@ impl Default for RepositorySettingsWindow {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// `text` shortened to fit `width` on one line by removing its middle. The start and the end are
+/// kept, since the end usually holds the folder name.
+fn middle_truncated(ui: &Ui, text: &str, width: f32) -> String {
+    let font = egui::FontId::monospace(11.5);
+    let measure = |candidate: &str| ui.painter().layout_no_wrap(candidate.to_string(), font.clone(), Color32::WHITE).size().x;
+    if measure(text) <= width {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    // Keeps `keep` characters: a third from the start and the rest from the end.
+    let build = |keep: usize| -> String {
+        let head = keep.div_ceil(3);
+        let tail = keep - head;
+        let start: String = chars[..head].iter().collect();
+        let end: String = chars[chars.len() - tail..].iter().collect();
+        format!("{start}…{end}")
+    };
+    // The most characters that still fit.
+    let (mut low, mut high) = (0, chars.len());
+    while low < high {
+        let mid = (low + high).div_ceil(2);
+        if measure(&build(mid)) <= width {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    build(low)
 }
 
 impl ToolWindow for RepositorySettingsWindow {

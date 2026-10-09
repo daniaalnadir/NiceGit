@@ -117,14 +117,9 @@ impl ToolWindow for ReflogWindow {
 
         let c = theme::of(ui);
         ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.heading("Recover lost work");
-                ui.label(
-                    RichText::new("Every position HEAD has had, including commits that no branch points to any more.")
-                        .small()
-                        .color(c.muted),
-                );
-            });
+            ui.label(
+                RichText::new("Every position HEAD has had, including commits that no branch points to any more.").small().color(c.muted),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read the reflog again", self.loading.is_none()).clicked() {
                     self.needs_load = true;
