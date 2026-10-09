@@ -2,7 +2,9 @@ name: Build and test
 
 "on":
   push:
+    paths-ignore: ['rust/**', '.github/workflows/rust-ci.yml', 'docs/PARITY.md', 'CHANGELOG.md']
   pull_request:
+    paths-ignore: ['rust/**', '.github/workflows/rust-ci.yml', 'docs/PARITY.md', 'CHANGELOG.md']
   workflow_dispatch:
 
 permissions:
