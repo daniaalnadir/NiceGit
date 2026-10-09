@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.3 - Fixes from deeper testing
+
+- Image sizes from 1 KB to 1 MB were labelled as bytes when comparing; they now read in KB,
+  and larger sizes in the right unit.
+- Filtering references reveals matching branches under a collapsed remote.
+- Undo and Redo from the command palette ask first, as the toolbar's buttons do, and are
+  offered only when they apply to the current branch.
+- Word highlights on wrapped diff rows stay apart, and floating windows cast a deeper shadow.
+- 32 more interface tests cover the remaining details of the Mac app's features.
+
 ## 0.6.2 - Easier reading
 
 - Diffs wrap long lines between words, measured from the text layout itself, so every row

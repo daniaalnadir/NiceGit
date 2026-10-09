@@ -100,6 +100,18 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Continue or abort interrupted operations | Operation banner | UI `resolve_a_merge_conflict_in_the_editor` (Continue), `abort_an_interrupted_merge_from_the_banner`; core `client::snapshot_reports_merge_operation_during_conflict` |
 | Conflict editor with base, current, incoming; whole-file resolutions | Conflict window | UI `resolve_a_merge_conflict_in_the_editor`; core `staging::load_*` and the conflict tests (10); unit `conflict::tests::*` |
 
+## Details of each feature
+
+A last independent audit listed the parts of features that no test yet exercised, such as
+bisect's Skip, the System appearance, blame's interactions, continuing or aborting a stopped
+rebase, cherry-pick, or revert, Undo after each kind of change, and drafts surviving a
+relaunch. The interface tests in `ui_tests_parity_a.rs`, `ui_tests_parity_b.rs`, and
+`ui_tests_parity_c.rs` cover each of them: `a_commit_draft_and_the_side_by_side_choice_survive_a_relaunch`, `amending_a_commit_already_on_a_remote_warns_before_amending`, `a_branch_or_tag_made_in_another_app_appears_without_refreshing`, `undo_a_cherry_pick_from_the_toolbar`, `undo_a_revert_from_the_toolbar`, `undo_a_rebase_from_the_toolbar`, `drag_a_graph_label_onto_the_current_row_to_merge_it`, `returning_to_the_app_waits_for_an_open_dialog_to_close`, `sidebar_filter_narrows_tags_and_remote_branches`, `filter_reveals_remote_branches_under_a_collapsed_remote`, `settings_choose_a_graph_palette_and_follow_the_system_theme`, `double_clicking_the_repositories_edge_restores_its_width`, `compare_shows_the_file_size_of_each_version_of_an_image`, `compare_shows_large_image_sizes_in_kilobytes`, `palette_switches_to_a_branch_by_its_name`, `palette_reopens_a_recent_repository_after_its_tab_closes`, `palette_undoes_the_last_commit`, `clicking_a_tag_selects_the_commit_it_points_to`, `bisect_skip_marks_a_commit_untestable_and_git_records_it`, `interactive_rebase_warns_about_commits_already_on_a_remote`, `mark_a_commit_then_compare_it_with_another`, `blame_ignore_whitespace_gives_the_line_back_to_its_earlier_commit`, `clicking_a_blame_line_selects_its_commit_and_shows_its_change`, `file_history_restores_an_earlier_version_after_confirmation`, `rebase_the_current_branch_onto_another_from_the_branch_menu`, `cherry_pick_one_commit_from_its_menu`, `abort_a_rebase_stopped_by_a_conflict_from_the_banner`, `continue_a_rebase_after_resolving_its_conflict_from_the_banner`, `abort_a_cherry_pick_stopped_by_a_conflict_from_the_banner`, `continue_a_cherry_pick_after_resolving_its_conflict_from_the_banner`, `abort_a_revert_stopped_by_a_conflict_from_the_banner`, `continue_a_revert_after_resolving_its_conflict_from_the_banner`.
+
+They found two bugs, now fixed: image sizes from 1 KB to 1 MB were labelled as bytes, and a
+filter did not reveal matching branches under a collapsed remote. Undo and Redo from the
+command palette now ask first, as the toolbar's buttons do.
+
 ## Platform differences
 
 - The Mac app is a native SwiftUI app. The cross-platform app uses egui and looks the same on

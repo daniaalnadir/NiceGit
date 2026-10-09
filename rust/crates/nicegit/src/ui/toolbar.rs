@@ -296,18 +296,8 @@ impl NiceGitApp {
         });
 
         match chosen {
-            Some(ToolAction::Undo) => self.confirm(
-                format!("{undo_tip}?"),
-                "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
-                "Undo",
-                crate::ui::dialogs::Pending::Undo,
-            ),
-            Some(ToolAction::Redo) => self.confirm(
-                format!("{redo_tip}?"),
-                "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
-                "Redo",
-                crate::ui::dialogs::Pending::Redo,
-            ),
+            Some(ToolAction::Undo) => self.confirm_undo(),
+            Some(ToolAction::Redo) => self.confirm_redo(),
             Some(ToolAction::Fetch) => self.fetch(),
             Some(ToolAction::Pull) => self.pull(),
             Some(ToolAction::Push) => self.push(),
@@ -324,7 +314,10 @@ impl NiceGitApp {
                 if let Some(stash) = snapshot.stashes.first().cloned() {
                     self.confirm(
                         format!("Pop {}?", stash.reference),
-                        format!("“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.", stash.message),
+                        format!(
+                            "“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
+                            stash.message
+                        ),
                         "Pop",
                         crate::ui::dialogs::Pending::PopStash(stash),
                     );
@@ -395,6 +388,28 @@ impl NiceGitApp {
             ui.close();
             self.apply_patch();
         }
+    }
+
+    /// Asks before undoing the last recorded step, from the toolbar or the command palette.
+    pub fn confirm_undo(&mut self) {
+        let Some(title) = self.repo().and_then(|r| r.undo.as_ref()).map(|s| s.title.to_lowercase()) else { return };
+        self.confirm(
+            format!("Undo {title}?"),
+            "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
+            "Undo",
+            crate::ui::dialogs::Pending::Undo,
+        );
+    }
+
+    /// Asks before redoing the last undone step, from the toolbar or the command palette.
+    pub fn confirm_redo(&mut self) {
+        let Some(title) = self.repo().and_then(|r| r.redo.as_ref()).map(|s| s.title.to_lowercase()) else { return };
+        self.confirm(
+            format!("Redo {title}?"),
+            "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
+            "Redo",
+            crate::ui::dialogs::Pending::Redo,
+        );
     }
 
     pub fn apply_patch(&mut self) {

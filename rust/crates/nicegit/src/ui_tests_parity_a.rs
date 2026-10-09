@@ -95,7 +95,6 @@ fn sidebar_filter_narrows_tags_and_remote_branches() {
 /// Expected: typing a filter reveals matching remote branches even while their remote is
 /// collapsed. Currently the collapsed header stays closed, so only an opened remote shows them.
 #[test]
-#[ignore = "bug: a filter does not expand a collapsed remote in ui/sidebar.rs"]
 fn filter_reveals_remote_branches_under_a_collapsed_remote() {
     let repo = repository();
     let path = repo.path();
@@ -284,7 +283,6 @@ fn compare_shows_the_file_size_of_each_version_of_an_image() {
 /// Expected: a file of a few kilobytes is shown in kilobytes. `human_size` in tools/compare.rs
 /// currently labels such sizes as bytes, as in "38.5 bytes".
 #[test]
-#[ignore = "bug: human_size in tools/compare.rs shows kilobyte sizes as bytes"]
 fn compare_shows_large_image_sizes_in_kilobytes() {
     let repo = repository();
     let path = repo.path();
@@ -360,6 +358,10 @@ fn palette_undoes_the_last_commit() {
     harness.event(egui::Event::Text("undo".into()));
     wait(&mut harness, "the undo command", |h| h.query_by_label_contains("Undo commit").is_some());
     harness.key_press(Key::Enter);
+    // Undo asks first, as it does from the toolbar.
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a third line", "nothing changes before confirming");
+    harness.get_all_by_label("Undo").last().expect("the confirm button").click();
     idle(&mut harness);
     wait(&mut harness, "the commit to be undone", |_| git(path, &["log", "-1", "--format=%s"]) == "Add a second line");
     assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "notes.txt", "the undone change stays staged");

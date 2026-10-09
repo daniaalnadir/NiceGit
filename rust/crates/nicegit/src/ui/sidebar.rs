@@ -188,7 +188,12 @@ impl NiceGitApp {
             }
             for remote in &snapshot.remotes {
                 let id = ui.make_persistent_id(("remote", remote));
-                egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, !filter.is_empty())
+                let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, !filter.is_empty());
+                // A filter reveals the remote's matching branches even if it was collapsed.
+                if !filter.is_empty() {
+                    state.set_open(true);
+                }
+                state
                     .show_header(ui, |ui| {
                         ui.label(RichText::new(format!("{}  {remote}", icon::CLOUD)).strong());
                     })

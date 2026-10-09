@@ -403,10 +403,11 @@ fn largest_icns_png(bytes: &[u8]) -> Option<image::DynamicImage> {
 
 /// A byte count as a short human-readable size, such as "12.4 KB".
 fn human_size(bytes: usize) -> String {
-    const UNITS: [&str; 4] = ["bytes", "KB", "MB", "GB"];
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
         return format!("{bytes} bytes");
     }
+    // After the first division the value is in kilobytes, the first unit.
     let mut value = bytes as f64 / 1000.0;
     let mut unit = 0;
     while value >= 1000.0 && unit < UNITS.len() - 1 {

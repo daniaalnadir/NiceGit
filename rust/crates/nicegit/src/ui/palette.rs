@@ -185,10 +185,18 @@ impl NiceGitApp {
             list.push(command("End bisect", "Return to the original checkout", icon::BUG, idle, Run::EndBisect));
         }
         if let Some(step) = self.repo().and_then(|r| r.undo.as_ref()) {
-            list.push(command(&format!("Undo {}", step.title.to_lowercase()), "", icon::ARROW_COUNTER_CLOCKWISE, idle, Run::Undo));
+            let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
+            list.push(command(
+                &format!("Undo {}", step.title.to_lowercase()),
+                "",
+                icon::ARROW_COUNTER_CLOCKWISE,
+                idle && applies,
+                Run::Undo,
+            ));
         }
         if let Some(step) = self.repo().and_then(|r| r.redo.as_ref()) {
-            list.push(command(&format!("Redo {}", step.title.to_lowercase()), "", icon::ARROW_CLOCKWISE, idle, Run::Redo));
+            let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
+            list.push(command(&format!("Redo {}", step.title.to_lowercase()), "", icon::ARROW_CLOCKWISE, idle && applies, Run::Redo));
         }
         if let Some(snapshot) = snapshot {
             for branch in snapshot.branches.iter().filter(|b| !b.is_current && !b.is_detached()) {
@@ -242,8 +250,9 @@ impl NiceGitApp {
             Run::Refresh => self.load(true),
             Run::StageAll => self.act("Stage all", |client, path| client.stage_all(path).map(|_| None)),
             Run::UnstageAll => self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None)),
-            Run::Undo => self.undo(),
-            Run::Redo => self.redo(),
+            // The same confirmation as the toolbar's buttons.
+            Run::Undo => self.confirm_undo(),
+            Run::Redo => self.confirm_redo(),
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
             Run::Open => self.choose_folder(),
