@@ -3,6 +3,7 @@
 
 pub mod changes;
 pub mod dialogs;
+pub mod github_section;
 pub mod history;
 pub mod inspector;
 pub mod palette;

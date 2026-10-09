@@ -578,9 +578,14 @@ fn github_pull_requests_and_issues_load_from_github() {
     harness.get_all_by_label_contains("Load from GitHub").next().expect("load button").click();
     settle(&mut harness);
     harness.get_by_label("origin").click();
-    // The project's open pull request (#34, this port) appears, read live from github.com.
+    // The open pull requests list in the sidebar, read live from github.com, with their count.
+    wait(&mut harness, "pull requests in the sidebar", |h| h.query_all_by_label_contains("Port NiceGit to Rust").next().is_some());
+    let loaded = harness.state().repo().and_then(|r| r.github[0].as_ref()).map(|l| l.items.len()).unwrap_or(0);
+    assert!(loaded >= 1, "the sidebar counts loaded pull requests");
+    // The window offers closed and merged pull requests and the Issues tab.
+    harness.get_by_label("Open GitHub window").click();
     wait(&mut harness, "pull requests from GitHub", |h| h.query_by_label_contains("Open in browser").is_some());
-    assert!(harness.query_by_label_contains("Port NiceGit to Rust").is_some(), "lists the open pull request");
+    assert!(harness.query_all_by_label_contains("Port NiceGit to Rust").next().is_some(), "lists the open pull request");
     // Closed and merged pull requests load when chosen, such as #33.
     settle(&mut harness);
     harness.get_by_label("Merged").click();

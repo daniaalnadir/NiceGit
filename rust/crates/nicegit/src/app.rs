@@ -99,6 +99,8 @@ pub struct Repo {
     pub bisect: Option<Task<Option<nicegit_core::bisect::BisectStatus>>>,
     /// Submodules recorded in the index, read after each refresh.
     pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
+    /// Pull requests and issues loaded into the sidebar, in that order.
+    pub github: [Option<crate::ui::github_section::GitHubList>; 2],
 }
 
 impl Repo {
@@ -134,6 +136,7 @@ impl Repo {
             scroll_to_selection: false,
             bisect: None,
             submodules: None,
+            github: [None, None],
         }
     }
 

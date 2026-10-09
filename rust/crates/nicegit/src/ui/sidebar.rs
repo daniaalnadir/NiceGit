@@ -11,7 +11,7 @@ use crate::tools::{self, widgets};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 
 /// A collapsible sidebar section: icon, uppercase title, and a count.
-fn section<R>(ui: &mut Ui, id: &str, glyph: &str, title: &str, count: usize, open: bool, add: impl FnOnce(&mut Ui) -> R) {
+pub(crate) fn section<R>(ui: &mut Ui, id: &str, glyph: &str, title: &str, count: usize, open: bool, add: impl FnOnce(&mut Ui) -> R) {
     let c = theme::of(ui);
     let id = ui.make_persistent_id(id);
     let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, open);
@@ -378,32 +378,8 @@ impl NiceGitApp {
         }
 
         // Pull requests and issues load on demand from a chosen github.com remote.
-        for (id, glyph, title, issues) in
-            [("pulls", icon::GIT_PULL_REQUEST, "Pull requests", false), ("issues", icon::CIRCLE_DASHED, "Issues", true)]
-        {
-            section(ui, id, glyph, title, 0, false, |ui| {
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    if snapshot.remotes.is_empty() {
-                        ui.label(RichText::new("Add a github.com remote to load these").small().color(c.muted));
-                        return;
-                    }
-                    ui.menu_button(format!("{}  Load from GitHub {}", icon::GITHUB_LOGO, icon::CARET_DOWN), |ui| {
-                        for remote in &snapshot.remotes {
-                            if ui.button(remote).clicked() {
-                                ui.close();
-                                let window = if issues {
-                                    tools::github::GitHubWindow::issues(remote.clone())
-                                } else {
-                                    tools::github::GitHubWindow::new(remote.clone())
-                                };
-                                self.open_tool(Box::new(window));
-                            }
-                        }
-                    });
-                });
-            });
-        }
+        self.github_section(ui, snapshot, nicegit_core::github::ItemKind::PullRequest);
+        self.github_section(ui, snapshot, nicegit_core::github::ItemKind::Issue);
     }
 
     /// The commit a tag points to, from the loaded history's decorations.

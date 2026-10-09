@@ -206,7 +206,7 @@ impl GitClient {
         if gh_executable().is_none() {
             return GhStatus::NotInstalled;
         }
-        match run_gh(&["auth", "status", "--hostname", "github.com"], directory) {
+        match run_gh(&["auth", "status", "--hostname", "github.com"], directory, &Cancel::default()) {
             Ok(_) => GhStatus::SignedIn,
             Err(message) => GhStatus::SignedOut(message),
         }
@@ -221,6 +221,19 @@ impl GitClient {
         limit: usize,
         directory: &Path,
     ) -> Result<Vec<GitHubItem>> {
+        self.github_items_cancellable(repository, kind, state, limit, &Cancel::default(), directory)
+    }
+
+    /// Like [`Self::github_items`], ending the request early when `cancel` is set.
+    pub fn github_items_cancellable(
+        &self,
+        repository: &GitHubRepository,
+        kind: ItemKind,
+        state: ItemState,
+        limit: usize,
+        cancel: &Cancel,
+        directory: &Path,
+    ) -> Result<Vec<GitHubItem>> {
         if kind == ItemKind::Issue && state == ItemState::Merged {
             return Err(GitError::failed("GitHub", "Merged applies to pull requests, not issues."));
         }
@@ -233,6 +246,7 @@ impl GitClient {
         let output = run_gh(
             &[kind.subcommand(), "list", "--repo", &repo, "--state", state.as_str(), "--limit", &limit, "--json", fields],
             directory,
+            cancel,
         )
         .map_err(|message| GitError::failed("GitHub", message))?;
         decode_items(&output, repository, kind)
@@ -297,10 +311,32 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
+/// The message for a request the user cancelled.
+pub const CANCELLED: &str = "Cancelled.";
+
+/// Set from another thread to end a running GitHub request; its `gh` process is stopped.
+#[derive(Clone, Debug, Default)]
+pub struct Cancel(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Cancel {
+    pub fn cancel(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
 /// Runs `gh` and returns its standard output. On failure the error is the text to show.
 /// Prompts are disabled, and the request is abandoned after a timeout.
-fn run_gh(arguments: &[&str], directory: &Path) -> std::result::Result<String, String> {
+fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel) -> std::result::Result<String, String> {
     let executable = gh_executable().ok_or_else(|| NOT_INSTALLED.to_string())?;
+    run_program(&executable, arguments, directory, cancel)
+}
+
+/// Runs a program to completion, its timeout, or cancellation, returning its standard output.
+fn run_program(executable: &Path, arguments: &[&str], directory: &Path, cancel: &Cancel) -> std::result::Result<String, String> {
     let mut command = Command::new(executable);
     command.args(arguments).current_dir(directory).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     command.env("PATH", runner::search_path());
@@ -339,6 +375,11 @@ fn run_gh(arguments: &[&str], directory: &Path) -> std::result::Result<String, S
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
+            Ok(None) if cancel.is_cancelled() => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(CANCELLED.to_string());
+            }
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
             Ok(None) => {
                 let _ = child.kill();
@@ -596,6 +637,21 @@ mod tests {
         assert_eq!(items[0].get("t").and_then(Json::as_str), Some("a\"b\u{e9}\u{1F600}"));
         assert_eq!(items[0].get("ok").and_then(Json::as_bool), Some(true));
         assert_eq!(items[0].get("x"), Some(&Json::Null));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancelling_stops_a_running_request_promptly() {
+        let cancel = Cancel::default();
+        let canceller = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            canceller.cancel();
+        });
+        let started = Instant::now();
+        let result = run_program(Path::new("/bin/sleep"), &["30"], Path::new("/"), &cancel);
+        assert_eq!(result, Err(CANCELLED.to_string()));
+        assert!(started.elapsed() < Duration::from_secs(5), "stopped after {:?}", started.elapsed());
     }
 
     #[test]
