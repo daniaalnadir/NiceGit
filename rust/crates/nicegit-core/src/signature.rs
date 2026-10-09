@@ -74,15 +74,8 @@ impl GitClient {
                 problem: None,
             }));
         };
-        let status = match code {
-            'G' => SignatureStatus::Verified,
-            'U' | 'X' | 'Y' | 'R' => SignatureStatus::Untrusted,
-            'B' => SignatureStatus::Bad,
-            // `N` (no signature) and `E` (cannot check) both leave the signature unchecked.
-            _ => SignatureStatus::Unverifiable,
-        };
         Ok(Some(CommitSignature {
-            status,
+            status: status_of(code),
             signer: fields.get(1).map(|field| field.to_string()).unwrap_or_default(),
             key: fields.get(2).map(|field| field.to_string()).unwrap_or_default(),
             problem: None,
@@ -90,9 +83,38 @@ impl GitClient {
     }
 }
 
+/// The status for Git's `%G?` code. Expired and revoked keys (`X`, `Y`, `R`) count as untrusted,
+/// as in the Mac app: the signature is genuine, but the key should not be relied on.
+fn status_of(code: char) -> SignatureStatus {
+    match code {
+        'G' => SignatureStatus::Verified,
+        'U' | 'X' | 'Y' | 'R' => SignatureStatus::Untrusted,
+        'B' => SignatureStatus::Bad,
+        // `N` (no signature) and `E` (cannot check) both leave the signature unchecked.
+        _ => SignatureStatus::Unverifiable,
+    }
+}
+
 fn message_of(error: &GitError) -> String {
     match error {
         GitError::CommandFailed { message, .. } => message.clone(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_git_code_maps_to_the_status_the_mac_app_shows() {
+        assert_eq!(status_of('G'), SignatureStatus::Verified);
+        for code in ['U', 'X', 'Y', 'R'] {
+            assert_eq!(status_of(code), SignatureStatus::Untrusted, "{code}");
+        }
+        assert_eq!(status_of('B'), SignatureStatus::Bad);
+        for code in ['E', 'N', '?'] {
+            assert_eq!(status_of(code), SignatureStatus::Unverifiable, "{code}");
+        }
     }
 }

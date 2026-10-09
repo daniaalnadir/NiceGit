@@ -350,3 +350,54 @@ fn github_merged_state_is_refused_for_issues_before_running_gh() {
     let result = GitClient::new().github_items(&repository, ItemKind::Issue, ItemState::Merged, 10, directory.path());
     assert!(result.is_err());
 }
+
+#[test]
+fn ssh_signed_commit_is_verified_only_with_its_key_allowed() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    let keys = tempfile::tempdir().unwrap();
+    let key = keys.path().join("signing");
+    let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output();
+    let Ok(made) = made else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+    let public = fs::read_to_string(key.with_extension("pub")).unwrap();
+    let key_path = key.to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "user.signingkey", &key_path]);
+    repo.write("a.txt", "a\n");
+    repo.git(&["add", "a.txt"]);
+    // Sign without the machine's own Git settings, which may name another signing tool.
+    let empty = keys.path().join("empty-config");
+    fs::write(&empty, "").unwrap();
+    let signed = Command::new("git")
+        .args(["commit", "-q", "-S", "-m", "signed"])
+        .current_dir(repo.path())
+        .env("GIT_CONFIG_GLOBAL", &empty)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .unwrap();
+    assert!(signed.status.success(), "{}", String::from_utf8_lossy(&signed.stderr));
+    let commit = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+    // NiceGit reads signatures with the user's settings, as Git does; a global setting Git
+    // rejects stops it checking any signature, so there is nothing to compare on this machine.
+    let probe = Command::new("git").args(["log", "-1", "--format=%G?"]).current_dir(repo.path()).output().unwrap();
+    if !probe.status.success() {
+        eprintln!("Git cannot check signatures with this machine's settings; skipping: {}", String::from_utf8_lossy(&probe.stderr));
+        return;
+    }
+
+    // Allowed for its own email: verified, with the signer named.
+    let allowed = keys.path().join("allowed_signers");
+    fs::write(&allowed, format!("test@example.com {public}")).unwrap();
+    repo.git(&["config", "gpg.ssh.allowedSignersFile", &allowed.to_string_lossy().replace('\\', "/")]);
+    let signature = client.signature(&commit, repo.path()).unwrap().expect("a signature");
+    assert_eq!(signature.status, SignatureStatus::Verified, "{signature:?}");
+
+    // A key nobody listed can be checked but not trusted.
+    fs::write(&allowed, "").unwrap();
+    let signature = client.signature(&commit, repo.path()).unwrap().expect("a signature");
+    assert_ne!(signature.status, SignatureStatus::Verified, "{signature:?}");
+}
