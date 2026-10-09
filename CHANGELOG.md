@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 - Interface polish and verified parity
+
+- A calmer, more readable interface after an independent design review: the Inter typeface,
+  a one-row toolbar that switches to compact icons and a More menu when space is short,
+  tool windows centred in three sizes, a wider graph label column with branch, remote, and
+  tag icons, larger avatars, and stronger contrast in the light theme.
+- Pull requests and issues load in the sidebar 100 at a time, and a slow request can be
+  cancelled. Tags can be created lightweight or annotated. Double-clicking a panel divider
+  restores its default width. Popping a stash and deleting a remote tag ask first, and
+  editing a published commit's message warns before rewriting it.
+- Branch clean-up never preselects main, master, develop, trunk, or a remote's default
+  branch, and a hard reset is shown as a destructive action.
+- [docs/PARITY.md](docs/PARITY.md) names the test behind every Mac app feature. Interface
+  tests now clone, create and remove worktrees, track LFS patterns, reopen recent
+  repositories, apply identity profiles, clean up branches with Undo, bisect, cherry-pick
+  marked commits, recover lost work, and set up GitFlow through the real window.
+
 ## 0.4.0 - Complete parity and cross-platform fixes
 
 - Every feature in the Mac app's guide is now in the cross-platform app; see
