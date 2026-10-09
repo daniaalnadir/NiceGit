@@ -348,3 +348,26 @@ fn restore_a_file_from_the_commit_inspector() {
     assert_eq!(std::fs::read_to_string(repo.path().join("notes.txt")).unwrap(), "first\n");
     assert_eq!(git(repo.path(), &["diff", "--cached", "--name-only"]), "notes.txt");
 }
+
+#[test]
+fn arrow_keys_move_through_the_graph_and_escape_clears() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let parent = git(repo.path(), &["rev-parse", "HEAD~1"]);
+    let selected = |h: &Harness<'static, NiceGitApp>| match h.state().repo().map(|r| r.selection.clone()) {
+        Some(crate::app::Selection::Commit { hash, .. }) => Some(hash),
+        _ => None,
+    };
+
+    harness.key_press(Key::ArrowDown);
+    harness.step();
+    assert_eq!(selected(&harness), Some(head));
+    harness.key_press(Key::ArrowDown);
+    harness.step();
+    assert_eq!(selected(&harness), Some(parent));
+    harness.key_press(Key::Escape);
+    harness.step();
+    assert_eq!(selected(&harness), None);
+}

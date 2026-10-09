@@ -73,8 +73,9 @@ These are the cross-platform version, built in Rust from [`rust/`](rust). It has
 same features as the original Mac app described above: the commit graph and inspector,
 line-by-line staging, interactive rebase, conflict editing, undo, blame, file history,
 search, bisect, comparisons, worktrees, submodules, GitFlow, Git LFS, pull requests and
-issues, the command palette, and an embedded terminal. Every version needs Git installed
-and on your `PATH`.
+issues, the command palette, and an embedded terminal; [docs/PARITY.md](docs/PARITY.md)
+maps each Mac feature to the cross-platform app. Every version needs Git installed and on
+your `PATH`.
 
 ![The cross-platform NiceGit showing a repository's commit graph, branches, and changes](docs/images/nicegit-cross-platform.png)
 
