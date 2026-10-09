@@ -132,7 +132,7 @@ fn discard_asks_first_and_can_be_undone() {
 
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
-    harness.get_by_label_contains("Discard changes").click();
+    harness.get_by_label(&format!("{}  Discard changes…", egui_phosphor::regular::TRASH)).click();
     wait(&mut harness, "the discard confirmation", |h| h.state().dialog.is_some());
     harness.get_by_label("Discard").click();
     idle(&mut harness);

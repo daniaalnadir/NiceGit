@@ -118,6 +118,8 @@ pub struct StashWindow {
     selected_stash: Option<String>,
     loading: Option<Loading>,
     preview: Option<Preview>,
+    /// Whether the preview leaves out whitespace-only changes, following the app setting.
+    ignore_whitespace: bool,
     /// A pop or delete waiting for confirmation.
     pending: Option<(Confirm, Stash)>,
 }
@@ -139,6 +141,7 @@ impl StashWindow {
             selected_stash: None,
             loading: None,
             preview: None,
+            ignore_whitespace: false,
             pending: None,
         }
     }
@@ -166,7 +169,10 @@ impl StashWindow {
         self.loading = Some(Loading {
             hash: stash.hash.clone(),
             title,
-            task: query(ctx, repo, move |client, directory| client.stash_diff(&owned, directory)),
+            task: query(ctx, repo, {
+                let ignore_whitespace = self.ignore_whitespace;
+                move |client, directory| client.stash_diff_with(&owned, ignore_whitespace, directory)
+            }),
         });
     }
 
@@ -426,6 +432,14 @@ impl ToolWindow for StashWindow {
 
     fn ui(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         self.sync(cx.snapshot);
+        // A change to the whitespace setting reads the shown stash again.
+        if self.ignore_whitespace != cx.ignore_whitespace {
+            self.ignore_whitespace = cx.ignore_whitespace;
+            let shown = self.selected_stash.take();
+            if let Some(stash) = cx.snapshot.stashes.iter().find(|stash| Some(&stash.hash) == shown.as_ref()) {
+                self.select(stash, ui.ctx(), cx.repo);
+            }
+        }
         self.poll_preview();
         let c = theme::of(ui);
         let files = stashable_files(&cx.snapshot.status);

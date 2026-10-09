@@ -87,8 +87,10 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub fn draft_key(repository: &str, branch: &str) -> String {
-        format!("{repository}\0{branch}")
+    /// Drafts belong to a checkout folder, as in the Mac app, so switching branches keeps the
+    /// message being written.
+    pub fn draft_key(checkout: &str) -> String {
+        checkout.to_string()
     }
 
     pub fn remember(&mut self, path: PathBuf) {

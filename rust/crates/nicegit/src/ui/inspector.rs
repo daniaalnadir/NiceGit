@@ -52,7 +52,7 @@ impl NiceGitApp {
                         ui.label(RichText::new(subject).size(16.0).strong());
                         if !body.is_empty() {
                             ui.add_space(4.0);
-                            ui.label(RichText::new(reflow(&body)).color(ui.visuals().text_color().gamma_multiply(0.85)));
+                            ui.label(RichText::new(body.as_str()).color(ui.visuals().text_color().gamma_multiply(0.85)));
                         }
                         ui.add_space(10.0);
                         if let Some(commit) = &summary {
@@ -225,23 +225,4 @@ impl NiceGitApp {
             (text, color)
         })
     }
-}
-
-/// Joins the hard-wrapped lines of each paragraph so the text wraps to the panel instead.
-/// Lists, quotes, and indented lines keep their own lines.
-fn reflow(body: &str) -> String {
-    body.split("\n\n")
-        .map(|paragraph| {
-            let mut out = String::new();
-            for line in paragraph.lines() {
-                let keep = line.starts_with(['-', '*', '>', ' ', '\t']) || line.chars().next().is_some_and(|c| c.is_ascii_digit());
-                if !out.is_empty() {
-                    out.push(if keep { '\n' } else { ' ' });
-                }
-                out.push_str(line.trim_end());
-            }
-            out
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
 }

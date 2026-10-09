@@ -146,6 +146,8 @@ fn edit_and_save_a_working_file_in_the_built_in_editor() {
     harness.get_by_label("notes.txt").click();
     let edit = format!("{}  Edit", icon::PENCIL_SIMPLE);
     wait(&mut harness, "the Edit button", |h| h.query_by_label(&edit).is_some());
+    idle(&mut harness);
+    settle(&mut harness);
     harness.get_by_label(&edit).click();
     wait(&mut harness, "the editor", |h| h.query_by_role_and_label(Role::TextInput, "File contents").is_some());
     settle(&mut harness);
@@ -273,4 +275,206 @@ fn save_a_commit_as_a_patch_and_apply_it_again() {
     wait(&mut harness, "the applied change", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\n");
     assert!(git(path, &["diff", "--cached", "--name-only"]).is_empty(), "the change stays unstaged");
     assert_eq!(git(path, &["diff", "--name-only"]), "notes.txt");
+}
+
+#[test]
+fn abort_an_interrupted_merge_from_the_banner() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "notes.txt", b"first\nfrom feature\n", "Change notes on feature");
+    git(path, &["switch", "-q", "main"]);
+    let head = git(path, &["rev-parse", "HEAD"]);
+    // Another tool started the merge; Git stopped with a conflict.
+    let merge = Command::new("git").args(["merge", "feature"]).current_dir(path).output().unwrap();
+    assert!(!merge.status.success(), "the merge conflicts");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    wait(&mut harness, "the operation banner", |h| h.query_by_label("Abort…").is_some());
+    harness.get_by_label("Abort…").click();
+    wait(&mut harness, "the abort confirmation", |h| shows(h, "Abort the merge?"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Abort").click();
+    idle(&mut harness);
+    wait(&mut harness, "the merge to end", |h| h.state().snapshot().is_some_and(|s| s.operation.is_none()));
+    assert!(!path.join(".git/MERGE_HEAD").exists(), "Git has no merge in progress");
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\n");
+}
+
+#[test]
+fn amend_the_last_commit_with_staged_changes() {
+    let repo = repository();
+    let path = repo.path();
+    let parent = git(path, &["rev-parse", "HEAD~1"]);
+    std::fs::write(path.join("forgotten.txt"), "left out\n").unwrap();
+    git(path, &["add", "forgotten.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Choosing amend fills in the last commit's message.
+    harness.get_by_role_and_label(Role::CheckBox, "Amend last commit").click();
+    let amend = format!("{}  Amend last commit", icon::CHECK_CIRCLE);
+    wait(&mut harness, "the amend button", |h| h.query_by_role_and_label(Role::Button, &amend).is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, &amend).click();
+    idle(&mut harness);
+    wait(&mut harness, "the amended commit", |_| git(path, &["ls-tree", "--name-only", "HEAD"]).contains("forgotten.txt"));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "the message is kept");
+    assert_eq!(git(path, &["rev-parse", "HEAD~1"]), parent, "the commit is replaced, not added to");
+    assert!(git(path, &["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn returning_to_the_app_refreshes_even_with_automatic_refresh_off() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.state_mut().settings.auto_refresh = false;
+    let focus = |harness: &mut App, focused: bool| {
+        harness.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().focused = Some(focused);
+        harness.run_steps(3);
+    };
+
+    focus(&mut harness, false);
+    std::thread::sleep(Duration::from_millis(600));
+    std::fs::write(path.join("while-away.txt"), "made while NiceGit was in the background\n").unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    harness.run_steps(3);
+    let listed = |h: &App| h.state().snapshot().is_some_and(|s| s.status.iter().any(|entry| entry.path == "while-away.txt"));
+    assert!(!listed(&harness), "nothing refreshes while automatic refresh is off and the app is in the background");
+
+    focus(&mut harness, true);
+    wait(&mut harness, "the refresh on return", listed);
+}
+
+#[test]
+fn settings_change_the_theme_and_diff_options() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    wait(&mut harness, "the Settings window", |h| h.query_by_role_and_label(Role::CheckBox, "Hide whitespace-only changes").is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::CheckBox, "Hide whitespace-only changes").click();
+    harness.get_by_role_and_label(Role::CheckBox, "Show diffs side by side").click();
+    harness.step();
+    harness.get_by_label("Light").click();
+    harness.run_steps(3);
+    let settings = &harness.state().settings;
+    assert!(settings.ignore_whitespace && settings.split_diff, "both diff options are on");
+    assert_eq!(harness.ctx.theme(), egui::Theme::Light, "the light theme is in use");
+
+    harness.get_by_label("Dark").click();
+    harness.run_steps(3);
+    assert_eq!(harness.ctx.theme(), egui::Theme::Dark);
+}
+
+#[test]
+fn filter_references_narrows_the_sidebar() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["branch", "release/1.0"]);
+    git(path, &["tag", "v1.0"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(harness.query_by_label("release/1.0").is_some() && harness.query_by_label("feature").is_some());
+
+    type_into(&mut harness, "Filter references", "release");
+    harness.run_steps(3);
+    assert!(harness.query_by_label("release/1.0").is_some(), "the matching branch stays");
+    assert!(harness.query_by_label("feature").is_none(), "other branches are hidden");
+}
+
+#[test]
+fn folder_tree_groups_changed_files_by_folder() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::create_dir_all(path.join("docs/guide")).unwrap();
+    std::fs::write(path.join("docs/guide/start.md"), "start\n").unwrap();
+    std::fs::write(path.join("docs/notes.md"), "notes\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The path list names each file by its full path.
+    assert!(shows(&harness, "docs/guide/start.md"));
+    harness.get_by_label("Tree").click();
+    harness.run_steps(3);
+    assert_eq!(harness.state().settings.file_view, crate::settings::FileView::Tree);
+    // The tree lists folders, with files by their own names beneath them.
+    assert!(shows(&harness, "guide"), "the nested folder is listed");
+    assert!(shows(&harness, "start.md") && !shows(&harness, "docs/guide/start.md"), "files show their own names");
+}
+
+#[test]
+fn add_a_remote_in_repository_settings() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(path), "Repository settings");
+    let remotes = format!("{}  Remotes", icon::CLOUD);
+    wait(&mut harness, "the Remotes tab", |h| h.query_by_label(&remotes).is_some());
+    harness.get_by_label(&remotes).click();
+    wait(&mut harness, "the remote form", |h| h.query_by_role_and_label(Role::TextInput, "Remote name").is_some());
+    settle(&mut harness);
+    type_into(&mut harness, "Remote name", "upstream");
+    type_into(&mut harness, "Remote URL", &remote.path().to_string_lossy());
+    harness.get_by_label(&format!("{}  Add remote", icon::PLUS)).click();
+    idle(&mut harness);
+    wait(&mut harness, "the new remote", |_| git(path, &["remote"]).lines().any(|name| name == "upstream"));
+    assert_eq!(git(path, &["remote", "get-url", "upstream"]), remote.path().to_string_lossy());
+}
+
+#[test]
+fn find_in_diff_counts_and_steps_through_matches() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "apple\nfirst\nbanana\napple pie\nsecond\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| diff_has_changes(h) == Some(true));
+    settle(&mut harness);
+
+    type_into(&mut harness, "Find in diff", "apple");
+    harness.run_steps(2);
+    assert!(shows(&harness, "1 of 2"), "two matches, the first current");
+    harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
+    harness.run_steps(2);
+    assert!(shows(&harness, "2 of 2"));
+    harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
+    harness.run_steps(2);
+    assert!(shows(&harness, "1 of 2"), "stepping past the last match wraps to the first");
+}
+
+#[test]
+fn untracked_files_show_their_whole_content_as_added() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("brand-new.txt"), "hello\nworld\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("brand-new.txt").click();
+    wait(&mut harness, "the diff", |h| diff_has_changes(h) == Some(true));
+    let added: Vec<String> = harness
+        .state()
+        .repo()
+        .unwrap()
+        .diff
+        .as_ref()
+        .unwrap()
+        .lines
+        .iter()
+        .filter(|line| line.kind == DiffLineKind::Addition)
+        .map(|line| line.text.clone())
+        .collect();
+    assert_eq!(added, ["+hello", "+world"]);
 }

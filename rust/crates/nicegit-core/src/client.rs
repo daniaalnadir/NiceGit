@@ -989,7 +989,17 @@ impl GitClient {
     }
 
     pub fn stash_diff(&self, stash: &Stash, directory: &Path) -> Result<String> {
-        self.run(&["stash", "show", "--include-untracked", "--patch", "--no-ext-diff", "--no-color", &stash.hash], directory)
+        self.stash_diff_with(stash, false, directory)
+    }
+
+    /// A stash's changes, optionally leaving out whitespace-only changes.
+    pub fn stash_diff_with(&self, stash: &Stash, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+        let mut args = vec!["stash", "show", "--include-untracked", "--patch", "--no-ext-diff", "--no-color"];
+        if ignore_whitespace {
+            args.push("--ignore-all-space");
+        }
+        args.push(&stash.hash);
+        self.run(&args, directory)
     }
 
     // MARK: Patches

@@ -189,10 +189,13 @@ impl NiceGitApp {
                 matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
             });
             if showing_diff {
+                // The diff opens at just over half the history column, so a change is readable
+                // without dragging the divider first.
+                let height = ui.available_height();
                 let shown = egui::Panel::bottom("diff")
                     .resizable(true)
-                    .default_size(340.0)
-                    .size_range(260.0..=900.0)
+                    .default_size((height * 0.55).max(300.0))
+                    .size_range(220.0..=(height * 0.85).max(260.0))
                     .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(0, 0)))
                     .show(ui, |ui| self.diff_panel(ui));
                 edges.push(("diff", PanelEdge::Top(shown.response.rect)));

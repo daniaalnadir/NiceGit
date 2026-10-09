@@ -342,7 +342,8 @@ impl RepositorySettingsWindow {
         widgets::section(ui, "Add a remote");
         egui::Grid::new("add_remote_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
             ui.label("Name");
-            ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.new_remote_name).hint_text("origin").desired_width(320.0));
+            ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.new_remote_name).hint_text("origin").desired_width(320.0))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Remote name"));
             ui.end_row();
             ui.label("URL");
             ui.add_enabled(
@@ -350,7 +351,8 @@ impl RepositorySettingsWindow {
                 egui::TextEdit::singleline(&mut self.new_remote_address)
                     .hint_text("https://example.com/repo.git or /path/to/repo.git")
                     .desired_width(320.0),
-            );
+            )
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Remote URL"));
             ui.end_row();
         });
         ui.add_space(8.0);

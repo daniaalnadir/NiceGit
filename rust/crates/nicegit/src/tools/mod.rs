@@ -63,12 +63,14 @@ pub struct Ctx<'a> {
     pub snapshot: &'a Snapshot,
     /// No action is running; tools disable controls that change the repository otherwise.
     pub idle: bool,
+    /// Diffs leave out whitespace-only changes, following the app setting.
+    pub ignore_whitespace: bool,
     requests: &'a mut Vec<Request>,
 }
 
 impl<'a> Ctx<'a> {
     pub fn new(repo: &'a Path, snapshot: &'a Snapshot, idle: bool, requests: &'a mut Vec<Request>) -> Self {
-        Self { repo, snapshot, idle, requests }
+        Self { repo, snapshot, idle, ignore_whitespace: false, requests }
     }
 
     pub fn act(&mut self, label: impl Into<String>, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {

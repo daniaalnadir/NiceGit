@@ -320,6 +320,7 @@ impl NiceGitApp {
             match name {
                 "palette" => self.palette = Some(PaletteState::default()),
                 "settings" => self.show_settings = true,
+                "split" => self.settings.split_diff = true,
                 "light" => self.applied_light_preview(ctx),
                 "repository" => self.run_command(Run::Tool("settings"), ctx),
                 "terminal" => self.toggle_terminal(ctx),

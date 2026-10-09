@@ -26,6 +26,10 @@ const ACCENT_WIDTH: f32 = 4.0;
 struct Selected {
     hash: String,
     summary: String,
+    /// The file's path in that commit.
+    file: String,
+    /// Whether the diff leaves out whitespace-only changes.
+    ignores_whitespace: bool,
     diff: Task<nicegit_core::Result<DiffContent>>,
 }
 
@@ -125,6 +129,11 @@ impl ToolWindow for BlameWindow {
         ui.separator();
 
         let Self { path, lines, ages, selected, split, focus_line, focus_pending, .. } = self;
+        // A change to the whitespace setting reloads the commit's diff.
+        if let Some(current) = selected.as_mut().filter(|current| current.ignores_whitespace != cx.ignore_whitespace) {
+            current.ignores_whitespace = cx.ignore_whitespace;
+            current.diff = commit_diff(ui.ctx(), cx.repo, &current.hash, &current.file, cx.ignore_whitespace);
+        }
         let Some(task) = lines.as_mut() else { return };
         let Some(result) = task.get() else {
             widgets::loading(ui, "Reading blame");
@@ -170,7 +179,9 @@ impl ToolWindow for BlameWindow {
                     *selected = Some(Selected {
                         hash: commit.hash.clone(),
                         summary: commit.summary.clone(),
-                        diff: commit_diff(ui.ctx(), cx.repo, &commit.hash, file),
+                        file: file.to_string(),
+                        ignores_whitespace: cx.ignore_whitespace,
+                        diff: commit_diff(ui.ctx(), cx.repo, &commit.hash, file, cx.ignore_whitespace),
                     });
                 }
             }
@@ -186,10 +197,16 @@ impl ToolWindow for BlameWindow {
 }
 
 /// The change a commit made to one file, against its first parent, as a diff.
-pub fn commit_diff(ctx: &egui::Context, repo: &Path, hash: &str, path: &str) -> Task<nicegit_core::Result<DiffContent>> {
+pub fn commit_diff(
+    ctx: &egui::Context,
+    repo: &Path,
+    hash: &str,
+    path: &str,
+    ignore_whitespace: bool,
+) -> Task<nicegit_core::Result<DiffContent>> {
     let (hash, path) = (hash.to_string(), path.to_string());
     query(ctx, repo, move |git, directory| {
-        let patch = git.commit_file_diff(&hash, &path, false, directory)?;
+        let patch = git.commit_file_diff(&hash, &path, ignore_whitespace, directory)?;
         Ok(DiffContent::new(hash, parse_diff(&patch)))
     })
 }

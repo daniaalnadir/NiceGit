@@ -14,9 +14,9 @@ use crate::diff_view::{self, DiffContent};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
-/// Extensions shown as images. TIFF and ICO cannot be decoded in this build; they report that
-/// the preview is unavailable.
-const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "ico"];
+/// Extensions shown as images, as in the Mac app. HEIC cannot be decoded in this build and shows
+/// its size only.
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "ico", "icns", "heic"];
 
 pub struct CompareWindow {
     from: String,
@@ -27,6 +27,8 @@ pub struct CompareWindow {
     detail: Refreshing<String, Detail>,
     /// The path the detail was last requested for.
     detail_path: Option<String>,
+    /// Whether that detail leaves out whitespace-only changes.
+    detail_ignores_whitespace: bool,
     /// The textures for the shown image pair, rebuilt when a new detail arrives.
     textures: Option<Textures>,
     selected: Option<String>,
@@ -66,6 +68,7 @@ impl CompareWindow {
             files: Refreshing::new(),
             detail: Refreshing::new(),
             detail_path: None,
+            detail_ignores_whitespace: false,
             textures: None,
             selected: None,
             split: false,
@@ -117,13 +120,17 @@ impl ToolWindow for CompareWindow {
         }
 
         // Request the selected file's detail whenever the selection differs from what was asked.
-        if self.detail_path != self.selected {
+        // The whitespace setting changing asks again too.
+        if self.detail_path != self.selected || self.detail_ignores_whitespace != cx.ignore_whitespace {
             if let Some(path) = self.selected.clone() {
                 let from = self.from.clone();
                 let to = self.to.clone();
                 let request_path = path.clone();
-                let task =
-                    query(&ctx, cx.repo, move |client, directory| load_detail(client, directory, &from, to.as_deref(), &request_path));
+                let ignore_whitespace = cx.ignore_whitespace;
+                self.detail_ignores_whitespace = ignore_whitespace;
+                let task = query(&ctx, cx.repo, move |client, directory| {
+                    load_detail(client, directory, &from, to.as_deref(), &request_path, ignore_whitespace)
+                });
                 self.detail.start(path.clone(), task);
                 self.detail_path = Some(path);
                 self.textures = None;
@@ -306,25 +313,59 @@ fn is_image(path: &str) -> bool {
 }
 
 /// The change to one file: either its text diff, or both images for an image file.
-fn load_detail(client: &GitClient, directory: &Path, from: &str, to: Option<&str>, path: &str) -> nicegit_core::Result<Detail> {
+fn load_detail(
+    client: &GitClient,
+    directory: &Path,
+    from: &str,
+    to: Option<&str>,
+    path: &str,
+    ignore_whitespace: bool,
+) -> nicegit_core::Result<Detail> {
     if is_image(path) {
         let before = client.file_bytes_at(Some(from), path, directory)?.map(decode_side);
         let after = client.file_bytes_at(to, path, directory)?.map(decode_side);
         return Ok(Detail::Images(ImagePair { before, after }));
     }
-    let patch = client.compare_file_diff(from, to, path, false, directory)?;
+    let patch = client.compare_file_diff(from, to, path, ignore_whitespace, directory)?;
     Ok(Detail::Diff(DiffContent::new(path.to_string(), parse_diff(&patch))))
 }
 
 /// Decodes one version of an image. Formats this build cannot decode keep their size only.
 fn decode_side(bytes: Vec<u8>) -> ImageSide {
     let size = bytes.len();
-    let image = image::load_from_memory(&bytes).ok().map(|decoded| {
+    let decoded = image::load_from_memory(&bytes).ok().or_else(|| largest_icns_png(&bytes));
+    let image = decoded.map(|decoded| {
         let rgba = decoded.to_rgba8();
         let dimensions = [rgba.width() as usize, rgba.height() as usize];
         ColorImage::from_rgba_unmultiplied(dimensions, rgba.as_raw())
     });
     ImageSide { bytes: size, image }
+}
+
+/// The largest PNG image inside an Apple icon file. Each entry is a four-byte type and a
+/// four-byte big-endian length that includes this header; modern icon sizes store PNG data.
+fn largest_icns_png(bytes: &[u8]) -> Option<image::DynamicImage> {
+    if bytes.get(..4) != Some(b"icns") {
+        return None;
+    }
+    let mut offset = 8;
+    let mut best: Option<image::DynamicImage> = None;
+    while let Some(header) = bytes.get(offset..offset + 8) {
+        let length = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
+        if length < 8 {
+            break;
+        }
+        let data = bytes.get(offset + 8..offset + length)?;
+        if data.starts_with(b"\x89PNG") {
+            if let Ok(image) = image::load_from_memory_with_format(data, image::ImageFormat::Png) {
+                if best.as_ref().is_none_or(|current| image.width() > current.width()) {
+                    best = Some(image);
+                }
+            }
+        }
+        offset += length;
+    }
+    best
 }
 
 /// A byte count as a short human-readable size, such as "12.4 KB".
@@ -381,5 +422,48 @@ impl<K: PartialEq, T: Send + 'static> Refreshing<K, T> {
             Some((shown, task)) if shown == key => task.get(),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn encoded(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(width, height, image::Rgba([10, 20, 30, 255])).write_to(&mut bytes, format).unwrap();
+        bytes.into_inner()
+    }
+
+    fn dimensions(side: &ImageSide) -> Option<[usize; 2]> {
+        side.image.as_ref().map(|image| image.size)
+    }
+
+    #[test]
+    fn tiff_and_ico_images_are_decoded() {
+        assert_eq!(dimensions(&decode_side(encoded(5, 4, image::ImageFormat::Tiff))), Some([5, 4]));
+        assert_eq!(dimensions(&decode_side(encoded(16, 16, image::ImageFormat::Ico))), Some([16, 16]));
+    }
+
+    #[test]
+    fn apple_icons_show_their_largest_png() {
+        let mut entries = Vec::new();
+        for (kind, size) in [(b"ic07", 128), (b"ic08", 256), (b"icp4", 16)] {
+            let png = encoded(size, size, image::ImageFormat::Png);
+            entries.extend_from_slice(kind);
+            entries.extend_from_slice(&(png.len() as u32 + 8).to_be_bytes());
+            entries.extend_from_slice(&png);
+        }
+        let mut file = b"icns".to_vec();
+        file.extend_from_slice(&(entries.len() as u32 + 8).to_be_bytes());
+        file.extend_from_slice(&entries);
+        assert_eq!(dimensions(&decode_side(file)), Some([256, 256]));
+        assert!(decode_side(b"icns\0\0\0\x08".to_vec()).image.is_none(), "an empty icon file has no image");
+    }
+
+    #[test]
+    fn heic_is_listed_as_an_image_even_though_it_cannot_be_previewed() {
+        assert!(is_image("photos/IMG_0001.HEIC"));
+        assert!(decode_side(b"not really heic".to_vec()).image.is_none());
     }
 }

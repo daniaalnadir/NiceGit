@@ -178,6 +178,8 @@ pub struct NiceGitApp {
     pub git_missing: bool,
     generation: u64,
     was_focused: bool,
+    /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
+    activation_refresh: bool,
     watcher: Option<Watch>,
     watched_change: Option<Instant>,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
@@ -214,6 +216,7 @@ impl NiceGitApp {
             git_missing: nicegit_core::runner::git_executable().is_none(),
             generation: 0,
             was_focused: true,
+            activation_refresh: false,
             watcher: None,
             watched_change: None,
             applied_appearance: None,
@@ -534,7 +537,7 @@ impl NiceGitApp {
         };
         repo.marked.retain(|hash| snapshot.commits.iter().any(|c| &c.hash == hash));
         // Each checkout keeps its own commit message draft.
-        let key = Settings::draft_key(&snapshot.root_path, &snapshot.current_branch);
+        let key = Settings::draft_key(&snapshot.root_path);
         if repo.draft_key.as_deref() != Some(key.as_str()) {
             if let Some(old) = repo.draft_key.take() {
                 if repo.draft.is_empty() {
@@ -821,6 +824,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let ignore_whitespace = self.settings.ignore_whitespace;
         let mut requests = Vec::new();
         let mut closed = Vec::new();
         let mut blocked_close = false;
@@ -850,6 +854,7 @@ impl NiceGitApp {
                 .open(&mut open)
                 .show(ctx, |ui| {
                     let mut cx = Ctx::new(&path, &snapshot, idle, &mut requests);
+                    cx.ignore_whitespace = ignore_whitespace;
                     tool.ui(ui, &mut cx);
                 });
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {
@@ -931,7 +936,9 @@ impl NiceGitApp {
 
     fn auto_refresh(&mut self, ctx: &egui::Context) {
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
-        let regained = focused && !self.was_focused;
+        if focused && !self.was_focused {
+            self.activation_refresh = true;
+        }
         self.was_focused = focused;
         if let Some(watch) = &self.watcher {
             // NiceGit's own actions refresh as they finish; skip changes from before then.
@@ -953,11 +960,15 @@ impl NiceGitApp {
             }
         }
         let quiet = self.busy.is_none() && self.dialog.is_none() && self.repo().is_some_and(|r| !r.loading && r.snapshot.is_some());
-        if !quiet || !self.settings.auto_refresh {
+        if !quiet {
             return;
         }
-        let watched = self.watched_change.is_some_and(|at| at.elapsed() >= WATCH_DEBOUNCE);
-        let periodic = focused && self.repo().is_some_and(|r| r.last_load.elapsed() >= AUTO_REFRESH);
+        // Returning to the app always refreshes, as in the Mac app; the setting covers changes
+        // noticed while NiceGit is in use.
+        let regained = std::mem::take(&mut self.activation_refresh);
+        let auto = self.settings.auto_refresh;
+        let watched = auto && self.watched_change.is_some_and(|at| at.elapsed() >= WATCH_DEBOUNCE);
+        let periodic = auto && focused && self.repo().is_some_and(|r| r.last_load.elapsed() >= AUTO_REFRESH);
         if regained || watched || periodic {
             self.watched_change = None;
             self.load(false);

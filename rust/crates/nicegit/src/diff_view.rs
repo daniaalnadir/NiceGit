@@ -1,6 +1,7 @@
 //! The diff view: unified or side by side, with word highlights, a find bar, and line selection
-//! for staging individual lines. Rows are virtualised, so large diffs stay responsive, and
-//! long lines scroll horizontally.
+//! for staging individual lines. Rows are virtualised, so large diffs stay responsive. Long
+//! lines wrap within each side of a split diff, as in the Mac app, and scroll horizontally in
+//! the unified view.
 
 #![allow(dead_code)]
 
@@ -28,6 +29,8 @@ const SELECTION_BAR: f32 = 3.0;
 const SCROLLBAR_ALLOWANCE: f32 = 14.0;
 /// Columns a tab is drawn as.
 const TAB_COLUMNS: usize = 4;
+/// The fewest columns of text a side of a split diff keeps before the view scrolls instead.
+const MIN_WRAP_COLUMNS: usize = 20;
 
 /// A diff prepared for display: its lines, their side-by-side arrangement, and the parts of
 /// paired lines that changed.
@@ -41,6 +44,8 @@ pub struct DiffContent {
     split_row_of_line: Vec<usize>,
     /// The widest line, in columns.
     max_columns: usize,
+    /// Each line's width in columns, for working out how many rows it wraps onto.
+    line_columns: Vec<usize>,
 }
 
 impl DiffContent {
@@ -57,9 +62,10 @@ impl DiffContent {
                 }
             }
         }
-        let max_columns = lines.iter().map(|line| columns(&line.text)).max().unwrap_or(0);
+        let line_columns: Vec<usize> = lines.iter().map(|line| columns(&line.text)).collect();
+        let max_columns = line_columns.iter().copied().max().unwrap_or(0);
         let highlights = inline::highlights(&lines);
-        Self { title, lines, split, highlights, split_row_of_line, max_columns }
+        Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -142,19 +148,49 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
 
     let style = Style::new(ui, content, options.split);
     let rows = if options.split { content.split.len() } else { content.lines.len() };
-    let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str())).auto_shrink([false, false]);
+    // Where each row starts. Unified rows are one line high; split rows as high as their
+    // longer side wraps.
+    let tops: Vec<f32> = if options.split {
+        let mut tops = Vec::with_capacity(rows + 1);
+        let mut top = 0.0;
+        for row in &content.split {
+            tops.push(top);
+            top += style.split_row_height(content, row);
+        }
+        tops.push(top);
+        tops
+    } else {
+        Vec::new()
+    };
+    let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), options.split)).auto_shrink([false, false]);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
-        let offset = content.row_of(line, options.split) as f32 * style.row_height - ui.available_height() * 0.4;
-        area = area.vertical_scroll_offset(offset.max(0.0));
+        let row = content.row_of(line, options.split);
+        let top = if options.split { tops[row] } else { row as f32 * style.row_height };
+        area = area.vertical_scroll_offset((top - ui.available_height() * 0.4).max(0.0));
     }
     let view = View { content, occurrences: &occurrences, current: options.find.current, split: options.split, style, drag_id };
     ui.scope(|ui| {
-        // Rows are placed at a fixed height, so no spacing may sit between them.
+        // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
-        area.show_rows(ui, view.style.row_height, rows, |ui, range| {
-            draw_rows(ui, range, &view, options, &mut response);
-        });
+        if options.split {
+            area.show_viewport(ui, |ui, viewport| {
+                let origin = ui.max_rect().min;
+                let height = tops[rows];
+                ui.allocate_rect(Rect::from_min_size(origin, vec2(view.style.total, height)), Sense::hover());
+                // The rows that overlap the visible part of the diff.
+                let first = tops.partition_point(|top| *top <= viewport.min.y).saturating_sub(1);
+                let last = tops.partition_point(|top| *top < viewport.max.y).min(rows);
+                for row in first..last {
+                    let rect = Rect::from_min_size(origin + vec2(0.0, tops[row]), vec2(view.style.total, tops[row + 1] - tops[row]));
+                    draw_split_row(ui, row, rect, &view, options, &mut response);
+                }
+            });
+        } else {
+            area.show_rows(ui, view.style.row_height, rows, |ui, range| {
+                draw_rows(ui, range, &view, options, &mut response);
+            });
+        }
     });
     response
 }
@@ -172,6 +208,10 @@ struct Style {
     total: f32,
     /// Width of one side of a split diff.
     half: f32,
+    /// In a split diff, the columns of text that fit on one side before a line wraps.
+    wrap_columns: Option<usize>,
+    /// Width of the text on one side of a split diff, where its lines wrap.
+    wrap_width: f32,
 }
 
 impl Style {
@@ -182,12 +222,15 @@ impl Style {
         let text_width = content.max_columns as f32 * char_width + 2.0 * PADDING;
         let available = (ui.available_width() - SCROLLBAR_ALLOWANCE).max(0.0);
         let (total, half) = if split {
-            let half = ((available - SPLIT_GAP) / 2.0).max(gutter + text_width);
+            // Each side takes half the width and its long lines wrap, down to a narrow minimum.
+            let half = ((available - SPLIT_GAP) / 2.0).max(gutter + MIN_WRAP_COLUMNS as f32 * char_width + 2.0 * PADDING);
             (2.0 * half + SPLIT_GAP, half)
         } else {
             let total = available.max(2.0 * gutter + text_width);
             (total, total)
         };
+        let wrap_width = (half - gutter - 2.0 * PADDING).max(char_width);
+        let wrap_columns = split.then(|| ((wrap_width / char_width).floor() as usize).max(1));
         Self {
             font,
             colors: theme::of(ui),
@@ -197,7 +240,28 @@ impl Style {
             row_height: ui.text_style_height(&TextStyle::Monospace) + 2.0,
             total,
             half,
+            wrap_columns,
+            wrap_width,
         }
+    }
+
+    /// How many lines of text `line` takes on one side of a split diff.
+    fn wrapped_lines(&self, content: &DiffContent, line: usize) -> usize {
+        match self.wrap_columns {
+            Some(columns) => content.line_columns[line].div_ceil(columns).max(1),
+            None => 1,
+        }
+    }
+
+    /// The height of a split row: its longer side, wrapped.
+    fn split_row_height(&self, content: &DiffContent, row: &SplitRow) -> f32 {
+        let lines = match *row {
+            SplitRow::Banner(_) => 1,
+            SplitRow::Pair { left, right } => {
+                [left, right].into_iter().flatten().map(|line| self.wrapped_lines(content, line)).max().unwrap_or(1)
+            }
+        };
+        lines as f32 * (self.row_height - 2.0) + 2.0
     }
 }
 
@@ -236,7 +300,7 @@ impl View<'_> {
     }
 
     /// Paints one line into `rect`, with a number column for each entry in `numbers`.
-    fn paint_line(&self, ui: &Ui, rect: Rect, line: usize, numbers: &[Option<usize>], selected: bool) {
+    fn paint_line(&self, ui: &Ui, rect: Rect, line: usize, numbers: &[Option<usize>], selected: bool, wrap: bool) {
         let painter = ui.painter().with_clip_rect(rect);
         let colors = self.style.colors;
         let diff_line = &self.content.lines[line];
@@ -253,10 +317,18 @@ impl View<'_> {
             painter.rect_filled(rect, 0.0, tint(colors.accent, 48));
             painter.rect_filled(Rect::from_min_size(rect.min, vec2(SELECTION_BAR, rect.height())), 0.0, colors.accent);
         }
+        // Numbers sit beside the first line of text, which is centred in a single-line row.
+        let first_line_center = rect.top() + self.style.row_height / 2.0;
         for (column, number) in numbers.iter().enumerate() {
             if let Some(number) = number {
                 let x = rect.left() + (column + 1) as f32 * self.style.gutter - PADDING / 2.0;
-                painter.text(pos2(x, rect.center().y), Align2::RIGHT_CENTER, number.to_string(), self.style.font.clone(), self.style.muted);
+                painter.text(
+                    pos2(x, first_line_center),
+                    Align2::RIGHT_CENTER,
+                    number.to_string(),
+                    self.style.font.clone(),
+                    self.style.muted,
+                );
             }
         }
         let text_color = match diff_line.kind {
@@ -264,10 +336,15 @@ impl View<'_> {
             DiffLineKind::Metadata => self.style.muted,
             _ => self.style.text,
         };
-        let job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
+        let mut job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
+        if wrap {
+            // Code wraps at any character, so the rows taken match the column count.
+            job.wrap.max_width = self.style.wrap_width;
+            job.wrap.break_anywhere = true;
+        }
         let galley = painter.layout_job(job);
         let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING;
-        let y = rect.center().y - galley.size().y / 2.0;
+        let y = first_line_center - (self.style.row_height - 2.0) / 2.0;
         painter.galley(pos2(x, y), galley, text_color);
     }
 
@@ -277,46 +354,45 @@ impl View<'_> {
     }
 }
 
-/// Draws the rows in `range`, handling pointer selection on changed lines.
+/// Draws the unified rows in `range`, handling pointer selection on changed lines.
 fn draw_rows(ui: &mut Ui, range: Range<usize>, view: &View, options: &mut DiffOptions, response: &mut DiffResponse) {
     let height = view.style.row_height;
-    for row in range {
+    for line in range {
         let row_rect = allocate_row(ui, view.style.total, height);
-        if view.split {
-            match view.content.split[row] {
-                SplitRow::Banner(line) => view.paint_line(ui, row_rect, line, &[], false),
-                SplitRow::Pair { left, right } => {
-                    let left_rect = Rect::from_min_size(row_rect.min, vec2(view.style.half, height));
-                    let right_rect = Rect::from_min_size(
-                        pos2(row_rect.left() + view.style.half + SPLIT_GAP, row_rect.top()),
-                        vec2(view.style.half, height),
-                    );
-                    match left {
-                        Some(line) => {
-                            let selected = select_by_pointer(ui, view, left_rect, line, options, response);
-                            let number = view.content.lines[line].old_number;
-                            view.paint_line(ui, left_rect, line, &[number], selected);
-                        }
-                        None => view.paint_empty(ui, left_rect),
-                    }
-                    match right {
-                        Some(line) => {
-                            let selected = select_by_pointer(ui, view, right_rect, line, options, response);
-                            let number = view.content.lines[line].new_number;
-                            view.paint_line(ui, right_rect, line, &[number], selected);
-                        }
-                        None => view.paint_empty(ui, right_rect),
-                    }
-                    let divider = row_rect.left() + view.style.half + SPLIT_GAP / 2.0;
-                    ui.painter().vline(divider, row_rect.y_range(), Stroke::new(1.0, view.style.colors.border));
+        let selected = select_by_pointer(ui, view, row_rect, line, options, response);
+        let diff_line = &view.content.lines[line];
+        let numbers = [diff_line.old_number, diff_line.new_number];
+        view.paint_line(ui, row_rect, line, &numbers, selected, false);
+    }
+}
+
+/// Draws one row of a split diff into `row_rect`, each side wrapping its long lines.
+fn draw_split_row(ui: &mut Ui, row: usize, row_rect: Rect, view: &View, options: &mut DiffOptions, response: &mut DiffResponse) {
+    match view.content.split[row] {
+        SplitRow::Banner(line) => view.paint_line(ui, row_rect, line, &[], false, false),
+        SplitRow::Pair { left, right } => {
+            let height = row_rect.height();
+            let left_rect = Rect::from_min_size(row_rect.min, vec2(view.style.half, height));
+            let right_rect =
+                Rect::from_min_size(pos2(row_rect.left() + view.style.half + SPLIT_GAP, row_rect.top()), vec2(view.style.half, height));
+            match left {
+                Some(line) => {
+                    let selected = select_by_pointer(ui, view, left_rect, line, options, response);
+                    let number = view.content.lines[line].old_number;
+                    view.paint_line(ui, left_rect, line, &[number], selected, true);
                 }
+                None => view.paint_empty(ui, left_rect),
             }
-        } else {
-            let line = row;
-            let selected = select_by_pointer(ui, view, row_rect, line, options, response);
-            let diff_line = &view.content.lines[line];
-            let numbers = [diff_line.old_number, diff_line.new_number];
-            view.paint_line(ui, row_rect, line, &numbers, selected);
+            match right {
+                Some(line) => {
+                    let selected = select_by_pointer(ui, view, right_rect, line, options, response);
+                    let number = view.content.lines[line].new_number;
+                    view.paint_line(ui, right_rect, line, &[number], selected, true);
+                }
+                None => view.paint_empty(ui, right_rect),
+            }
+            let divider = row_rect.left() + view.style.half + SPLIT_GAP / 2.0;
+            ui.painter().vline(divider, row_rect.y_range(), Stroke::new(1.0, view.style.colors.border));
         }
     }
 }
@@ -371,6 +447,7 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
     ui.horizontal(|ui| {
         ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(muted));
         let edit = ui.add(TextEdit::singleline(&mut options.find.query).hint_text("Find in diff").desired_width(180.0));
+        edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Find in diff"));
         // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
         if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {
             edit.request_focus();
@@ -501,6 +578,33 @@ mod tests {
         let found = matches_in(text, "café");
         assert_eq!(found.len(), 2);
         assert_eq!(&text[found[1].clone()], "Café");
+    }
+
+    #[test]
+    fn split_rows_are_as_tall_as_the_wrapped_text() {
+        let long = format!("-{}", "wrap ".repeat(80));
+        let lines = vec![
+            DiffLine { text: long.clone(), kind: DiffLineKind::Deletion, old_number: Some(1), new_number: None },
+            DiffLine { text: "+short".to_string(), kind: DiffLineKind::Addition, old_number: None, new_number: Some(1) },
+        ];
+        let content = DiffContent::new("long.txt".to_string(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, &content, true);
+            let row = content.split[content.row_of(0, true)];
+            let wrapped = style.wrapped_lines(&content, 0);
+            assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
+            assert_eq!(style.split_row_height(&content, &row), wrapped as f32 * (style.row_height - 2.0) + 2.0);
+            // egui wraps the text onto exactly the rows the height allows for.
+            let mut job = layout(&long, &style.font, Color32::WHITE, &[]);
+            job.wrap.max_width = style.wrap_width;
+            job.wrap.break_anywhere = true;
+            let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
+            assert_eq!(galley.rows.len(), wrapped);
+        });
+        // No renderer takes the font texture here.
+        output.textures_delta.clear();
     }
 
     #[test]
