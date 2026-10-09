@@ -28,7 +28,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Initialize repositories; repository identity | Repository menu › New repository; Repository Settings › Identity | core `coverage::initialize_creates_repository_that_snapshot_can_open`, `settings::set_identity_*` |
 | Add, rename, remove remotes; edit fetch URL | Repository Settings › Remotes | UI `add_a_remote_in_repository_settings`; core `settings::rename_remote_*`, `set_remote_address_*`, `remove_remote_*` |
 | Clone from a URL or local path | Repository menu › Clone, empty window | UI `clone_a_repository_through_its_dialog` |
-| Background Git with a busy indicator | Status bar spinner; actions refuse while busy | UI tests wait on it throughout |
+| Background Git with a busy indicator | Status bar spinner; actions refuse while busy | UI `the_status_bar_shows_a_running_action_and_actions_wait_for_it` |
 | Repository tabs; restore on launch | Repositories column | UI `recent_repositories_reopen_after_their_tab_closes` |
 | Recent repositories | Repositories column › Recent, empty window, palette | UI `recent_repositories_reopen_after_their_tab_closes` |
 | Resizable, remembered columns; restore default width | Panel dividers; double-click a divider; Settings button | UI `double_clicking_a_panel_edge_restores_its_width`, `smallest_window_lays_out_every_panel` |
@@ -36,7 +36,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Automatic refresh after outside changes; refresh on return to the app | File watcher, Settings toggle; returning always refreshes | UI `changes_made_in_another_app_appear_without_refreshing`, `returning_to_the_app_refreshes_even_with_automatic_refresh_off` |
 | Command palette with fuzzy matching | Shift-Ctrl/Cmd-P | UI `command_palette_runs_a_command`; unit `ui::palette::tests::word_starts_and_runs_rank_higher`; CI run (OS keyboard input) |
 | Embedded terminal per checkout; hide keeps shells; stop with confirmation | Terminal panel (Ctrl-`) | UI `terminal_panel_opens_and_hides`; unit `tools::terminal::tests::*` (3) |
-| Per-checkout commit-message drafts | Commit box, kept per checkout folder | unit `settings::tests::drafts_round_trip_summary_and_description` |
+| Per-checkout commit-message drafts | Commit box, kept per checkout folder | UI `a_message_draft_stays_with_the_checkout_across_branch_switches`; unit `settings::tests::drafts_round_trip_summary_and_description` |
 
 ## Branches, remotes, tags, stashes
 
@@ -50,10 +50,10 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Ahead and behind counts | Sidebar, toolbar Pull/Push labels | core `client::snapshot_counts_commits_ahead_of_and_behind_the_upstream` |
 | Drag a branch onto the current branch to merge or rebase | Sidebar rows and graph labels | UI `drag_a_branch_onto_the_current_branch_to_merge_it` |
 | Merge and rebase with previews | Branch menu; confirmation shows the preview | core `rewrite::merge_preview_*` (4), `rebase_preview_is_marked_as_an_estimate`, `rebase_onto_branch_replays_the_current_branch`, `client::merge_refuses_*` |
-| Worktrees: browse, open, reveal, copy path, create, remove, forget | Sidebar Worktrees, Worktrees window | UI `create_and_remove_a_worktree_from_the_interface`; core `settings::create_worktree_*`, `remove_worktree_*`, `prune_*` |
+| Worktrees: browse, open, reveal, copy path, create, remove, forget | Sidebar Worktrees, Worktrees window | UI `create_and_remove_a_worktree_from_the_interface`, `copy_a_worktree_path_and_open_it_from_the_sidebar`; core `settings::create_worktree_*`, `remove_worktree_*`, `prune_*` |
 | Submodules with state; check out recorded commit | Sidebar Submodules, Submodules window | core `settings::submodule*` (3), `missing_submodule_folder_*`, `update_submodule_*` |
 | Tags: create (lightweight or annotated), inspect, delete, push, delete from remote | Sidebar Tags, commit menu | UI `create_lightweight_and_annotated_tags_from_the_graph`; core `client::delete_tag_*`, `create_tag_*`, `settings::push_tag_*`, `delete_remote_tag_*` |
-| Stashes: save selected files and untracked, preview, apply, pop, delete | Sidebar Stashes, Stashes window, toolbar | UI `stash_window_saves_selected_changes`; core `client::*stash*` (4), `settings::stash_selected_*` (3), `coverage::stash_diff_*`; unit `tools::stash::tests::*` (8) |
+| Stashes: save selected files and untracked, preview, apply, pop, delete | Sidebar Stashes, Stashes window, toolbar | UI `stash_window_saves_selected_changes`, `stash_only_the_ticked_files_then_preview_the_stash`; core `client::*stash*` (4), `settings::stash_selected_*` (3), `coverage::stash_diff_*`; unit `tools::stash::tests::*` (8) |
 | GitHub pull requests and issues | Sidebar sections, GitHub window | UI `github_pull_requests_and_issues_load_from_github` (needs `gh` sign-in, so run with `--ignored`; passes against github.com); core `inspect::github_*` (3); unit `github::tests::*` (3) |
 | Copy a GitHub commit link | Branch and commit menus | UI `copy_a_github_commit_link_from_the_graph`; core `inspect::github_remote_addresses_are_parsed_in_every_supported_form` |
 | Clean up merged or inactive branches, undoable | Repository menu › Clean up branches; toolbar Undo | UI `clean_up_branches_deletes_a_merged_branch_and_undo_restores_it`; core `workflows::cleanup_*` (4) |
@@ -70,7 +70,7 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Load older history; filter loaded commits | History header and end of the graph | UI `load_older_history_reads_the_next_page` |
 | Search every branch's history | Search history window (Shift-Ctrl/Cmd-F) | UI `search_history_finds_a_commit_by_its_message`; core `history::search_*` (5) |
 | Search file contents; open blame at a match | Search file contents (Alt-Ctrl/Cmd-F) | core `history::content_search_*` (3); unit `search::tests::*` (3) |
-| Commit inspector: message, metadata, parents, files, patches | Right panel | UI `restore_a_file_from_the_commit_inspector`, `revert_and_edit_message_from_the_graph`; core `history::commit_file_diff_*` |
+| Commit inspector: message, metadata, parents, files, patches | Right panel | UI `the_inspector_shows_the_whole_commit_message_as_written`, `restore_a_file_from_the_commit_inspector`, `revert_and_edit_message_from_the_graph`; core `history::commit_file_diff_*` |
 | Signature status | Inspector | core `inspect::ssh_signed_commit_is_verified_only_with_its_key_allowed`, `unsigned_commit_has_no_signature`, `commit_with_an_unchecked_signature_is_not_reported_as_verified`; unit `signature::tests::each_git_code_maps_to_the_status_the_mac_app_shows` |
 | Restore a file to a commit's version or before it | Inspector file menu, with confirmation | UI `restore_a_file_from_the_commit_inspector`; core `history::restore_*` (7) |
 | File history following renames | Changes and inspector menus | UI `file_history_lists_the_commits_that_changed_the_file`; core `history::file_history_*` (3) |
@@ -93,10 +93,10 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 | Edit working files | Diff panel › Edit, changes menu | UI `edit_and_save_a_working_file_in_the_built_in_editor` |
 | Amend, with a warning when published | Commit box | UI `amend_the_last_commit_with_staged_changes`; core `rewrite::is_published_reports_commits_contained_by_a_remote_branch` |
 | Edit the HEAD message | Commit menu › Edit message | UI `revert_and_edit_message_from_the_graph`; core `coverage::amend_message_*` (2) |
-| Undo and redo commits, amends, resets, deletions | Toolbar, with confirmation | UI `stage_commit_and_undo_through_the_interface`, `clean_up_branches_deletes_a_merged_branch_and_undo_restores_it`; core `rewrite::undo_*`, `redo_*` (8) |
+| Undo and redo commits, amends, resets, merges, deletions | Toolbar, with confirmation | UI `stage_commit_and_undo_through_the_interface`, `undo_a_merge_from_the_toolbar`, `clean_up_branches_deletes_a_merged_branch_and_undo_restores_it`; core `rewrite::undo_*`, `redo_*` (8) |
 | Cherry-pick one or many (oldest first); revert; choose a merge's parent | Commit menu, Ctrl/Cmd-click selection | UI `command_click_cherry_picks_the_marked_commits_oldest_first`, `revert_and_edit_message_from_the_graph`; core `rewrite::cherry_pick_*`, `revert_*` |
 | Reset soft, mixed, or hard | Commit and branch menus › Reset | core `rewrite::undo_hard_reset_*`, `undo_soft_reset_*`, `undo_mixed_reset_*` |
-| Interactive rebase: drag to reorder, pick, reword, squash, fixup, drop | Commit menu › Interactive rebase | core `rewrite::plan_*` (3), `interactive_rebase_*` (9); unit `tools::interactive_rebase::tests::*` (6) |
+| Interactive rebase: drag to reorder, pick, reword, squash, fixup, drop | Commit menu › Interactive rebase | UI `interactive_rebase_drops_a_commit_through_its_window`; core `rewrite::plan_*` (3), `interactive_rebase_*` (9); unit `tools::interactive_rebase::tests::*` (6) |
 | Continue or abort interrupted operations | Operation banner | UI `resolve_a_merge_conflict_in_the_editor` (Continue), `abort_an_interrupted_merge_from_the_banner`; core `client::snapshot_reports_merge_operation_during_conflict` |
 | Conflict editor with base, current, incoming; whole-file resolutions | Conflict window | UI `resolve_a_merge_conflict_in_the_editor`; core `staging::load_*` and the conflict tests (10); unit `conflict::tests::*` |
 
@@ -105,8 +105,9 @@ menu, and `smallest_window_lays_out_every_panel` lays out every panel at the min
 - The Mac app is a native SwiftUI app. The cross-platform app uses egui and looks the same on
   every system, with the Inter typeface and Phosphor icons. Menus live in the Repository picker,
   the toolbar's More menu, and the command palette rather than a macOS menu bar.
-- HEIC images are recognised but cannot be previewed: no pure-Rust decoder exists, so the
-  Compare window shows their size only. PNG, JPEG, GIF, BMP, WebP, TIFF, ICO, and ICNS preview.
+- HEIC images preview on macOS, through the system's own `sips` tool. No pure-Rust HEIC
+  decoder exists, so on Windows and Linux the Compare window shows their size only. PNG, JPEG,
+  GIF, BMP, WebP, TIFF, ICO, and ICNS preview everywhere.
 - Interaction tests run headless through egui_kittest on all three systems in CI. Keyboard input
   through the operating system is tested on Windows and Linux in CI; on macOS it was checked by
   hand.

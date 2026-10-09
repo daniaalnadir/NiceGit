@@ -14,8 +14,8 @@ use crate::diff_view::{self, DiffContent};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
-/// Extensions shown as images, as in the Mac app. HEIC cannot be decoded in this build and shows
-/// its size only.
+/// Extensions shown as images, as in the Mac app. HEIC is decoded through macOS's own image
+/// tool, so on Windows and Linux it shows its size only.
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "ico", "icns", "heic"];
 
 pub struct CompareWindow {
@@ -333,13 +333,46 @@ fn load_detail(
 /// Decodes one version of an image. Formats this build cannot decode keep their size only.
 fn decode_side(bytes: Vec<u8>) -> ImageSide {
     let size = bytes.len();
-    let decoded = image::load_from_memory(&bytes).ok().or_else(|| largest_icns_png(&bytes));
+    let decoded = image::load_from_memory(&bytes).ok().or_else(|| largest_icns_png(&bytes)).or_else(|| decode_with_sips(&bytes));
     let image = decoded.map(|decoded| {
         let rgba = decoded.to_rgba8();
         let dimensions = [rgba.width() as usize, rgba.height() as usize];
         ColorImage::from_rgba_unmultiplied(dimensions, rgba.as_raw())
     });
     ImageSide { bytes: size, image }
+}
+
+/// Decodes formats such as HEIC with `sips`, which every Mac has, by converting to PNG.
+#[cfg(target_os = "macos")]
+fn decode_with_sips(bytes: &[u8]) -> Option<image::DynamicImage> {
+    let folder = tempfile_folder()?;
+    let (input, output) = (folder.join("image"), folder.join("image.png"));
+    let decoded = std::fs::write(&input, bytes).ok().and_then(|_| {
+        let converted = std::process::Command::new("/usr/bin/sips")
+            .args(["-s", "format", "png"])
+            .arg(&input)
+            .arg("--out")
+            .arg(&output)
+            .output()
+            .ok()?;
+        converted.status.success().then(|| image::open(&output).ok()).flatten()
+    });
+    let _ = std::fs::remove_dir_all(&folder);
+    decoded
+}
+
+#[cfg(not(target_os = "macos"))]
+fn decode_with_sips(_bytes: &[u8]) -> Option<image::DynamicImage> {
+    None
+}
+
+/// A new private folder for one conversion.
+#[cfg(target_os = "macos")]
+fn tempfile_folder() -> Option<std::path::PathBuf> {
+    let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+    let folder = std::env::temp_dir().join(format!("nicegit-image-{}-{unique}", std::process::id()));
+    std::fs::create_dir(&folder).ok()?;
+    Some(folder)
 }
 
 /// The largest PNG image inside an Apple icon file. Each entry is a four-byte type and a
@@ -462,8 +495,21 @@ mod tests {
     }
 
     #[test]
-    fn heic_is_listed_as_an_image_even_though_it_cannot_be_previewed() {
+    fn heic_is_listed_as_an_image_and_unreadable_bytes_have_no_preview() {
         assert!(is_image("photos/IMG_0001.HEIC"));
         assert!(decode_side(b"not really heic".to_vec()).image.is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn heic_images_are_decoded_on_macos() {
+        let folder = tempfile::tempdir().unwrap();
+        let (png, heic) = (folder.path().join("in.png"), folder.path().join("out.heic"));
+        std::fs::write(&png, encoded(6, 5, image::ImageFormat::Png)).unwrap();
+        let made =
+            std::process::Command::new("/usr/bin/sips").args(["-s", "format", "heic"]).arg(&png).arg("--out").arg(&heic).output().unwrap();
+        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+        let side = decode_side(std::fs::read(&heic).unwrap());
+        assert_eq!(dimensions(&side), Some([6, 5]));
     }
 }

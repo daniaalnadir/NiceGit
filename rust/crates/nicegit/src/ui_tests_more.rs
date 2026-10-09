@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use egui::accesskit::Role;
 use egui::{Key, Modifiers};
-use egui_kittest::kittest::{By, Queryable};
+use egui_kittest::kittest::{By, NodeT, Queryable};
 use egui_kittest::Harness;
 use egui_phosphor::regular as icon;
 use nicegit_core::diff::DiffLineKind;
@@ -106,6 +106,8 @@ fn hide_whitespace_leaves_out_whitespace_only_changes() {
 
     harness.get_by_role_and_label(Role::CheckBox, "Hide whitespace").click();
     wait(&mut harness, "the diff without whitespace", |h| h.state().settings.ignore_whitespace && diff_has_changes(h) == Some(false));
+    // The reloaded diff lays the panel out again; click once it has settled.
+    settle(&mut harness);
 
     harness.get_by_role_and_label(Role::CheckBox, "Hide whitespace").click();
     wait(&mut harness, "the full diff again", |h| !h.state().settings.ignore_whitespace && diff_has_changes(h) == Some(true));
@@ -444,14 +446,19 @@ fn find_in_diff_counts_and_steps_through_matches() {
     settle(&mut harness);
 
     type_into(&mut harness, "Find in diff", "apple");
-    harness.run_steps(2);
-    assert!(shows(&harness, "1 of 2"), "two matches, the first current");
-    harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
-    harness.run_steps(2);
-    assert!(shows(&harness, "2 of 2"));
-    harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
-    harness.run_steps(2);
-    assert!(shows(&harness, "1 of 2"), "stepping past the last match wraps to the first");
+    wait(&mut harness, "two matches, the first current", |h| shows(h, "1 of 2"));
+    // Each step scrolls to its match; click the next button once that has settled.
+    let next = |harness: &mut App| {
+        settle(harness);
+        harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
+    };
+    next(&mut harness);
+    wait(&mut harness, "the second match", |h| shows(h, "2 of 2"));
+    next(&mut harness);
+    wait(&mut harness, "stepping past the last match to wrap to the first", |h| shows(h, "1 of 2"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Previous match (Shift+Enter)").click();
+    wait(&mut harness, "stepping back to wrap to the last", |h| shows(h, "2 of 2"));
 }
 
 #[test]
@@ -477,4 +484,202 @@ fn untracked_files_show_their_whole_content_as_added() {
         .map(|line| line.text.clone())
         .collect();
     assert_eq!(added, ["+hello", "+world"]);
+}
+
+#[test]
+fn a_message_draft_stays_with_the_checkout_across_branch_switches() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    type_into(&mut harness, "Commit summary", "Half-written message");
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Check out").click();
+    idle(&mut harness);
+    wait(&mut harness, "the switch", |h| h.state().snapshot().is_some_and(|s| s.current_branch == "feature"));
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Half-written message", "the draft belongs to the checkout");
+}
+
+#[test]
+fn the_inspector_shows_the_whole_commit_message_as_written() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "third\n").unwrap();
+    let body = "Explain the change\n\nFirst line of the body,\nwrapped by hand at a short width.\n\n- a list item";
+    git(path, &["commit", "-qam", body]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Explain the change").click();
+    let expected = "First line of the body,\nwrapped by hand at a short width.\n\n- a list item";
+    wait(&mut harness, "the message body", |h| shows(h, expected));
+}
+
+#[test]
+fn the_status_bar_shows_a_running_action_and_actions_wait_for_it() {
+    let repo = repository();
+    // With a remote, Fetch is available whenever nothing else is running.
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(repo.path(), &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let disabled = |harness: &App, label: &str| harness.get_by_role_and_label(Role::Button, label).accesskit_node().is_disabled();
+    assert!(!disabled(&harness, "Fetch"), "Fetch starts out available");
+
+    harness.state_mut().act("Waiting for the test", |_, _| {
+        std::thread::sleep(Duration::from_millis(1500));
+        Ok(None)
+    });
+    harness.run_steps(2);
+    assert!(shows(&harness, "Waiting for the test…"), "the status bar names the running action");
+    assert!(disabled(&harness, "Fetch"), "Fetch waits for the running action");
+    idle(&mut harness);
+    harness.run_steps(2);
+    assert!(!shows(&harness, "Waiting for the test…"));
+    assert!(!disabled(&harness, "Fetch"));
+}
+
+#[test]
+fn copy_a_worktree_path_and_open_it_from_the_sidebar() {
+    let repo = repository();
+    let path = repo.path();
+    let folder = tempfile::tempdir().unwrap();
+    let linked = folder.path().join("linked");
+    git(path, &["worktree", "add", "-q", "-b", "linked-work", &linked.to_string_lossy()]);
+    let linked = std::fs::canonicalize(&linked).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The worktree row comes after the branch of the same name.
+    let row = |h: &App| h.get_all_by_label("linked-work").last().expect("the worktree row").rect().center();
+    let at = row(&harness);
+    harness.hover_at(at);
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    settle(&mut harness);
+    harness.get_by_label(&format!("{}  Copy path", icon::COPY)).click();
+    let mut copied = None;
+    for _ in 0..5 {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+    }
+    let copied = copied.expect("a copied path");
+    assert_eq!(std::fs::canonicalize(&copied).unwrap(), linked);
+
+    // Clicking the row opens that checkout in its own tab.
+    let at = row(&harness);
+    harness.hover_at(at);
+    harness.get_all_by_label("linked-work").last().unwrap().click();
+    wait(&mut harness, "the linked checkout", |h| {
+        h.state().repo().is_some_and(|r| std::fs::canonicalize(&r.path).ok().as_deref() == Some(linked.as_path()))
+    });
+    assert_eq!(harness.state().repos.len(), 2, "the first checkout stays open in its tab");
+}
+
+#[test]
+fn undo_a_merge_from_the_toolbar() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "side.txt", b"side\n", "Work on the feature");
+    git(path, &["switch", "-q", "main"]);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(&mut harness, "the merge confirmation", |h| shows(h, "Merge feature into main?"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Merge").click();
+    idle(&mut harness);
+    wait(&mut harness, "the merge", |_| git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count() == 3);
+
+    toolbar_button(&mut harness, "Undo");
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    harness.get_all_by_label("Undo").last().expect("confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the branch back where it was", |_| git(path, &["rev-parse", "HEAD"]) == before);
+    assert!(!path.join("side.txt").exists(), "the merged file is gone with the merge");
+}
+
+#[test]
+fn stash_only_the_ticked_files_then_preview_the_stash() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", b"other\n", "Add another file");
+    std::fs::write(path.join("notes.txt"), "stash me\n").unwrap();
+    std::fs::write(path.join("other.txt"), "keep me\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Manage stashes").click();
+    wait(&mut harness, "the stash window", |h| h.query_by_role_and_label(Role::CheckBox, "other.txt").is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::CheckBox, "other.txt").click();
+    harness.run_steps(2);
+    harness.get_by_label_contains("Stash 1 file").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash", |_| !git(path, &["stash", "list"]).is_empty());
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\n", "the ticked file is stashed");
+    assert_eq!(std::fs::read_to_string(path.join("other.txt")).unwrap(), "keep me\n", "the unticked file is untouched");
+
+    // Selecting the stash in the sidebar previews its changes.
+    harness.state_mut().tools.clear();
+    let stash = git(path, &["stash", "list", "--format=%gs"]);
+    wait(&mut harness, "the stash row", |h| h.query_by_label(&stash).is_some());
+    harness.get_by_label(&stash).click();
+    wait(&mut harness, "the stash preview", |h| {
+        h.state().repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.lines.iter().any(|line| line.text == "+stash me"))
+    });
+}
+
+#[test]
+fn interactive_rebase_drops_a_commit_through_its_window() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "keep.txt", b"keep\n", "Keep this commit");
+    commit_file(path, "mistake.txt", b"oops\n", "Drop this commit");
+    commit_file(path, "also.txt", b"also\n", "Keep this one too");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Interactive rebase from here").click();
+    let action = "Action for Drop this commit";
+    wait(&mut harness, "the rebase plan", |h| h.query_by_role_and_label(Role::ComboBox, action).is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::ComboBox, action).click();
+    settle(&mut harness);
+    harness.get_all_by_label("Drop").last().expect("the Drop choice").click();
+    settle(&mut harness);
+    harness.get_by_label("Rewrite commits").click();
+    if harness.query_by_role_and_label(Role::Button, "Rewrite").is_some() {
+        harness.get_by_role_and_label(Role::Button, "Rewrite").click();
+    }
+    idle(&mut harness);
+    wait(&mut harness, "the rewritten history", |_| !git(path, &["log", "--format=%s"]).contains("Drop this commit"));
+    let log = git(path, &["log", "--format=%s"]);
+    assert!(log.starts_with("Keep this one too\nKeep this commit\nAdd a second line"), "{log}");
+    assert!(!path.join("mistake.txt").exists());
 }

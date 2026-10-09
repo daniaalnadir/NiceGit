@@ -6,7 +6,7 @@
   panel opens at a readable height.
 - Hide whitespace applies to every diff: Compare, blame and file history commits, and the
   stash preview, as well as the Changes panel.
-- TIFF, ICO, and Apple icon images are previewed when comparing.
+- TIFF, ICO, and Apple icon images are previewed when comparing, and HEIC photos on macOS.
 - Returning to NiceGit always refreshes, as in the Mac app; the automatic refresh setting
   covers changes noticed while it is in use.
 - Commit message drafts belong to the checkout, so switching branches keeps the message

@@ -64,7 +64,7 @@ pub struct Settings {
     pub active: usize,
     /// Recently opened repositories, newest first.
     pub recent: Vec<PathBuf>,
-    /// Commit message drafts, keyed by "<repository path>\0<branch>".
+    /// Commit message drafts, keyed by checkout folder.
     pub drafts: BTreeMap<String, Draft>,
 }
 

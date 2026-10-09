@@ -218,6 +218,10 @@ impl InteractiveRebaseWindow {
                             for option in Choice::ALL {
                                 ui.selectable_value(&mut entry.choice, option, option.title()).on_hover_text(option.help());
                             }
+                        })
+                        .response
+                        .widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, idle, format!("Action for {}", entry.commit.subject))
                         });
                     widgets::hash_label(ui, &entry.commit.hash);
                     let subject = RichText::new(&entry.commit.subject);
