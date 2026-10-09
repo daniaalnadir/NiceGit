@@ -134,6 +134,16 @@ impl ToolWindow for EditorWindow {
                     let lines = self.text.split('\n').count();
                     let digits = lines.to_string().len();
                     let numbers: Vec<String> = (1..=lines).map(|line| format!("{line:>digits$}")).collect();
+                    // Long lines extend sideways instead of wrapping, so each number stays beside its line.
+                    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _wrap_width: f32| {
+                        let job = egui::text::LayoutJob::simple(
+                            text.as_str().to_owned(),
+                            egui::TextStyle::Monospace.resolve(ui.style()),
+                            ui.visuals().text_color(),
+                            f32::INFINITY,
+                        );
+                        ui.ctx().fonts_mut(|fonts| fonts.layout_job(job))
+                    };
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 10.0;
                         let gutter = RichText::new(numbers.join("\n")).monospace().color(c.muted);
@@ -144,7 +154,8 @@ impl ToolWindow for EditorWindow {
                                 .frame(egui::Frame::NONE)
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(30)
-                                .lock_focus(true),
+                                .lock_focus(true)
+                                .layouter(&mut layouter),
                         )
                         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "File contents"));
                     });

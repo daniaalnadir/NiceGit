@@ -123,6 +123,8 @@ impl NiceGitApp {
                         if outlined(ui, "Stage All Changes", c.accent, idle && !unstaged.is_empty()).clicked() {
                             self.act("Stage all", |client, path| client.stage_all(path).map(|_| None));
                         }
+                        // Keeps the discard icon clear of the Stage All button.
+                        ui.add_space(8.0);
                         let discardable: Vec<StatusEntry> = unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
                         let discard_all_enabled = idle && !discardable.is_empty();
                         let discard_all = widgets::icon_button(ui, icon::TRASH, "Discard all changes…", discard_all_enabled);
@@ -152,7 +154,7 @@ impl NiceGitApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{}  Staged files ({})", icon::CARET_DOWN, staged.len())).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if outlined(ui, "Unstage All Changes", c.danger, idle && !staged.is_empty()).clicked() {
+                        if outlined(ui, "Unstage All Changes", c.accent, idle && !staged.is_empty()).clicked() {
                             self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None));
                         }
                     });

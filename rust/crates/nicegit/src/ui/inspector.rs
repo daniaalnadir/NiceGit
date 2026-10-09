@@ -3,6 +3,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
 
 use crate::app::{NiceGitApp, Selection};
+use crate::ui::history::middle_ellipsis;
 
 /// A commit's signature summary, filled in by a background thread: None while loading.
 type SignatureCell = std::sync::Arc<std::sync::Mutex<Option<Option<(String, u8)>>>>;
@@ -66,7 +67,8 @@ impl NiceGitApp {
                                                 if reference.contains('/') { c.remote_branch } else { c.local_branch },
                                             ),
                                         };
-                                        widgets::pill(ui, &text, fill);
+                                        // Long names are shortened so each pill stays on one line; the full name shows on hover.
+                                        widgets::pill(ui, &middle_ellipsis(&text, 26), fill).on_hover_text(&text);
                                     }
                                 });
                                 ui.add_space(8.0);

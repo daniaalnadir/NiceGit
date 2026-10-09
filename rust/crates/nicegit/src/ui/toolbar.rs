@@ -8,6 +8,8 @@ use crate::ui::dialogs::{Dialog, InputKind};
 
 const FULL_WIDTH: f32 = 54.0;
 const COMPACT_WIDTH: f32 = 34.0;
+/// The room between two groups of buttons: space, a thin rule, and space.
+const GROUP_GAP: f32 = 12.0;
 
 #[derive(Clone, Copy, PartialEq)]
 enum ToolStyle {
@@ -76,6 +78,13 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
         );
     }
     response
+}
+
+/// A thin vertical rule between two groups of toolbar buttons.
+fn group_rule(ui: &mut Ui) {
+    let c = theme::of(ui);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 44.0), egui::Sense::hover());
+    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 8.0)).y_range(), egui::Stroke::new(1.0, c.border));
 }
 
 /// A labelled picker: a small caption above an accent-coloured value with a chevron.
@@ -195,7 +204,9 @@ impl NiceGitApp {
                     if seen >= shown {
                         break;
                     }
-                    total += 8.0;
+                    if seen > 0 {
+                        total += GROUP_GAP;
+                    }
                     for _ in group {
                         if seen >= shown {
                             break;
@@ -218,8 +229,10 @@ impl NiceGitApp {
             let mut index = 0;
             let mut overflow: Vec<&ToolItem> = Vec::new();
             for group in &groups {
-                if index < shown {
-                    ui.add_space(6.0);
+                if index > 0 && index < shown {
+                    ui.add_space((GROUP_GAP - 1.0) / 2.0);
+                    group_rule(ui);
+                    ui.add_space((GROUP_GAP - 1.0) / 2.0);
                 }
                 for item in group {
                     if index < shown {

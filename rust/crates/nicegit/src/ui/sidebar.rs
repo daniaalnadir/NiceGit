@@ -23,7 +23,9 @@ pub(crate) fn section<R>(ui: &mut Ui, id: &str, glyph: &str, title: &str, count:
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(6.0);
-            ui.label(RichText::new(count.to_string()).small().monospace().color(c.accent));
+            // An empty section has nothing to highlight, so its zero is muted.
+            let count_color = if count == 0 { c.muted } else { c.accent };
+            ui.label(RichText::new(count.to_string()).small().monospace().color(count_color));
         });
         response
     });

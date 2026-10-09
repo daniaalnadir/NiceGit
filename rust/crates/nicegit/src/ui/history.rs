@@ -657,7 +657,7 @@ fn shade(color: Color32, factor: f32) -> Color32 {
 }
 
 /// Shortens long branch names in the middle, so both the prefix and the distinctive end show.
-fn middle_ellipsis(text: &str, max: usize) -> String {
+pub(crate) fn middle_ellipsis(text: &str, max: usize) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() <= max {
         return text.to_string();
