@@ -218,8 +218,9 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     response.match_count = occurrences.len();
     response.current_match_line = occurrences.get(options.find.current).map(|occurrence| occurrence.line);
 
-    // Beside an empty column, a new or deleted file's lines would have half the room.
-    let split = options.split && !content.is_one_sided();
+    // Beside an empty column, a new or deleted file's lines would have half the room; and a
+    // narrow panel leaves each side too little room to read.
+    let split = options.split && !content.is_one_sided() && split_fits(ui.available_width());
     let style = Style::new(ui, content, split);
     let rows = if split { content.split.len() } else { content.lines.len() };
     // Where each row starts: as high as its line wraps, or a split row's longer side.
@@ -234,7 +235,7 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     let mut area = ScrollArea::both()
         .id_salt(("diff", content.title.as_str(), split))
         .auto_shrink([false, false])
-        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible);
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
         let row = content.row_of(line, split);
@@ -244,8 +245,8 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
-        // A solid scroll bar, rather than one that only appears on hover, shows when a long
-        // diff continues past the panel.
+        // A solid scroll bar, rather than one that only appears on hover, shows whenever a
+        // long diff continues past the panel.
         ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
         area.show_viewport(ui, |ui, viewport| {
             let origin = ui.max_rect().min;
@@ -645,6 +646,15 @@ fn append_run(job: &mut LayoutJob, run: &mut String, background: Option<Color32>
     run.clear();
 }
 
+/// The narrowest panel that shows a diff side by side; narrower, each side would wrap most
+/// lines, so the diff is shown in one column.
+pub const MIN_SPLIT_WIDTH: f32 = 560.0;
+
+/// Whether a panel `width` points wide has room for a side-by-side diff.
+pub fn split_fits(width: f32) -> bool {
+    width >= MIN_SPLIT_WIDTH
+}
+
 /// The tint behind a whole line: green for added, red for removed, blue for a hunk header.
 fn line_background(kind: DiffLineKind, colors: &theme::Colors) -> Option<Color32> {
     match kind {
@@ -743,6 +753,13 @@ mod tests {
                 .any(|(range, color)| *color == colors.added_word_bg && content.lines[1].text[range.clone()].contains('2')));
         });
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn narrow_panels_show_one_column() {
+        assert!(!split_fits(MIN_SPLIT_WIDTH - 1.0), "each side would be too narrow to read");
+        assert!(split_fits(MIN_SPLIT_WIDTH));
+        assert!(split_fits(1200.0));
     }
 
     #[test]

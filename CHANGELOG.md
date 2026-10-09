@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.8 - Room to read
+
+- A diff panel narrower than 560 points shows changes in one column, since each side would
+  wrap most lines; the Split control says to widen the panel.
+- Long branch names in the graph drop their prefix first ("…/hourly-forecast"), keeping the
+  part that tells branches apart.
+- The diff's scroll bars appear only when it overflows.
+
 ## 0.6.7 - Nothing clipped
 
 - Diff rows are as tall as their wrapped text measures, so the last row of a long wrapped

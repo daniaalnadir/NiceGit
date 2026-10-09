@@ -352,10 +352,13 @@ impl NiceGitApp {
                     painter.layout_no_wrap(format!("{glyph} {text}{cloud}{suffix}"), small.clone(), Color32::WHITE).size().x
                         <= available - 12.0
                 };
+                // The last part of a name is what tells branches apart, so a prefix such as
+                // "feature/" goes first, before the middle of what remains.
+                let short = label.text.rsplit_once('/').map(|(_, last)| format!("…/{last}"));
                 let length = label.text.chars().count();
-                let text = (4..=length.min(40))
-                    .rev()
-                    .map(|max| middle_ellipsis(&label.text, max))
+                let text = std::iter::once(label.text.clone())
+                    .chain(short.clone())
+                    .chain((4..=length.min(40)).rev().map(|max| middle_ellipsis(short.as_deref().unwrap_or(&label.text), max)))
                     .find(|text| fits(text))
                     .unwrap_or_else(|| middle_ellipsis(&label.text, 4));
                 let full = format!("{glyph} {text}{cloud}{suffix}");

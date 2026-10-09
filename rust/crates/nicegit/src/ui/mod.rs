@@ -411,6 +411,7 @@ impl NiceGitApp {
 
     fn diff_panel(&mut self, ui: &mut egui::Ui) {
         let c = theme::of(ui);
+        let panel_width = ui.available_width();
         let Some(repo) = self.repo() else { return };
         let title = repo.diff.as_ref().map(|d| d.title.clone()).unwrap_or_default();
         let loading = repo.diff_loading;
@@ -433,9 +434,14 @@ impl NiceGitApp {
                     let mut split = self.settings.split_diff;
                     // A diff with only one side always shows in one column.
                     let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
-                    ui.add_enabled_ui(!one_sided, |ui| {
-                        ui.selectable_value(&mut split, true, "Split")
-                            .on_disabled_hover_text("A new or deleted file has only one side, so it is shown in one column");
+                    let narrow = !crate::diff_view::split_fits(panel_width);
+                    let reason = if one_sided {
+                        "A new or deleted file has only one side, so it is shown in one column"
+                    } else {
+                        "Widen the diff panel to show changes side by side"
+                    };
+                    ui.add_enabled_ui(!one_sided && !narrow, |ui| {
+                        ui.selectable_value(&mut split, true, "Split").on_disabled_hover_text(reason);
                         ui.selectable_value(&mut split, false, "Unified");
                     });
                     self.settings.split_diff = split;
