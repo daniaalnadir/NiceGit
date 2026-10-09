@@ -69,6 +69,20 @@ fn settle(harness: &mut Harness<'static, NiceGitApp>) {
     harness.run_steps(3);
 }
 
+/// Clicks a toolbar button, through the More menu when it did not fit on the toolbar.
+fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
+    settle(harness);
+    let role = egui::accesskit::Role::Button;
+    if harness.query_by_role_and_label(role, label).is_some() {
+        harness.get_by_role_and_label(role, label).click();
+    } else {
+        harness.get_by_label("More").click();
+        settle(harness);
+        harness.get_by_label_contains(&format!("  {label}")).click();
+    }
+    harness.step();
+}
+
 fn has_label(harness: &Harness<'static, NiceGitApp>, label: &str) -> bool {
     harness.query_by_label_contains(label).is_some()
 }
@@ -94,7 +108,7 @@ fn stage_commit_and_undo_through_the_interface() {
     assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]), "Add a third line");
 
     // Undo asks first, then moves the branch back and keeps the change staged.
-    harness.get_by_label("Undo").click();
+    toolbar_button(&mut harness, "Undo");
     wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
     harness.get_all_by_label("Undo").last().expect("confirm button").click();
     idle(&mut harness);
@@ -102,7 +116,7 @@ fn stage_commit_and_undo_through_the_interface() {
     assert_eq!(git(repo.path(), &["diff", "--cached", "--name-only"]), "notes.txt");
 
     // Redo puts the commit back.
-    harness.get_by_label("Redo").click();
+    toolbar_button(&mut harness, "Redo");
     wait(&mut harness, "the redo confirmation", |h| h.state().dialog.is_some());
     harness.get_all_by_label("Redo").last().expect("confirm button").click();
     idle(&mut harness);
@@ -222,9 +236,7 @@ fn terminal_panel_opens_and_hides() {
     let mut harness = open(repo.path());
     loaded(&mut harness);
 
-    settle(&mut harness);
-    harness.get_by_label("Terminal").click();
-    harness.step();
+    toolbar_button(&mut harness, "Terminal");
     assert!(harness.state().terminal.is_some());
     harness.key_press_modifiers(Modifiers::CTRL, Key::Backtick);
     harness.step();
@@ -268,7 +280,7 @@ fn create_a_branch_from_the_toolbar() {
     loaded(&mut harness);
     settle(&mut harness);
 
-    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Branch").click();
+    toolbar_button(&mut harness, "Branch");
     wait(&mut harness, "the new branch dialog", |h| h.state().dialog.is_some());
     harness.event(egui::Event::Text("topic/ui-test".into()));
     harness.step();
@@ -530,6 +542,10 @@ fn save_an_identity_profile_and_apply_it_from_the_palette() {
     settle(&mut harness);
     harness.get_by_label_contains("Profiles").click();
     settle(&mut harness);
+    // The form reads the identity in the background; saving is enabled once it has.
+    wait(&mut harness, "the identity to load", |h| {
+        h.query_by_label_contains("Save as profile").is_some_and(|node| !format!("{node:?}").contains("disabled: true"))
+    });
     harness.get_by_label_contains("Save as profile").click();
     settle(&mut harness);
     harness.state_mut().tools.clear();
@@ -539,7 +555,7 @@ fn save_an_identity_profile_and_apply_it_from_the_palette() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("use identity test".into()));
-    harness.step();
+    wait(&mut harness, "the profile command", |h| h.query_by_label("Use identity Test").is_some());
     harness.key_press(Key::Enter);
     idle(&mut harness);
     assert_eq!(git(repo.path(), &["config", "user.name"]), "Test");

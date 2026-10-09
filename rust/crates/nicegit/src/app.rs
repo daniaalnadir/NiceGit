@@ -824,12 +824,23 @@ impl NiceGitApp {
         for (index, tool) in self.tools.iter_mut().enumerate() {
             let mut open = true;
             // Windows stay within the app window, so their buttons are never off-screen.
-            let screen = ctx.content_rect().size();
-            let size = tool.default_size().min(screen - egui::vec2(40.0, 60.0));
+            let screen = ctx.content_rect();
+            // Three widths keep windows consistent: forms, lists, and wide diff views.
+            let wanted = tool.default_size();
+            let width = if wanted.x <= 600.0 {
+                540.0
+            } else if wanted.x <= 840.0 {
+                720.0
+            } else {
+                980.0
+            };
+            let size = egui::vec2(width, wanted.y).min(screen.size() - egui::vec2(40.0, 60.0));
             egui::Window::new(tool.title())
                 .id(egui::Id::new(("tool", tool.id())))
+                .pivot(egui::Align2::CENTER_CENTER)
+                .default_pos(screen.center())
                 .default_size(size)
-                .max_size(screen - egui::vec2(20.0, 40.0))
+                .max_size(screen.size() - egui::vec2(20.0, 40.0))
                 .constrain(true)
                 .collapsible(false)
                 .resizable(true)

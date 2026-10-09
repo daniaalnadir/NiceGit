@@ -1,12 +1,12 @@
 use egui::epaint::{CubicBezierShape, PathStroke};
-use egui::{Color32, FontId, Painter, Pos2, Rect, Stroke};
+use egui::{Color32, Painter, Pos2, Rect, Stroke};
 use nicegit_core::graph::GraphRow;
 
 use crate::theme::graph_color as color;
 
-pub const LANE_WIDTH: f32 = 18.0;
+pub const LANE_WIDTH: f32 = 20.0;
 const LEFT_PADDING: f32 = 8.0;
-pub const NODE_RADIUS: f32 = 10.0;
+pub const NODE_RADIUS: f32 = 11.0;
 
 /// How a row's node is drawn.
 pub enum Node<'a> {
@@ -69,7 +69,7 @@ pub fn paint_row(painter: &Painter, rect: Rect, row: &GraphRow, node: Node, back
         }
         Node::Commit { initials, .. } => {
             painter.circle(center, NODE_RADIUS, node_color, Stroke::new(2.0, background));
-            painter.text(center, egui::Align2::CENTER_CENTER, initials, FontId::proportional(8.5), Color32::WHITE);
+            painter.text(center, egui::Align2::CENTER_CENTER, initials, crate::theme::strong(9.5), Color32::WHITE);
         }
     }
 }

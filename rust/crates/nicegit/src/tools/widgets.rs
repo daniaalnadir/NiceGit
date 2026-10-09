@@ -20,13 +20,20 @@ pub fn labeled_button(ui: &mut Ui, glyph: &str, text: &str, enabled: bool) -> eg
 /// The prominent button of a dialog or form, filled with the accent colour.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
     let c = theme::of(ui);
-    ui.add_enabled(enabled, egui::Button::new(RichText::new(text).strong().color(c.accent_text)).fill(c.accent))
+    // A disabled primary button looks like an ordinary one, so it does not invite a click.
+    if !enabled {
+        return ui.add_enabled(false, egui::Button::new(RichText::new(text).font(theme::strong(13.0))));
+    }
+    ui.add(egui::Button::new(RichText::new(text).font(theme::strong(13.0)).color(c.accent_text)).fill(c.accent))
 }
 
 /// A button for an action that discards or deletes something.
 pub fn danger_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
     let c = theme::of(ui);
-    ui.add_enabled(enabled, egui::Button::new(RichText::new(text).strong().color(Color32::WHITE)).fill(c.danger))
+    if !enabled {
+        return ui.add_enabled(false, egui::Button::new(RichText::new(text).font(theme::strong(13.0))));
+    }
+    ui.add(egui::Button::new(RichText::new(text).font(theme::strong(13.0)).color(Color32::WHITE)).fill(c.danger))
 }
 
 /// An uppercase section caption.

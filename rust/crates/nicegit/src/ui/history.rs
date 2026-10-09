@@ -10,8 +10,8 @@ use crate::theme;
 use crate::tools::{self, widgets};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 
-const ROW_HEIGHT: f32 = 30.0;
-const LABEL_COLUMN: f32 = 168.0;
+const ROW_HEIGHT: f32 = 34.0;
+const LABEL_COLUMN: f32 = 184.0;
 
 #[derive(Clone, Copy, PartialEq)]
 enum LabelKind {
@@ -342,7 +342,9 @@ impl NiceGitApp {
                 let glyph = label_icons(label.kind);
                 let cloud = if label.kind == LabelKind::Both { format!(" {}", icon::CLOUD) } else { String::new() };
                 let available = (label_limit - x - 6.0).max(30.0);
-                let full = format!("{} {}{cloud}{suffix}", if label.kind == LabelKind::Tag { glyph } else { "" }, label.text);
+                // Every label carries where it lives: a laptop for local, a cloud for remote, a tag.
+                let text = middle_ellipsis(&label.text, 26);
+                let full = format!("{glyph} {text}{cloud}{suffix}");
                 let galley =
                     painter.layout_no_wrap(truncate_to(&painter, &full, available - 12.0, small.clone()), small.clone(), Color32::WHITE);
                 let pill = egui::Rect::from_min_size(egui::pos2(x, y - 10.0), egui::vec2(galley.size().x + 12.0, 20.0));
@@ -358,7 +360,6 @@ impl NiceGitApp {
                 if let Some(branch) = label.branch.as_ref().filter(|b| !b.is_current && b.name != commit.hash) {
                     draggable.push((pill, branch.clone()));
                 }
-                let _ = glyph;
                 last_right = pill.right();
                 x = pill.right() + 4.0;
                 if x > label_limit - 30.0 {
@@ -653,4 +654,15 @@ fn truncate_to(painter: &egui::Painter, text: &str, width: f32, font: FontId) ->
 fn shade(color: Color32, factor: f32) -> Color32 {
     let scale = |v: u8| (v as f32 * factor).round() as u8;
     Color32::from_rgb(scale(color.r()), scale(color.g()), scale(color.b()))
+}
+
+/// Shortens long branch names in the middle, so both the prefix and the distinctive end show.
+fn middle_ellipsis(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max {
+        return text.to_string();
+    }
+    let head = max / 2;
+    let tail = max - head - 1;
+    format!("{}…{}", chars[..head].iter().collect::<String>(), chars[chars.len() - tail..].iter().collect::<String>())
 }

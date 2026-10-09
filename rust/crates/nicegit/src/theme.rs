@@ -149,7 +149,8 @@ pub fn colors(dark: bool) -> Colors {
         }
     } else {
         Colors {
-            accent: Color32::from_rgb(0x1f, 0x9d, 0x5f),
+            // Dark enough for 4.5:1 contrast on white, including small text.
+            accent: Color32::from_rgb(0x15, 0x7f, 0x4b),
             accent_text: Color32::WHITE,
             added: Color32::from_rgb(0x1a, 0x8f, 0x52),
             removed: Color32::from_rgb(0xc8, 0x33, 0x45),
@@ -158,7 +159,7 @@ pub fn colors(dark: bool) -> Colors {
             conflict: Color32::from_rgb(0xc9, 0x74, 0x0a),
             warning: Color32::from_rgb(0xa8, 0x6b, 0x00),
             danger: Color32::from_rgb(0xc8, 0x33, 0x45),
-            muted: Color32::from_rgb(0x6b, 0x72, 0x80),
+            muted: Color32::from_rgb(0x5b, 0x62, 0x70),
             subtle_bg: Color32::from_rgb(0xf1, 0xf3, 0xf6),
             card_bg: Color32::WHITE,
             border: Color32::from_rgb(0xdc, 0xe0, 0xe6),
@@ -179,9 +180,34 @@ pub fn of(ui: &egui::Ui) -> Colors {
     colors(ui.visuals().dark_mode)
 }
 
+/// The family for headings, branch names, and primary buttons: Inter SemiBold.
+pub fn strong_family() -> FontFamily {
+    FontFamily::Name("strong".into())
+}
+
+/// A font in the strong family, for text that should stand out.
+pub fn strong(size: f32) -> FontId {
+    FontId::new(size, strong_family())
+}
+
+/// Inter for text (OFL-licensed, bundled so every system looks the same), Phosphor for icons,
+/// and egui's own fonts as fallbacks for other scripts and emoji.
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert("inter".into(), egui::FontData::from_static(include_bytes!("../../../assets/fonts/Inter-Regular.otf")).into());
+    fonts
+        .font_data
+        .insert("inter-semibold".into(), egui::FontData::from_static(include_bytes!("../../../assets/fonts/Inter-SemiBold.otf")).into());
+    let fallbacks = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "inter".into());
+    let mut strong = vec!["inter-semibold".to_string()];
+    strong.extend(fallbacks);
+    fonts.families.insert(strong_family(), strong);
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+    // Icons in strong text resolve from Phosphor too.
+    if let Some(strong) = fonts.families.get_mut(&strong_family()) {
+        strong.insert(1, "phosphor".into());
+    }
     ctx.set_fonts(fonts);
 }
 
@@ -232,7 +258,11 @@ fn visuals(dark: bool) -> Visuals {
     visuals.widgets.hovered.bg_fill = visuals.widgets.hovered.weak_bg_fill;
     visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, c.border);
     visuals.widgets.active.weak_bg_fill = if dark { Color32::from_rgb(0x36, 0x3d, 0x4b) } else { Color32::from_rgb(0xd8, 0xdd, 0xe5) };
-    visuals.widgets.inactive.bg_stroke = Stroke::NONE;
+    // Fields and checkboxes get a visible edge and a fill distinct from the window.
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, c.border);
+    visuals.text_edit_bg_color = Some(if dark { Color32::from_rgb(0x12, 0x14, 0x1a) } else { Color32::from_rgb(0xfb, 0xfc, 0xfd) });
+    visuals.widgets.noninteractive.fg_stroke.color =
+        if dark { Color32::from_rgb(0xa3, 0xab, 0xbb) } else { Color32::from_rgb(0x4a, 0x50, 0x5c) };
     visuals.striped = false;
     visuals
 }
@@ -248,10 +278,10 @@ pub fn apply(ctx: &egui::Context, appearance: Appearance) {
     ctx.set_visuals_of(egui::Theme::Light, visuals(false));
     ctx.all_styles_mut(|style| {
         style.text_styles = [
-            (TextStyle::Heading, FontId::new(18.0, FontFamily::Proportional)),
-            (TextStyle::Body, FontId::new(13.5, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(13.5, FontFamily::Proportional)),
-            (TextStyle::Small, FontId::new(11.5, FontFamily::Proportional)),
+            (TextStyle::Heading, FontId::new(17.0, strong_family())),
+            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+            (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
+            (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
             (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
         ]
         .into();
