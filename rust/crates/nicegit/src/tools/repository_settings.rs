@@ -388,10 +388,12 @@ impl RepositorySettingsWindow {
                 ui.label(RichText::new(icon::PENCIL_SIMPLE).color(c.muted));
                 egui::Grid::new(("edit_remote", name)).num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                     ui.label("Name");
-                    ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.name).desired_width(320.0));
+                    ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.name).desired_width(320.0))
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit remote name"));
                     ui.end_row();
                     ui.label("Fetch URL");
-                    ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.address).desired_width(320.0));
+                    ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.address).desired_width(320.0))
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit fetch URL"));
                     ui.end_row();
                 });
                 let valid = !edit.name.trim().is_empty() && !edit.address.trim().is_empty();
