@@ -138,28 +138,35 @@ impl NiceGitApp {
     pub fn layout(&mut self, ui: &mut egui::Ui) {
         let c = theme::of(ui);
         let panel = egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::ZERO);
+        // Side panels scale with the window so the history keeps a usable width on small screens.
+        let width = ui.ctx().content_rect().width();
         if self.settings.show_repositories {
             egui::Panel::left("repositories")
                 .resizable(true)
-                .default_size(220.0)
-                .size_range(170.0..=320.0)
+                .default_size(220.0_f32.min(width * 0.16))
+                .size_range(150.0..=320.0_f32.min(width * 0.22).max(150.0))
                 .frame(panel.fill(c.subtle_bg))
                 .show(ui, |ui| self.repositories_column(ui));
         }
         if self.snapshot().is_some() {
             egui::Panel::left("sidebar")
                 .resizable(true)
-                .default_size(260.0)
-                .size_range(200.0..=440.0)
+                .default_size(260.0_f32.min(width * 0.2))
+                .size_range(180.0..=440.0_f32.min(width * 0.3).max(180.0))
                 .frame(panel)
                 .show(ui, |ui| self.sidebar(ui));
-            egui::Panel::right("changes").resizable(true).default_size(400.0).size_range(300.0..=640.0).frame(panel).show(ui, |ui| {
-                if matches!(self.repo().map(|r| &r.selection), Some(Selection::Commit { .. })) {
-                    self.inspector(ui);
-                } else {
-                    self.changes_panel(ui);
-                }
-            });
+            egui::Panel::right("changes")
+                .resizable(true)
+                .default_size(400.0_f32.min(width * 0.28))
+                .size_range(260.0..=640.0_f32.min(width * 0.4).max(260.0))
+                .frame(panel)
+                .show(ui, |ui| {
+                    if matches!(self.repo().map(|r| &r.selection), Some(Selection::Commit { .. })) {
+                        self.inspector(ui);
+                    } else {
+                        self.changes_panel(ui);
+                    }
+                });
         }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(ui.visuals().window_fill)).show(ui, |ui| {
             if self.snapshot().is_none() {

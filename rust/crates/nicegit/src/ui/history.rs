@@ -113,7 +113,7 @@ impl NiceGitApp {
                 egui::Frame::new().fill(ui.visuals().extreme_bg_color).corner_radius(6.0).inner_margin(egui::Margin::symmetric(8, 4)).show(
                     ui,
                     |ui| {
-                        ui.set_width(ui.available_width() - search_width - 16.0);
+                        ui.set_width((ui.available_width() - search_width - 16.0).max(80.0));
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(icon::FUNNEL_SIMPLE).color(c.muted));
                             let filter = &mut self.repos[self.active].commit_filter;

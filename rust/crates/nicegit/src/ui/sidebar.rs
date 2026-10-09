@@ -102,7 +102,7 @@ impl NiceGitApp {
                     egui::TextEdit::singleline(filter)
                         .hint_text("Filter references")
                         .frame(egui::Frame::NONE)
-                        .desired_width(ui.available_width() - 34.0),
+                        .desired_width((ui.available_width() - 34.0).max(40.0)),
                 );
                 if widgets::icon_button(ui, icon::PLUS, "New branch at HEAD", idle && snapshot.head_hash.is_some()).clicked() {
                     self.dialog = Some(Dialog::input(

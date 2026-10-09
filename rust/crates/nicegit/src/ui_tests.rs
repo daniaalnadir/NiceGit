@@ -371,3 +371,26 @@ fn arrow_keys_move_through_the_graph_and_escape_clears() {
     harness.step();
     assert_eq!(selected(&harness), None);
 }
+
+/// The smallest window the app allows still lays out every panel; debug builds check widths.
+#[test]
+fn smallest_window_lays_out_every_panel() {
+    let repo = repository();
+    std::fs::write(repo.path().join("notes.txt"), "changed\n").unwrap();
+    let path = repo.path().to_path_buf();
+    let mut harness = Harness::builder().with_size(egui::vec2(900.0, 560.0)).build_eframe(move |cc| NiceGitApp::new(cc, Some(path)));
+    loaded(&mut harness);
+    harness.state_mut().select_working_tree();
+    settle(&mut harness);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    harness.state_mut().select_commit(head);
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    settle(&mut harness);
+    harness.key_press(Key::Escape);
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    let ctx = harness.ctx.clone();
+    harness.state_mut().toggle_terminal(&ctx);
+    settle(&mut harness);
+}

@@ -361,7 +361,7 @@ impl NiceGitApp {
                         egui::TextEdit::singleline(&mut repo.draft.summary)
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
-                            .desired_width(ui.available_width() - 34.0),
+                            .desired_width((ui.available_width() - 34.0).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
                     let length = repo.draft.summary.chars().count();
