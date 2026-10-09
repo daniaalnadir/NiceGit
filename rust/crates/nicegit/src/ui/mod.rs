@@ -264,7 +264,7 @@ impl NiceGitApp {
     }
 
     pub fn create_repository(&mut self) {
-        if let Some(folder) = rfd::FileDialog::new().set_title("Choose a folder for the new repository").pick_folder() {
+        if let Some(folder) = crate::file_dialog::pick_folder("Choose a folder for the new repository") {
             let path = folder.clone();
             match nicegit_core::GitClient::new().initialize(&path) {
                 Ok(()) => self.open(folder),

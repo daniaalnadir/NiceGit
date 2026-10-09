@@ -3,6 +3,7 @@
 
 mod app;
 mod diff_view;
+mod file_dialog;
 mod git_ext;
 mod graph_view;
 mod settings;
@@ -11,6 +12,8 @@ mod tools;
 mod ui;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod ui_tests_more;
 #[cfg(test)]
 mod ui_tests_tools;
 mod worker;

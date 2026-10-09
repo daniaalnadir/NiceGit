@@ -145,7 +145,8 @@ impl ToolWindow for EditorWindow {
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(30)
                                 .lock_focus(true),
-                        );
+                        )
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "File contents"));
                     });
                 });
         });

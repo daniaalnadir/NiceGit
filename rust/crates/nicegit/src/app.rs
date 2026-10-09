@@ -325,7 +325,7 @@ impl NiceGitApp {
         if self.busy.is_some() {
             return;
         }
-        if let Some(folder) = rfd::FileDialog::new().set_title("Open a Git repository").pick_folder() {
+        if let Some(folder) = crate::file_dialog::pick_folder("Open a Git repository") {
             self.open(folder);
         }
     }

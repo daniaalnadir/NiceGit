@@ -356,7 +356,7 @@ impl NiceGitApp {
 
     pub fn apply_patch(&mut self) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
-        if let Some(file) = rfd::FileDialog::new().set_title("Apply a patch").add_filter("Patch", &["patch", "diff"]).pick_file() {
+        if let Some(file) = crate::file_dialog::pick_file("Apply a patch", "Patch", &["patch", "diff"]) {
             let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             self.confirm(
                 format!("Apply {name}?"),

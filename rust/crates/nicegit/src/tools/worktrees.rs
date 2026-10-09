@@ -160,7 +160,7 @@ impl WorktreesWindow {
             ui.label("Parent folder");
             ui.horizontal(|ui| {
                 if ui.add_enabled(idle, egui::Button::new(format!("{}  Choose folder", icon::FOLDER_OPEN))).clicked() {
-                    let folder = rfd::FileDialog::new().set_title("Choose where the new worktree folder goes").pick_folder();
+                    let folder = crate::file_dialog::pick_folder("Choose where the new worktree folder goes");
                     if let Some(folder) = folder {
                         self.parent = folder.display().to_string();
                         // The branch may have moved while the dialog was open; read it again.

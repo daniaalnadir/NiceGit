@@ -620,7 +620,7 @@ impl NiceGitApp {
     fn export_patch(&mut self, commit: &Commit) {
         let Some(repo) = self.repo() else { return };
         let name = format!("{}.patch", commit.short_hash);
-        if let Some(file) = rfd::FileDialog::new().set_file_name(&name).save_file() {
+        if let Some(file) = crate::file_dialog::save_file("Save as patch", &name) {
             match nicegit_core::GitClient::new().export_commit_patch(&commit.hash, &repo.path) {
                 Ok(patch) => match std::fs::write(&file, patch) {
                     Ok(()) => self.notify(format!("Saved {}.", file.display()), false),

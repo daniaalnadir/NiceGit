@@ -194,7 +194,7 @@ impl NiceGitApp {
                                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &second_name));
                             }
                             if browse && ui.button("Choose…").clicked() {
-                                if let Some(folder) = rfd::FileDialog::new().set_title("Clone into").pick_folder() {
+                                if let Some(folder) = crate::file_dialog::pick_folder("Clone into") {
                                     let name = value
                                         .trim_end_matches('/')
                                         .rsplit(['/', ':'])
