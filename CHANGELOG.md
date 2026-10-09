@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 - Every feature checked by an interface test
+
+- Side-by-side diffs wrap long lines within each side, as in the Mac app, and the diff
+  panel opens at a readable height.
+- Hide whitespace applies to every diff: Compare, blame and file history commits, and the
+  stash preview, as well as the Changes panel.
+- TIFF, ICO, and Apple icon images are previewed when comparing.
+- Returning to NiceGit always refreshes, as in the Mac app; the automatic refresh setting
+  covers changes noticed while it is in use.
+- Commit message drafts belong to the checkout, so switching branches keeps the message
+  being written. The inspector shows commit messages exactly as written.
+- Visual polish from an independent review: the Settings window is centred, toolbar groups
+  are separated, checkboxes no longer look like radio buttons, zero counts are muted,
+  Unstage All is no longer drawn as destructive, palette swatches line up, the editor's line
+  numbers stay beside their lines, and long branch names in the inspector stay on one line.
+- Icon buttons and form fields have accessible names for screen readers.
+- Every feature in the Mac app's guide is now exercised by an interface test, an
+  integration test, or both; see [docs/PARITY.md](docs/PARITY.md).
+
 ## 0.5.0 - Interface polish and verified parity
 
 - A calmer, more readable interface after an independent design review: the Inter typeface,
