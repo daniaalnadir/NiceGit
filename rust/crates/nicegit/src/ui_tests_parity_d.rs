@@ -244,3 +244,32 @@ fn push_a_tag_to_a_remote_then_delete_it_there() {
     wait(&mut harness, "the tag to leave the remote", |_| !remote_tags().contains("refs/tags/v1.0"));
     assert!(git(path, &["tag", "--list"]).contains("v1.0"), "the local tag is kept");
 }
+
+/// Presses and releases the primary button at `at`, as one click.
+fn click_at(harness: &mut Harness<'static, NiceGitApp>, at: egui::Pos2) {
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+    }
+}
+
+#[test]
+fn double_click_a_branch_in_the_sidebar_to_check_it_out() {
+    let repo = repository();
+    let path = repo.path();
+    // The harness gives each input event its own frame, so frames must be short for two clicks
+    // to land within the system's double-click interval, as a person's would.
+    let owned = path.to_path_buf();
+    let mut harness =
+        Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(0.02).build_eframe(move |cc| NiceGitApp::new(cc, Some(owned)));
+    loaded(&mut harness);
+
+    let at = harness.get_by_label("feature").rect().center();
+    harness.hover_at(at);
+    harness.step();
+    click_at(&mut harness, at);
+    harness.step();
+    click_at(&mut harness, at);
+    harness.step();
+    idle(&mut harness);
+    wait(&mut harness, "the checkout", |_| git(path, &["branch", "--show-current"]) == "feature");
+}
