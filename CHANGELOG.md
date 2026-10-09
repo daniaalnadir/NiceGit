@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.4 - Truer side-by-side diffs
+
+- In a side-by-side diff, a short line beside a long wrapped one tints only its own rows;
+  the rest is neutral, so a one-line deletion no longer looks like a longer one.
+- Floating windows cast a stronger shadow in the dark theme.
+- Interface tests now cover undoing a pull, publishing from the palette, searching a
+  commit's files, submodule checkout, signature display, and rebasing by dragging a graph
+  label.
+
 ## 0.6.3 - Fixes from deeper testing
 
 - Image sizes from 1 KB to 1 MB were labelled as bytes when comparing; they now read in KB,

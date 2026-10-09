@@ -347,12 +347,19 @@ impl View<'_> {
             DiffLineKind::Hunk => Some(tint(colors.modified, 26)),
             _ => None,
         };
+        // A side whose line is shorter than its partner's tints only its own rows; the rest of
+        // the row is filler, so a one-line deletion does not look like a longer one.
+        let own = if wrap { self.style.unified_row_height(line).min(rect.height()) } else { rect.height() };
+        let rect_own = Rect::from_min_size(rect.min, vec2(rect.width(), own));
+        if own < rect.height() {
+            painter.rect_filled(Rect::from_min_max(pos2(rect.left(), rect.top() + own), rect.max), 0.0, colors.subtle_bg);
+        }
         if let Some(background) = background {
-            painter.rect_filled(rect, 0.0, background);
+            painter.rect_filled(rect_own, 0.0, background);
         }
         if selected {
-            painter.rect_filled(rect, 0.0, tint(colors.accent, 48));
-            painter.rect_filled(Rect::from_min_size(rect.min, vec2(SELECTION_BAR, rect.height())), 0.0, colors.accent);
+            painter.rect_filled(rect_own, 0.0, tint(colors.accent, 48));
+            painter.rect_filled(Rect::from_min_size(rect.min, vec2(SELECTION_BAR, own)), 0.0, colors.accent);
         }
         // Numbers sit beside the first line of text, which is centred in a single-line row.
         let first_line_center = rect.top() + self.style.row_height / 2.0;

@@ -850,3 +850,200 @@ fn drag_a_branch_onto_the_current_branch_to_rebase_onto_it() {
     assert_eq!(git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count(), 2, "history stays linear");
     assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "main's own commit is replayed on top");
 }
+
+/// A bare repository holding `path`'s main branch, which `path` tracks as origin.
+fn publish_to_bare(path: &Path) -> tempfile::TempDir {
+    let remote = tempfile::tempdir().unwrap();
+    // Clones of it check out main, whatever this machine's default branch name is.
+    git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    git(path, &["push", "-q", "-u", "origin", "main"]);
+    remote
+}
+
+#[test]
+fn undo_a_pull_from_the_toolbar() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    // Someone else pushes a commit.
+    let other = tempfile::tempdir().unwrap();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"from the other clone\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    let theirs = git(&clone, &["rev-parse", "HEAD"]);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    toolbar_button(&mut harness, "Pull");
+    idle(&mut harness);
+    wait(&mut harness, "the pull", |_| git(path, &["rev-parse", "HEAD"]) == theirs);
+
+    toolbar_button(&mut harness, "Undo");
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Undo").last().expect("the confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the branch back before the pull", |_| git(path, &["rev-parse", "HEAD"]) == before);
+    assert!(!path.join("theirs.txt").exists(), "the pulled file goes with the pull");
+}
+
+#[test]
+fn publish_a_branch_from_the_command_palette() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("publish".into()));
+    wait(&mut harness, "the publish command", |h| h.query_by_label_contains("Publish branch").is_some());
+    harness.key_press(Key::Enter);
+    wait(&mut harness, "the publish dialog", |h| shows(h, "Push main to a remote and track it there."));
+    harness.query_all(By::new().role(Role::Button).label("Publish")).last().expect("the dialog's Publish").click();
+    idle(&mut harness);
+    wait(&mut harness, "the published branch", |_| {
+        Command::new("git").args(["rev-parse", "--verify", "-q", "main"]).current_dir(remote.path()).status().is_ok_and(|s| s.success())
+    });
+    assert_eq!(git(path, &["rev-parse", "--abbrev-ref", "main@{upstream}"]), "origin/main");
+}
+
+#[test]
+fn search_files_in_a_commit_then_open_blame_at_a_match() {
+    let repo = repository();
+    let path = repo.path();
+    // The working file no longer has the text; only the commit does.
+    std::fs::write(path.join("notes.txt"), "rewritten\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Start the notes").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Search files in this commit").click();
+    wait(&mut harness, "the search window", |h| h.query_by_role_and_label(Role::TextInput, "Text in files").is_some());
+    type_into(&mut harness, "Text in files", "first");
+    harness.key_press(Key::Enter);
+    let blame = format!("{}  Blame", icon::USER);
+    wait(&mut harness, "a match", |h| h.query_by_label(&blame).is_some());
+    assert!(shows(&harness, "notes.txt"), "the match is in the commit's notes.txt");
+
+    harness.get_all_by_label(&blame).next().unwrap().click_accesskit();
+    wait(&mut harness, "blame at the match", |h| {
+        h.state().tools.iter().any(|t| t.title().contains("notes.txt") && t.id().contains("blame"))
+    });
+}
+
+#[test]
+fn check_out_a_submodule_at_its_recorded_commit() {
+    let library = repository();
+    let repo = repository();
+    let path = repo.path();
+    let add = Command::new("git")
+        .args(["-c", "protocol.file.allow=always", "submodule", "add", "-q"])
+        .arg(library.path())
+        .arg("library")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert!(add.status.success(), "{}", String::from_utf8_lossy(&add.stderr));
+    git(path, &["commit", "-qm", "Add the library"]);
+    let recorded = git(path, &["rev-parse", "HEAD:library"]);
+    // The submodule's checkout moves away from the commit the superproject records.
+    let checkout = path.join("library");
+    git(&checkout, &["config", "user.name", "Test"]);
+    git(&checkout, &["config", "user.email", "test@example.invalid"]);
+    git(&checkout, &["checkout", "-q", "HEAD~1"]);
+    assert_ne!(git(&checkout, &["rev-parse", "HEAD"]), recorded);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(path), "Submodules");
+    let button = format!("{}  Check out recorded commit", icon::GIT_COMMIT);
+    wait(&mut harness, "the submodule", |h| {
+        h.query_by_role_and_label(Role::Button, &button).is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, &button).click_accesskit();
+    idle(&mut harness);
+    wait(&mut harness, "the recorded commit", |_| git(&checkout, &["rev-parse", "HEAD"]) == recorded);
+}
+
+#[test]
+fn the_inspector_shows_a_verified_signature() {
+    let repo = repository();
+    let path = repo.path();
+    let keys = tempfile::tempdir().unwrap();
+    let key = keys.path().join("signing");
+    let Ok(made) = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output() else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    assert!(made.status.success());
+    let public = std::fs::read_to_string(key.with_extension("pub")).unwrap();
+    let allowed = keys.path().join("allowed_signers");
+    std::fs::write(&allowed, format!("test@example.invalid {public}")).unwrap();
+    git(path, &["config", "gpg.format", "ssh"]);
+    git(path, &["config", "user.signingkey", &key.to_string_lossy().replace('\\', "/")]);
+    git(path, &["config", "gpg.ssh.allowedSignersFile", &allowed.to_string_lossy().replace('\\', "/")]);
+    std::fs::write(path.join("signed.txt"), "signed\n").unwrap();
+    git(path, &["add", "signed.txt"]);
+    let empty = keys.path().join("empty-config");
+    std::fs::write(&empty, "").unwrap();
+    let signed = Command::new("git")
+        .args(["commit", "-q", "-S", "-m", "A signed commit"])
+        .current_dir(path)
+        .env("GIT_CONFIG_GLOBAL", &empty)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .unwrap();
+    assert!(signed.status.success(), "{}", String::from_utf8_lossy(&signed.stderr));
+    // NiceGit checks signatures with the user's own Git settings, as Git does.
+    if !Command::new("git").args(["log", "-1", "--format=%G?"]).current_dir(path).output().unwrap().status.success() {
+        eprintln!("Git cannot check signatures with this machine's settings; skipping");
+        return;
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("A signed commit").click();
+    wait(&mut harness, "the signature line", |h| shows(h, "Verified signature"));
+}
+
+#[test]
+fn drag_a_graph_label_onto_the_current_row_to_rebase_onto_it() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "side.txt", b"from feature\n", "Work on the feature");
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    let from = harness.get_by_label("Branch label feature").rect().center();
+    let to = harness.get_by_label("Add a second line").rect().center();
+    harness.hover_at(from);
+    harness.step();
+    harness.drag_at(from);
+    harness.step();
+    for step in 1..=6 {
+        harness.hover_at(from + (to - from) * (step as f32 / 6.0));
+        harness.step();
+    }
+    harness.drop_at(to);
+    harness.step();
+    wait(&mut harness, "the merge or rebase choice", |h| shows(h, "Integrate feature"));
+    harness.get_by_label(&format!("{}  Rebase…", icon::GIT_PULL_REQUEST)).click();
+    wait(&mut harness, "the rebase confirmation", |h| shows(h, "Rebase main onto feature?"));
+    harness.get_by_role_and_label(Role::Button, "Rebase").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rebase", |_| {
+        Command::new("git").args(["merge-base", "--is-ancestor", "feature", "main"]).current_dir(path).status().is_ok_and(|s| s.success())
+    });
+    assert_eq!(git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count(), 2, "history stays linear");
+}

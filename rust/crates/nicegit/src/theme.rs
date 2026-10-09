@@ -243,7 +243,7 @@ fn visuals(dark: bool) -> Visuals {
         offset: [0, 10],
         blur: 36,
         spread: 2,
-        color: if dark { Color32::from_black_alpha(150) } else { Color32::from_black_alpha(60) },
+        color: if dark { Color32::from_black_alpha(210) } else { Color32::from_black_alpha(60) },
     };
     visuals.window_corner_radius = CornerRadius::same(10);
     visuals.menu_corner_radius = CornerRadius::same(8);

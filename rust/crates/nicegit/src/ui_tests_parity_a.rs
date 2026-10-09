@@ -92,8 +92,7 @@ fn sidebar_filter_narrows_tags_and_remote_branches() {
     assert!(harness.query_by_label("review/remote-only").is_none(), "other remote branches are hidden");
 }
 
-/// Expected: typing a filter reveals matching remote branches even while their remote is
-/// collapsed. Currently the collapsed header stays closed, so only an opened remote shows them.
+/// Typing a filter reveals matching remote branches even while their remote is collapsed.
 #[test]
 fn filter_reveals_remote_branches_under_a_collapsed_remote() {
     let repo = repository();
@@ -280,8 +279,7 @@ fn compare_shows_the_file_size_of_each_version_of_an_image() {
     wait(&mut harness, "both sizes", |h| h.query_by_label(&before_label).is_some() && h.query_by_label(&after_label).is_some());
 }
 
-/// Expected: a file of a few kilobytes is shown in kilobytes. `human_size` in tools/compare.rs
-/// currently labels such sizes as bytes, as in "38.5 bytes".
+/// A file of a few kilobytes is shown in kilobytes, not bytes.
 #[test]
 fn compare_shows_large_image_sizes_in_kilobytes() {
     let repo = repository();

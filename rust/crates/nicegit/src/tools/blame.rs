@@ -392,3 +392,39 @@ pub fn relative_time(time: i64) -> String {
 fn displayed(content: &str) -> String {
     content.strip_suffix('\r').unwrap_or(content).replace('\t', "    ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(number: usize, hash: &str, time: i64) -> BlameLine {
+        BlameLine {
+            number,
+            content: String::new(),
+            commit: nicegit_core::blame::BlameCommit {
+                hash: hash.to_string(),
+                author_name: String::new(),
+                author_email: String::new(),
+                author_time: Some(time),
+                summary: String::new(),
+                path: String::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn newer_commits_get_a_stronger_age_tint() {
+        let lines = [line(1, "old", 100), line(2, "middle", 200), line(3, "new", 300), line(4, "old", 100)];
+        let ranks = age_ranks(&lines);
+        assert_eq!(ranks["old"], 0.0, "the oldest commit is palest");
+        assert_eq!(ranks["middle"], 0.5);
+        assert_eq!(ranks["new"], 1.0, "the newest commit is strongest");
+        assert_eq!(ranks.len(), 3, "each commit is ranked once, however many lines it has");
+    }
+
+    #[test]
+    fn a_file_from_one_commit_is_fully_tinted() {
+        let ranks = age_ranks(&[line(1, "only", 100), line(2, "only", 100)]);
+        assert_eq!(ranks["only"], 1.0);
+    }
+}
