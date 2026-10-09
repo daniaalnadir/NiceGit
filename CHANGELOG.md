@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 - Easier reading
+
+- Diffs wrap long lines between words, measured from the text layout itself, so every row
+  is exactly as tall as its wrapped text.
+- Compact toolbar buttons show their icon alone instead of a label squeezed into a narrow
+  cell; labelled buttons are as wide as their labels. Group rules are clearer in the light
+  theme.
+
 ## 0.6.1 - Nothing cut off
 
 - Every diff wraps long lines, in one column as well as side by side, so no line is cut off

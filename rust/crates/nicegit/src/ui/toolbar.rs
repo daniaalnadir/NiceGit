@@ -6,7 +6,8 @@ use crate::theme;
 use crate::tools::{self};
 use crate::ui::dialogs::{Dialog, InputKind};
 
-const FULL_WIDTH: f32 = 54.0;
+/// Space either side of a labelled button's label.
+const LABEL_PADDING: f32 = 7.0;
 const COMPACT_WIDTH: f32 = 34.0;
 /// The room between two groups of buttons: space, a thin rule, and space.
 const GROUP_GAP: f32 = 15.0;
@@ -51,7 +52,7 @@ impl ToolItem {
 /// A toolbar button: an icon above a short label, or the icon alone when space is tight.
 fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, style: ToolStyle) -> egui::Response {
     let c = theme::of(ui);
-    let size = egui::vec2(if style == ToolStyle::Full { FULL_WIDTH } else { COMPACT_WIDTH }, 44.0);
+    let size = egui::vec2(tool_width(ui, label, style), 44.0);
     let (rect, response) = ui.allocate_exact_size(size, if enabled { egui::Sense::click() } else { egui::Sense::hover() });
     let response =
         if style == ToolStyle::Compact { response.on_hover_text(format!("{label}: {tooltip}")) } else { response.on_hover_text(tooltip) };
@@ -62,30 +63,49 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
         }
         let color = if enabled { ui.visuals().text_color() } else { c.muted.gamma_multiply(0.6) };
-        ui.painter().text(
-            rect.center_top() + egui::vec2(0.0, 4.0),
-            egui::Align2::CENTER_TOP,
-            label,
-            egui::FontId::proportional(11.0),
-            color,
-        );
-        ui.painter().text(
-            rect.center_bottom() - egui::vec2(0.0, 3.0),
-            egui::Align2::CENTER_BOTTOM,
-            glyph,
-            egui::FontId::proportional(20.0),
-            color,
-        );
+        if style == ToolStyle::Full {
+            ui.painter().text(
+                rect.center_top() + egui::vec2(0.0, 4.0),
+                egui::Align2::CENTER_TOP,
+                label,
+                egui::FontId::proportional(11.0),
+                color,
+            );
+            ui.painter().text(
+                rect.center_bottom() - egui::vec2(0.0, 3.0),
+                egui::Align2::CENTER_BOTTOM,
+                glyph,
+                egui::FontId::proportional(20.0),
+                color,
+            );
+        } else {
+            // A compact cell is narrower than most labels, so it shows the icon alone; the label
+            // is in the tooltip and the accessible name.
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::proportional(20.0), color);
+        }
     }
     response
+}
+
+/// How wide a toolbar button is: as wide as its label needs, or a compact icon cell.
+fn tool_width(ui: &Ui, label: &str, style: ToolStyle) -> f32 {
+    match style {
+        ToolStyle::Full => {
+            let text =
+                ui.ctx().fonts_mut(|fonts| fonts.layout_no_wrap(label.to_string(), egui::FontId::proportional(11.0), egui::Color32::WHITE));
+            (text.size().x + 2.0 * LABEL_PADDING).max(COMPACT_WIDTH)
+        }
+        ToolStyle::Compact => COMPACT_WIDTH,
+    }
 }
 
 /// A thin vertical rule between two groups of toolbar buttons.
 fn group_rule(ui: &mut Ui) {
     let c = theme::of(ui);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 44.0), egui::Sense::hover());
-    // Stronger than a panel border, so the groups read apart at a glance.
-    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 6.0)).y_range(), egui::Stroke::new(1.0, c.muted.gamma_multiply(0.7)));
+    // Stronger than a panel border, so the groups read apart at a glance in either theme.
+    let color = if ui.visuals().dark_mode { c.muted.gamma_multiply(0.7) } else { c.muted };
+    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 6.0)).y_range(), egui::Stroke::new(1.0, color));
 }
 
 /// A labelled picker: a small caption above an accent-coloured value with a chevron.
@@ -198,7 +218,7 @@ impl NiceGitApp {
             // whatever still does not fit, so the toolbar stays on one row.
             let available = ui.available_width();
             let count: usize = groups.iter().map(Vec::len).sum();
-            let width_for = |button: f32, shown: usize| -> f32 {
+            let width_for = |style: ToolStyle, shown: usize| -> f32 {
                 let mut total = 0.0;
                 let mut seen = 0;
                 for group in &groups {
@@ -208,24 +228,24 @@ impl NiceGitApp {
                     if seen > 0 {
                         total += GROUP_GAP;
                     }
-                    for _ in group {
+                    for item in group {
                         if seen >= shown {
                             break;
                         }
-                        total += button + 2.0;
+                        total += tool_width(ui, &item.label, style) + 2.0;
                         seen += 1;
                     }
                 }
                 total
             };
-            let (style, shown) = if width_for(FULL_WIDTH, count) <= available {
+            let (style, shown) = if width_for(ToolStyle::Full, count) <= available {
                 (ToolStyle::Full, count)
-            } else if width_for(COMPACT_WIDTH, count) <= available {
+            } else if width_for(ToolStyle::Compact, count) <= available {
                 (ToolStyle::Compact, count)
             } else {
                 // Room for the More menu and the rule before it.
                 let room = available - COMPACT_WIDTH - GROUP_GAP;
-                let fits = (0..=count).rev().find(|&n| width_for(COMPACT_WIDTH, n) <= room).unwrap_or(0);
+                let fits = (0..=count).rev().find(|&n| width_for(ToolStyle::Compact, n) <= room).unwrap_or(0);
                 (ToolStyle::Compact, fits)
             };
             let mut index = 0;

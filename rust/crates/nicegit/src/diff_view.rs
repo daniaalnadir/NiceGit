@@ -32,6 +32,9 @@ const TAB_COLUMNS: usize = 4;
 /// The fewest columns of text a side of a split diff keeps before the view scrolls instead.
 const MIN_WRAP_COLUMNS: usize = 20;
 
+/// Rows per line, with the bits of the font size and width they were measured for.
+type WrappedRows = (u32, u32, std::sync::Arc<Vec<usize>>);
+
 /// A diff prepared for display: its lines, their side-by-side arrangement, and the parts of
 /// paired lines that changed.
 pub struct DiffContent {
@@ -44,8 +47,11 @@ pub struct DiffContent {
     split_row_of_line: Vec<usize>,
     /// The widest line, in columns.
     max_columns: usize,
-    /// Each line's width in columns, for working out how many rows it wraps onto.
+    /// Each line's width in columns.
     line_columns: Vec<usize>,
+    /// How many rows each line wraps onto, measured with the layout the view draws with, and
+    /// the font size and width they were measured for.
+    wrapped_rows: std::sync::Mutex<Option<WrappedRows>>,
 }
 
 impl DiffContent {
@@ -65,7 +71,32 @@ impl DiffContent {
         let line_columns: Vec<usize> = lines.iter().map(|line| columns(&line.text)).collect();
         let max_columns = line_columns.iter().copied().max().unwrap_or(0);
         let highlights = inline::highlights(&lines);
-        Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns }
+        Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns, wrapped_rows: Default::default() }
+    }
+
+    /// How many rows each line takes when wrapped at `width`. Lines wrap between words where
+    /// they can, so this is measured from the laid-out text, once for each width.
+    fn rows_at(&self, ctx: &egui::Context, font: &FontId, width: f32) -> std::sync::Arc<Vec<usize>> {
+        let key = (font.size.to_bits(), width.to_bits());
+        let mut cache = self.wrapped_rows.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((size, measured, rows)) = cache.as_ref() {
+            if (*size, *measured) == key {
+                return rows.clone();
+            }
+        }
+        let rows: Vec<usize> = ctx.fonts_mut(|fonts| {
+            self.lines
+                .iter()
+                .map(|line| {
+                    let mut job = layout(&line.text, font, Color32::WHITE, &[]);
+                    job.wrap.max_width = width;
+                    fonts.layout_job(job).rows.len().max(1)
+                })
+                .collect()
+        });
+        let rows = std::sync::Arc::new(rows);
+        *cache = Some((key.0, key.1, rows.clone()));
+        rows
     }
 
     /// Whether only one side has lines, as for a new or deleted file; such a diff is always
@@ -157,14 +188,14 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
 
     // Beside an empty column, a new or deleted file's lines would have half the room.
     let split = options.split && !content.is_one_sided();
-    let style = Style::new(ui, split);
+    let style = Style::new(ui, content, split);
     let rows = if split { content.split.len() } else { content.lines.len() };
     // Where each row starts: as high as its line wraps, or a split row's longer side.
     let mut tops = Vec::with_capacity(rows + 1);
     let mut top = 0.0;
     for row in 0..rows {
         tops.push(top);
-        top += if split { style.split_row_height(content, &content.split[row]) } else { style.unified_row_height(content, row) };
+        top += if split { style.split_row_height(&content.split[row]) } else { style.unified_row_height(row) };
     }
     tops.push(top);
     let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), split)).auto_shrink([false, false]);
@@ -214,10 +245,12 @@ struct Style {
     wrap_columns: Option<usize>,
     /// Width of the text, where its lines wrap.
     wrap_width: f32,
+    /// How many rows each line of the diff wraps onto at that width.
+    rows: std::sync::Arc<Vec<usize>>,
 }
 
 impl Style {
-    fn new(ui: &Ui, split: bool) -> Self {
+    fn new(ui: &Ui, content: &DiffContent, split: bool) -> Self {
         let font = TextStyle::Monospace.resolve(ui.style());
         let char_width = ui.ctx().fonts_mut(|fonts| fonts.glyph_width(&font, '0'));
         let gutter = NUMBER_COLUMNS * char_width + PADDING;
@@ -233,6 +266,7 @@ impl Style {
         };
         let wrap_width = (half - gutters * gutter - 2.0 * PADDING).max(char_width);
         let wrap_columns = Some(((wrap_width / char_width).floor() as usize).max(1));
+        let rows = content.rows_at(ui.ctx(), &font, wrap_width);
         Self {
             font,
             colors: theme::of(ui),
@@ -244,29 +278,25 @@ impl Style {
             half,
             wrap_columns,
             wrap_width,
+            rows,
         }
     }
 
-    /// How many lines of text `line` wraps onto.
-    fn wrapped_lines(&self, content: &DiffContent, line: usize) -> usize {
-        match self.wrap_columns {
-            Some(columns) => content.line_columns[line].div_ceil(columns).max(1),
-            None => 1,
-        }
+    /// How many rows of text `line` wraps onto.
+    fn wrapped_lines(&self, line: usize) -> usize {
+        self.rows.get(line).copied().unwrap_or(1)
     }
 
     /// The height of a unified row: its line, wrapped.
-    fn unified_row_height(&self, content: &DiffContent, line: usize) -> f32 {
-        self.wrapped_lines(content, line) as f32 * (self.row_height - 2.0) + 2.0
+    fn unified_row_height(&self, line: usize) -> f32 {
+        self.wrapped_lines(line) as f32 * (self.row_height - 2.0) + 2.0
     }
 
     /// The height of a split row: its longer side, wrapped.
-    fn split_row_height(&self, content: &DiffContent, row: &SplitRow) -> f32 {
+    fn split_row_height(&self, row: &SplitRow) -> f32 {
         let lines = match *row {
             SplitRow::Banner(_) => 1,
-            SplitRow::Pair { left, right } => {
-                [left, right].into_iter().flatten().map(|line| self.wrapped_lines(content, line)).max().unwrap_or(1)
-            }
+            SplitRow::Pair { left, right } => [left, right].into_iter().flatten().map(|line| self.wrapped_lines(line)).max().unwrap_or(1),
         };
         lines as f32 * (self.row_height - 2.0) + 2.0
     }
@@ -345,9 +375,8 @@ impl View<'_> {
         };
         let mut job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
         if wrap {
-            // Code wraps at any character, so the rows taken match the column count.
+            // Lines wrap between words where they can, as measured for the row heights.
             job.wrap.max_width = self.style.wrap_width;
-            job.wrap.break_anywhere = true;
         }
         let galley = painter.layout_job(job);
         let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING;
@@ -594,17 +623,20 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, true);
+            let style = Style::new(ui, &content, true);
             let row = content.split[content.row_of(0, true)];
-            let wrapped = style.wrapped_lines(&content, 0);
+            let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
-            assert_eq!(style.split_row_height(&content, &row), wrapped as f32 * (style.row_height - 2.0) + 2.0);
-            // egui wraps the text onto exactly the rows the height allows for.
-            let mut job = layout(&long, &style.font, Color32::WHITE, &[]);
+            assert_eq!(style.split_row_height(&row), wrapped as f32 * (style.row_height - 2.0) + 2.0);
+            // The drawn text, with its highlight colours, wraps onto exactly the rows allowed for.
+            let mut job = layout(&long, &style.font, Color32::RED, &[(3..9, Color32::BLUE)]);
             job.wrap.max_width = style.wrap_width;
-            job.wrap.break_anywhere = true;
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), wrapped);
+            // Rows break between words: every row but the last ends with the space before a word.
+            for row in &galley.rows[..galley.rows.len() - 1] {
+                assert!(row.text().ends_with(' '), "{:?}", row.text());
+            }
         });
         // No renderer takes the font texture here.
         output.textures_delta.clear();
@@ -630,8 +662,8 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, false);
-            assert!(style.wrapped_lines(&content, 0) > 1, "a 600-column line wraps in a 700-point view");
+            let style = Style::new(ui, &content, false);
+            assert!(style.wrapped_lines(0) > 1, "a 600-column line wraps in a 700-point view");
             assert!(style.total <= 700.0, "the view fits its width instead of scrolling sideways");
         });
         output.textures_delta.clear();
