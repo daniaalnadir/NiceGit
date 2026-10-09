@@ -237,6 +237,14 @@ fn visuals(dark: bool) -> Visuals {
     visuals.faint_bg_color = faint;
     visuals.override_text_color = Some(text);
     visuals.window_stroke = Stroke::new(1.0, c.border);
+    // Floating windows are not modal, so nothing behind them is dimmed; a deep, soft shadow
+    // lifts them clear of the main window instead.
+    visuals.window_shadow = egui::epaint::Shadow {
+        offset: [0, 10],
+        blur: 36,
+        spread: 2,
+        color: if dark { Color32::from_black_alpha(150) } else { Color32::from_black_alpha(60) },
+    };
     visuals.window_corner_radius = CornerRadius::same(10);
     visuals.menu_corner_radius = CornerRadius::same(8);
     visuals.selection.bg_fill = if dark { Color32::from_rgb(0x1f, 0x4f, 0x3a) } else { Color32::from_rgb(0xcf, 0xef, 0xdc) };

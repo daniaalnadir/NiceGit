@@ -13,15 +13,15 @@ mod ui;
 #[cfg(test)]
 mod ui_screenshots;
 #[cfg(test)]
+mod ui_tests;
+#[cfg(test)]
+mod ui_tests_more;
+#[cfg(test)]
 mod ui_tests_parity_a;
 #[cfg(test)]
 mod ui_tests_parity_b;
 #[cfg(test)]
 mod ui_tests_parity_c;
-#[cfg(test)]
-mod ui_tests;
-#[cfg(test)]
-mod ui_tests_more;
 #[cfg(test)]
 mod ui_tests_tools;
 mod worker;

@@ -583,7 +583,14 @@ fn append_run(job: &mut LayoutJob, run: &mut String, background: Option<Color32>
     if run.is_empty() {
         return;
     }
-    let format = TextFormat { font_id: font.clone(), color, background: background.unwrap_or(Color32::TRANSPARENT), ..Default::default() };
+    // Backgrounds stop just short of the row, so highlights on wrapped rows stay apart.
+    let format = TextFormat {
+        font_id: font.clone(),
+        color,
+        background: background.unwrap_or(Color32::TRANSPARENT),
+        expand_bg: -1.0,
+        ..Default::default()
+    };
     job.append(run, 0.0, format);
     run.clear();
 }
