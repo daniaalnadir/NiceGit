@@ -117,13 +117,15 @@ impl NiceGitApp {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(icon::FUNNEL_SIMPLE).color(c.muted));
                             let filter = &mut self.repos[self.active].commit_filter;
-                            ui.add(
-                                egui::TextEdit::singleline(filter)
-                                    .hint_text("Filter loaded commits by message, author, ID, or branch")
-                                    .frame(egui::Frame::NONE)
-                                    .desired_width(f32::INFINITY),
-                            )
-                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter loaded commits"));
+                            let field = ui
+                                .add(
+                                    egui::TextEdit::singleline(filter)
+                                        .hint_text("Filter loaded commits")
+                                        .frame(egui::Frame::NONE)
+                                        .desired_width(f32::INFINITY),
+                                )
+                                .on_hover_text("Matches each commit's message, author, ID, branches, and tags");
+                            field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter loaded commits"));
                         });
                     },
                 );

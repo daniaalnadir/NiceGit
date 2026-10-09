@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.7 - Nothing clipped
+
+- Diff rows are as tall as their wrapped text measures, so the last row of a long wrapped
+  line is no longer clipped; the diff has a solid scroll bar that shows when it continues.
+- The history filter's placeholder fits, with what it matches in a tooltip.
+
 ## 0.6.6 - Last details
 
 - Long branch names in the graph lose their middle rather than their end, and hovering a

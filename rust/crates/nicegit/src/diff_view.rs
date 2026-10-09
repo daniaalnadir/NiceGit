@@ -34,7 +34,15 @@ const MIN_WRAP_COLUMNS: usize = 20;
 
 /// Rows per line, with the bits of the font size, wrap width and character width they were
 /// measured for.
-type WrappedRows = ((u32, u32, u32), std::sync::Arc<Vec<usize>>);
+type WrappedRows = ((u32, u32, u32), std::sync::Arc<Vec<Measured>>);
+
+/// One line laid out at a width: how many rows it wraps onto, and how tall its text is. The
+/// height is measured rather than multiplied out, because egui rounds each row to whole pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Measured {
+    rows: usize,
+    height: f32,
+}
 
 /// A diff prepared for display: its lines, their side-by-side arrangement, and the parts of
 /// paired lines that changed.
@@ -77,7 +85,7 @@ impl DiffContent {
 
     /// How many rows each line takes when wrapped at `width` for code. Lines wrap between words
     /// where they can, so this is measured from the laid-out text, once for each width.
-    fn rows_at(&self, ctx: &egui::Context, font: &FontId, width: f32, char_width: f32) -> std::sync::Arc<Vec<usize>> {
+    fn rows_at(&self, ctx: &egui::Context, font: &FontId, width: f32, char_width: f32) -> std::sync::Arc<Vec<Measured>> {
         let key = (font.size.to_bits(), width.to_bits(), char_width.to_bits());
         let mut cache = self.wrapped_rows.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some((measured, rows)) = cache.as_ref() {
@@ -85,13 +93,14 @@ impl DiffContent {
                 return rows.clone();
             }
         }
-        let rows: Vec<usize> = ctx.fonts_mut(|fonts| {
+        let rows: Vec<Measured> = ctx.fonts_mut(|fonts| {
             self.lines
                 .iter()
                 .map(|line| {
                     let mut job = layout(&line.text, font, Color32::WHITE, &[]);
                     job.wrap.max_width = wrap_width_of(line.kind, width, char_width);
-                    fonts.layout_job(job).rows.len().max(1)
+                    let galley = fonts.layout_job(job);
+                    Measured { rows: galley.rows.len().max(1), height: galley.size().y }
                 })
                 .collect()
         });
@@ -235,6 +244,9 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
+        // A solid scroll bar, rather than one that only appears on hover, shows when a long
+        // diff continues past the panel.
+        ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
         area.show_viewport(ui, |ui, viewport| {
             let origin = ui.max_rect().min;
             ui.allocate_rect(Rect::from_min_size(origin, vec2(view.style.total, tops[rows])), Sense::hover());
@@ -274,8 +286,8 @@ struct Style {
     wrap_width: f32,
     /// Width of one monospace column.
     char_width: f32,
-    /// How many rows each line of the diff wraps onto at that width.
-    rows: std::sync::Arc<Vec<usize>>,
+    /// Each line of the diff laid out at that width.
+    rows: std::sync::Arc<Vec<Measured>>,
 }
 
 impl Style {
@@ -314,21 +326,27 @@ impl Style {
 
     /// How many rows of text `line` wraps onto.
     fn wrapped_lines(&self, line: usize) -> usize {
-        self.rows.get(line).copied().unwrap_or(1)
+        self.rows.get(line).map_or(1, |measured| measured.rows)
+    }
+
+    /// How tall `line`'s wrapped text is, at least one row.
+    fn text_height(&self, line: usize) -> f32 {
+        self.rows.get(line).map_or(0.0, |measured| measured.height).max(self.row_height - 2.0)
     }
 
     /// The height of a unified row: its line, wrapped.
     fn unified_row_height(&self, line: usize) -> f32 {
-        self.wrapped_lines(line) as f32 * (self.row_height - 2.0) + 2.0
+        self.text_height(line) + 2.0
     }
 
     /// The height of a split row: its longer side, wrapped.
     fn split_row_height(&self, row: &SplitRow) -> f32 {
-        let lines = match *row {
-            SplitRow::Banner(_) => 1,
-            SplitRow::Pair { left, right } => [left, right].into_iter().flatten().map(|line| self.wrapped_lines(line)).max().unwrap_or(1),
-        };
-        lines as f32 * (self.row_height - 2.0) + 2.0
+        match *row {
+            SplitRow::Banner(_) => self.row_height,
+            SplitRow::Pair { left, right } => {
+                [left, right].into_iter().flatten().map(|line| self.text_height(line)).fold(self.row_height - 2.0, f32::max) + 2.0
+            }
+        }
     }
 }
 
@@ -677,12 +695,13 @@ mod tests {
             let row = content.split[content.row_of(0, true)];
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
-            assert_eq!(style.split_row_height(&row), wrapped as f32 * (style.row_height - 2.0) + 2.0);
             // The drawn text, with its highlight colours, wraps onto exactly the rows allowed for.
             let mut job = layout(&long, &style.font, Color32::RED, &[(3..9, Color32::BLUE)]);
             job.wrap.max_width = style.wrap_width;
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), wrapped);
+            // The row is at least as tall as the drawn text, so no wrapped row is clipped.
+            assert!(style.split_row_height(&row) >= galley.size().y + 1.0, "{} for {}", style.split_row_height(&row), galley.size().y);
             // Rows break between words: every row but the last ends with the space before a word.
             for row in &galley.rows[..galley.rows.len() - 1] {
                 assert!(row.text().ends_with(' '), "{:?}", row.text());
@@ -782,12 +801,12 @@ mod tests {
             assert_eq!(text_offset(DiffLineKind::Hunk, style.char_width), style.char_width);
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a long hunk header wraps in a 700-point view");
-            assert_eq!(style.unified_row_height(0), wrapped as f32 * (style.row_height - 2.0) + 2.0);
             // The drawn header starts one column in, so it wraps onto exactly the rows allowed for.
             let mut job = layout(&header, &style.font, Color32::RED, &[]);
             job.wrap.max_width = wrap_width_of(DiffLineKind::Hunk, style.wrap_width, style.char_width);
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), wrapped);
+            assert_eq!(style.unified_row_height(0), galley.size().y + 2.0, "the row is exactly as tall as the drawn header");
             // The code beside it keeps the full width.
             assert_eq!(style.wrapped_lines(1), {
                 let mut job = layout(&content.lines[1].text, &style.font, Color32::RED, &[]);
