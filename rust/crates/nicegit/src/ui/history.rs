@@ -344,7 +344,18 @@ impl NiceGitApp {
                 let cloud = if label.kind == LabelKind::Both { format!(" {}", icon::CLOUD) } else { String::new() };
                 let available = (label_limit - x - 6.0).max(30.0);
                 // Every label carries where it lives: a laptop for local, a cloud for remote, a tag.
-                let text = middle_ellipsis(&label.text, 26);
+                // Long names lose their middle, not their end, so names that share a prefix
+                // stay distinguishable; the full name is in the label's tooltip.
+                let fits = |text: &str| {
+                    painter.layout_no_wrap(format!("{glyph} {text}{cloud}{suffix}"), small.clone(), Color32::WHITE).size().x
+                        <= available - 12.0
+                };
+                let length = label.text.chars().count();
+                let text = (4..=length.min(40))
+                    .rev()
+                    .map(|max| middle_ellipsis(&label.text, max))
+                    .find(|text| fits(text))
+                    .unwrap_or_else(|| middle_ellipsis(&label.text, 4));
                 let full = format!("{glyph} {text}{cloud}{suffix}");
                 let galley =
                     painter.layout_no_wrap(truncate_to(&painter, &full, available - 12.0, small.clone()), small.clone(), Color32::WHITE);
@@ -395,6 +406,7 @@ impl NiceGitApp {
             let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::drag());
             let name = format!("Branch label {}", branch.display_name());
             label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+            let label = label.on_hover_text(branch.display_name());
             label.dnd_set_drag_payload(branch);
         }
         if is_head && snapshot.is_on_branch() {

@@ -221,7 +221,11 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
         top += if split { style.split_row_height(&content.split[row]) } else { style.unified_row_height(row) };
     }
     tops.push(top);
-    let mut area = ScrollArea::both().id_salt(("diff", content.title.as_str(), split)).auto_shrink([false, false]);
+    // The scroll bar stays visible, so a long diff never looks cut off at the panel's edge.
+    let mut area = ScrollArea::both()
+        .id_salt(("diff", content.title.as_str(), split))
+        .auto_shrink([false, false])
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
         let row = content.row_of(line, split);

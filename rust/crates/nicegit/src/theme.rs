@@ -236,7 +236,9 @@ fn visuals(dark: bool) -> Visuals {
     visuals.extreme_bg_color = extreme;
     visuals.faint_bg_color = faint;
     visuals.override_text_color = Some(text);
-    visuals.window_stroke = Stroke::new(1.0, c.border);
+    // A dark window's edge is drawn lighter than its panels' borders, since a shadow barely
+    // shows against a dark background.
+    visuals.window_stroke = Stroke::new(1.0, if dark { Color32::from_rgb(0x4a, 0x52, 0x60) } else { c.border });
     // Floating windows are not modal, so nothing behind them is dimmed; a deep, soft shadow
     // lifts them clear of the main window instead.
     visuals.window_shadow = egui::epaint::Shadow {
