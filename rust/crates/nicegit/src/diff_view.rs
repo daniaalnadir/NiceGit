@@ -32,8 +32,9 @@ const TAB_COLUMNS: usize = 4;
 /// The fewest columns of text a side of a split diff keeps before the view scrolls instead.
 const MIN_WRAP_COLUMNS: usize = 20;
 
-/// Rows per line, with the bits of the font size and width they were measured for.
-type WrappedRows = (u32, u32, std::sync::Arc<Vec<usize>>);
+/// Rows per line, with the bits of the font size, wrap width and character width they were
+/// measured for.
+type WrappedRows = ((u32, u32, u32), std::sync::Arc<Vec<usize>>);
 
 /// A diff prepared for display: its lines, their side-by-side arrangement, and the parts of
 /// paired lines that changed.
@@ -74,13 +75,13 @@ impl DiffContent {
         Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns, wrapped_rows: Default::default() }
     }
 
-    /// How many rows each line takes when wrapped at `width`. Lines wrap between words where
-    /// they can, so this is measured from the laid-out text, once for each width.
-    fn rows_at(&self, ctx: &egui::Context, font: &FontId, width: f32) -> std::sync::Arc<Vec<usize>> {
-        let key = (font.size.to_bits(), width.to_bits());
+    /// How many rows each line takes when wrapped at `width` for code. Lines wrap between words
+    /// where they can, so this is measured from the laid-out text, once for each width.
+    fn rows_at(&self, ctx: &egui::Context, font: &FontId, width: f32, char_width: f32) -> std::sync::Arc<Vec<usize>> {
+        let key = (font.size.to_bits(), width.to_bits(), char_width.to_bits());
         let mut cache = self.wrapped_rows.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some((size, measured, rows)) = cache.as_ref() {
-            if (*size, *measured) == key {
+        if let Some((measured, rows)) = cache.as_ref() {
+            if *measured == key {
                 return rows.clone();
             }
         }
@@ -89,13 +90,13 @@ impl DiffContent {
                 .iter()
                 .map(|line| {
                     let mut job = layout(&line.text, font, Color32::WHITE, &[]);
-                    job.wrap.max_width = width;
+                    job.wrap.max_width = wrap_width_of(line.kind, width, char_width);
                     fonts.layout_job(job).rows.len().max(1)
                 })
                 .collect()
         });
         let rows = std::sync::Arc::new(rows);
-        *cache = Some((key.0, key.1, rows.clone()));
+        *cache = Some((key, rows.clone()));
         rows
     }
 
@@ -123,6 +124,28 @@ impl DiffContent {
 
 fn columns(text: &str) -> usize {
     text.chars().map(|c| if c == '\t' { TAB_COLUMNS } else { 1 }).sum()
+}
+
+/// Whether a line is a header, drawn from the column where code content starts rather than from
+/// the marker column, so it lines up with the code beside it.
+fn is_header(kind: DiffLineKind) -> bool {
+    matches!(kind, DiffLineKind::Metadata | DiffLineKind::Hunk)
+}
+
+/// How far right of the text edge a line's text starts. Code lines begin with a one-character
+/// marker (' ', '+' or '-'); headers skip that marker so they start where code content starts.
+fn text_offset(kind: DiffLineKind, char_width: f32) -> f32 {
+    if is_header(kind) {
+        char_width
+    } else {
+        0.0
+    }
+}
+
+/// The width a line's text wraps at, given the width for code. A header starts one character
+/// further right, so it has one character less room.
+fn wrap_width_of(kind: DiffLineKind, width: f32, char_width: f32) -> f32 {
+    (width - text_offset(kind, char_width)).max(char_width)
 }
 
 /// The find bar's state. The caller keeps it between frames.
@@ -245,6 +268,8 @@ struct Style {
     wrap_columns: Option<usize>,
     /// Width of the text, where its lines wrap.
     wrap_width: f32,
+    /// Width of one monospace column.
+    char_width: f32,
     /// How many rows each line of the diff wraps onto at that width.
     rows: std::sync::Arc<Vec<usize>>,
 }
@@ -266,7 +291,7 @@ impl Style {
         };
         let wrap_width = (half - gutters * gutter - 2.0 * PADDING).max(char_width);
         let wrap_columns = Some(((wrap_width / char_width).floor() as usize).max(1));
-        let rows = content.rows_at(ui.ctx(), &font, wrap_width);
+        let rows = content.rows_at(ui.ctx(), &font, wrap_width, char_width);
         Self {
             font,
             colors: theme::of(ui),
@@ -278,6 +303,7 @@ impl Style {
             half,
             wrap_columns,
             wrap_width,
+            char_width,
             rows,
         }
     }
@@ -383,10 +409,10 @@ impl View<'_> {
         let mut job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
         if wrap {
             // Lines wrap between words where they can, as measured for the row heights.
-            job.wrap.max_width = self.style.wrap_width;
+            job.wrap.max_width = wrap_width_of(diff_line.kind, self.style.wrap_width, self.style.char_width);
         }
         let galley = painter.layout_job(job);
-        let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING;
+        let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING + text_offset(diff_line.kind, self.style.char_width);
         let y = first_line_center - (self.style.row_height - 2.0) / 2.0;
         painter.galley(pos2(x, y), galley, text_color);
     }
@@ -687,5 +713,45 @@ mod tests {
     #[test]
     fn tabs_count_as_several_columns() {
         assert_eq!(columns("a\tb"), 1 + TAB_COLUMNS + 1);
+    }
+
+    #[test]
+    fn headers_start_one_column_in_where_code_content_starts() {
+        assert_eq!(text_offset(DiffLineKind::Hunk, 8.0), 8.0);
+        assert_eq!(text_offset(DiffLineKind::Metadata, 8.0), 8.0);
+        for kind in [DiffLineKind::Context, DiffLineKind::Addition, DiffLineKind::Deletion] {
+            assert_eq!(text_offset(kind, 8.0), 0.0, "{kind:?} text begins with its marker, so it is not shifted");
+        }
+    }
+
+    #[test]
+    fn wrapped_header_rows_match_their_measured_height() {
+        let header = format!("@@ -1,2 +1,2 @@ {}", "fn long_name_part ".repeat(60));
+        let lines = vec![
+            DiffLine { text: header.clone(), kind: DiffLineKind::Hunk, old_number: None, new_number: None },
+            DiffLine { text: format!("+{}", "word ".repeat(60)), kind: DiffLineKind::Addition, old_number: None, new_number: Some(1) },
+        ];
+        let content = DiffContent::new("header.rs".to_string(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, &content, false);
+            assert_eq!(text_offset(DiffLineKind::Hunk, style.char_width), style.char_width);
+            let wrapped = style.wrapped_lines(0);
+            assert!(wrapped > 1, "a long hunk header wraps in a 700-point view");
+            assert_eq!(style.unified_row_height(0), wrapped as f32 * (style.row_height - 2.0) + 2.0);
+            // The drawn header starts one column in, so it wraps onto exactly the rows allowed for.
+            let mut job = layout(&header, &style.font, Color32::RED, &[]);
+            job.wrap.max_width = wrap_width_of(DiffLineKind::Hunk, style.wrap_width, style.char_width);
+            let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
+            assert_eq!(galley.rows.len(), wrapped);
+            // The code beside it keeps the full width.
+            assert_eq!(style.wrapped_lines(1), {
+                let mut job = layout(&content.lines[1].text, &style.font, Color32::RED, &[]);
+                job.wrap.max_width = style.wrap_width;
+                ui.ctx().fonts_mut(|fonts| fonts.layout_job(job)).rows.len()
+            });
+        });
+        output.textures_delta.clear();
     }
 }
