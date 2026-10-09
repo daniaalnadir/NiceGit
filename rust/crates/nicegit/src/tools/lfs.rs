@@ -16,6 +16,8 @@ type Loaded = nicegit_core::Result<LfsStatus>;
 pub struct LfsWindow {
     /// The status, read in the background. None until read, and again after the repository changes.
     status: Option<Task<Loaded>>,
+    /// The last status read, shown while a newer one loads so the window does not flicker.
+    shown: Option<Loaded>,
     /// The pattern typed for tracking.
     pattern: String,
     /// The pattern a track was requested for; the field is cleared once it appears in the list.
@@ -69,8 +71,10 @@ impl ToolWindow for LfsWindow {
         ui.add_space(8.0);
 
         egui::ScrollArea::vertical().id_salt("lfs_body").auto_shrink([false, false]).show(ui, |ui| {
-            let state = self.status.as_mut().and_then(|task| task.get());
-            let Some(state) = state else {
+            if let Some(state) = self.status.as_mut().and_then(|task| task.get()) {
+                self.shown = Some(state.clone());
+            }
+            let Some(state) = &self.shown else {
                 widgets::loading(ui, "Reading Git LFS status…");
                 return;
             };

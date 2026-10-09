@@ -86,7 +86,9 @@ fn bisect_finds_the_first_bad_commit_through_the_bar() {
     wait(&mut harness, "the first bad commit", |h| shows(h, "First bad commit:"));
     settle(&mut harness);
     let log = git(path, &["bisect", "log"]);
-    assert!(log.contains(&format!("first bad commit: [{culprit}]")), "Git found the culprit: {log}");
+    // Newer Git writes "first 'bad' commit", older Git "first bad commit".
+    let verdict = log.lines().find(|line| line.starts_with("# first") && line.contains("bad")).unwrap_or_default();
+    assert!(verdict.contains(&format!("[{culprit}]")), "Git found the culprit: {log}");
     assert!(shows(&harness, "Introduce the bug"), "the first bad commit's subject is shown");
 
     harness.get_by_label_contains("End bisect, return to main").click();

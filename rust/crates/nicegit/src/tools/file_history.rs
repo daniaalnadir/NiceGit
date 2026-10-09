@@ -44,6 +44,8 @@ struct Selected {
 pub struct FileHistoryWindow {
     path: String,
     entries: Option<Task<nicegit_core::Result<Vec<FileHistoryEntry>>>>,
+    /// The last history read, shown while a newer one loads so the window does not flicker.
+    shown: Option<nicegit_core::Result<Vec<FileHistoryEntry>>>,
     selected: Option<Selected>,
     split: bool,
     restore: Option<PendingRestore>,
@@ -52,7 +54,7 @@ pub struct FileHistoryWindow {
 
 impl FileHistoryWindow {
     pub fn new(path: String) -> Self {
-        Self { path, entries: None, selected: None, split: false, restore: None, close: false }
+        Self { path, entries: None, shown: None, selected: None, split: false, restore: None, close: false }
     }
 
     fn reload(&mut self, ctx: &egui::Context, repo: &Path) {
@@ -78,9 +80,11 @@ impl ToolWindow for FileHistoryWindow {
         if self.entries.is_none() {
             self.reload(ui.ctx(), cx.repo);
         }
-        let Self { path, entries, selected, split, restore, close } = self;
-        let Some(task) = entries.as_mut() else { return };
-        let outcome = task.get();
+        let Self { path, entries, shown, selected, split, restore, close } = self;
+        if let Some(outcome) = entries.as_mut().and_then(|task| task.get()) {
+            *shown = Some(outcome.clone());
+        }
+        let outcome = shown.as_ref();
 
         // Select the newest commit once the history arrives, as the list would otherwise be empty.
         if selected.is_none() {

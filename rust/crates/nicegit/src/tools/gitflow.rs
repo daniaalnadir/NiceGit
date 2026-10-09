@@ -15,6 +15,8 @@ type Loaded = nicegit_core::Result<Option<GitFlowConfiguration>>;
 pub struct GitFlowWindow {
     /// The settings, read in the background. None until read.
     configuration: Option<Task<Loaded>>,
+    /// The last settings read, shown while newer ones load so the window does not flicker.
+    shown: Option<Loaded>,
     /// The setup form, filled in from the repository's branches the first time it is shown.
     draft: Option<GitFlowConfiguration>,
     kind: GitFlowKind,
@@ -36,6 +38,7 @@ impl GitFlowWindow {
     pub fn new() -> Self {
         Self {
             configuration: None,
+            shown: None,
             draft: None,
             kind: GitFlowKind::Feature,
             name: String::new(),
@@ -67,7 +70,10 @@ impl ToolWindow for GitFlowWindow {
         if self.configuration.is_none() {
             self.configuration = Some(query(ui.ctx(), cx.repo, |client, directory| client.gitflow_configuration(directory)));
         }
-        let loaded = self.configuration.as_mut().and_then(|task| task.get().cloned());
+        if let Some(loaded) = self.configuration.as_mut().and_then(|task| task.get().cloned()) {
+            self.shown = Some(loaded);
+        }
+        let loaded = self.shown.clone();
 
         let c = theme::of(ui);
         ui.label(
