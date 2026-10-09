@@ -6,7 +6,7 @@ use crate::app::{NiceGitApp, Selection};
 use crate::ui::history::middle_ellipsis;
 
 /// A commit's signature summary, filled in by a background thread: None while loading.
-type SignatureCell = std::sync::Arc<std::sync::Mutex<Option<Option<(String, u8)>>>>;
+type SignatureCell = std::sync::Arc<std::sync::Mutex<Option<Option<crate::git_ext::SignatureSummary>>>>;
 use crate::theme;
 use crate::tools::{self, widgets};
 
@@ -112,9 +112,12 @@ impl NiceGitApp {
                                 });
                                 ui.end_row();
                             }
-                            if let Some((text, color)) = &signature {
+                            if let Some((text, color, help)) = &signature {
                                 caption(ui, "Signature");
-                                ui.label(RichText::new(text).color(*color));
+                                let label = ui.label(RichText::new(text).color(*color));
+                                if !help.is_empty() {
+                                    label.on_hover_text(help);
+                                }
                                 ui.end_row();
                             }
                         });
@@ -196,7 +199,7 @@ impl NiceGitApp {
     }
 
     /// A commit's signature status, loaded once per commit and cached in egui memory.
-    fn signature_for(&mut self, hash: &str, ctx: &egui::Context) -> Option<(String, egui::Color32)> {
+    fn signature_for(&mut self, hash: &str, ctx: &egui::Context) -> Option<(String, egui::Color32, String)> {
         let id = egui::Id::new(("signature", hash.to_string()));
         let repo = self.repo()?.path.clone();
         let dark = ctx.theme() == egui::Theme::Dark;
@@ -217,14 +220,14 @@ impl NiceGitApp {
             }
         };
         let value = cell.lock().unwrap_or_else(|p| p.into_inner()).clone();
-        value.flatten().map(|(text, level)| {
-            let color = match level {
+        value.flatten().map(|summary| {
+            let color = match summary.level {
                 0 => c.added,
                 1 => c.warning,
                 2 => c.danger,
                 _ => c.muted,
             };
-            (text, color)
+            (summary.text, color, summary.help)
         })
     }
 }

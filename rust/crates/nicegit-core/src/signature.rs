@@ -22,10 +22,11 @@ pub enum SignatureStatus {
 impl SignatureStatus {
     pub fn title(self) -> &'static str {
         match self {
+            // The Mac app's wording; "this Mac" becomes "this computer" on every system.
             SignatureStatus::Verified => "Verified signature",
-            SignatureStatus::Untrusted => "Signed by an untrusted key",
-            SignatureStatus::Bad => "Bad signature",
-            SignatureStatus::Unverifiable => "Signature cannot be checked",
+            SignatureStatus::Untrusted => "Valid signature from an untrusted key",
+            SignatureStatus::Bad => "Bad signature: this commit does not match it",
+            SignatureStatus::Unverifiable => "Signed, but it cannot be verified on this computer",
         }
     }
 }
@@ -105,6 +106,14 @@ fn message_of(error: &GitError) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_status_reads_as_in_the_mac_app() {
+        assert_eq!(SignatureStatus::Verified.title(), "Verified signature");
+        assert_eq!(SignatureStatus::Untrusted.title(), "Valid signature from an untrusted key");
+        assert_eq!(SignatureStatus::Bad.title(), "Bad signature: this commit does not match it");
+        assert_eq!(SignatureStatus::Unverifiable.title(), "Signed, but it cannot be verified on this computer");
+    }
 
     #[test]
     fn each_git_code_maps_to_the_status_the_mac_app_shows() {
