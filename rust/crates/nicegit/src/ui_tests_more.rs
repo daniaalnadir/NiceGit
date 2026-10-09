@@ -447,15 +447,19 @@ fn find_in_diff_counts_and_steps_through_matches() {
 
     type_into(&mut harness, "Find in diff", "apple");
     wait(&mut harness, "two matches, the first current", |h| shows(h, "1 of 2"));
-    // Each step scrolls to its match; click the next button once that has settled.
-    let next = |harness: &mut App| {
-        settle(harness);
-        harness.get_by_role_and_label(Role::Button, "Next match (Enter)").click();
+    // Return in the field moves to the next match, as in the Mac app.
+    let enter = |harness: &mut App| {
+        harness.get_by_role_and_label(Role::TextInput, "Find in diff").focus();
+        harness.step();
+        harness.key_press(Key::Enter);
+        harness.step();
     };
-    next(&mut harness);
+    enter(&mut harness);
     wait(&mut harness, "the second match", |h| shows(h, "2 of 2"));
-    next(&mut harness);
+    enter(&mut harness);
     wait(&mut harness, "stepping past the last match to wrap to the first", |h| shows(h, "1 of 2"));
+    // The buttons step too. The pointer leaves first, so no tooltip is open over the button.
+    harness.remove_cursor();
     settle(&mut harness);
     harness.get_by_role_and_label(Role::Button, "Previous match (Shift+Enter)").click();
     wait(&mut harness, "stepping back to wrap to the last", |h| shows(h, "2 of 2"));
