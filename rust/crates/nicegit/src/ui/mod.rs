@@ -440,10 +440,17 @@ impl NiceGitApp {
                     } else {
                         "Widen the diff panel to show changes side by side"
                     };
-                    ui.add_enabled_ui(!one_sided && !narrow, |ui| {
-                        ui.selectable_value(&mut split, true, "Split").on_disabled_hover_text(reason);
-                        ui.selectable_value(&mut split, false, "Unified");
+                    let available = !one_sided && !narrow;
+                    // The control shows the layout on screen: Unified whenever Split cannot apply,
+                    // while the saved preference waits for a diff and a panel that suit it.
+                    let mut shown = split && available;
+                    ui.add_enabled_ui(available, |ui| {
+                        ui.selectable_value(&mut shown, true, "Split").on_disabled_hover_text(reason);
+                        ui.selectable_value(&mut shown, false, "Unified");
                     });
+                    if available {
+                        split = shown;
+                    }
                     self.settings.split_diff = split;
                     let mut ignore = self.settings.ignore_whitespace;
                     if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {

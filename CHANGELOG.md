@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.9 - Honest controls
+
+- When a diff can only be shown in one column, the Split and Unified control shows Unified as
+  active instead of the saved Split choice, which still applies when there is room again.
+
 ## 0.6.8 - Room to read
 
 - A diff panel narrower than 560 points shows changes in one column, since each side would
