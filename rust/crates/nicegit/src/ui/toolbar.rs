@@ -9,7 +9,7 @@ use crate::ui::dialogs::{Dialog, InputKind};
 const FULL_WIDTH: f32 = 54.0;
 const COMPACT_WIDTH: f32 = 34.0;
 /// The room between two groups of buttons: space, a thin rule, and space.
-const GROUP_GAP: f32 = 12.0;
+const GROUP_GAP: f32 = 15.0;
 
 #[derive(Clone, Copy, PartialEq)]
 enum ToolStyle {
@@ -84,7 +84,8 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
 fn group_rule(ui: &mut Ui) {
     let c = theme::of(ui);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 44.0), egui::Sense::hover());
-    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 8.0)).y_range(), egui::Stroke::new(1.0, c.border));
+    // Stronger than a panel border, so the groups read apart at a glance.
+    ui.painter().vline(rect.center().x, rect.shrink2(egui::vec2(0.0, 6.0)).y_range(), egui::Stroke::new(1.0, c.muted.gamma_multiply(0.5)));
 }
 
 /// A labelled picker: a small caption above an accent-coloured value with a chevron.
@@ -222,7 +223,8 @@ impl NiceGitApp {
             } else if width_for(COMPACT_WIDTH, count) <= available {
                 (ToolStyle::Compact, count)
             } else {
-                let room = available - COMPACT_WIDTH - 10.0;
+                // Room for the More menu and the rule before it.
+                let room = available - COMPACT_WIDTH - GROUP_GAP;
                 let fits = (0..=count).rev().find(|&n| width_for(COMPACT_WIDTH, n) <= room).unwrap_or(0);
                 (ToolStyle::Compact, fits)
             };
@@ -246,7 +248,15 @@ impl NiceGitApp {
                 }
             }
             if !overflow.is_empty() {
-                ui.add_space(6.0);
+                if shown > 0 {
+                    ui.add_space((GROUP_GAP - 1.0) / 2.0);
+                    group_rule(ui);
+                    ui.add_space((GROUP_GAP - 1.0) / 2.0);
+                }
+                // Drawn without a frame at rest, like the other toolbar buttons.
+                let visuals = &mut ui.visuals_mut().widgets.inactive;
+                visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
+                visuals.bg_stroke = egui::Stroke::NONE;
                 let more = ui.menu_button(RichText::new(icon::DOTS_THREE).size(20.0), |ui| {
                     for item in &overflow {
                         if ui

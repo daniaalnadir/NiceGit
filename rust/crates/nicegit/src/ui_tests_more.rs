@@ -575,7 +575,7 @@ fn the_status_bar_shows_a_running_action_and_actions_wait_for_it() {
 }
 
 #[test]
-fn copy_a_worktree_path_and_open_it_from_the_sidebar() {
+fn copy_reveal_and_open_a_worktree_from_the_sidebar() {
     let repo = repository();
     let path = repo.path();
     let folder = tempfile::tempdir().unwrap();
@@ -614,6 +614,27 @@ fn copy_a_worktree_path_and_open_it_from_the_sidebar() {
     }
     let copied = copied.expect("a copied path");
     assert_eq!(std::fs::canonicalize(&copied).unwrap(), linked);
+
+    // Show in file manager reveals the worktree folder.
+    harness.hover_at(row(&harness));
+    let at = row(&harness);
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    settle(&mut harness);
+    harness.get_by_label(&format!("{}  Show in file manager", icon::FOLDER)).click();
+    harness.run_steps(2);
+    let revealed = crate::ui::changes::REVEALED.with(|revealed| revealed.borrow().clone());
+    assert_eq!(revealed.iter().map(|path| std::fs::canonicalize(path).unwrap()).collect::<Vec<_>>(), std::slice::from_ref(&linked));
 
     // Clicking the row opens that checkout in its own tab.
     let at = row(&harness);

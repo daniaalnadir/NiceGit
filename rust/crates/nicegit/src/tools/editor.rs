@@ -122,37 +122,39 @@ impl ToolWindow for EditorWindow {
         if !self.loaded {
             return;
         }
-        egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
+        egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             // The box has a margin around the text, and a muted gutter of line numbers that
-            // uses the editor's font, so each number sits beside its line.
+            // uses the editor's font. Long lines wrap to the window, as in the Mac app, and only
+            // the first row of each line is numbered.
             egui::Frame::new()
                 .fill(ui.visuals().extreme_bg_color)
                 .stroke(egui::Stroke::new(1.0, c.border))
                 .corner_radius(6.0)
                 .inner_margin(egui::Margin::same(8))
                 .show(ui, |ui| {
-                    let lines = self.text.split('\n').count();
-                    let digits = lines.to_string().len();
-                    let numbers: Vec<String> = (1..=lines).map(|line| format!("{line:>digits$}")).collect();
-                    // Long lines extend sideways instead of wrapping, so each number stays beside its line.
-                    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _wrap_width: f32| {
-                        let job = egui::text::LayoutJob::simple(
-                            text.as_str().to_owned(),
-                            egui::TextStyle::Monospace.resolve(ui.style()),
-                            ui.visuals().text_color(),
-                            f32::INFINITY,
-                        );
+                    const GUTTER_SPACING: f32 = 10.0;
+                    let font = egui::TextStyle::Monospace.resolve(ui.style());
+                    let color = ui.visuals().text_color();
+                    let digits = self.text.split('\n').count().to_string().len();
+                    let digit_width = ui.ctx().fonts_mut(|fonts| fonts.glyph_width(&font, '0'));
+                    let wrap_width = (ui.available_width() - digits as f32 * digit_width - GUTTER_SPACING).max(20.0 * digit_width);
+                    // The gutter and the editor share one layout, so the numbers follow the wrapping.
+                    let layout = |ui: &egui::Ui, text: &str| {
+                        let job = egui::text::LayoutJob::simple(text.to_owned(), font.clone(), color, wrap_width);
                         ui.ctx().fonts_mut(|fonts| fonts.layout_job(job))
                     };
+                    let galley = layout(ui, &self.text);
+                    let numbers = gutter_numbers(galley.rows.iter().map(|row| row.ends_with_newline), digits);
+                    let mut layouter = |ui: &egui::Ui, text: &dyn egui::TextBuffer, _wrap_width: f32| layout(ui, text.as_str());
                     ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = 10.0;
+                        ui.spacing_mut().item_spacing.x = GUTTER_SPACING;
                         let gutter = RichText::new(numbers.join("\n")).monospace().color(c.muted);
                         ui.add(egui::Label::new(gutter).wrap_mode(egui::TextWrapMode::Extend));
                         ui.add(
                             egui::TextEdit::multiline(&mut self.text)
                                 .code_editor()
                                 .frame(egui::Frame::NONE)
-                                .desired_width(f32::INFINITY)
+                                .desired_width(wrap_width)
                                 .desired_rows(30)
                                 .lock_focus(true)
                                 .layouter(&mut layouter),
@@ -161,5 +163,44 @@ impl ToolWindow for EditorWindow {
                     });
                 });
         });
+    }
+}
+
+/// The gutter's text for each row of laid-out text: a right-aligned line number on the first
+/// row of each line, and nothing on the rows a long line wraps onto.
+fn gutter_numbers(rows_end_lines: impl Iterator<Item = bool>, digits: usize) -> Vec<String> {
+    let mut line = 0;
+    let mut starts_line = true;
+    rows_end_lines
+        .map(|ends_line| {
+            let number = if starts_line {
+                line += 1;
+                format!("{line:>digits$}")
+            } else {
+                String::new()
+            };
+            starts_line = ends_line;
+            number
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gutter_numbers;
+
+    #[test]
+    fn wrapped_rows_are_not_numbered() {
+        // Line 1 wraps onto a second row; line 2 fits; line 3 is the empty last line.
+        let rows = [false, true, true, false];
+        assert_eq!(gutter_numbers(rows.into_iter(), 2), [" 1", "", " 2", " 3"]);
+    }
+
+    #[test]
+    fn numbers_are_right_aligned_to_the_widest() {
+        let rows = std::iter::repeat_n(true, 9).chain([false]);
+        let numbers = gutter_numbers(rows, 2);
+        assert_eq!(numbers.first().map(String::as_str), Some(" 1"));
+        assert_eq!(numbers.last().map(String::as_str), Some("10"));
     }
 }

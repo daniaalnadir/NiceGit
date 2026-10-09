@@ -460,13 +460,21 @@ fn sorted(mut entries: Vec<StatusEntry>) -> Vec<StatusEntry> {
     entries
 }
 
+#[cfg(test)]
+thread_local! {
+    /// What interface tests asked the file manager to show, instead of opening its windows.
+    pub static REVEALED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// Shows a file in the platform's file manager.
 pub fn reveal(path: &std::path::Path) {
     let target = if path.exists() { path.to_path_buf() } else { path.parent().map(|p| p.to_path_buf()).unwrap_or_default() };
-    #[cfg(target_os = "macos")]
+    #[cfg(test)]
+    REVEALED.with(|revealed| revealed.borrow_mut().push(target));
+    #[cfg(all(not(test), target_os = "macos"))]
     let _ = std::process::Command::new("open").arg("-R").arg(&target).spawn();
-    #[cfg(target_os = "windows")]
+    #[cfg(all(not(test), target_os = "windows"))]
     let _ = std::process::Command::new("explorer").arg(format!("/select,{}", target.display())).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(all(not(test), unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(target.parent().unwrap_or(&target)).spawn();
 }

@@ -174,7 +174,7 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
         let top = if split { tops[row] } else { row as f32 * style.row_height };
         area = area.vertical_scroll_offset((top - ui.available_height() * 0.4).max(0.0));
     }
-    let view = View { content, occurrences: &occurrences, current: options.find.current, split: split, style, drag_id };
+    let view = View { content, occurrences: &occurrences, current: options.find.current, split, style, drag_id };
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
