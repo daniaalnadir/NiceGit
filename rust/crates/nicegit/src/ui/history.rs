@@ -258,6 +258,12 @@ impl NiceGitApp {
         let selection = repo.selection.clone();
         let width = ui.available_width();
         let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), Sense::click());
+        // The row is painted, so describe it for screen readers and UI tests.
+        let description = match &commit {
+            Some(commit) => commit.subject.clone(),
+            None => "Working tree".to_string(),
+        };
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::SelectableLabel, true, &description));
         if !ui.is_rect_visible(rect) {
             return;
         }

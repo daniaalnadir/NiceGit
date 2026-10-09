@@ -1843,6 +1843,7 @@ dependencies = [
  "notify",
  "rfd",
  "serde",
+ "tempfile",
  "winresource",
 ]
 

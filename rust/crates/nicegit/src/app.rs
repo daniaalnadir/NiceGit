@@ -821,9 +821,14 @@ impl NiceGitApp {
         let mut blocked_close = false;
         for (index, tool) in self.tools.iter_mut().enumerate() {
             let mut open = true;
+            // Windows stay within the app window, so their buttons are never off-screen.
+            let screen = ctx.content_rect().size();
+            let size = tool.default_size().min(screen - egui::vec2(40.0, 60.0));
             egui::Window::new(tool.title())
                 .id(egui::Id::new(("tool", tool.id())))
-                .default_size(tool.default_size())
+                .default_size(size)
+                .max_size(screen - egui::vec2(20.0, 40.0))
+                .constrain(true)
                 .collapsible(false)
                 .resizable(true)
                 .open(&mut open)

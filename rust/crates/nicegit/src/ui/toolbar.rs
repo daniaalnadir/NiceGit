@@ -6,7 +6,7 @@ use crate::theme;
 use crate::tools::{self};
 use crate::ui::dialogs::{Dialog, InputKind};
 
-/// A toolbar button: an icon above a short label.
+/// A toolbar button: an icon above a short label, or the icon alone when space is tight.
 fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool) -> egui::Response {
     let c = theme::of(ui);
     let size = egui::vec2(50.0, 44.0);
@@ -52,10 +52,8 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let idle = self.idle();
         let clean = snapshot.operation.is_none();
-        egui::ScrollArea::horizontal().id_salt("toolbar").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(
-            ui,
-            |ui| {
-                ui.horizontal(|ui| {
+        // Buttons wrap onto a second row when the column is narrow, so none is ever hidden.
+        ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let name = self.repo().map(|r| r.name()).unwrap_or_default();
                     picker(ui, "Repository", &name, |ui| self.repository_menu(ui));
@@ -174,9 +172,7 @@ impl NiceGitApp {
                     if tool(ui, icon::COMMAND, "Commands", "Command palette (Shift-Ctrl/Cmd-P)", true).clicked() {
                         self.toggle_palette();
                     }
-                })
-            },
-        );
+        });
     }
 
     /// The Repository menu: opening repositories and every repository tool.

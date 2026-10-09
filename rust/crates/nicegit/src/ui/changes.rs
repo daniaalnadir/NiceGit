@@ -106,7 +106,7 @@ impl NiceGitApp {
                         if widgets::icon_button(ui, icon::X, "Dismiss", true).clicked() {
                             self.repos[self.active].discard_undo.clear();
                         }
-                        if ui.add_enabled(idle, egui::Button::new(format!("{}  Undo", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
+                        if ui.add_enabled(idle, egui::Button::new(format!("{}  Undo discard", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
                             self.undo_discard();
                         }
                     });

@@ -9,6 +9,8 @@ mod settings;
 mod theme;
 mod tools;
 mod ui;
+#[cfg(test)]
+mod ui_tests;
 mod worker;
 
 use std::path::PathBuf;
