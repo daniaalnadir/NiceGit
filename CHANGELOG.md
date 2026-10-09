@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.5 - Every detail checked
+
+- Commit signatures read as in the Mac app, name the signer only when verified, and show the
+  key and any problem in a tooltip.
+- The diff header's controls keep their identity while a diff reloads, so a click or screen
+  reader action on Edit no longer misses during a reload.
+- Diff header lines align with the code text. Disabled toolbar buttons are legible in the
+  light theme, the commit summary counter reads "used/72" with a tooltip, and the editor
+  shows a file's path only when it adds to the title.
+- Interface tests now cover the remaining details of the Mac app's features, from creating
+  and cloning repositories to stash pop, conflict panes, and relaunch memory.
+- `rust/scripts/test-all.sh` runs the tests on macOS and in a Linux container at once,
+  optionally several times, in a few minutes instead of waiting on CI.
+
 ## 0.6.4 - Truer side-by-side diffs
 
 - In a side-by-side diff, a short line beside a long wrapped one tints only its own rows;

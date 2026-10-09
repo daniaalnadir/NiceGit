@@ -113,6 +113,11 @@ files in a commit and opening blame at a match, checking out a submodule's recor
 the inspector's verified-signature line, and rebasing by dragging a graph label; unit tests
 cover blame's age tint.
 
+A further independent audit then found 70 of 71 features fully implemented, the exception
+being the commit signature line's wording, which now matches the Mac app. Its list of
+remaining untested details is covered by `ui_tests_parity_d.rs`, `ui_tests_parity_e.rs`, and
+`ui_tests_parity_f.rs`: `create_a_repository_from_the_empty_window`, `clone_from_a_file_url_through_the_dialog`, `rename_a_branch_from_its_menu`, `delete_a_merged_branch_from_its_menu`, `check_out_a_remote_branch_creates_a_tracking_branch`, `rename_a_remote_and_change_its_fetch_address_in_settings`, `push_a_tag_to_a_remote_then_delete_it_there`, `double_click_a_branch_in_the_sidebar_to_check_it_out`, `ignore_an_untracked_file_in_the_shared_gitignore`, `ignore_every_file_with_an_extension_in_the_shared_gitignore`, `ignore_an_untracked_file_only_on_this_computer`, `delete_a_local_tag_from_the_sidebar_after_confirming`, `push_the_current_branch_with_the_toolbar_button`, `pop_a_stash_from_the_sidebar_menu_after_confirming`, `delete_one_stash_from_the_stashes_window_after_confirming`, `conflict_editor_shows_the_base_current_and_incoming_versions`, `delete_file_resolves_a_conflict_by_deleting_the_file`, `file_history_opens_from_the_changes_menu`, `open_a_submodule_as_a_repository_tab_from_its_window`, `the_history_filter_matches_author_hash_and_reference_names`, `panel_widths_and_the_whitespace_choice_survive_a_relaunch`, `undo_an_amend_restores_the_old_commit_and_keeps_the_change_staged`, `apply_an_identity_profile_from_repository_settings`, `search_history_finds_a_commit_older_than_the_loaded_page`, `compare_shows_the_detail_of_the_selected_file`, `restore_this_version_brings_back_the_files_content_at_that_commit`, `the_smallest_window_keeps_the_key_controls_on_screen`.
+
 They found two bugs, now fixed: image sizes from 1 KB to 1 MB were labelled as bytes, and a
 filter did not reveal matching branches under a collapsed remote. Undo and Redo from the
 command palette now ask first, as the toolbar's buttons do.
