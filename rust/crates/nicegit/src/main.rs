@@ -11,6 +11,8 @@ mod tools;
 mod ui;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod ui_tests_tools;
 mod worker;
 
 use std::path::PathBuf;

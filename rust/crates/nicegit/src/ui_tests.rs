@@ -11,7 +11,7 @@ use egui_kittest::Harness;
 
 use crate::app::NiceGitApp;
 
-fn git(dir: &Path, args: &[&str]) -> String {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> String {
     let output =
         Command::new("git").args(args).current_dir(dir).env_remove("GIT_DIR").env_remove("GIT_WORK_TREE").output().expect("run git");
     assert!(output.status.success(), "git {args:?} failed: {}", String::from_utf8_lossy(&output.stderr));
@@ -19,7 +19,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 /// A repository with two commits on main, a `feature` branch, and local-only configuration.
-fn repository() -> tempfile::TempDir {
+pub(crate) fn repository() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("temporary folder");
     let path = dir.path();
     git(path, &["init", "-q", "-b", "main"]);
@@ -37,13 +37,13 @@ fn repository() -> tempfile::TempDir {
     dir
 }
 
-fn open(path: &Path) -> Harness<'static, NiceGitApp> {
+pub(crate) fn open(path: &Path) -> Harness<'static, NiceGitApp> {
     let path: PathBuf = path.to_path_buf();
     Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(move |cc| NiceGitApp::new(cc, Some(path)))
 }
 
 /// Runs frames until `done` holds, failing after a generous timeout.
-fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done: impl Fn(&Harness<'static, NiceGitApp>) -> bool) {
+pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done: impl Fn(&Harness<'static, NiceGitApp>) -> bool) {
     let start = Instant::now();
     loop {
         harness.step();
@@ -56,21 +56,21 @@ fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done: impl Fn(&H
     }
 }
 
-fn loaded(harness: &mut Harness<'static, NiceGitApp>) {
+pub(crate) fn loaded(harness: &mut Harness<'static, NiceGitApp>) {
     wait(harness, "the repository to load", |h| h.state().snapshot().is_some() && h.state().busy.is_none());
 }
 
-fn idle(harness: &mut Harness<'static, NiceGitApp>) {
+pub(crate) fn idle(harness: &mut Harness<'static, NiceGitApp>) {
     wait(harness, "the action to finish", |h| h.state().busy.is_none() && h.state().repo().is_some_and(|r| !r.loading));
 }
 
 /// New menus and popups spend their first frame measuring themselves, disabled.
-fn settle(harness: &mut Harness<'static, NiceGitApp>) {
+pub(crate) fn settle(harness: &mut Harness<'static, NiceGitApp>) {
     harness.run_steps(3);
 }
 
 /// Clicks a toolbar button, through the More menu when it did not fit on the toolbar.
-fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
+pub(crate) fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
     settle(harness);
     let role = egui::accesskit::Role::Button;
     if harness.query_by_role_and_label(role, label).is_some() {
@@ -83,7 +83,7 @@ fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
     harness.step();
 }
 
-fn has_label(harness: &Harness<'static, NiceGitApp>, label: &str) -> bool {
+pub(crate) fn has_label(harness: &Harness<'static, NiceGitApp>, label: &str) -> bool {
     harness.query_by_label_contains(label).is_some()
 }
 
@@ -408,7 +408,7 @@ fn smallest_window_lays_out_every_panel() {
 }
 
 /// Types into the text field with this accessible label.
-fn type_into(harness: &mut Harness<'static, NiceGitApp>, label: &str, text: &str) {
+pub(crate) fn type_into(harness: &mut Harness<'static, NiceGitApp>, label: &str, text: &str) {
     let role = egui::accesskit::Role::TextInput;
     harness.get_by_role_and_label(role, label).focus();
     harness.step();
@@ -417,7 +417,7 @@ fn type_into(harness: &mut Harness<'static, NiceGitApp>, label: &str, text: &str
 }
 
 /// Opens a Repository menu item from the toolbar's repository picker.
-fn repository_menu(harness: &mut Harness<'static, NiceGitApp>, name: &str, item: &str) {
+pub(crate) fn repository_menu(harness: &mut Harness<'static, NiceGitApp>, name: &str, item: &str) {
     let picker = format!("{name} {}", egui_phosphor::regular::CARET_DOWN);
     harness.get_all_by_label(&picker).next().expect("repository picker").click();
     settle(harness);
@@ -425,7 +425,7 @@ fn repository_menu(harness: &mut Harness<'static, NiceGitApp>, name: &str, item:
     settle(harness);
 }
 
-fn folder_name(path: &Path) -> String {
+pub(crate) fn folder_name(path: &Path) -> String {
     path.file_name().unwrap().to_string_lossy().into_owned()
 }
 
