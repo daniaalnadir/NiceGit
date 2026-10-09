@@ -452,6 +452,18 @@ impl NiceGitApp {
         }
         ui.separator();
         let can_rewrite = idle && on_branch && clean;
+        // Cherry-picking or reverting a merge needs the parent its changes are measured against.
+        let merge_parents =
+            (commit.parents.len() > 1).then(|| commit.parents.iter().map(|p| (p.clone(), String::new())).collect::<Vec<_>>());
+        let choose_parent = |revert: bool| Dialog::ChooseParent {
+            commit: commit.hash.clone(),
+            subject: commit.subject.clone(),
+            parents: merge_parents.clone().unwrap_or_default(),
+            selected: 0,
+            revert,
+            branch: snapshot.current_branch.clone(),
+            head: snapshot.head_hash.clone(),
+        };
         if !is_head
             && ui
                 .add_enabled(can_rewrite, egui::Button::new(format!("{}  Cherry-pick", icon::ARROW_BEND_DOWN_RIGHT)))
@@ -459,6 +471,10 @@ impl NiceGitApp {
                 .clicked()
         {
             ui.close();
+            if merge_parents.is_some() {
+                self.dialog = Some(choose_parent(false));
+                return;
+            }
             self.confirm(
                 "Cherry-pick this commit?",
                 format!("“{}” is applied to {} as a new commit.", commit.subject, snapshot.current_branch),
@@ -476,6 +492,10 @@ impl NiceGitApp {
             .clicked()
         {
             ui.close();
+            if merge_parents.is_some() {
+                self.dialog = Some(choose_parent(true));
+                return;
+            }
             self.confirm(
                 "Revert this commit?",
                 format!("A new commit on {} undoes the changes from “{}”.", snapshot.current_branch, commit.subject),
@@ -502,6 +522,24 @@ impl NiceGitApp {
         {
             ui.close();
             self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::new(commit.hash.clone(), snapshot)));
+        }
+        if is_head
+            && ui
+                .add_enabled(
+                    idle && on_branch && snapshot.operation.is_none(),
+                    egui::Button::new(format!("{}  Edit message…", icon::PENCIL_SIMPLE)),
+                )
+                .clicked()
+        {
+            ui.close();
+            if let Some(head) = snapshot.head_hash.clone() {
+                let message = self
+                    .repo()
+                    .and_then(|r| nicegit_core::GitClient::new().commit_message(&head, &r.path).ok())
+                    .unwrap_or_else(|| commit.subject.clone());
+                self.dialog =
+                    Some(Dialog::EditMessage { message: message.trim_end().to_string(), branch: snapshot.current_branch.clone(), head });
+            }
         }
         if is_head
             && ui

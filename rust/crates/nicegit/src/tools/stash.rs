@@ -3,7 +3,6 @@
 //! it is.
 
 // The window is not opened from the menus yet, so nothing constructs it in the application.
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 

@@ -72,7 +72,12 @@ impl NiceGitApp {
                         .map(|s| format!("Undo {}", s.title.to_lowercase()))
                         .unwrap_or_else(|| "Nothing to undo".into());
                     if tool(ui, icon::ARROW_COUNTER_CLOCKWISE, "Undo", &undo_tip, can_undo).clicked() {
-                        self.undo();
+                        self.confirm(
+                            format!("{undo_tip}?"),
+                            "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
+                            "Undo",
+                            crate::ui::dialogs::Pending::Undo,
+                        );
                     }
                     let can_redo =
                         idle && self.repo().is_some_and(|r| r.redo.as_ref().is_some_and(|s| s.applies_to(&snapshot.current_branch)));
@@ -82,7 +87,12 @@ impl NiceGitApp {
                         .map(|s| format!("Redo {}", s.title.to_lowercase()))
                         .unwrap_or_else(|| "Nothing to redo".into());
                     if tool(ui, icon::ARROW_CLOCKWISE, "Redo", &redo_tip, can_redo).clicked() {
-                        self.redo();
+                        self.confirm(
+                            format!("{redo_tip}?"),
+                            "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
+                            "Redo",
+                            crate::ui::dialogs::Pending::Redo,
+                        );
                     }
                     ui.add_space(8.0);
                     let has_remote = !snapshot.remotes.is_empty();
@@ -194,6 +204,7 @@ impl NiceGitApp {
                 }
             };
         open(ui, self, icon::GEAR_SIX, "Repository settings…", &|_| Box::new(tools::repository_settings::RepositorySettingsWindow::new()));
+        open(ui, self, icon::ARCHIVE, "Stashes…", &|_| Box::new(tools::stash::StashWindow::new()));
         open(ui, self, icon::MAGNIFYING_GLASS, "Search history…", &|_| Box::new(tools::commit_search::CommitSearchWindow::new()));
         open(ui, self, icon::FILE_MAGNIFYING_GLASS, "Search file contents…", &|_| {
             Box::new(tools::content_search::ContentSearchWindow::new(None))

@@ -270,6 +270,12 @@ impl NiceGitApp {
             if snapshot.stashes.is_empty() {
                 ui.label(RichText::new("   No stashes").small().color(c.muted));
             }
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                if ui.small_button("Manage stashes…").clicked() {
+                    self.open_tool(Box::new(tools::stash::StashWindow::new()));
+                }
+            });
             for stash in &snapshot.stashes {
                 let selected = matches!(self.repo().map(|r| &r.selection), Some(Selection::Stash { hash }) if *hash == stash.hash);
                 let response =

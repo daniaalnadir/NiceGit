@@ -108,6 +108,7 @@ impl NiceGitApp {
             command("Clone repository…", "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
             command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
             command("Repository settings", "Identity, profiles, and remotes", icon::GEAR_SIX, has, Run::Tool("settings")),
+            command("Stashes", "Save selected files, preview, apply, or delete stashes", icon::ARCHIVE, has, Run::Tool("stashes")),
             command("Search history", "Shift-Ctrl/Cmd-F · every branch", icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
             command("Search file contents", "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
             command(
@@ -209,6 +210,7 @@ impl NiceGitApp {
                 let remote = self.snapshot().and_then(|s| s.remotes.iter().find(|r| *r == "origin").or(s.remotes.first()).cloned());
                 let tool: Option<Box<dyn tools::ToolWindow>> = match name {
                     "settings" => Some(Box::new(tools::repository_settings::RepositorySettingsWindow::new())),
+                    "stashes" => Some(Box::new(tools::stash::StashWindow::new())),
                     "search" => Some(Box::new(tools::commit_search::CommitSearchWindow::new())),
                     "grep" => Some(Box::new(tools::content_search::ContentSearchWindow::new(None))),
                     "reflog" => Some(Box::new(tools::reflog::ReflogWindow::new())),
