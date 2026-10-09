@@ -165,7 +165,21 @@ fn edit_and_save_a_working_file_in_the_built_in_editor() {
     // An accessibility click, like a screen reader's, does not depend on where the diff header
     // is laid out in the frame the click arrives.
     harness.get_by_label(&edit).click_accesskit();
-    wait(&mut harness, "the editor", |h| h.query_by_role_and_label(Role::TextInput, "File contents").is_some());
+    let start = Instant::now();
+    while harness.query_by_role_and_label(Role::TextInput, "File contents").is_none() {
+        harness.step();
+        std::thread::sleep(Duration::from_millis(15));
+        let state = harness.state();
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "the editor did not open: windows {:?}, busy {:?}, selection {:?}, Edit button shown {}, notice {:?}",
+            state.tools.iter().map(|t| t.title()).collect::<Vec<_>>(),
+            state.busy,
+            state.repo().map(|r| r.selection.clone()),
+            harness.query_by_label(&edit).is_some(),
+            state.notice.as_ref().map(|n| n.text.clone()),
+        );
+    }
     settle(&mut harness);
 
     harness.get_by_role_and_label(Role::TextInput, "File contents").focus();
