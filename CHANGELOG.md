@@ -6,6 +6,8 @@
   files do in the Changes panel.
 - Each repository tab shows how many uncommitted changes it has, so work in progress is
   visible in every open repository.
+- Set an external editor in Settings, such as `code` or `zed`, and open changed files in it
+  from their menu or the diff's header.
 
 ## 1.3.0 - Line by line
 

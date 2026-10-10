@@ -390,6 +390,13 @@ impl NiceGitApp {
             ui.ctx().copy_text(entry.path.clone());
         }
         let file = repo_path.join(&entry.path);
+        let editor = self.settings.external_editor.trim().to_string();
+        if !editor.is_empty() && file.is_file() && ui.button(format!("{}  Open in {}", icon::CODE, editor_name(&editor))).clicked() {
+            ui.close();
+            if let Err(error) = open_in_editor(&editor, &file) {
+                self.notify(error, true);
+            }
+        }
         if file.is_file() && ui.button(format!("{}  Open in default app", icon::ARROW_SQUARE_OUT)).clicked() {
             ui.close();
             open_in_default_app(&file);
@@ -595,6 +602,8 @@ thread_local! {
     pub static REVEALED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
     /// Files the interface asked the system to open, recorded under test instead of opened.
     pub static OPENED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Files the interface asked an external editor to open, with its command, under test.
+    pub static EDITED: std::cell::RefCell<Vec<(String, std::path::PathBuf)>> = const { std::cell::RefCell::new(Vec::new()) };
     /// Web addresses the interface asked the browser to open, recorded under test instead.
     pub static OPENED_URLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
@@ -611,6 +620,48 @@ pub fn open_in_default_app(path: &std::path::Path) {
     let _ = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(all(not(test), unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+}
+
+/// What to call an external editor command in menus: a well-known editor's name, or the
+/// program's own name.
+pub fn editor_name(command: &str) -> String {
+    let program = command.split_whitespace().next().unwrap_or_default();
+    let base = std::path::Path::new(program).file_stem().and_then(|stem| stem.to_str()).unwrap_or(program);
+    match base {
+        "code" => "VS Code".into(),
+        "code-insiders" => "VS Code Insiders".into(),
+        "cursor" => "Cursor".into(),
+        "zed" => "Zed".into(),
+        "subl" => "Sublime Text".into(),
+        "idea" => "IntelliJ IDEA".into(),
+        "mate" => "TextMate".into(),
+        "nova" => "Nova".into(),
+        other => other.to_string(),
+    }
+}
+
+/// Opens a file with the external editor `command`: its first word is the program, later words
+/// are passed before the file's absolute path. The program is looked up on NiceGit's search
+/// path, which includes common install folders an app opened from the desktop may not inherit.
+pub fn open_in_editor(command: &str, file: &std::path::Path) -> Result<(), String> {
+    let mut words = command.split_whitespace();
+    let Some(program) = words.next() else { return Err("Set an external editor in Settings first.".into()) };
+    let arguments: Vec<&str> = words.collect();
+    #[cfg(test)]
+    {
+        let _ = (program, &arguments);
+        EDITED.with(|edited| edited.borrow_mut().push((command.to_string(), file.to_path_buf())));
+        Ok(())
+    }
+    #[cfg(not(test))]
+    std::process::Command::new(program)
+        .args(&arguments)
+        .arg(file)
+        .env("PATH", nicegit_core::runner::search_path())
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .map(drop)
+        .map_err(|error| format!("Could not start {}: {error}", editor_name(command)))
 }
 
 /// Opens a web address in the default browser. Only `https://` addresses are opened.

@@ -642,6 +642,20 @@ impl NiceGitApp {
                 self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
             }
         }
+        // The open working file in the person's own editor, when one is set in Settings.
+        let editor = self.settings.external_editor.trim().to_string();
+        let working_file = match self.repo().map(|r| (&r.selection, r.path.clone())) {
+            Some((Selection::Change { entry, .. }, root)) => Some(root.join(&entry.path)).filter(|file| file.is_file()),
+            _ => None,
+        };
+        if let (false, Some(file)) = (editor.is_empty(), working_file) {
+            let tip = format!("Open in {}", crate::ui::changes::editor_name(&editor));
+            if widgets::icon_button(ui, icon::CODE, &tip, true).clicked() {
+                if let Err(error) = crate::ui::changes::open_in_editor(&editor, &file) {
+                    self.notify(error, true);
+                }
+            }
+        }
         // The diff as Git printed it, to paste into a message or an issue.
         let patch = self
             .repo()

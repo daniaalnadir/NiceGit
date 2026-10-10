@@ -1755,3 +1755,43 @@ fn repository_tabs_count_their_uncommitted_changes() {
     harness.get_by_label(&count).hover();
     wait(&mut harness, "the tooltip", |h| shows(h, "7 uncommitted changes"));
 }
+
+#[test]
+fn changed_files_open_in_the_external_editor_from_settings() {
+    assert_eq!(crate::ui::changes::editor_name("code --reuse-window"), "VS Code");
+    assert_eq!(crate::ui::changes::editor_name("/usr/local/bin/zed"), "Zed");
+    assert_eq!(crate::ui::changes::editor_name("nvim-qt"), "nvim-qt");
+
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::EDITED.with(|edited| edited.borrow_mut().clear());
+    let edited = || crate::ui::changes::EDITED.with(|edited| edited.borrow().clone());
+    let canonical = |p: &Path| p.canonicalize().unwrap();
+
+    // With no editor set, the menu does not offer one.
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the file's menu", |h| shows(h, "Open in default app"));
+    assert!(!shows(&harness, "Open in VS Code"));
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+
+    harness.state_mut().settings.external_editor = "code --reuse-window".into();
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the editor in the menu", |h| shows(h, "Open in VS Code"));
+    harness.get_by_label_contains("Open in VS Code").click();
+    settle(&mut harness);
+    let opened = edited();
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0].0, "code --reuse-window");
+    assert_eq!(canonical(&opened[0].1), canonical(&path.join("notes.txt")));
+
+    // The open diff offers it too.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff's editor button", |h| h.query_by_label("Open in VS Code").is_some());
+    harness.get_by_label("Open in VS Code").click();
+    settle(&mut harness);
+    assert_eq!(edited().len(), 2);
+}

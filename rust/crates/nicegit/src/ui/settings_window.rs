@@ -69,6 +69,18 @@ impl NiceGitApp {
                 // A warning is set at body size so it reads as clearly as the setting it explains.
                 let note = RichText::new(note).color(color);
                 ui.label(if too_narrow && self.settings.split_diff { note } else { note.small() });
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label("External editor");
+                    let field = ui.add(
+                        egui::TextEdit::singleline(&mut self.settings.external_editor).hint_text("code, zed, subl…").desired_width(180.0),
+                    );
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "External editor"));
+                })
+                .response
+                .on_hover_text(
+                    "The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.",
+                );
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(
