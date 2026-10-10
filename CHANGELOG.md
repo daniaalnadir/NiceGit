@@ -8,6 +8,8 @@
 - A repository tab's right-click menu can close it or every other tab, copy its path, or
   show it in the file manager.
 - Clicking a tab's name now switches to it; before, only the tab's edges responded.
+- Every download includes THIRD_PARTY_LICENSES.txt, the license texts and copyright notices of
+  the open-source components built into NiceGit.
 
 ## 1.5.0 - Fewer surprises
 

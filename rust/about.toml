@@ -1,0 +1,37 @@
+# Licenses accepted in the third-party license file (rust/scripts/third-party-licenses.sh).
+#
+# Each dependency's license expression must be satisfiable with these. GPL and LGPL alternatives
+# that some crates offer (self_cell: Apache-2.0 OR GPL-2.0-only; r-efi: MIT OR Apache-2.0 OR
+# LGPL-2.1-or-later) are not listed: the permissive alternative is chosen instead.
+# OFL-1.1 and Ubuntu-font-1.0 are needed because egui's default fonts (epaint_default_fonts,
+# enabled by eframe's default_fonts feature) are compiled into the program.
+accepted = [
+    "0BSD",
+    "Apache-2.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+# The platforms NiceGit ships, so one file covers every download.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+]
+
+# Only the crates that are compiled into the shipped program count. Dev-dependencies are test
+# tools, and build-dependencies (such as winresource, which embeds the Windows icon) run at build
+# time and are not linked into the program.
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+
+# NiceGit's own crates (publish = false) are covered by the root LICENSE, so they are left out.
+[private]
+ignore = true
