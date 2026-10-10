@@ -567,6 +567,8 @@ thread_local! {
     pub static REVEALED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
     /// Files the interface asked the system to open, recorded under test instead of opened.
     pub static OPENED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Web addresses the interface asked the browser to open, recorded under test instead.
+    pub static OPENED_URLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Shows a file in the platform's file manager.
@@ -581,6 +583,21 @@ pub fn open_in_default_app(path: &std::path::Path) {
     let _ = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(all(not(test), unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+}
+
+/// Opens a web address in the default browser. Only `https://` addresses are opened.
+pub fn open_url(url: &str) {
+    if !url.starts_with("https://") {
+        return;
+    }
+    #[cfg(test)]
+    OPENED_URLS.with(|opened| opened.borrow_mut().push(url.to_string()));
+    #[cfg(all(not(test), target_os = "macos"))]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(all(not(test), target_os = "windows"))]
+    let _ = std::process::Command::new("explorer").arg(url).spawn();
+    #[cfg(all(not(test), unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
 
 pub fn reveal(path: &std::path::Path) {

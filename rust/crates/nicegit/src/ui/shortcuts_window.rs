@@ -15,6 +15,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             vec![
                 (with("Shift-Cmd-P"), "Command palette"),
                 (with("Cmd-O"), "Open a repository"),
+                (with("Cmd-1 … Cmd-9"), "Go to a repository tab; Cmd-9 for the last"),
                 (with("Cmd-R"), "Refresh the repository"),
                 (with("Shift-Cmd-F"), "Search the history of every branch"),
                 (with("Alt-Cmd-F"), "Search file contents"),

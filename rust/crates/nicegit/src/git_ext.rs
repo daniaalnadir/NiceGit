@@ -97,6 +97,34 @@ pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str) -> V
         .collect()
 }
 
+/// The github.com page for opening a pull request from a local branch, when its upstream is a
+/// branch on a github.com remote. Remote names can contain slashes, so the longest one that
+/// prefixes the upstream is its remote.
+pub fn github_pull_request_link(snapshot: &nicegit_core::Snapshot, branch: &nicegit_core::Branch) -> Option<String> {
+    if branch.is_remote {
+        return None;
+    }
+    // The upstream is a full ref; only a remote-tracking branch has a remote to compare on.
+    let upstream = branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?;
+    let remote = snapshot.remotes.iter().filter(|remote| upstream.starts_with(&format!("{remote}/"))).max_by_key(|remote| remote.len())?;
+    let remote_branch = &upstream[remote.len() + 1..];
+    let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
+    let repository = nicegit_core::github::GitHubRepository::parse(address).ok()?;
+    Some(format!("https://github.com/{}/compare/{}?expand=1", repository.slug(), encode_path(remote_branch)))
+}
+
+/// Percent-encodes a branch name for a URL path, keeping its slashes.
+fn encode_path(text: &str) -> String {
+    let mut encoded = String::new();
+    for byte in text.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => encoded.push(byte as char),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
 /// A submenu for copying a commit's github.com link, choosing the remote explicitly. Making a
 /// link neither publishes the commit nor checks that the remote has it.
 pub fn github_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, commit: &str) {
@@ -122,6 +150,37 @@ mod tests {
 
     fn signed(status: SignatureStatus, problem: Option<&str>) -> CommitSignature {
         CommitSignature { status, signer: "Riley <riley@example.com>".into(), key: "SHA256:abc".into(), problem: problem.map(String::from) }
+    }
+
+    #[test]
+    fn pull_request_links_use_the_upstream_branch_on_its_github_remote() {
+        use nicegit_core::{Branch, Snapshot};
+        let mut snapshot = Snapshot { remotes: vec!["origin".into(), "origin/team".into(), "mirror".into()], ..Default::default() };
+        snapshot.remote_fetch_addresses.insert("origin".into(), vec!["git@github.com:acme/app.git".into()]);
+        snapshot.remote_fetch_addresses.insert("origin/team".into(), vec!["https://github.com/team/app".into()]);
+        snapshot.remote_fetch_addresses.insert("mirror".into(), vec!["https://example.com/app.git".into()]);
+        let branch = |upstream: Option<&str>| Branch {
+            name: "local".into(),
+            is_current: true,
+            is_remote: false,
+            tip: "abc".into(),
+            subject: String::new(),
+            upstream: upstream.map(String::from),
+        };
+        let link = |upstream| super::github_pull_request_link(&snapshot, &branch(upstream));
+
+        assert_eq!(
+            link(Some("refs/remotes/origin/feature/fix #2")).as_deref(),
+            Some("https://github.com/acme/app/compare/feature/fix%20%232?expand=1")
+        );
+        assert_eq!(
+            link(Some("refs/remotes/origin/team/topic")).as_deref(),
+            Some("https://github.com/team/app/compare/topic?expand=1"),
+            "the longest remote name wins"
+        );
+        assert_eq!(link(Some("refs/remotes/mirror/topic")), None, "not on github.com");
+        assert_eq!(link(Some("refs/heads/main")), None, "a local upstream has no remote");
+        assert_eq!(link(None), None, "an unpublished branch has nothing to compare");
     }
 
     #[test]

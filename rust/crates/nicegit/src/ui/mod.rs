@@ -47,6 +47,16 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Comma))) {
             self.show_settings = !self.show_settings;
         }
+        // Command-1 to Command-8 open the repository tabs in order; Command-9 the last, as in browsers.
+        let tabs = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
+        for (position, key) in tabs.into_iter().enumerate() {
+            if ctx.input_mut(|i| i.consume_shortcut(&command(key))) {
+                let index = if key == Key::Num9 { self.repos.len().saturating_sub(1) } else { position };
+                if index < self.repos.len() && index != self.active {
+                    self.switch_to(index);
+                }
+            }
+        }
         // Checked first: Command-Enter also matches while Shift is held.
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
             self.commit_and_push();

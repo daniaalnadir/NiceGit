@@ -20,6 +20,7 @@ pub struct PaletteState {
 
 #[derive(Clone)]
 enum Run {
+    PullRequest(String),
     Shortcuts,
     Fetch,
     Pull,
@@ -102,6 +103,10 @@ impl NiceGitApp {
             enabled,
             run,
         };
+        let pull_request = snapshot.and_then(|s| {
+            let current = s.branches.iter().find(|b| b.is_current && !b.is_remote)?;
+            crate::git_ext::github_pull_request_link(s, current)
+        });
         let mut list = vec![
             command("Fetch", "Download from all remotes", icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
             command("Pull", "Fetch and fast-forward the current branch", icon::ARROW_LINE_DOWN, idle && clean, Run::Pull),
@@ -141,6 +146,15 @@ impl NiceGitApp {
             ),
             command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
         ];
+        if let Some(link) = pull_request {
+            list.push(command(
+                "Create pull request on GitHub",
+                "For the current branch, in your browser",
+                icon::GIT_PULL_REQUEST,
+                true,
+                Run::PullRequest(link),
+            ));
+        }
         if let Some(snapshot) = snapshot {
             if snapshot.upstream.is_none() && snapshot.is_on_branch() && !snapshot.remotes.is_empty() {
                 list.push(command("Publish branch", "Push it to a remote and track it", icon::UPLOAD_SIMPLE, idle, Run::Publish));
@@ -257,6 +271,7 @@ impl NiceGitApp {
             Run::Redo => self.confirm_redo(),
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
+            Run::PullRequest(link) => crate::ui::changes::open_url(&link),
             Run::Shortcuts => self.show_shortcuts = true,
             Run::Open => self.choose_folder(),
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),

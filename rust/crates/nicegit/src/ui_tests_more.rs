@@ -1496,3 +1496,47 @@ fn a_changed_image_shows_both_versions_in_the_diff() {
     harness.state_mut().select_commit_file(added, Some("icon.png".into()));
     wait(&mut harness, "the committed image", |h| shows(h, "4 × 3") && shows(h, "Added in this change"));
 }
+
+#[test]
+fn command_and_a_number_switches_repository_tabs() {
+    let first = repository();
+    let second = repository();
+    let third = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    for repo in [&second, &third] {
+        harness.state_mut().open(repo.path().to_path_buf());
+        wait(&mut harness, "the tab", |h| h.state().snapshot().is_some() && !h.state().repo().unwrap().loading);
+    }
+    assert_eq!(harness.state().active, 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num1);
+    wait(&mut harness, "the first tab", |h| h.state().active == 0);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num2);
+    wait(&mut harness, "the second tab", |h| h.state().active == 1);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num9);
+    wait(&mut harness, "the last tab", |h| h.state().active == 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    harness.run_steps(3);
+    assert_eq!(harness.state().active, 2, "a tab that does not exist changes nothing");
+}
+
+#[test]
+fn a_pull_request_opens_on_github_for_the_current_branch() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/app.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("create pull request".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec!["https://github.com/acme/app/compare/main?expand=1".to_string()]);
+}
