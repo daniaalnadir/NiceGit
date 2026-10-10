@@ -173,8 +173,12 @@ impl NiceGitApp {
                     if let InputKind::CreateTag { annotated, .. } = kind {
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
-                            ui.radio_value(annotated, false, "Lightweight");
-                            ui.radio_value(annotated, true, "Annotated, with a message");
+                            if widgets::radio(ui, !*annotated, "Lightweight").clicked() {
+                                *annotated = false;
+                            }
+                            if widgets::radio(ui, *annotated, "Annotated, with a message").clicked() {
+                                *annotated = true;
+                            }
                         });
                         show_second = *annotated;
                     }
@@ -248,7 +252,10 @@ impl NiceGitApp {
                         } else {
                             parent_subject.clone()
                         };
-                        ui.radio_value(selected, index, format!("Parent {} · {} {subject}", index + 1, nicegit_core::models::short(hash)));
+                        let label = format!("Parent {} · {} {subject}", index + 1, nicegit_core::models::short(hash));
+                        if widgets::radio(ui, *selected == index, label).clicked() {
+                            *selected = index;
+                        }
                     }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {

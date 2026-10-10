@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.12 - Clear controls
+
+- Radio buttons have a clear outline, so unselected choices read as controls in the light
+  theme.
+- A watchdog stops the test run with a hung interface test's name, last step, and (on
+  Windows) every thread's stack.
+
 ## 0.6.11 - Refresh like the Mac app
 
 - As in the Mac app, automatic refreshes and the refresh for returning to NiceGit wait while

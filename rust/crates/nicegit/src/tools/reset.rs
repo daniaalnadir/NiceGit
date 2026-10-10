@@ -70,7 +70,7 @@ fn mode_card(ui: &mut egui::Ui, mode: &mut ResetMode, option: ResetMode) {
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             let title_color = if is_hard { c.danger } else { ui.visuals().text_color() };
-            if ui.radio(selected, RichText::new(mode_title(option)).strong().color(title_color)).clicked() {
+            if widgets::radio(ui, selected, RichText::new(mode_title(option)).strong().color(title_color)).clicked() {
                 *mode = option;
             }
             ui.add_space(2.0);

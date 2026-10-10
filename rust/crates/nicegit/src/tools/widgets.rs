@@ -133,3 +133,16 @@ pub fn checkbox(ui: &mut Ui, enabled: bool, checked: &mut bool, text: impl Into<
     })
     .inner
 }
+
+/// A radio button whose unselected circle has a clear outline, since the widgets' resting
+/// border is too faint on the light theme's white to read as a control.
+pub fn radio(ui: &mut Ui, selected: bool, text: impl Into<egui::WidgetText>) -> egui::Response {
+    let outline = egui::Stroke::new(1.0, crate::theme::of(ui).muted);
+    ui.scope(|ui| {
+        let widgets = &mut ui.visuals_mut().widgets;
+        widgets.inactive.bg_stroke = outline;
+        widgets.hovered.bg_stroke = outline;
+        ui.radio(selected, text)
+    })
+    .inner
+}

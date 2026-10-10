@@ -35,7 +35,9 @@ impl NiceGitApp {
                         ui.allocate_ui_with_layout(label_size, egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             // The space is otherwise shrunk to the label's own width.
                             ui.set_min_width(label_size.x);
-                            ui.radio_value(&mut self.settings.graph_palette, palette, palette.title());
+                            if crate::tools::widgets::radio(ui, self.settings.graph_palette == palette, palette.title()).clicked() {
+                                self.settings.graph_palette = palette;
+                            }
                         });
                         let previous = theme::graph_palette();
                         theme::set_graph_palette(palette);
