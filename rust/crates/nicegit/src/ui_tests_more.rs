@@ -1463,3 +1463,36 @@ fn commit_and_push_sends_the_new_commit_from_the_commit_box_or_the_keyboard() {
     assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Push from the keyboard");
     assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "4", "one commit each time, not two");
 }
+
+#[test]
+fn a_changed_image_shows_both_versions_in_the_diff() {
+    let repo = repository();
+    let path = repo.path();
+    let image = |width, height| {
+        image::RgbaImage::from_pixel(width, height, image::Rgba([40, 120, 200, 255])).save(path.join("icon.png")).unwrap();
+    };
+    image(4, 3);
+    git(path, &["add", "icon.png"]);
+    git(path, &["commit", "-q", "-m", "Add the icon"]);
+    image(8, 6);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Unstaged: the index's version against the working file.
+    harness.get_by_label("icon.png").click();
+    wait(&mut harness, "both versions", |h| shows(h, "4 × 3") && shows(h, "8 × 6"));
+
+    // Staged: HEAD's version against the index.
+    image(2, 2);
+    git(path, &["add", "icon.png"]);
+    harness.state_mut().load(true);
+    idle(&mut harness);
+    let staged = harness.state().snapshot().unwrap().status.iter().find(|e| e.path == "icon.png").cloned().unwrap();
+    harness.state_mut().select_change(staged, true);
+    wait(&mut harness, "the staged versions", |h| shows(h, "4 × 3") && shows(h, "2 × 2") && !shows(h, "8 × 6"));
+
+    // A commit's image: its parent's version (none, for an added file) against the commit's.
+    let added = git(path, &["rev-parse", "HEAD"]);
+    harness.state_mut().select_commit_file(added, Some("icon.png".into()));
+    wait(&mut harness, "the committed image", |h| shows(h, "4 × 3") && shows(h, "Added in this change"));
+}

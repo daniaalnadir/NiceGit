@@ -115,6 +115,10 @@ pub struct Repo {
     pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
     /// Lines added and removed in each changed file, read after each refresh.
     pub line_counts: Option<Task<Option<nicegit_core::line_counts::LineCounts>>>,
+    /// Both versions of an image file whose change is open, read alongside its diff.
+    pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
+    /// The open image's versions, uploaded for drawing once read.
+    pub image_textures: Option<crate::tools::compare::Textures>,
     /// Text that narrows the Changes panel's lists to matching paths.
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
@@ -161,6 +165,8 @@ impl Repo {
             submodules: None,
             line_counts: None,
             change_filter: String::new(),
+            image_preview: None,
+            image_textures: None,
             github: [None, None],
         }
     }
@@ -728,6 +734,8 @@ impl NiceGitApp {
         repo.details = None;
         repo.review = None;
         repo.line_map = None;
+        repo.image_preview = None;
+        repo.image_textures = None;
         repo.diff_options.selected.clear();
         repo.commit_files.clear();
         repo.diff_generation = next_id();
@@ -738,6 +746,8 @@ impl NiceGitApp {
         let repo = self.repos.get_mut(self.active)?;
         repo.review = None;
         repo.line_map = None;
+        repo.image_preview = None;
+        repo.image_textures = None;
         repo.diff_options.selected.clear();
         repo.diff_generation = next_id();
         repo.diff_loading = true;
@@ -833,7 +843,35 @@ impl NiceGitApp {
             self.repo_mut().expect("active repository").review =
                 Some(Task::spawn(&context, move || GitClient::new().file_review(&file, staged, &review_path)));
         }
+        if crate::tools::compare::is_image(&entry.path) {
+            // An image's versions: the index against the working file, or HEAD (under its old
+            // name, for a rename) against the index once staged.
+            let (preview_path, preview_entry) = (path.clone(), entry.clone());
+            self.load_image_preview(move |client| {
+                let entry = preview_entry;
+                if staged {
+                    let old = entry.original_path.as_deref().unwrap_or(&entry.path);
+                    let head = client.file_bytes_at(Some("HEAD"), old, &preview_path).unwrap_or(None);
+                    Ok((head, client.index_bytes(&entry.path, &preview_path)?))
+                } else {
+                    Ok((client.index_bytes(&entry.path, &preview_path)?, client.file_bytes_at(None, &entry.path, &preview_path)?))
+                }
+            });
+        }
         self.worker.diff(generation, title, move |client| client.diff_with(&entry, staged, ignore_whitespace, &path));
+    }
+
+    /// Reads both versions of an image whose change is open, in the background, to show them
+    /// in place of Git's note that the binary file differs.
+    fn load_image_preview(
+        &mut self,
+        read: impl FnOnce(&GitClient) -> nicegit_core::Result<(Option<Vec<u8>>, Option<Vec<u8>>)> + Send + 'static,
+    ) {
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repo_mut() else { return };
+        repo.image_preview = Some(Task::spawn(&context, move || {
+            read(&GitClient::new()).map(|(before, after)| crate::tools::compare::ImagePair::read(before, after)).map_err(|e| e.to_string())
+        }));
     }
 
     pub fn select_commit(&mut self, hash: String) {
@@ -857,6 +895,14 @@ impl NiceGitApp {
         let repo = self.repo_mut().expect("active repository");
         repo.selection = Selection::Commit { hash: hash.clone(), file: file.clone() };
         let title = file.clone().unwrap_or_else(|| format!("Commit {}", short(&hash)));
+        if let Some(image) = file.clone().filter(|file| crate::tools::compare::is_image(file)) {
+            // The image as its parent had it, against the commit's version.
+            let (preview_path, commit) = (path.clone(), hash.clone());
+            self.load_image_preview(move |client| {
+                let before = client.file_bytes_at(Some(&format!("{commit}^")), &image, &preview_path).unwrap_or(None);
+                Ok((before, client.file_bytes_at(Some(&commit), &image, &preview_path)?))
+            });
+        }
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), ignore_whitespace, &path));
     }
 

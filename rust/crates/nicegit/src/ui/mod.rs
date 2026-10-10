@@ -556,7 +556,15 @@ impl NiceGitApp {
         }
         let repo = &mut self.repos[self.active];
         let mut block_action = None;
-        if let Some(diff) = repo.diff.as_ref() {
+        // Git only says that a binary file differs; for an image, both versions are shown.
+        let binary = repo.diff.as_ref().is_some_and(|diff| diff.is_empty());
+        let preview = repo.image_preview.as_mut().and_then(|task| task.get()).and_then(|pair| pair.as_ref().ok()).filter(|_| binary);
+        if let Some(pair) = preview {
+            if repo.image_textures.is_none() {
+                repo.image_textures = Some(pair.textures(ui.ctx(), &title));
+            }
+            egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| pair.show(ui, repo.image_textures.as_ref()));
+        } else if let Some(diff) = repo.diff.as_ref() {
             block_action = crate::diff_view::show_with(ui, diff, &mut repo.diff_options).block_action;
         } else {
             ui.take_available_space();

@@ -8,6 +8,8 @@
   shows how many of its files match.
 - Open a changed file in its default app from its menu in the Changes panel.
 - Drag a folder onto the window to open it as a repository.
+- A changed image shows its versions side by side in the diff, with their dimensions and
+  file sizes, for unstaged and staged changes and for a commit's files.
 - Commit and push in one step from the commit box, or with Shift-Command-Enter
   (Shift-Control-Enter elsewhere), on a branch with an upstream. If the push fails, the
   commit is kept and the message says so.

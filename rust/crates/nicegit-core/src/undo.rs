@@ -338,7 +338,7 @@ impl GitClient {
     }
 
     /// The raw bytes of a blob. Binary contents are kept exactly, unlike `run`, which requires UTF-8.
-    fn blob_contents(&self, blob: &str, directory: &Path) -> Result<Vec<u8>> {
+    pub(crate) fn blob_contents(&self, blob: &str, directory: &Path) -> Result<Vec<u8>> {
         runner::run_bytes(&["cat-file", "blob", blob], directory, &self.options())
     }
 }
