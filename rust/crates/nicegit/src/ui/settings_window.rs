@@ -54,11 +54,18 @@ impl NiceGitApp {
                     crate::tools::widgets::checkbox(ui, true, &mut self.settings.ignore_whitespace, "Hide whitespace-only changes")
                         .changed();
                 crate::tools::widgets::checkbox(ui, true, &mut self.settings.split_diff, "Show diffs side by side");
-                ui.label(
-                    RichText::new(format!("Needs a diff panel at least {} points wide.", crate::diff_view::MIN_SPLIT_WIDTH))
-                        .small()
-                        .color(theme::of(ui).muted),
-                );
+                // Said plainly when the choice is not in effect at the panel's current width.
+                let minimum = crate::diff_view::MIN_SPLIT_WIDTH;
+                let too_narrow = self.diff_panel_width.is_some_and(|width| !crate::diff_view::split_fits(width));
+                let (note, color) = if self.settings.split_diff && too_narrow {
+                    (
+                        format!("Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides."),
+                        theme::of(ui).warning,
+                    )
+                } else {
+                    (format!("Needs a diff panel at least {minimum} points wide."), theme::of(ui).muted)
+                };
+                ui.label(RichText::new(note).small().color(color));
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(

@@ -180,6 +180,9 @@ pub struct NiceGitApp {
     was_focused: bool,
     /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
     pub(crate) activation_refresh: bool,
+    /// How wide the diff panel was when last shown, so Settings can say whether side by side
+    /// is in effect.
+    pub(crate) diff_panel_width: Option<f32>,
     watcher: Option<Watch>,
     watched_change: Option<Instant>,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
@@ -217,6 +220,7 @@ impl NiceGitApp {
             generation: 0,
             was_focused: true,
             activation_refresh: false,
+            diff_panel_width: None,
             watcher: None,
             watched_change: None,
             applied_appearance: None,

@@ -563,3 +563,22 @@ fn outside_changes_wait_while_a_review_window_is_open() {
         wait(&mut harness, "the refresh once it closes", listed);
     }
 }
+
+#[test]
+fn settings_say_when_side_by_side_is_not_in_effect() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff panel", |h| h.state().diff_panel_width.is_some());
+    harness.state_mut().settings.split_diff = true;
+    harness.state_mut().show_settings = true;
+    let narrow = harness.state().diff_panel_width.is_some_and(|width| !crate::diff_view::split_fits(width));
+
+    // At the default window the panel is too narrow for two columns, and Settings says so.
+    wait(&mut harness, "the settings note", |h| h.query_all_by_label_contains("Not in effect now").next().is_some() == narrow);
+    harness.state_mut().settings.split_diff = false;
+    wait(&mut harness, "the plain note", |h| h.query_all_by_label_contains("Needs a diff panel at least").next().is_some());
+}

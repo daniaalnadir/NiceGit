@@ -412,6 +412,7 @@ impl NiceGitApp {
     fn diff_panel(&mut self, ui: &mut egui::Ui) {
         let c = theme::of(ui);
         let panel_width = ui.available_width();
+        self.diff_panel_width = Some(panel_width);
         let Some(repo) = self.repo() else { return };
         let title = repo.diff.as_ref().map(|d| d.title.clone()).unwrap_or_default();
         let loading = repo.diff_loading;

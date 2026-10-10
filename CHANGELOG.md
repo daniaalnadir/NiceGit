@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.15 - Settings that explain themselves
+
+- When "Show diffs side by side" is on but the diff panel is too narrow, Settings says so in
+  the warning colour and how to change it.
+- Interface tests leave temporary repositories for the Windows runner to discard; deleting
+  them while handles were still closing could hang a CI run.
+
 ## 0.6.14 - Aligned
 
 - The history's column headings line up with their columns: labels, the first graph lane,
