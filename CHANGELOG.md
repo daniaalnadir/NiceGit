@@ -14,6 +14,8 @@
 - A remote that cannot be reached, refuses your sign-in or SSH key, or cannot be found is
   explained in plain words, with Git's own message in the tooltip; the Couldn't fetch note
   explains it too.
+- Away from any branch, as after checking out a tag, the commit box warns that a commit there
+  could be lost and offers Create branch here….
 
 ## 1.4.0 - Sizes everywhere
 

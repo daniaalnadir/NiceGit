@@ -418,6 +418,28 @@ impl NiceGitApp {
             ui.label(RichText::new("Commit").size(15.0).strong());
         });
         ui.add_space(6.0);
+        // A commit made away from any branch is easily lost; outside a rebase or similar, where
+        // that is expected, offer a branch first.
+        if !snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none() {
+            widgets::callout(
+                ui,
+                "You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.",
+                true,
+            );
+            ui.add_space(4.0);
+            if ui.add_enabled(self.idle(), egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+                self.dialog = Some(crate::ui::dialogs::Dialog::input(
+                    "New branch",
+                    "Create a branch at HEAD and switch to it",
+                    "",
+                    crate::ui::dialogs::InputKind::CreateBranch {
+                        branch: snapshot.current_branch.clone(),
+                        head: snapshot.head_hash.clone(),
+                    },
+                ));
+            }
+            ui.add_space(6.0);
+        }
         let can_amend = snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none();
         let head_published = self.head_published();
         let repo = &mut self.repos[self.active];

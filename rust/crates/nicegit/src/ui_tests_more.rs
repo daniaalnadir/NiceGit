@@ -1946,3 +1946,24 @@ fn an_unreachable_remote_is_explained_in_plain_words() {
         })
     });
 }
+
+#[test]
+fn committing_away_from_a_branch_warns_and_offers_a_branch_first() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["checkout", "-q", "--detach", "HEAD"]);
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the warning", |h| shows(h, "You are not on a branch"));
+
+    harness.get_by_label_contains("Create branch here…").click();
+    wait(&mut harness, "the new branch dialog", |h| h.state().dialog.is_some());
+    harness.event(egui::Event::Text("rescued-work".into()));
+    harness.step();
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the new branch", |_| git(path, &["branch", "--show-current"]) == "rescued-work");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n", "the change is kept");
+    wait(&mut harness, "the warning gone", |h| !shows(h, "You are not on a branch"));
+}
