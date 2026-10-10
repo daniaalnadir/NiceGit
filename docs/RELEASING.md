@@ -46,15 +46,20 @@ working repository as a release asset.
 
 ## Cross-platform Releases (Rust)
 
-Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`, which builds:
+Releases are made from `main`. Update `version` in `rust/Cargo.toml` and add a
+`CHANGELOG.md` entry, merge that to `main`, then tag the merged commit, for example
+`git tag v1.0.0 && git push origin v1.0.0`. The tag runs `.github/workflows/release.yml`,
+which first checks that the tag points to a commit on `main` and matches the version in
+`rust/Cargo.toml`, then builds:
 
 - `NiceGit-<version>-macos-universal.dmg` (Apple Silicon and Intel), built by
   `rust/scripts/package-macos.sh`;
 - `NiceGit-<version>-windows-x64.zip`;
 - `NiceGit-<version>-linux-x86_64.tar.gz` and `NiceGit-<version>-linux-amd64.deb`;
 
-and publishes them as a GitHub prerelease. Update `version` in `rust/Cargo.toml`
-before tagging. A release can be rebuilt for an existing tag from the Actions tab
+and publishes them. A plain version such as `v1.0.0` becomes a full release marked
+Latest; a version with a suffix such as `v1.1.0-rc.1` becomes a pre-release. A release
+can be rebuilt for an existing tag from the Actions tab
 (Run workflow, with the tag name); its files are replaced.
 
 Without signing secrets, the macOS app is ad-hoc signed and macOS asks users to
