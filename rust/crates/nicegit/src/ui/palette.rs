@@ -131,7 +131,7 @@ impl NiceGitApp {
                 has,
                 Run::Tool("reflog"),
             ),
-            command("Clean up branches", "Delete merged or inactive local branches", icon::BROOM, has, Run::Tool("cleanup")),
+            command("Clean up branches", "Delete merged, inactive, or gone local branches", icon::BROOM, has, Run::Tool("cleanup")),
             command("Bisect", "Find the commit that introduced a bug", icon::BUG, has, Run::Tool("bisect")),
             command("Worktrees", "Linked worktrees", icon::FOLDERS, has, Run::Tool("worktrees")),
             command("Submodules", "", icon::PACKAGE, has, Run::Tool("submodules")),
