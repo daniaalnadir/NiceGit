@@ -1823,3 +1823,22 @@ fn the_open_file_stages_and_unstages_from_the_diff_and_stays_open() {
     wait(&mut harness, "the unstaged side", |h| open_side(h) == Some(false));
     assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "");
 }
+
+#[test]
+fn every_change_can_be_staged_and_committed_at_once() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    std::fs::write(path.join("new.txt"), "new\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(!shows(&harness, "Stage all 2 and commit"), "offered only once a summary is written");
+
+    type_into(&mut harness, "Commit summary", "Everything at once");
+    wait(&mut harness, "the button", |h| shows(h, "Stage all 2 and commit"));
+    harness.get_by_label_contains("Stage all 2 and commit").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Everything at once");
+    assert_eq!(git(path, &["status", "--porcelain"]), "", "every change went into the commit");
+    assert_eq!(git(path, &["show", "--name-only", "--format="]), "new.txt\nnotes.txt");
+}

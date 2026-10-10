@@ -520,6 +520,23 @@ impl NiceGitApp {
         if clicked {
             self.commit();
         }
+        // With a summary written but nothing staged, everything can be staged and committed at once.
+        if self.can_stage_all_and_commit() {
+            ui.add_space(4.0);
+            let changes = snapshot.status.len();
+            let text = RichText::new(format!("{}  Stage all {changes} and commit", icon::CHECK_CIRCLE)).color(c.accent);
+            let button = egui::Button::new(text)
+                .fill(egui::Color32::TRANSPARENT)
+                .stroke(egui::Stroke::new(1.0, c.accent))
+                .min_size(egui::vec2(ui.available_width(), 28.0));
+            let all = ui
+                .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add(button))
+                .inner
+                .on_hover_text("Stage every change, as Stage All Changes does, then commit");
+            if all.clicked() {
+                self.stage_all_and_commit();
+            }
+        }
         // Committing and pushing in one step, for a branch that already has an upstream.
         if let (Some(upstream), false) = (snapshot.upstream.as_deref(), self.repos[self.active].amend) {
             ui.add_space(4.0);

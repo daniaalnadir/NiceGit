@@ -1045,6 +1045,37 @@ impl NiceGitApp {
         }
     }
 
+    /// Whether every change can be staged and committed in one step: a summary is written,
+    /// nothing is staged yet, there are changes, none is a conflict, and this is not an amend.
+    pub fn can_stage_all_and_commit(&self) -> bool {
+        let (Some(snapshot), Some(repo)) = (self.snapshot(), self.repo()) else { return false };
+        self.idle()
+            && !repo.amend
+            && !repo.draft.summary.trim().is_empty()
+            && snapshot.staged_count() == 0
+            && !snapshot.status.is_empty()
+            && !snapshot.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted)
+    }
+
+    /// Stages every change, as Stage All Changes does, and commits it with the draft message.
+    pub fn stage_all_and_commit(&mut self) {
+        if !self.can_stage_all_and_commit() {
+            return;
+        }
+        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        let count = self.snapshot().map_or(0, |s| s.status.len());
+        self.act_recording("Commit", "Commit", move |client, path| {
+            client.stage_all(path)?;
+            client.commit(&message, path).map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
+        });
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.draft = Draft::default();
+            }
+            self.save_draft();
+        }
+    }
+
     /// Commits the staged changes and pushes the new commit to the branch's upstream.
     pub fn commit_and_push(&mut self) {
         if !self.can_commit_and_push() {

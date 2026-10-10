@@ -10,6 +10,8 @@
   from their menu or the diff's header.
 - Stage or unstage the open file from the diff's header, or with Shift-Command-S; the file
   stays open on its other side instead of closing.
+- With a summary written and nothing staged, Stage all and commit stages every change and
+  commits it in one step.
 
 ## 1.3.0 - Line by line
 
