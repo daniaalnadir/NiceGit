@@ -692,6 +692,68 @@ fn push_refuses_stale_snapshot() {
 }
 
 #[test]
+fn commit_and_push_sends_the_new_commit_to_the_upstream() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    repo.write("a.txt", "two\n");
+    repo.git(&["add", "a.txt"]);
+
+    client().commit_and_push("Second", &snapshot(repo.path()), repo.path()).expect("commit and push");
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), head.trim());
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Second");
+}
+
+#[test]
+fn commit_and_push_refuses_a_stale_view_or_an_unpublished_branch_before_committing() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    // Not published yet: nothing to push to, so nothing is committed.
+    repo.write("a.txt", "two\n");
+    repo.git(&["add", "a.txt"]);
+    let unpublished = snapshot(repo.path());
+    assert!(error_text(client().commit_and_push("Second", &unpublished, repo.path())).contains("Publish"));
+    assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]).trim(), "1");
+
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    let stale = snapshot(repo.path());
+    repo.commit("b.txt", "elsewhere\n", "Made in another app");
+    repo.write("a.txt", "three\n");
+    repo.git(&["add", "a.txt"]);
+    assert!(error_text(client().commit_and_push("Third", &stale, repo.path())).contains("changed"));
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Made in another app", "nothing was committed");
+}
+
+#[test]
+fn commit_and_push_keeps_the_commit_and_says_so_when_the_push_fails() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    // Someone else pushes first, so this push is rejected as not a fast-forward.
+    let other = tempfile::tempdir().expect("temp dir");
+    git(other.path(), &["clone", "-q", &path_string(remote.path()), "clone"]);
+    let clone = other.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("theirs.txt"), "theirs\n").expect("write");
+    git(&clone, &["add", "theirs.txt"]);
+    git(&clone, &["commit", "-q", "-m", "Theirs"]);
+    git(&clone, &["push", "-q", "origin", "main"]);
+    repo.write("a.txt", "mine\n");
+    repo.git(&["add", "a.txt"]);
+
+    let error = error_text(client().commit_and_push("Mine", &snapshot(repo.path()), repo.path()));
+    assert!(error.contains("The commit was made, but pushing it failed"), "{error}");
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Mine");
+}
+
+#[test]
 fn pull_fast_forwards_from_remote() {
     let remote = bare_remote();
     let repo = Repo::new();

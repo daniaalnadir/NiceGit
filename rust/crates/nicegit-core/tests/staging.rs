@@ -285,6 +285,25 @@ fn a_stale_review_is_refused_without_touching_the_index() {
     assert_eq!(repo.index_text("stale.txt"), "a\nb\n");
 }
 
+// MARK: Line counts
+
+#[test]
+fn line_counts_cover_unstaged_staged_renamed_and_untracked_files() {
+    use nicegit_core::line_counts::LineCount;
+    let repo = Repo::new();
+    repo.commit("a.txt", "1\n2\n3\n", "Base");
+    repo.commit("old.txt", "keep\nkeep\nkeep\nkeep\n", "Second");
+    repo.write("a.txt", "1\nTWO\n3\n4\n");
+    repo.git(&["mv", "old.txt", "new.txt"]);
+    repo.write("b.txt", "x\ny");
+
+    let counts = client().line_counts(&["b.txt".to_string()], repo.path()).expect("counts");
+    assert_eq!(counts.unstaged["a.txt"], LineCount::Text { added: 2, removed: 1 });
+    assert_eq!(counts.unstaged["b.txt"], LineCount::Text { added: 2, removed: 0 }, "an untracked file's lines are all added");
+    assert_eq!(counts.staged["new.txt"], LineCount::Text { added: 0, removed: 0 }, "a pure rename changes no lines");
+    assert!(!counts.staged.contains_key("a.txt"), "a.txt has nothing staged");
+}
+
 // MARK: Discarding lines
 
 #[test]

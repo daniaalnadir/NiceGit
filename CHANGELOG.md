@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 - At a glance
+
+- Each changed file shows how many lines it adds and removes, such as +12 −3, or that it is
+  binary; new files count their lines too.
+- With more than ten changed files, a filter narrows the Changes panel by path; each list
+  shows how many of its files match.
+- Open a changed file in its default app from its menu in the Changes panel.
+- Drag a folder onto the window to open it as a repository.
+- Create a pull request on GitHub for a published branch, from the branch's menu or the
+  command palette; it opens GitHub's compare page in your browser.
+- Command-1 to Command-9 (Control elsewhere) go to the repository tabs, Command-9 to the last.
+- A changed image shows its versions side by side in the diff, with their dimensions and
+  file sizes, for unstaged and staged changes and for a commit's files.
+- Commit and push in one step from the commit box, or with Shift-Command-Enter
+  (Shift-Control-Enter elsewhere), on a branch with an upstream. If the push fails, the
+  commit is kept and the message says so.
+
 ## 1.1.0 - Change by change
 
 - Hover a change in a diff to stage it, unstage it, or discard it on its own. Discarding asks

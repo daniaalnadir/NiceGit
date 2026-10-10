@@ -43,20 +43,63 @@ enum Detail {
 }
 
 /// Both versions of an image. A side is `None` when the file does not exist on that side.
-struct ImagePair {
-    before: Option<ImageSide>,
-    after: Option<ImageSide>,
+/// The versions of an image before and after a change; a side is `None` where the file did
+/// not exist.
+pub(crate) struct ImagePair {
+    pub before: Option<ImageSide>,
+    pub after: Option<ImageSide>,
 }
 
-struct ImageSide {
+pub(crate) struct ImageSide {
     bytes: usize,
     /// The decoded picture, or `None` when this build cannot decode the format.
     image: Option<ColorImage>,
 }
 
-struct Textures {
+/// An image pair uploaded for drawing.
+pub(crate) struct Textures {
     before: Option<TextureHandle>,
     after: Option<TextureHandle>,
+}
+
+impl ImagePair {
+    /// Reads and decodes both versions of an image.
+    pub fn read(before: Option<Vec<u8>>, after: Option<Vec<u8>>) -> Self {
+        Self { before: before.map(decode_side), after: after.map(decode_side) }
+    }
+
+    /// Uploads both versions for drawing, named after `key`.
+    pub fn textures(&self, ctx: &egui::Context, key: &str) -> Textures {
+        let load = |side: &Option<ImageSide>, name: &str| {
+            side.as_ref()
+                .and_then(|side| side.image.as_ref())
+                .map(|image| ctx.load_texture(format!("{key}-{name}"), image.clone(), TextureOptions::LINEAR))
+        };
+        Textures { before: load(&self.before, "before"), after: load(&self.after, "after") }
+    }
+
+    /// Draws the two versions side by side, each with its dimensions and file size.
+    pub fn show(&self, ui: &mut Ui, textures: Option<&Textures>) {
+        let muted = theme::of(ui).muted;
+        ui.columns(2, |columns| {
+            image_pane(
+                &mut columns[0],
+                "Before",
+                self.before.as_ref(),
+                textures.and_then(|t| t.before.as_ref()),
+                "Added in this change",
+                muted,
+            );
+            image_pane(
+                &mut columns[1],
+                "After",
+                self.after.as_ref(),
+                textures.and_then(|t| t.after.as_ref()),
+                "Deleted in this change",
+                muted,
+            );
+        });
+    }
 }
 
 impl CompareWindow {
@@ -201,7 +244,6 @@ impl CompareWindow {
             widgets::empty_state(ui, icon::GIT_DIFF, "Select a file to see how it changed");
             return;
         };
-        let c = theme::of(ui);
         ui.horizontal(|ui| {
             ui.label(RichText::new(&path).strong()).on_hover_text(&path);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -214,45 +256,14 @@ impl CompareWindow {
         ui.separator();
         if self.textures.is_none() {
             if let Some(Ok(Detail::Images(pair))) = self.detail.value(&path) {
-                self.textures = Some(Textures {
-                    before: pair
-                        .before
-                        .as_ref()
-                        .and_then(|side| side.image.as_ref())
-                        .map(|image| ctx.load_texture(format!("{path}-before"), image.clone(), TextureOptions::LINEAR)),
-                    after: pair
-                        .after
-                        .as_ref()
-                        .and_then(|side| side.image.as_ref())
-                        .map(|image| ctx.load_texture(format!("{path}-after"), image.clone(), TextureOptions::LINEAR)),
-                });
+                self.textures = Some(pair.textures(ctx, &path));
             }
         }
         match self.detail.value(&path) {
             None => widgets::loading(ui, "Loading the change"),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(Detail::Diff(content))) => diff_view::show(ui, content, self.split),
-            Some(Ok(Detail::Images(pair))) => {
-                let textures = self.textures.as_ref();
-                ui.columns(2, |columns| {
-                    image_pane(
-                        &mut columns[0],
-                        "Before",
-                        pair.before.as_ref(),
-                        textures.and_then(|t| t.before.as_ref()),
-                        "Added in this change",
-                        c.muted,
-                    );
-                    image_pane(
-                        &mut columns[1],
-                        "After",
-                        pair.after.as_ref(),
-                        textures.and_then(|t| t.after.as_ref()),
-                        "Deleted in this change",
-                        c.muted,
-                    );
-                });
-            }
+            Some(Ok(Detail::Images(pair))) => pair.show(ui, self.textures.as_ref()),
         }
     }
 }
@@ -305,7 +316,7 @@ fn image_pane(ui: &mut Ui, title: &str, side: Option<&ImageSide>, texture: Optio
 }
 
 /// Whether a path is an image by its extension.
-fn is_image(path: &str) -> bool {
+pub(crate) fn is_image(path: &str) -> bool {
     Path::new(path)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -322,9 +333,9 @@ fn load_detail(
     ignore_whitespace: bool,
 ) -> nicegit_core::Result<Detail> {
     if is_image(path) {
-        let before = client.file_bytes_at(Some(from), path, directory)?.map(decode_side);
-        let after = client.file_bytes_at(to, path, directory)?.map(decode_side);
-        return Ok(Detail::Images(ImagePair { before, after }));
+        let before = client.file_bytes_at(Some(from), path, directory)?;
+        let after = client.file_bytes_at(to, path, directory)?;
+        return Ok(Detail::Images(ImagePair::read(before, after)));
     }
     let patch = client.compare_file_diff(from, to, path, ignore_whitespace, directory)?;
     Ok(Detail::Diff(DiffContent::new(path.to_string(), parse_diff(&patch))))

@@ -15,6 +15,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             vec![
                 (with("Shift-Cmd-P"), "Command palette"),
                 (with("Cmd-O"), "Open a repository"),
+                (with("Cmd-1 … Cmd-9"), "Go to a repository tab; Cmd-9 for the last"),
                 (with("Cmd-R"), "Refresh the repository"),
                 (with("Shift-Cmd-F"), "Search the history of every branch"),
                 (with("Alt-Cmd-F"), "Search file contents"),
@@ -40,7 +41,14 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 ("Escape".to_string(), "Back to the history"),
             ],
         ),
-        ("Committing", vec![(with("Cmd-Enter"), "Commit the staged changes"), (with("Cmd-S"), "Save in the built-in editor")]),
+        (
+            "Committing",
+            vec![
+                (with("Cmd-Enter"), "Commit the staged changes"),
+                (with("Shift-Cmd-Enter"), "Commit and push"),
+                (with("Cmd-S"), "Save in the built-in editor"),
+            ],
+        ),
     ]
 }
 

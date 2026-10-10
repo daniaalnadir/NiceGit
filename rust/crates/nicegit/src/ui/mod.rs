@@ -47,6 +47,20 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Comma))) {
             self.show_settings = !self.show_settings;
         }
+        // Command-1 to Command-8 open the repository tabs in order; Command-9 the last, as in browsers.
+        let tabs = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
+        for (position, key) in tabs.into_iter().enumerate() {
+            if ctx.input_mut(|i| i.consume_shortcut(&command(key))) {
+                let index = if key == Key::Num9 { self.repos.len().saturating_sub(1) } else { position };
+                if index < self.repos.len() && index != self.active {
+                    self.switch_to(index);
+                }
+            }
+        }
+        // Checked first: Command-Enter also matches while Shift is held.
+        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
+            self.commit_and_push();
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Enter))) && self.can_commit() {
             self.commit();
         }
@@ -552,7 +566,15 @@ impl NiceGitApp {
         }
         let repo = &mut self.repos[self.active];
         let mut block_action = None;
-        if let Some(diff) = repo.diff.as_ref() {
+        // Git only says that a binary file differs; for an image, both versions are shown.
+        let binary = repo.diff.as_ref().is_some_and(|diff| diff.is_empty());
+        let preview = repo.image_preview.as_mut().and_then(|task| task.get()).and_then(|pair| pair.as_ref().ok()).filter(|_| binary);
+        if let Some(pair) = preview {
+            if repo.image_textures.is_none() {
+                repo.image_textures = Some(pair.textures(ui.ctx(), &title));
+            }
+            egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| pair.show(ui, repo.image_textures.as_ref()));
+        } else if let Some(diff) = repo.diff.as_ref() {
             block_action = crate::diff_view::show_with(ui, diff, &mut repo.diff_options).block_action;
         } else {
             ui.take_available_space();

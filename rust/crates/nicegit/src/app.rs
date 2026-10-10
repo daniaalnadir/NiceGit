@@ -113,6 +113,14 @@ pub struct Repo {
     pub bisect: Option<Task<Option<nicegit_core::bisect::BisectStatus>>>,
     /// Submodules recorded in the index, read after each refresh.
     pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
+    /// Lines added and removed in each changed file, read after each refresh.
+    pub line_counts: Option<Task<Option<nicegit_core::line_counts::LineCounts>>>,
+    /// Both versions of an image file whose change is open, read alongside its diff.
+    pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
+    /// The open image's versions, uploaded for drawing once read.
+    pub image_textures: Option<crate::tools::compare::Textures>,
+    /// Text that narrows the Changes panel's lists to matching paths.
+    pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
     pub github: [Option<crate::ui::github_section::GitHubList>; 2],
 }
@@ -155,6 +163,10 @@ impl Repo {
             scroll_to_selection: false,
             bisect: None,
             submodules: None,
+            line_counts: None,
+            change_filter: String::new(),
+            image_preview: None,
+            image_textures: None,
             github: [None, None],
         }
     }
@@ -299,6 +311,37 @@ impl NiceGitApp {
         self.active = self.repos.len() - 1;
         self.tools.clear();
         self.load_repo(self.active, true);
+    }
+
+    /// Opens folders dropped onto the window as repositories. While something is dragged over
+    /// the window, it says what dropping it will do.
+    fn drop_folders(&mut self, ctx: &egui::Context) {
+        let (hovering, dropped) = ctx.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.clone()));
+        if hovering {
+            let screen = ctx.content_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop target")));
+            let c = crate::theme::colors(ctx.theme() == egui::Theme::Dark);
+            painter.rect_filled(screen, 0.0, c.accent.gamma_multiply(0.12));
+            painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
+            // On a solid label, so the words stay readable over whatever is beneath.
+            let text =
+                painter.layout_no_wrap("Drop a folder to open it as a repository".into(), egui::FontId::proportional(18.0), c.accent_text);
+            let label = egui::Rect::from_center_size(screen.center(), text.size() + egui::vec2(36.0, 22.0));
+            painter.rect_filled(label, 10.0, c.accent);
+            painter.galley(label.center() - text.size() / 2.0, text, c.accent_text);
+        }
+        let paths: Vec<PathBuf> =
+            dropped.iter().map(|file| file.path().to_path_buf()).filter(|path| !path.as_os_str().is_empty()).collect();
+        if paths.is_empty() {
+            return;
+        }
+        let (folders, files): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|path| path.is_dir());
+        for folder in folders {
+            self.open(folder);
+        }
+        if !files.is_empty() {
+            self.notify("Drop a folder, not a file, to open it as a repository.", true);
+        }
     }
 
     pub fn switch_to(&mut self, index: usize) {
@@ -645,7 +688,19 @@ impl NiceGitApp {
         let path = self.repos[index].path.clone();
         let bisect_path = path.clone();
         self.repos[index].bisect = Some(Task::spawn(&context, move || GitClient::new().bisect_status(&bisect_path).ok().flatten()));
+        let untracked: Vec<String> = self.repos[index]
+            .snapshot
+            .iter()
+            .flat_map(|s| &s.status)
+            .filter(|e| e.kind == nicegit_core::StatusKind::Untracked)
+            .map(|e| e.path.clone())
+            .collect();
+        let counts_path = path.clone();
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
+        // The previous counts stay until the new ones arrive, so the numbers do not flicker.
+        let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
+        self.repos[index].line_counts =
+            Some(Task::spawn_with(&context, previous.map(Some), move || GitClient::new().line_counts(&untracked, &counts_path).ok()));
         if index != self.active {
             return;
         }
@@ -679,6 +734,8 @@ impl NiceGitApp {
         repo.details = None;
         repo.review = None;
         repo.line_map = None;
+        repo.image_preview = None;
+        repo.image_textures = None;
         repo.diff_options.selected.clear();
         repo.commit_files.clear();
         repo.diff_generation = next_id();
@@ -689,6 +746,8 @@ impl NiceGitApp {
         let repo = self.repos.get_mut(self.active)?;
         repo.review = None;
         repo.line_map = None;
+        repo.image_preview = None;
+        repo.image_textures = None;
         repo.diff_options.selected.clear();
         repo.diff_generation = next_id();
         repo.diff_loading = true;
@@ -784,7 +843,35 @@ impl NiceGitApp {
             self.repo_mut().expect("active repository").review =
                 Some(Task::spawn(&context, move || GitClient::new().file_review(&file, staged, &review_path)));
         }
+        if crate::tools::compare::is_image(&entry.path) {
+            // An image's versions: the index against the working file, or HEAD (under its old
+            // name, for a rename) against the index once staged.
+            let (preview_path, preview_entry) = (path.clone(), entry.clone());
+            self.load_image_preview(move |client| {
+                let entry = preview_entry;
+                if staged {
+                    let old = entry.original_path.as_deref().unwrap_or(&entry.path);
+                    let head = client.file_bytes_at(Some("HEAD"), old, &preview_path).unwrap_or(None);
+                    Ok((head, client.index_bytes(&entry.path, &preview_path)?))
+                } else {
+                    Ok((client.index_bytes(&entry.path, &preview_path)?, client.file_bytes_at(None, &entry.path, &preview_path)?))
+                }
+            });
+        }
         self.worker.diff(generation, title, move |client| client.diff_with(&entry, staged, ignore_whitespace, &path));
+    }
+
+    /// Reads both versions of an image whose change is open, in the background, to show them
+    /// in place of Git's note that the binary file differs.
+    fn load_image_preview(
+        &mut self,
+        read: impl FnOnce(&GitClient) -> nicegit_core::Result<(Option<Vec<u8>>, Option<Vec<u8>>)> + Send + 'static,
+    ) {
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repo_mut() else { return };
+        repo.image_preview = Some(Task::spawn(&context, move || {
+            read(&GitClient::new()).map(|(before, after)| crate::tools::compare::ImagePair::read(before, after)).map_err(|e| e.to_string())
+        }));
     }
 
     pub fn select_commit(&mut self, hash: String) {
@@ -808,6 +895,14 @@ impl NiceGitApp {
         let repo = self.repo_mut().expect("active repository");
         repo.selection = Selection::Commit { hash: hash.clone(), file: file.clone() };
         let title = file.clone().unwrap_or_else(|| format!("Commit {}", short(&hash)));
+        if let Some(image) = file.clone().filter(|file| crate::tools::compare::is_image(file)) {
+            // The image as its parent had it, against the commit's version.
+            let (preview_path, commit) = (path.clone(), hash.clone());
+            self.load_image_preview(move |client| {
+                let before = client.file_bytes_at(Some(&format!("{commit}^")), &image, &preview_path).unwrap_or(None);
+                Ok((before, client.file_bytes_at(Some(&commit), &image, &preview_path)?))
+            });
+        }
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), ignore_whitespace, &path));
     }
 
@@ -876,6 +971,29 @@ impl NiceGitApp {
             }
             self.save_draft();
         }
+    }
+
+    /// Commits the staged changes and pushes the new commit to the branch's upstream.
+    pub fn commit_and_push(&mut self) {
+        if !self.can_commit_and_push() {
+            return;
+        }
+        let Some(snapshot) = self.snapshot().cloned() else { return };
+        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        self.act_recording("Commit and push", "Commit", move |client, path| {
+            client.commit_and_push(&message, &snapshot, path).map(|_| Some("Committed and pushed.".into()))
+        });
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.draft = Draft::default();
+            }
+            self.save_draft();
+        }
+    }
+
+    /// Whether a commit can be made and pushed: the branch has an upstream and this is not an amend.
+    pub fn can_commit_and_push(&self) -> bool {
+        self.can_commit() && self.repo().is_some_and(|repo| !repo.amend) && self.snapshot().is_some_and(|s| s.upstream.is_some())
     }
 
     pub fn can_commit(&self) -> bool {
@@ -1194,6 +1312,7 @@ impl eframe::App for NiceGitApp {
         self.receive();
         self.finish_clone();
         self.shortcuts(&ctx);
+        self.drop_folders(&ctx);
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
         self.debug_open(&ctx);

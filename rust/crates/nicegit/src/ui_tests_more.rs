@@ -1349,3 +1349,194 @@ fn the_keyboard_shortcuts_open_from_the_keyboard_the_palette_and_settings() {
     harness.get_by_label("Keyboard shortcuts").click();
     wait(&mut harness, "the shortcuts from settings", shown);
 }
+
+/// A file or folder dropped onto the window, as the windowing system reports it.
+#[derive(Debug)]
+struct Dropped(std::path::PathBuf);
+
+impl egui::DroppedFile for Dropped {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|error| error.to_string())
+    }
+}
+
+#[test]
+fn a_folder_dropped_on_the_window_opens_as_a_repository() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(second.path().to_path_buf())));
+    wait(&mut harness, "the dropped repository", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    let active = harness.state().repo().unwrap().path.clone();
+    assert_eq!(active.canonicalize().unwrap(), second.path().canonicalize().unwrap(), "the dropped folder is the active tab");
+
+    // A file is not a repository: dropping one says so and opens nothing.
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(second.path().join("notes.txt"))));
+    wait(&mut harness, "the hint", |h| h.state().notice.as_ref().is_some_and(|n| n.text.contains("Drop a folder")));
+    assert_eq!(harness.state().repos.len(), 2);
+}
+
+#[test]
+fn changed_files_show_how_many_lines_they_add_and_remove() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nSECOND\nthird\n").unwrap();
+    std::fs::write(path.join("new.txt"), "a\nb\nc\nd\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the counts", |h| h.query_by_label("+4").is_some());
+    // notes.txt replaces one line and adds one; new.txt adds four.
+    assert!(harness.query_by_label("+2").is_some() && harness.query_by_label("−1").is_some());
+}
+
+#[test]
+fn a_long_list_of_changes_can_be_filtered_by_path() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::create_dir_all(path.join("docs")).unwrap();
+    for n in 0..12 {
+        std::fs::write(path.join(format!("file{n:02}.txt")), "x\n").unwrap();
+    }
+    std::fs::write(path.join("docs/guide.md"), "# Guide\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(harness.query_by_label("Filter changed files").is_some(), "many changes offer a filter");
+
+    harness.get_by_label("Filter changed files").click();
+    harness.step();
+    harness.event(egui::Event::Text("GUIDE".into()));
+    wait(&mut harness, "the filtered list", |h| h.query_by_label_contains("Unstaged files (1 of 13)").is_some());
+    assert!(harness.query_by_label("guide.md").is_some() || harness.query_by_label("docs/guide.md").is_some());
+    assert!(harness.query_by_label("file00.txt").is_none(), "other files are hidden");
+}
+
+#[test]
+fn a_changed_file_opens_in_its_default_app_from_its_menu() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED.with(|opened| opened.borrow_mut().clear());
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the file's menu", |h| h.query_by_label_contains("Open in default app").is_some());
+    harness.get_by_label_contains("Open in default app").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED.with(|opened| opened.borrow().clone());
+    let canonical = |p: &Path| p.canonicalize().unwrap();
+    assert_eq!(opened.iter().map(|p| canonical(p)).collect::<Vec<_>>(), vec![canonical(&path.join("notes.txt"))]);
+}
+
+#[test]
+fn commit_and_push_sends_the_new_commit_from_the_commit_box_or_the_keyboard() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    std::fs::write(path.join("notes.txt"), "pushed\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let remote_head = || git(remote.path(), &["rev-parse", "refs/heads/main"]);
+
+    type_into(&mut harness, "Commit summary", "Push from the commit box");
+    harness.get_by_label_contains("Commit and push").click();
+    idle(&mut harness);
+    wait(&mut harness, "the push", |_| remote_head() == git(path, &["rev-parse", "HEAD"]));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Push from the commit box");
+    assert!(harness.state().repo().unwrap().draft.is_empty(), "the message is cleared");
+
+    std::fs::write(path.join("notes.txt"), "pushed again\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    harness.state_mut().load(true);
+    idle(&mut harness);
+    wait(&mut harness, "the staged change", |h| h.state().snapshot().is_some_and(|s| s.staged_count() == 1));
+    type_into(&mut harness, "Commit summary", "Push from the keyboard");
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter);
+    idle(&mut harness);
+    wait(&mut harness, "the second push", |_| remote_head() == git(path, &["rev-parse", "HEAD"]));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Push from the keyboard");
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "4", "one commit each time, not two");
+}
+
+#[test]
+fn a_changed_image_shows_both_versions_in_the_diff() {
+    let repo = repository();
+    let path = repo.path();
+    let image = |width, height| {
+        image::RgbaImage::from_pixel(width, height, image::Rgba([40, 120, 200, 255])).save(path.join("icon.png")).unwrap();
+    };
+    image(4, 3);
+    git(path, &["add", "icon.png"]);
+    git(path, &["commit", "-q", "-m", "Add the icon"]);
+    image(8, 6);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Unstaged: the index's version against the working file.
+    harness.get_by_label("icon.png").click();
+    wait(&mut harness, "both versions", |h| shows(h, "4 × 3") && shows(h, "8 × 6"));
+
+    // Staged: HEAD's version against the index.
+    image(2, 2);
+    git(path, &["add", "icon.png"]);
+    harness.state_mut().load(true);
+    idle(&mut harness);
+    let staged = harness.state().snapshot().unwrap().status.iter().find(|e| e.path == "icon.png").cloned().unwrap();
+    harness.state_mut().select_change(staged, true);
+    wait(&mut harness, "the staged versions", |h| shows(h, "4 × 3") && shows(h, "2 × 2") && !shows(h, "8 × 6"));
+
+    // A commit's image: its parent's version (none, for an added file) against the commit's.
+    let added = git(path, &["rev-parse", "HEAD"]);
+    harness.state_mut().select_commit_file(added, Some("icon.png".into()));
+    wait(&mut harness, "the committed image", |h| shows(h, "4 × 3") && shows(h, "Added in this change"));
+}
+
+#[test]
+fn command_and_a_number_switches_repository_tabs() {
+    let first = repository();
+    let second = repository();
+    let third = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    for repo in [&second, &third] {
+        harness.state_mut().open(repo.path().to_path_buf());
+        wait(&mut harness, "the tab", |h| h.state().snapshot().is_some() && !h.state().repo().unwrap().loading);
+    }
+    assert_eq!(harness.state().active, 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num1);
+    wait(&mut harness, "the first tab", |h| h.state().active == 0);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num2);
+    wait(&mut harness, "the second tab", |h| h.state().active == 1);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num9);
+    wait(&mut harness, "the last tab", |h| h.state().active == 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    harness.run_steps(3);
+    assert_eq!(harness.state().active, 2, "a tab that does not exist changes nothing");
+}
+
+#[test]
+fn a_pull_request_opens_on_github_for_the_current_branch() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/app.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("create pull request".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec!["https://github.com/acme/app/compare/main?expand=1".to_string()]);
+}

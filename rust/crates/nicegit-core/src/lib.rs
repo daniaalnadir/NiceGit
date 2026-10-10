@@ -16,6 +16,7 @@ pub mod github;
 pub mod graph;
 pub mod inline;
 pub mod lfs;
+pub mod line_counts;
 pub mod merge_preview;
 pub mod models;
 pub mod parsers;

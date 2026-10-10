@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use egui::{Color32, RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::line_counts::LineCount;
 use nicegit_core::{Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
@@ -68,8 +69,31 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let c = theme::of(ui);
         let idle = self.idle();
-        let unstaged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_unstaged()).cloned().collect());
-        let staged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_staged()).cloned().collect());
+        let all_unstaged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_unstaged()).cloned().collect());
+        let all_staged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_staged()).cloned().collect());
+        // A long list of changes can be narrowed by path; the filter shows once there are many.
+        let filter = self.repo().map(|r| r.change_filter.trim().to_lowercase()).unwrap_or_default();
+        let show_filter = snapshot.status.len() > FILTER_FROM || !filter.is_empty();
+        let matches = |entries: &[StatusEntry]| -> Vec<StatusEntry> {
+            entries
+                .iter()
+                .filter(|e| {
+                    filter.is_empty()
+                        || e.path.to_lowercase().contains(&filter)
+                        || e.original_path.as_ref().is_some_and(|p| p.to_lowercase().contains(&filter))
+                })
+                .cloned()
+                .collect()
+        };
+        let unstaged = matches(&all_unstaged);
+        let staged = matches(&all_staged);
+        let shown = |part: &[StatusEntry], whole: &[StatusEntry]| {
+            if part.len() == whole.len() {
+                whole.len().to_string()
+            } else {
+                format!("{} of {}", part.len(), whole.len())
+            }
+        };
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 14, bottom: 6 }).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -83,13 +107,18 @@ impl NiceGitApp {
                 ui.selectable_value(&mut self.settings.file_view, FileView::Path, "Path");
                 ui.selectable_value(&mut self.settings.file_view, FileView::Tree, "Tree");
             });
+            if show_filter {
+                ui.add_space(6.0);
+                let field = widgets::search_field(ui, &mut self.repos[self.active].change_filter, "Filter changed files");
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter changed files"));
+            }
         });
         ui.separator();
 
         egui::Panel::bottom("commit_box")
             .resizable(false)
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 10, bottom: 14 }))
-            .show(ui, |ui| self.commit_box(ui, &snapshot, staged.len()));
+            .show(ui, |ui| self.commit_box(ui, &snapshot, all_staged.len()));
 
         if let Some(undo) = self.repo().and_then(|r| r.discard_undo.last().cloned()) {
             let more = self.repo().map(|r| r.discard_undo.len().saturating_sub(1)).unwrap_or(0);
@@ -118,14 +147,14 @@ impl NiceGitApp {
         egui::ScrollArea::vertical().id_salt("changes").auto_shrink(false).max_height(available).show(ui, |ui| {
             egui::Frame::new().inner_margin(egui::Margin { left: 10, right: 10, top: 6, bottom: 6 }).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Unstaged files ({})", icon::CARET_DOWN, unstaged.len())).strong());
+                    ui.label(RichText::new(format!("{}  Unstaged files ({})", icon::CARET_DOWN, shown(&unstaged, &all_unstaged))).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if outlined(ui, "Stage All Changes", c.accent, idle && !unstaged.is_empty()).clicked() {
+                        if outlined(ui, "Stage All Changes", c.accent, idle && !all_unstaged.is_empty()).clicked() {
                             self.act("Stage all", |client, path| client.stage_all(path).map(|_| None));
                         }
                         // Keeps the discard icon clear of the Stage All button.
                         ui.add_space(8.0);
-                        let discardable: Vec<StatusEntry> = unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
+                        let discardable: Vec<StatusEntry> = all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
                         let discard_all_enabled = idle && !discardable.is_empty();
                         let discard_all = widgets::icon_button(ui, icon::TRASH, "Discard all changes…", discard_all_enabled);
                         discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, discard_all_enabled, "Discard all changes…"));
@@ -140,7 +169,9 @@ impl NiceGitApp {
                     });
                 });
                 ui.add_space(4.0);
-                if unstaged.is_empty() {
+                if unstaged.is_empty() && !all_unstaged.is_empty() {
+                    ui.label(RichText::new("   No unstaged files match the filter").small().color(c.muted));
+                } else if unstaged.is_empty() {
                     ui.label(RichText::new("   No unstaged changes").small().color(c.muted));
                 } else if tree {
                     self.folder_rows(ui, &Folder::build(&unstaged), false, idle, &snapshot, 0);
@@ -152,15 +183,17 @@ impl NiceGitApp {
                 ui.add_space(14.0);
                 ui.separator();
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Staged files ({})", icon::CARET_DOWN, staged.len())).strong());
+                    ui.label(RichText::new(format!("{}  Staged files ({})", icon::CARET_DOWN, shown(&staged, &all_staged))).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if outlined(ui, "Unstage All Changes", c.accent, idle && !staged.is_empty()).clicked() {
+                        if outlined(ui, "Unstage All Changes", c.accent, idle && !all_staged.is_empty()).clicked() {
                             self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None));
                         }
                     });
                 });
                 ui.add_space(4.0);
-                if staged.is_empty() {
+                if staged.is_empty() && !all_staged.is_empty() {
+                    ui.label(RichText::new("   No staged files match the filter").small().color(c.muted));
+                } else if staged.is_empty() {
                     ui.label(RichText::new("   Stage files to include them in the next commit").small().color(c.muted));
                 } else if tree {
                     self.folder_rows(ui, &Folder::build(&staged), true, idle, &snapshot, 0);
@@ -214,8 +247,16 @@ impl NiceGitApp {
         let mut stage_clicked = false;
         let mut discard_clicked = false;
         let mut resolve_clicked = false;
+        let count = self.repos[self.active]
+            .line_counts
+            .as_mut()
+            .and_then(|task| task.get())
+            .and_then(|counts| counts.as_ref())
+            .and_then(|counts| if staged { counts.staged.get(&entry.path) } else { counts.unstaged.get(&entry.path) })
+            .copied();
         let buttons = if staged { 1.0 } else { 2.0 };
-        let label_width = (child.available_width() - buttons * 30.0).max(40.0);
+        let counts_width = if count.is_some() { 64.0 } else { 0.0 };
+        let label_width = (child.available_width() - buttons * 30.0 - counts_width).max(40.0);
         child.allocate_ui_with_layout(egui::vec2(label_width, height), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add(egui::Label::new(RichText::new(text).color(ui.visuals().text_color())).truncate().selectable(false))
                 .on_hover_text(&entry.path);
@@ -231,6 +272,9 @@ impl NiceGitApp {
                 } else {
                     stage_clicked = widgets::icon_button(ui, icon::PLUS_CIRCLE, "Stage", idle).clicked();
                 }
+            }
+            if let Some(count) = count {
+                line_count(ui, count);
             }
         });
         if resolve_clicked {
@@ -345,9 +389,14 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(entry.path.clone());
         }
+        let file = repo_path.join(&entry.path);
+        if file.is_file() && ui.button(format!("{}  Open in default app", icon::ARROW_SQUARE_OUT)).clicked() {
+            ui.close();
+            open_in_default_app(&file);
+        }
         if ui.button(format!("{}  Show in file manager", icon::FOLDER_OPEN)).clicked() {
             ui.close();
-            reveal(&repo_path.join(&entry.path));
+            reveal(&file);
         }
     }
 
@@ -436,6 +485,24 @@ impl NiceGitApp {
         if clicked {
             self.commit();
         }
+        // Committing and pushing in one step, for a branch that already has an upstream.
+        if let (Some(upstream), false) = (snapshot.upstream.as_deref(), self.repos[self.active].amend) {
+            ui.add_space(4.0);
+            let enabled = self.can_commit_and_push();
+            // The upstream is in the tooltip, so a long branch name cannot widen the panel.
+            let text = RichText::new(format!("{}  Commit and push", icon::ARROW_LINE_UP)).color(if enabled { c.accent } else { c.muted });
+            let button = egui::Button::new(text)
+                .fill(egui::Color32::TRANSPARENT)
+                .stroke(egui::Stroke::new(1.0, if enabled { c.accent } else { c.border }))
+                .min_size(egui::vec2(ui.available_width(), 28.0));
+            let push = ui
+                .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add_enabled(enabled, button))
+                .inner
+                .on_hover_text(format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)"));
+            if push.clicked() {
+                self.commit_and_push();
+            }
+        }
     }
 
     /// Whether HEAD is already on a remote-tracking branch, judged from the loaded history.
@@ -464,6 +531,31 @@ impl NiceGitApp {
     }
 }
 
+/// The number of changed files above which the Changes panel offers a filter.
+const FILTER_FROM: usize = 10;
+
+/// How many lines a file's change adds and removes, laid out from the right.
+fn line_count(ui: &mut Ui, count: LineCount) {
+    let c = theme::of(ui);
+    ui.add_space(4.0);
+    let (text, tip) = match count {
+        LineCount::Binary => (RichText::new("binary").small().color(c.muted), "A binary file has no lines".to_string()),
+        LineCount::Text { added, removed } => {
+            let lines = |n: usize| if n == 1 { "line" } else { "lines" };
+            let tip = format!("{added} {} added, {removed} {} removed", lines(added), lines(removed));
+            // Right to left: the removed count sits to the right of the added one.
+            if removed > 0 {
+                ui.label(RichText::new(format!("−{removed}")).small().monospace().color(c.removed)).on_hover_text(&tip);
+            }
+            if added == 0 && removed > 0 {
+                return;
+            }
+            (RichText::new(format!("+{added}")).small().monospace().color(c.added), tip)
+        }
+    };
+    ui.label(text).on_hover_text(tip);
+}
+
 fn sorted(mut entries: Vec<StatusEntry>) -> Vec<StatusEntry> {
     entries.sort_by_key(|a| a.path.to_lowercase());
     entries
@@ -473,9 +565,41 @@ fn sorted(mut entries: Vec<StatusEntry>) -> Vec<StatusEntry> {
 thread_local! {
     /// What interface tests asked the file manager to show, instead of opening its windows.
     pub static REVEALED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Files the interface asked the system to open, recorded under test instead of opened.
+    pub static OPENED: std::cell::RefCell<Vec<std::path::PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Web addresses the interface asked the browser to open, recorded under test instead.
+    pub static OPENED_URLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Shows a file in the platform's file manager.
+/// Opens a file in the app the system uses for its type. `path` is absolute, so no file name
+/// can be read as an option.
+pub fn open_in_default_app(path: &std::path::Path) {
+    #[cfg(test)]
+    OPENED.with(|opened| opened.borrow_mut().push(path.to_path_buf()));
+    #[cfg(all(not(test), target_os = "macos"))]
+    let _ = std::process::Command::new("open").arg(path).spawn();
+    #[cfg(all(not(test), target_os = "windows"))]
+    let _ = std::process::Command::new("explorer").arg(path).spawn();
+    #[cfg(all(not(test), unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+}
+
+/// Opens a web address in the default browser. Only `https://` addresses are opened.
+pub fn open_url(url: &str) {
+    if !url.starts_with("https://") {
+        return;
+    }
+    #[cfg(test)]
+    OPENED_URLS.with(|opened| opened.borrow_mut().push(url.to_string()));
+    #[cfg(all(not(test), target_os = "macos"))]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(all(not(test), target_os = "windows"))]
+    let _ = std::process::Command::new("explorer").arg(url).spawn();
+    #[cfg(all(not(test), unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
 pub fn reveal(path: &std::path::Path) {
     let target = if path.exists() { path.to_path_buf() } else { path.parent().map(|p| p.to_path_buf()).unwrap_or_default() };
     #[cfg(test)]

@@ -448,6 +448,13 @@ impl NiceGitApp {
             ui.close();
             self.fetch();
         }
+        if let Some(link) = crate::git_ext::github_pull_request_link(snapshot, branch) {
+            let button = ui.button(format!("{}  Create pull request on GitHub", icon::GIT_PULL_REQUEST)).on_hover_text(&link);
+            if button.clicked() {
+                ui.close();
+                crate::ui::changes::open_url(&link);
+            }
+        }
         if branch.is_current {
             if ui
                 .add_enabled(

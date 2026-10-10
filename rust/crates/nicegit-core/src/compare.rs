@@ -70,6 +70,19 @@ impl GitClient {
         }
     }
 
+    /// The bytes of a file as the index holds it, or `None` when the index has no such file
+    /// (or holds a submodule there). Binary content is returned unchanged.
+    pub fn index_bytes(&self, path: &str, directory: &Path) -> Result<Option<Vec<u8>>> {
+        let relative = Path::new(path);
+        if path.is_empty() || !relative.components().all(|component| matches!(component, Component::Normal(_))) {
+            return Err(GitError::failed("read file", "This path is not inside the repository."));
+        }
+        match self.index_version(path, directory)? {
+            Some(version) if version.mode != "160000" => Ok(Some(self.blob_contents(&version.blob, directory)?)),
+            _ => Ok(None),
+        }
+    }
+
     /// Resolves both sides to object IDs, so neither can be read as an option or a path.
     fn comparison_revisions(&self, from: &str, to: Option<&str>, directory: &Path) -> Result<Vec<String>> {
         let mut revisions = vec![self.resolve_commit(from, directory)?];
