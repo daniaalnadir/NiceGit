@@ -172,15 +172,25 @@ impl NiceGitApp {
 
         // Column headers.
         let graph_width = graph_view::width_for(self.repo().map(|r| r.lanes).unwrap_or(1)).clamp(44.0, 240.0);
-        ui.horizontal(|ui| {
-            ui.add_space(16.0);
-            let header = |ui: &mut Ui, text: &str, width: f32| {
-                ui.add_sized([width, 18.0], egui::Label::new(RichText::new(text).small().color(c.muted)));
-            };
-            header(ui, "Branch / tag", LABEL_COLUMN - 8.0);
-            header(ui, "Graph", graph_width);
-            ui.label(RichText::new("Commit message").small().color(c.muted));
-        });
+        // Painted where each row draws its columns: labels and the message 10 points in, and
+        // "Graph" over the first lane.
+        {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), Sense::hover());
+            let painter = ui.painter();
+            let font = egui::TextStyle::Small.resolve(ui.style());
+            let y = rect.center().y;
+            painter.text(egui::pos2(rect.left() + 10.0, y), egui::Align2::LEFT_CENTER, "Branch / tag", font.clone(), c.muted);
+            let graph_rect =
+                egui::Rect::from_min_size(egui::pos2(rect.left() + LABEL_COLUMN, rect.top()), egui::vec2(graph_width, ROW_HEIGHT));
+            painter.text(egui::pos2(graph_view::lane_x(graph_rect, 0), y), egui::Align2::CENTER_CENTER, "Graph", font.clone(), c.muted);
+            painter.text(
+                egui::pos2(rect.left() + LABEL_COLUMN + graph_width + 10.0, y),
+                egui::Align2::LEFT_CENTER,
+                "Commit message",
+                font,
+                c.muted,
+            );
+        }
 
         let dirty = !snapshot.status.is_empty();
         let rows: Vec<usize> = if filter.is_empty() {

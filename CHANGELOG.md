@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.14 - Aligned
+
+- The history's column headings line up with their columns: labels, the first graph lane,
+  and the commit text.
+
 ## 0.6.13 - Every control readable
 
 - Checkboxes have the same clear outline as radio buttons.

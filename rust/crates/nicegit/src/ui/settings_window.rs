@@ -55,12 +55,9 @@ impl NiceGitApp {
                         .changed();
                 crate::tools::widgets::checkbox(ui, true, &mut self.settings.split_diff, "Show diffs side by side");
                 ui.label(
-                    RichText::new(format!(
-                        "Used when the diff panel is at least {} points wide; narrower, diffs show in one column.",
-                        crate::diff_view::MIN_SPLIT_WIDTH
-                    ))
-                    .small()
-                    .color(theme::of(ui).muted),
+                    RichText::new(format!("Needs a diff panel at least {} points wide.", crate::diff_view::MIN_SPLIT_WIDTH))
+                        .small()
+                        .color(theme::of(ui).muted),
                 );
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
