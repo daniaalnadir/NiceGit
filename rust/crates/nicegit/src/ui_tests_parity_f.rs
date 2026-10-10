@@ -445,7 +445,7 @@ fn shift_command_f_opens_history_search() {
 }
 
 #[test]
-fn returning_to_the_app_waits_for_a_running_action() {
+fn returning_to_the_app_during_an_action_refreshes_once_it_finishes() {
     let repo = repository();
     let path = repo.path();
     let mut harness = open(path);
@@ -455,26 +455,50 @@ fn returning_to_the_app_waits_for_a_running_action() {
         harness.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().focused = Some(focused);
         harness.run_steps(2);
     };
-    let listed = |h: &Harness<'static, NiceGitApp>| {
-        h.state().snapshot().is_some_and(|s| s.status.iter().any(|entry| entry.path == "while-busy.txt"))
-    };
 
     focus(&mut harness, false);
     harness.state_mut().act("A slow action", |_, _| {
         std::thread::sleep(Duration::from_millis(1500));
         Ok(None)
     });
-    std::fs::write(path.join("while-busy.txt"), "made while an action ran\n").unwrap();
+    let action = harness.state().repo().unwrap().generation;
     focus(&mut harness, true);
-    // Returning to the app while the action runs does not start a second load alongside it.
+    // The return is remembered while the action runs, and no second load starts beside it.
     let start = Instant::now();
     while harness.state().busy.is_some() {
-        assert!(!listed(&harness), "nothing refreshes while an action is running");
+        assert!(harness.state().activation_refresh, "the refresh for returning to the app waits");
+        assert_eq!(harness.state().repo().unwrap().generation, action, "no load starts during the action");
         assert!(start.elapsed() < Duration::from_secs(20), "the action finishes");
         harness.step();
         std::thread::sleep(Duration::from_millis(15));
     }
-    wait(&mut harness, "the refresh once the action is done", listed);
+    // Once the action and its own refresh are done, the postponed refresh runs.
+    wait(&mut harness, "the postponed refresh", |h| {
+        !h.state().activation_refresh && h.state().repo().is_some_and(|r| r.generation > action)
+    });
+}
+
+#[test]
+fn open_a_repository_from_the_repository_menu_and_the_empty_window() {
+    let first = repository();
+    let second = repository();
+    let third = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+
+    crate::file_dialog::answer_next(second.path());
+    repository_menu(&mut harness, &folder_name(first.path()), "Open repository");
+    wait(&mut harness, "the second repository", |h| h.state().repos.len() == 2);
+    loaded(&mut harness);
+    assert_eq!(harness.state().repo().map(|r| r.path.canonicalize().unwrap()), Some(second.path().canonicalize().unwrap()));
+
+    // With nothing open, the empty window offers the same choice.
+    let mut empty = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(|cc| NiceGitApp::new(cc, None));
+    settle(&mut empty);
+    crate::file_dialog::answer_next(third.path());
+    empty.get_by_label(&format!("{}  Open repository…", icon::FOLDER_OPEN)).click();
+    wait(&mut empty, "the chosen repository", |h| h.state().snapshot().is_some() && h.state().busy.is_none());
+    assert_eq!(empty.state().repo().map(|r| r.path.canonicalize().unwrap()), Some(third.path().canonicalize().unwrap()));
 }
 
 #[test]

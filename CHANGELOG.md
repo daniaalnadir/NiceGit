@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.10 - Clear choices
+
+- Only the Split choice is dimmed when a diff cannot be split; the active Unified choice keeps
+  full emphasis.
+- Tests now open repositories from the Repository menu and the empty window, check every
+  signature state's wording, colour, and tooltip, and check that returning to NiceGit during
+  an action refreshes once the action finishes.
+
 ## 0.6.9 - Honest controls
 
 - When a diff can only be shown in one column, the Split and Unified control shows Unified as

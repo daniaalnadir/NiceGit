@@ -179,7 +179,7 @@ pub struct NiceGitApp {
     generation: u64,
     was_focused: bool,
     /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
-    activation_refresh: bool,
+    pub(crate) activation_refresh: bool,
     watcher: Option<Watch>,
     watched_change: Option<Instant>,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,

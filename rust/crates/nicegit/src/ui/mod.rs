@@ -443,13 +443,13 @@ impl NiceGitApp {
                     let available = !one_sided && !narrow;
                     // The control shows the layout on screen: Unified whenever Split cannot apply,
                     // while the saved preference waits for a diff and a panel that suit it.
-                    let mut shown = split && available;
-                    ui.add_enabled_ui(available, |ui| {
-                        ui.selectable_value(&mut shown, true, "Split").on_disabled_hover_text(reason);
-                        ui.selectable_value(&mut shown, false, "Unified");
-                    });
-                    if available {
-                        split = shown;
+                    // Only Split is disabled, so the active Unified keeps full emphasis.
+                    let shown = split && available;
+                    if ui.add_enabled(available, egui::Button::selectable(shown, "Split")).on_disabled_hover_text(reason).clicked() {
+                        split = true;
+                    }
+                    if ui.add(egui::Button::selectable(!shown, "Unified")).clicked() && available {
+                        split = false;
                     }
                     self.settings.split_diff = split;
                     let mut ignore = self.settings.ignore_whitespace;

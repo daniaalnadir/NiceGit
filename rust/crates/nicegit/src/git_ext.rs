@@ -47,6 +47,12 @@ pub fn merge_preview_text(source: &str, rebase: bool, directory: &Path) -> Resul
 /// A commit's signature as display text and a level: 0 verified, 1 untrusted or unverifiable, 2 bad.
 pub fn signature_summary(hash: &str, directory: &Path) -> Option<SignatureSummary> {
     let signature = GitClient::new().signature(hash, directory).ok()??;
+    Some(summarize_signature(&signature))
+}
+
+/// The inspector's line for a signature: the Mac app's wording and colour level, the signer
+/// only when verified, and the key and any problem for the tooltip.
+fn summarize_signature(signature: &nicegit_core::signature::CommitSignature) -> SignatureSummary {
     // The Mac app's colours: green, orange, red, and secondary for a signature it cannot check.
     let level = match signature.status {
         SignatureStatus::Verified => 0,
@@ -65,7 +71,7 @@ pub fn signature_summary(hash: &str, directory: &Path) -> Option<SignatureSummar
         .flatten()
         .collect::<Vec<_>>()
         .join("\n");
-    Some(SignatureSummary { text: format!("{}{signer}", signature.status.title()), level, help })
+    SignatureSummary { text: format!("{}{signer}", signature.status.title()), level, help }
 }
 
 /// What the commit inspector shows about a signature.
@@ -106,4 +112,35 @@ pub fn github_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, co
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use nicegit_core::signature::{CommitSignature, SignatureStatus};
+
+    use super::summarize_signature;
+
+    fn signed(status: SignatureStatus, problem: Option<&str>) -> CommitSignature {
+        CommitSignature { status, signer: "Riley <riley@example.com>".into(), key: "SHA256:abc".into(), problem: problem.map(String::from) }
+    }
+
+    #[test]
+    fn each_signature_state_reads_and_colours_as_in_the_mac_app() {
+        let verified = summarize_signature(&signed(SignatureStatus::Verified, None));
+        assert_eq!(verified.text, "Verified signature · Riley <riley@example.com>", "only a verified signature names its signer");
+        assert_eq!(verified.level, 0, "green");
+
+        let untrusted = summarize_signature(&signed(SignatureStatus::Untrusted, None));
+        assert_eq!(untrusted.text, "Valid signature from an untrusted key");
+        assert_eq!(untrusted.level, 1, "orange");
+
+        let bad = summarize_signature(&signed(SignatureStatus::Bad, None));
+        assert_eq!(bad.text, "Bad signature: this commit does not match it");
+        assert_eq!(bad.level, 2, "red");
+
+        let unchecked = summarize_signature(&signed(SignatureStatus::Unverifiable, Some("gpg: no public key")));
+        assert_eq!(unchecked.text, "Signed, but it cannot be verified on this computer");
+        assert_eq!(unchecked.level, 3, "secondary");
+        assert_eq!(unchecked.help, "Key SHA256:abc\ngpg: no public key", "the key and the problem are in the tooltip");
+    }
 }
