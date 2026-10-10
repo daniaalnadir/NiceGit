@@ -11,6 +11,10 @@ use crate::models::Result;
 /// Untracked files larger than this are not read to count their lines.
 const MAX_UNTRACKED_BYTES: u64 = 2_000_000;
 
+/// Working files this large are pointed out before they are committed; GitHub warns about files
+/// over 50 MB and refuses files over 100 MB.
+pub const LARGE_FILE_BYTES: u64 = 50_000_000;
+
 /// The size of one file's change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LineCount {
@@ -28,12 +32,15 @@ pub enum LineCount {
 pub struct LineCounts {
     pub unstaged: HashMap<String, LineCount>,
     pub staged: HashMap<String, LineCount>,
+    /// Changed working files of at least `LARGE_FILE_BYTES`, with their sizes in bytes.
+    pub large: HashMap<String, u64>,
 }
 
 impl GitClient {
     /// Counts the lines each changed file adds and removes. `untracked` lists untracked files,
-    /// which Git does not diff; each is read to count its lines, unless it is large.
-    pub fn line_counts(&self, untracked: &[String], directory: &Path) -> Result<LineCounts> {
+    /// which Git does not diff; each is read to count its lines, unless it is large. `changed`
+    /// lists every changed path, whose working files are checked for being large.
+    pub fn line_counts(&self, untracked: &[String], changed: &[String], directory: &Path) -> Result<LineCounts> {
         let options = ["diff", "--numstat", "-z", "--no-ext-diff", "--no-color", "--no-textconv"];
         let mut unstaged = parse_numstat(&self.run(&options, directory)?);
         let mut cached = options.to_vec();
@@ -44,7 +51,15 @@ impl GitClient {
                 unstaged.insert(path.clone(), count);
             }
         }
-        Ok(LineCounts { unstaged, staged })
+        let large = changed
+            .iter()
+            .filter(|path| !path.ends_with('/'))
+            .filter_map(|path| {
+                let metadata = fs::symlink_metadata(directory.join(path)).ok()?;
+                (metadata.is_file() && metadata.len() >= LARGE_FILE_BYTES).then(|| (path.clone(), metadata.len()))
+            })
+            .collect();
+        Ok(LineCounts { unstaged, staged, large })
     }
 }
 

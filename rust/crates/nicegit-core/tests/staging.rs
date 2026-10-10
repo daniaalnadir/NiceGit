@@ -297,7 +297,9 @@ fn line_counts_cover_unstaged_staged_renamed_and_untracked_files() {
     repo.git(&["mv", "old.txt", "new.txt"]);
     repo.write("b.txt", "x\ny");
 
-    let counts = client().line_counts(&["b.txt".to_string()], repo.path()).expect("counts");
+    let changed = ["a.txt", "new.txt", "b.txt"].map(String::from);
+    let counts = client().line_counts(&["b.txt".to_string()], &changed, repo.path()).expect("counts");
+    assert!(counts.large.is_empty(), "small files are not large");
     assert_eq!(counts.unstaged["a.txt"], LineCount::Text { added: 2, removed: 1 });
     assert_eq!(counts.unstaged["b.txt"], LineCount::Text { added: 2, removed: 0 }, "an untracked file's lines are all added");
     assert_eq!(counts.staged["new.txt"], LineCount::Text { added: 0, removed: 0 }, "a pure rename changes no lines");

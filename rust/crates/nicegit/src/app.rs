@@ -741,6 +741,7 @@ impl NiceGitApp {
             .filter(|e| e.kind == nicegit_core::StatusKind::Untracked)
             .map(|e| e.path.clone())
             .collect();
+        let changed: Vec<String> = self.repos[index].snapshot.iter().flat_map(|s| &s.status).map(|e| e.path.clone()).collect();
         let counts_path = path.clone();
         let tracking_path = path.clone();
         let previous_tracking = self.repos[index].branch_tracking.take().and_then(|mut task| task.get().cloned().flatten());
@@ -749,8 +750,9 @@ impl NiceGitApp {
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
         // The previous counts stay until the new ones arrive, so the numbers do not flicker.
         let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
-        self.repos[index].line_counts =
-            Some(Task::spawn_with(&context, previous.map(Some), move || GitClient::new().line_counts(&untracked, &counts_path).ok()));
+        self.repos[index].line_counts = Some(Task::spawn_with(&context, previous.map(Some), move || {
+            GitClient::new().line_counts(&untracked, &changed, &counts_path).ok()
+        }));
         if index != self.active {
             return;
         }

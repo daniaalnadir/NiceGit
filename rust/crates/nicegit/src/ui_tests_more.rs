@@ -1842,3 +1842,25 @@ fn every_change_can_be_staged_and_committed_at_once() {
     assert_eq!(git(path, &["status", "--porcelain"]), "", "every change went into the commit");
     assert_eq!(git(path, &["show", "--name-only", "--format="]), "new.txt\nnotes.txt");
 }
+
+#[test]
+fn a_large_changed_file_is_pointed_out_and_the_open_file_can_be_discarded() {
+    let repo = repository();
+    let path = repo.path();
+    // A sparse file: large on paper, quick to make.
+    std::fs::File::create(path.join("video.mov")).unwrap().set_len(51_000_000).unwrap();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let tag = format!("{} 51 MB", icon::WARNING);
+    wait(&mut harness, "the size warning", |h| h.query_by_label(&tag).is_some());
+
+    // The open file's diff can discard it, after confirming.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label("Discard this file's changes…").is_some());
+    harness.get_by_label("Discard this file's changes…").click();
+    wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Discard").last().expect("the confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the discard", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\n");
+}

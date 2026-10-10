@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 - Fewer surprises
+
+- A changed file of 50 MB or more shows its size with a warning in the Changes panel, before
+  it is committed by mistake; GitHub refuses files over 100 MB.
+- Discard the open file's changes from the diff's header, after confirming; the discard can
+  be undone from the Changes panel.
+
 ## 1.4.0 - Sizes everywhere
 
 - A commit's files in the inspector show how many lines each adds and removes, as changed

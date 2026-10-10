@@ -653,6 +653,10 @@ impl NiceGitApp {
                 if button.on_hover_text("Shift-Ctrl/Cmd-S").clicked() {
                     self.toggle_stage_open_file();
                 }
+                // Discarding asks first, as from the Changes panel, and can be undone there.
+                if !staged && widgets::icon_button(ui, icon::TRASH, "Discard this file's changes…", self.idle()).clicked() {
+                    self.confirm_discard(entry.clone());
+                }
             }
         }
         // The open working file in the person's own editor, when one is set in Settings.
