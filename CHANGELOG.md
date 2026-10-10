@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0 - NiceGit everywhere
+
+The first release of NiceGit for macOS, Windows, and Linux, rewritten in Rust with every
+feature of the Mac app. Earlier versions below were development builds and were not
+released.
+
+- Everything the Mac app does, from staging single lines and resolving conflicts to
+  interactive rebase, bisect, worktrees, GitFlow, and Git LFS. `docs/PARITY.md` lists each
+  feature and the tests behind it.
+- A file's diff fills the main area in place of the history, side by side when there is room.
+- Fetch and Pull share one toolbar button whose menu chooses what it does.
+- The history's columns resize from their headings and are chosen from the headings' menu.
+- A universal Mac app (Apple silicon and Intel), a Windows zip, and Linux `.deb` and
+  `.tar.gz` packages.
+
 ## 0.7.1 - Your columns
 
 - The commit history has Branch / tag, Graph, Commit message, Author, Date, and Commit
