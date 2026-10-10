@@ -1673,3 +1673,24 @@ fn a_recent_commit_summary_can_be_reused() {
     settle(&mut harness);
     assert_eq!(harness.state().repo().unwrap().draft.summary, "Start the notes");
 }
+
+#[test]
+fn the_fetch_button_counts_commits_waiting_to_be_pulled() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"theirs\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    git(path, &["fetch", "-q"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert_eq!(harness.state().snapshot().unwrap().behind, Some(1));
+
+    harness.get_by_label("Fetch").hover();
+    wait(&mut harness, "the count in the tooltip", |h| shows(h, "1 commit to pull"));
+}

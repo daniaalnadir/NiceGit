@@ -13,6 +13,7 @@
   window again when it changes.
 - Restore default panel widths also restores the history's column widths.
 - Reuse a recent commit summary from the button beside the summary's character count.
+- When the toolbar's button fetches, a badge on it counts the commits waiting to be pulled.
 - Every local branch in the sidebar shows how far it is from its upstream (↑ to push, ↓ to
   pull), or that its upstream is gone from the remote; before, only the current branch did.
 - Clean Up Branches also lists branches whose remote branch was deleted, as after a merged
