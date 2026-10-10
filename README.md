@@ -1,6 +1,6 @@
 # NiceGit
 
-**A fast, native Git client for macOS. Free and open source.**
+**A fast Git client for macOS, Windows, and Linux. Free and open source.**
 
 ![NiceGit showing a repository's commit graph, branches, and staged changes](docs/images/nicegit-window.png)
 
@@ -57,9 +57,48 @@ The [feature guide](docs/FEATURES.md) describes each feature's behaviour and saf
 
 ## Install
 
-NiceGit is currently installed by building it from source.
+### Download
 
-### Requirements
+Download the latest build for your system from
+[Releases](https://github.com/daniaalnadir/NiceGit/releases):
+
+| System | File |
+| --- | --- |
+| macOS 11 or newer (Apple Silicon and Intel) | `NiceGit-…-macos-universal.dmg` |
+| Windows 10 or newer (64-bit) | `NiceGit-…-windows-x64.zip` |
+| Debian, Ubuntu, and derivatives | `NiceGit-…-linux-amd64.deb` |
+| Other Linux (x86_64) | `NiceGit-…-linux-x86_64.tar.gz` |
+
+These are the cross-platform version, built in Rust from [`rust/`](rust). It has the
+same features as the original Mac app described above: the commit graph and inspector,
+line-by-line staging, interactive rebase, conflict editing, undo, blame, file history,
+search, bisect, comparisons, worktrees, submodules, GitFlow, Git LFS, pull requests and
+issues, the command palette, and an embedded terminal; [docs/PARITY.md](docs/PARITY.md)
+maps each Mac feature to the cross-platform app. Every version needs Git installed and on
+your `PATH`.
+
+![The cross-platform NiceGit showing a repository's commit graph, branches, and changes](docs/images/nicegit-cross-platform.png)
+
+Until the macOS download is notarized, macOS blocks it the first time it opens:
+open it once, then choose **Open Anyway** in System Settings › Privacy & Security.
+
+### Build the cross-platform version from source
+
+Install [Rust](https://rustup.rs), then:
+
+```sh
+cd rust
+cargo run --release
+```
+
+On Linux, first install the GTK 3, xkbcommon, and Wayland or X11 development
+packages (for example `libgtk-3-dev libxkbcommon-dev libwayland-dev`). The tarball build
+also needs `libxkbcommon-x11-0` and OpenGL (`libgl1`, `libegl1`) at run time; the `.deb`
+installs them for you.
+
+### Build the Mac app from source
+
+Requirements:
 
 - macOS 14 or newer. Day-to-day testing uses recent macOS on Apple Silicon; older macOS
   versions and Intel Macs have not been verified at runtime.
@@ -67,8 +106,6 @@ NiceGit is currently installed by building it from source.
   completed.
 - Git on your `PATH`.
 - An internet connection for the first dependency download.
-
-### Build the app
 
 ```sh
 git clone https://github.com/daniaalnadir/NiceGit.git
@@ -109,6 +146,7 @@ ordinary Git operations use your existing Git credentials.
 
 ```sh
 swift test --build-system native
+cd rust && cargo test
 ```
 
 Tests run against disposable repositories and need no GitHub login. The opt-in
@@ -117,21 +155,22 @@ after each step; its documentation comment explains how to run it.
 
 | Folder | Contents |
 | --- | --- |
-| `Sources/NiceGit` | The interface and application state |
+| `Sources/NiceGit` | The Mac app's interface and application state |
 | `Sources/NiceGitCore` | Git commands, parsers, the commit graph, and GitHub reads |
 | `Tests` | Integration, regression, and interface tests |
 | `scripts` | Packaging, icons, and preview fixtures |
+| `rust/crates/nicegit-core` | The cross-platform Git commands, parsers, and commit graph |
+| `rust/crates/nicegit` | The cross-platform interface; `src/tools` holds each feature window |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow, and [AGENTS.md](AGENTS.md)
 records hard-won rules about Git edge cases that changes must respect.
 
 ## Limitations
 
-- NiceGit runs only on macOS.
 - Pull requests and issues support github.com only, not GitHub Enterprise, GitLab, or
   Bitbucket. Pushing and pulling work with any Git remote.
 - Undo covers the most recent undoable action, not a full history of every operation.
-- Releases are not notarized and there are no automatic updates.
+- Releases are not yet notarized and there are no automatic updates.
 - The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
   can run code. Only open repositories you trust.
 

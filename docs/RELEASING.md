@@ -43,3 +43,33 @@ Include the app's resource licenses in every binary distribution. Bump both
 version fields in `packaging/Info.plist`, document changes, and only tag the exact
 commit that passed CI and release smoke tests. Never upload `.build` or a private
 working repository as a release asset.
+
+## Cross-platform Releases (Rust)
+
+Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`, which builds:
+
+- `NiceGit-<version>-macos-universal.dmg` (Apple Silicon and Intel), built by
+  `rust/scripts/package-macos.sh`;
+- `NiceGit-<version>-windows-x64.zip`;
+- `NiceGit-<version>-linux-x86_64.tar.gz` and `NiceGit-<version>-linux-amd64.deb`;
+
+and publishes them as a GitHub prerelease. Update `version` in `rust/Cargo.toml`
+before tagging. A release can be rebuilt for an existing tag from the Actions tab
+(Run workflow, with the tag name); its files are replaced.
+
+Without signing secrets, the macOS app is ad-hoc signed and macOS asks users to
+approve it in System Settings › Privacy & Security the first time. To sign with
+Developer ID and notarize, add these repository secrets (ideally on a protected
+`release` environment):
+
+| Secret | Contents |
+| --- | --- |
+| `DEVELOPER_ID_P12` | Base64 of the exported Developer ID Application certificate and key (`.p12`) |
+| `DEVELOPER_ID_P12_PASSWORD` | The password chosen when exporting the `.p12` |
+| `NOTARY_KEY_P8` | Base64 of an App Store Connect API key (`AuthKey_XXXX.p8`) |
+| `NOTARY_KEY_ID` | That key's Key ID |
+| `NOTARY_ISSUER_ID` | The Issuer ID shown above the keys list in App Store Connect |
+
+Encode files with `base64 -i file | pbcopy`. With the certificate secrets the app
+is signed with the hardened runtime; with all five it is also notarized and the
+ticket stapled to the DMG. Windows and Linux builds are unsigned.

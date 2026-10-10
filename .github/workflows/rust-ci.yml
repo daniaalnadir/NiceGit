@@ -1,0 +1,198 @@
+name: Rust
+
+"on":
+  push:
+    branches: [main]
+    paths: ['rust/**', '.github/workflows/rust-ci.yml']
+  pull_request:
+    paths: ['rust/**', '.github/workflows/rust-ci.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: rust
+
+jobs:
+  test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev libssl-dev pkg-config
+
+      - name: Configure Git defaults
+        run: git config --global init.defaultBranch main
+
+      - name: Build
+        run: cargo build --locked --all-targets
+
+      - name: Test
+        run: cargo test --locked
+
+  run-app:
+    name: Run the app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install Linux system libraries and a virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev libssl-dev pkg-config xvfb imagemagick libgl1-mesa-dri libegl1 x11-utils libxkbcommon-x11-0 xdotool
+
+      - name: Build
+        run: cargo build --locked -p nicegit
+
+      - name: Create a demo repository
+        shell: bash
+        run: bash scripts/demo-repository.sh "$RUNNER_TEMP/Weather"
+
+      # Each step starts the real app on the demo repository with the commit inspector and
+      # command palette open, checks it is still running after it has drawn, and captures
+      # the screen.
+      - name: Run and capture (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
+            NICEGIT_DEBUG_OPEN=inspector,palette ./target/debug/nicegit "$RUNNER_TEMP/Weather" > "$RUNNER_TEMP/app.log" 2>&1 &
+            pid=$!
+            sleep 25
+            import -window root "$RUNNER_TEMP/nicegit-linux.png"
+            kill -0 $pid || { cat "$RUNNER_TEMP/app.log"; exit 1; }
+            kill $pid'
+
+      # Drives the real window with X11 keyboard events: the command palette stages every
+      # change, and Git confirms it happened.
+      - name: Type into the app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          bash scripts/demo-repository.sh "$RUNNER_TEMP/Typed" > /dev/null
+          xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
+            ./target/debug/nicegit "$RUNNER_TEMP/Typed" > "$RUNNER_TEMP/typed.log" 2>&1 &
+            pid=$!
+            sleep 20
+            window=$(xdotool search --name NiceGit | head -1)
+            xdotool windowfocus --sync "$window"
+            xdotool key --window "$window" ctrl+shift+p
+            sleep 2
+            xdotool type --window "$window" --delay 60 "stage all"
+            sleep 1
+            xdotool key --window "$window" Return
+            sleep 5
+            import -window root "$RUNNER_TEMP/nicegit-linux-typed.png"
+            kill -0 $pid || { cat "$RUNNER_TEMP/typed.log"; exit 1; }
+            kill $pid'
+          staged=$(git -C "$RUNNER_TEMP/Typed" diff --cached --name-only)
+          echo "Staged after typing: $staged"
+          echo "$staged" | grep -q "App/SettingsView.swift"
+
+      - name: Run and capture (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          NICEGIT_DEBUG_OPEN=inspector,palette ./target/debug/nicegit "$RUNNER_TEMP/Weather" > "$RUNNER_TEMP/app.log" 2>&1 &
+          pid=$!
+          sleep 25
+          screencapture -x "$RUNNER_TEMP/nicegit-macos.png" || true
+          kill -0 $pid || { cat "$RUNNER_TEMP/app.log"; exit 1; }
+          kill $pid
+
+      - name: Run and capture (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:NICEGIT_DEBUG_OPEN = "inspector,palette"
+          $app = Start-Process -FilePath "target\debug\nicegit.exe" -ArgumentList "$env:RUNNER_TEMP\Weather" -PassThru `
+            -RedirectStandardError "$env:RUNNER_TEMP\app.log"
+          Start-Sleep -Seconds 25
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:RUNNER_TEMP\nicegit-windows.png")
+          if ($app.HasExited) { Get-Content "$env:RUNNER_TEMP\app.log"; throw "NiceGit exited with code $($app.ExitCode)" }
+          Stop-Process -Id $app.Id
+
+      # Drives the real window with Windows keyboard events: the command palette stages every
+      # change, and Git confirms it happened.
+      - name: Type into the app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          bash scripts/demo-repository.sh "$env:RUNNER_TEMP/Typed" | Out-Null
+          $app = Start-Process -FilePath "target\debug\nicegit.exe" -ArgumentList "$env:RUNNER_TEMP\Typed" -PassThru `
+            -RedirectStandardError "$env:RUNNER_TEMP\typed.log"
+          Start-Sleep -Seconds 20
+          $shell = New-Object -ComObject WScript.Shell
+          # The runner's desktop can take focus back while the app starts, so the keystrokes are
+          # retried with the window activated again; each attempt starts by closing any palette.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $null = $shell.AppActivate($app.Id)
+            Start-Sleep -Seconds 1
+            $shell.SendKeys("{ESC}")
+            Start-Sleep -Milliseconds 500
+            $shell.SendKeys("^+p")
+            Start-Sleep -Seconds 2
+            $shell.SendKeys("stage all")
+            Start-Sleep -Seconds 1
+            $shell.SendKeys("{ENTER}")
+            Start-Sleep -Seconds 5
+            $staged = git -C "$env:RUNNER_TEMP\Typed" diff --cached --name-only
+            if ($staged -match "App/SettingsView.swift") { break }
+            Write-Host "Attempt $attempt did not reach the app; activating it again."
+          }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:RUNNER_TEMP\nicegit-windows-typed.png")
+          if ($app.HasExited) { Get-Content "$env:RUNNER_TEMP\typed.log"; throw "NiceGit exited with code $($app.ExitCode)" }
+          Stop-Process -Id $app.Id
+          $staged = git -C "$env:RUNNER_TEMP\Typed" diff --cached --name-only
+          Write-Host "Staged after typing: $staged"
+          if (-not ($staged -match "App/SettingsView.swift")) { throw "Typing into the app did not stage the changes" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshot-${{ matrix.os }}
+          path: ${{ runner.temp }}/nicegit-*.png
+          if-no-files-found: warn

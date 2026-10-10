@@ -1,0 +1,16 @@
+[workspace]
+members = ["crates/nicegit-core", "crates/nicegit"]
+resolver = "2"
+
+[workspace.package]
+version = "0.7.1"
+edition = "2021"
+license = "MIT"
+authors = ["Daniaal Nadir"]
+repository = "https://github.com/daniaalnadir/NiceGit"
+rust-version = "1.95"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
