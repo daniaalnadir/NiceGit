@@ -61,6 +61,8 @@ pub struct DiffContent {
     /// How many rows each line wraps onto, measured with the layout the view draws with, and
     /// the font size and width they were measured for.
     wrapped_rows: std::sync::Mutex<Option<WrappedRows>>,
+    /// Each run of added and removed lines, as indices into `lines`, worked out when first needed.
+    blocks: std::sync::OnceLock<Vec<BTreeSet<usize>>>,
 }
 
 impl DiffContent {
@@ -80,7 +82,17 @@ impl DiffContent {
         let line_columns: Vec<usize> = lines.iter().map(|line| columns(&line.text)).collect();
         let max_columns = line_columns.iter().copied().max().unwrap_or(0);
         let highlights = inline::highlights(&lines);
-        Self { title, lines, split, highlights, split_row_of_line, max_columns, line_columns, wrapped_rows: Default::default() }
+        Self {
+            title,
+            lines,
+            split,
+            highlights,
+            split_row_of_line,
+            max_columns,
+            line_columns,
+            wrapped_rows: Default::default(),
+            blocks: Default::default(),
+        }
     }
 
     /// How many rows each line takes when wrapped at `width` for code. Lines wrap between words
@@ -116,6 +128,12 @@ impl DiffContent {
         // none, and lines of one kind.
         let has = |kind: DiffLineKind| self.lines.iter().any(|line| line.kind == kind);
         !has(DiffLineKind::Context) && (!has(DiffLineKind::Deletion) || !has(DiffLineKind::Addition))
+    }
+
+    /// Each run of added and removed lines, joined across Git's missing-newline note.
+    fn blocks(&self) -> &[BTreeSet<usize>] {
+        self.blocks
+            .get_or_init(|| nicegit_core::staging::DiffHunk::grouped(&self.lines, 0).into_iter().map(|hunk| hunk.changed_indices).collect())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -214,6 +232,26 @@ pub struct DiffOptions {
     /// toggles it. Dragging sets every line the pointer crosses to the state of the line where
     /// the drag began.
     pub selected: BTreeSet<usize>,
+    /// The buttons a run of changed lines shows while the pointer is over it, when the lines
+    /// are selectable.
+    pub block_buttons: Option<BlockButtons>,
+}
+
+/// The buttons shown on a hovered run of changed lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockButtons {
+    /// Unstaged changes: Stage and Discard.
+    StageAndDiscard,
+    /// Staged changes: Unstage.
+    Unstage,
+}
+
+/// What a run of changed lines' button asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockAction {
+    Stage,
+    Unstage,
+    Discard,
 }
 
 /// What happened in the diff view this frame.
@@ -227,6 +265,8 @@ pub struct DiffResponse {
     pub match_count: usize,
     /// The line holding the current match, if there is one.
     pub current_match_line: Option<usize>,
+    /// A button pressed on a run of changed lines, with the lines it applies to.
+    pub block_action: Option<(BlockAction, BTreeSet<usize>)>,
 }
 
 /// Shows the diff without a find bar, keeping no state. Use [`show_with`] for the full view.
@@ -292,6 +332,17 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
             // The rows that overlap the visible part of the diff.
             let first = tops.partition_point(|top| *top <= viewport.min.y).saturating_sub(1);
             let last = tops.partition_point(|top| *top < viewport.max.y).min(rows);
+            let row_of = |line: usize| content.row_of(line, split);
+            // The run of changed lines under the pointer, whose buttons show on its first row.
+            let hovered = options.block_buttons.filter(|_| options.selectable).and_then(|buttons| {
+                let pointer = ui.input(|input| input.pointer.hover_pos()).filter(|pointer| ui.clip_rect().contains(*pointer))?;
+                let y = pointer.y - origin.y;
+                content.blocks().iter().find_map(|block| {
+                    let first_row = block.iter().map(|&line| row_of(line)).min()?;
+                    let last_row = block.iter().map(|&line| row_of(line)).max()?;
+                    (tops[first_row] <= y && y < tops[last_row + 1]).then_some((buttons, block, first_row))
+                })
+            });
             for row in first..last {
                 let rect = Rect::from_min_size(origin + vec2(0.0, tops[row]), vec2(view.style.total, tops[row + 1] - tops[row]));
                 if split {
@@ -300,9 +351,68 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
                     draw_unified_row(ui, row, rect, &view, options, &mut response);
                 }
             }
+            // Drawn after the rows, so the buttons sit over the line they belong to.
+            let buttons_id = view.drag_id.with("block buttons");
+            let mut drawn = None;
+            if let Some((buttons, block, row)) = hovered {
+                let height = (tops[row + 1] - tops[row]).min(view.style.row_height + 6.0);
+                let area = Rect::from_min_max(
+                    pos2(origin.x + viewport.min.x, origin.y + tops[row]),
+                    pos2(origin.x + viewport.max.x - 14.0, origin.y + tops[row] + height),
+                );
+                let builder = egui::UiBuilder::new().max_rect(area).layout(egui::Layout::right_to_left(egui::Align::Center));
+                let shown = ui.scope_builder(builder, |ui| block_buttons(ui, buttons)).inner;
+                drawn = Some(shown.rect);
+                if let Some(action) = shown.action {
+                    response.block_action = Some((action, block.clone()));
+                }
+            }
+            // Where the buttons are, so a press on them does not also select the line beneath.
+            ui.ctx().data_mut(|data| data.insert_temp(buttons_id, drawn));
         });
     });
     response
+}
+
+/// The buttons drawn on a hovered run of changed lines and the one pressed, if any.
+struct ShownButtons {
+    rect: Rect,
+    action: Option<BlockAction>,
+}
+
+/// Draws a run of changed lines' buttons from the right, in a frame that keeps them readable
+/// over the code beneath.
+fn block_buttons(ui: &mut Ui, buttons: BlockButtons) -> ShownButtons {
+    let c = theme::of(ui);
+    let mut action = None;
+    let frame = egui::Frame::new()
+        .fill(ui.visuals().window_fill)
+        .stroke(Stroke::new(1.0, c.border))
+        .corner_radius(6.0)
+        .inner_margin(egui::Margin::symmetric(3, 1))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().button_padding = vec2(6.0, 1.0);
+            // Laid out from the right, so the last added is leftmost.
+            let choices: &[(BlockAction, &str, &str, &str)] = match buttons {
+                BlockButtons::StageAndDiscard => &[
+                    (BlockAction::Discard, icon::ARROW_COUNTER_CLOCKWISE, "Discard", "Discard this change from the file. You can undo it."),
+                    (BlockAction::Stage, icon::PLUS, "Stage", "Stage this change"),
+                ],
+                BlockButtons::Unstage => &[(BlockAction::Unstage, icon::MINUS, "Unstage", "Unstage this change")],
+            };
+            for &(choice, glyph, label, tip) in choices {
+                let text = RichText::new(format!("{glyph} {label}")).small();
+                let text = if choice == BlockAction::Discard { text.color(c.removed) } else { text };
+                let button = ui.add(egui::Button::new(text).frame(false)).on_hover_text(tip);
+                let name = format!("{label} this change");
+                button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+                if button.clicked() {
+                    action = Some(choice);
+                }
+            }
+        });
+    ShownButtons { rect: frame.response.rect, action }
 }
 
 /// Sizes and colours that stay the same for every row of one frame.
@@ -540,7 +650,9 @@ fn select_by_pointer(ui: &Ui, view: &View, rect: Rect, line: usize, options: &mu
     }
     let (pressed, down, pointer) =
         ui.input(|input| (input.pointer.primary_pressed(), input.pointer.primary_down(), input.pointer.interact_pos()));
-    let inside = pointer.is_some_and(|position| rect.contains(position));
+    // A press on a run's buttons is for the button, not the line beneath it.
+    let buttons: Option<Rect> = ui.ctx().data(|data| data.get_temp::<Option<Rect>>(view.drag_id.with("block buttons"))).flatten();
+    let inside = pointer.is_some_and(|position| rect.contains(position) && !buttons.is_some_and(|area| area.contains(position)));
     if inside {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }

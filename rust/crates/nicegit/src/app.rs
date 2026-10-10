@@ -51,6 +51,11 @@ impl HistoryEntry {
     }
 }
 
+/// The busy label of a fetch NiceGit starts on its own; its result is reported quietly.
+pub const BACKGROUND_FETCH: &str = "Fetching in the background";
+/// How long after a repository opens its first background fetch waits.
+const FIRST_FETCH_DELAY: Duration = Duration::from_secs(30);
+
 /// What a finished action recorded for undo, handed from the background thread.
 pub enum Recorded {
     Step(HistoryEntry),
@@ -71,6 +76,12 @@ pub struct Repo {
     pub generation: u64,
     pub loading: bool,
     pub last_load: Instant,
+    /// When the next background fetch is due.
+    pub next_fetch: Instant,
+    /// When the repository was last fetched, by hand or in the background.
+    pub last_fetched: Option<Instant>,
+    /// Why the last background fetch failed, shown quietly in the status bar.
+    pub fetch_problem: Option<String>,
     pub selection: Selection,
     /// Commits chosen together with Command/Ctrl-click, for cherry-picking several.
     pub marked: BTreeSet<String>,
@@ -83,6 +94,9 @@ pub struct Repo {
     pub diff_generation: u64,
     /// The selected change prepared for staging individual lines.
     pub review: Option<Task<nicegit_core::Result<nicegit_core::staging::FileReview>>>,
+    /// Each shown diff line's place in the review's full-file diff, once both have loaded:
+    /// `Some(None)` when they do not match, so lines cannot be staged one by one.
+    pub line_map: Option<Option<std::sync::Arc<Vec<Option<usize>>>>>,
     pub diff_options: crate::diff_view::DiffOptions,
     pub draft: Draft,
     pub draft_key: Option<String>,
@@ -115,6 +129,10 @@ impl Repo {
             generation: 0,
             loading: false,
             last_load: Instant::now(),
+            // Soon after opening, rather than at once, so opening stays quick.
+            next_fetch: Instant::now() + FIRST_FETCH_DELAY,
+            last_fetched: None,
+            fetch_problem: None,
             selection: Selection::None,
             marked: BTreeSet::new(),
             compare_base: None,
@@ -124,6 +142,7 @@ impl Repo {
             diff_loading: false,
             diff_generation: 0,
             review: None,
+            line_map: None,
             diff_options: crate::diff_view::DiffOptions::default(),
             draft: Draft::default(),
             draft_key: None,
@@ -175,6 +194,7 @@ pub struct NiceGitApp {
     pub tools: Vec<Box<dyn ToolWindow>>,
     pub palette: Option<crate::ui::palette::PaletteState>,
     pub show_settings: bool,
+    pub show_shortcuts: bool,
     pub git_missing: bool,
     generation: u64,
     was_focused: bool,
@@ -216,6 +236,7 @@ impl NiceGitApp {
             tools: Vec::new(),
             palette: None,
             show_settings: false,
+            show_shortcuts: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
             generation: 0,
             was_focused: true,
@@ -356,6 +377,34 @@ impl NiceGitApp {
         self.worker.load(self.generation, repo.path.clone(), deliberate, limit);
     }
 
+    /// Fetches the open repository from its remotes every few minutes, as Settings chooses, so
+    /// ahead and behind counts stay current. It waits while anything else runs, a dialog is
+    /// open, or the editor holds unsaved text, and a failure shows quietly in the status bar.
+    fn auto_fetch(&mut self, ctx: &egui::Context) {
+        let minutes = self.settings.auto_fetch_minutes;
+        let Some(repo) = self.repos.get(self.active) else { return };
+        if minutes == 0 || repo.snapshot.as_ref().is_none_or(|s| s.remotes.is_empty()) {
+            return;
+        }
+        let now = Instant::now();
+        if now < repo.next_fetch {
+            ctx.request_repaint_after(repo.next_fetch - now);
+            return;
+        }
+        let quiet = self.busy.is_none()
+            && self.dialog.is_none()
+            && self.palette.is_none()
+            && !repo.loading
+            && !self.has_unsaved_editor()
+            && !self.tools.iter().any(|tool| tool.holds_refresh());
+        if !quiet {
+            ctx.request_repaint_after(Duration::from_secs(5));
+            return;
+        }
+        self.repos[self.active].next_fetch = now + Duration::from_secs(u64::from(minutes) * 60);
+        self.act(BACKGROUND_FETCH, |client, path| client.fetch(path).map(|_| None));
+    }
+
     /// Runs an action that changes the repository in the background, then refreshes it.
     /// Refused while another action runs or the editor has unsaved text.
     pub fn act(&mut self, label: &str, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
@@ -372,7 +421,10 @@ impl NiceGitApp {
         repo.loading = true;
         repo.last_load = Instant::now();
         self.busy = Some(label.to_string());
-        self.notice = None;
+        // A background fetch leaves the last message for the person to read.
+        if label != BACKGROUND_FETCH {
+            self.notice = None;
+        }
         let limit = repo.history_limit;
         self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, action);
     }
@@ -445,6 +497,23 @@ impl NiceGitApp {
                     if action.is_some() {
                         self.take_record(index);
                     }
+                    if let Some((label, result)) = &action {
+                        // Fetching, by hand, in the background, or as part of Pull, resets the timer.
+                        if matches!(label.as_str(), BACKGROUND_FETCH | "Fetch" | "Pull") {
+                            let repo = &mut self.repos[index];
+                            let minutes = u64::from(self.settings.auto_fetch_minutes.max(1));
+                            repo.next_fetch = Instant::now() + Duration::from_secs(minutes * 60);
+                            match result {
+                                Ok(_) => {
+                                    repo.last_fetched = Some(Instant::now());
+                                    repo.fetch_problem = None;
+                                }
+                                Err(error) if label == BACKGROUND_FETCH => repo.fetch_problem = Some(error.to_string()),
+                                Err(_) => {}
+                            }
+                        }
+                    }
+                    let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     if let Some((label, result)) = action {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
@@ -471,6 +540,7 @@ impl NiceGitApp {
                 Message::Diff { generation, title, result } => {
                     let Some(repo) = self.repos.iter_mut().find(|r| r.diff_generation == generation) else { continue };
                     repo.diff_loading = false;
+                    repo.line_map = None;
                     match result {
                         Ok(lines) => repo.diff = Some(DiffContent::new(title, lines)),
                         Err(error) => {
@@ -529,6 +599,15 @@ impl NiceGitApp {
             layout(&snapshot.commits, snapshot.head_hash.as_deref(), colors)
         };
         repo.lanes = repo.rows.iter().map(|row| row.lane_count).max().unwrap_or(1);
+        // A selected file stays open while it still has changes on its side, even when staging
+        // part of it changed its status; it then shows its new status.
+        if let Selection::Change { entry, staged } = &repo.selection {
+            let same_file = |e: &&StatusEntry| e.path == entry.path && e.original_path == entry.original_path;
+            let side = |e: &&StatusEntry| if *staged { e.is_staged() } else { e.is_unstaged() };
+            if let Some(current) = snapshot.status.iter().filter(same_file).find(side) {
+                repo.selection = Selection::Change { entry: current.clone(), staged: *staged };
+            }
+        }
         // Keep the selection only while it still exists in the new state.
         let keep = match &repo.selection {
             Selection::None => true,
@@ -599,6 +678,7 @@ impl NiceGitApp {
         repo.diff = None;
         repo.details = None;
         repo.review = None;
+        repo.line_map = None;
         repo.diff_options.selected.clear();
         repo.commit_files.clear();
         repo.diff_generation = next_id();
@@ -608,6 +688,7 @@ impl NiceGitApp {
     fn start_diff(&mut self) -> Option<(u64, PathBuf)> {
         let repo = self.repos.get_mut(self.active)?;
         repo.review = None;
+        repo.line_map = None;
         repo.diff_options.selected.clear();
         repo.diff_generation = next_id();
         repo.diff_loading = true;
@@ -628,6 +709,54 @@ impl NiceGitApp {
         self.repo().is_some_and(|r| {
             matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
         })
+    }
+
+    /// The files the open diff can step through, in the order they are listed: the Changes
+    /// panel's unstaged then staged files, or the selected commit's files. Also the open file's
+    /// place among them.
+    fn diff_files(&self) -> Option<(Vec<Selection>, usize)> {
+        let repo = self.repo()?;
+        let files: Vec<Selection> = match &repo.selection {
+            Selection::Change { .. } => {
+                let status = &repo.snapshot.as_ref()?.status;
+                let side = |staged: bool| {
+                    let mut entries: Vec<&StatusEntry> =
+                        status.iter().filter(|e| if staged { e.is_staged() } else { e.is_unstaged() }).collect();
+                    entries.sort_by_key(|e| e.path.to_lowercase());
+                    entries.into_iter().map(move |e| Selection::Change { entry: e.clone(), staged })
+                };
+                side(false).chain(side(true)).collect()
+            }
+            Selection::Commit { hash, file: Some(_) } => {
+                repo.commit_files.iter().map(|(_, path)| Selection::Commit { hash: hash.clone(), file: Some(path.clone()) }).collect()
+            }
+            _ => return None,
+        };
+        let same = |candidate: &Selection| match (candidate, &repo.selection) {
+            (Selection::Change { entry: a, staged: x }, Selection::Change { entry: b, staged: y }) => {
+                a.path == b.path && a.original_path == b.original_path && x == y
+            }
+            (a, b) => a == b,
+        };
+        let position = files.iter().position(same)?;
+        Some((files, position))
+    }
+
+    /// Where the open file sits among the files it can step through, as (position, count).
+    pub fn diff_file_position(&self) -> Option<(usize, usize)> {
+        self.diff_files().map(|(files, position)| (position, files.len()))
+    }
+
+    /// Opens the next file (`step` 1) or the previous one (-1) in the list the open diff came
+    /// from, if there is one.
+    pub fn step_diff_file(&mut self, step: isize) {
+        let Some((files, position)) = self.diff_files() else { return };
+        let Some(target) = position.checked_add_signed(step).and_then(|index| files.get(index)).cloned() else { return };
+        match target {
+            Selection::Change { entry, staged } => self.select_change(entry, staged),
+            Selection::Commit { hash, file } => self.select_commit_file(hash, file),
+            _ => {}
+        }
     }
 
     /// Closes the open diff and returns to the history, keeping the commit or the working tree
@@ -1066,12 +1195,14 @@ impl eframe::App for NiceGitApp {
         self.finish_clone();
         self.shortcuts(&ctx);
         self.auto_refresh(&ctx);
+        self.auto_fetch(&ctx);
         self.debug_open(&ctx);
         self.layout(ui);
         self.tool_windows(&ctx);
         self.dialogs(&ctx);
         self.palette_window(&ctx);
         self.settings_window(&ctx);
+        self.shortcuts_window(&ctx);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

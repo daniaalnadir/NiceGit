@@ -285,6 +285,77 @@ fn a_stale_review_is_refused_without_touching_the_index() {
     assert_eq!(repo.index_text("stale.txt"), "a\nb\n");
 }
 
+// MARK: Discarding lines
+
+#[test]
+fn discarding_one_hunk_restores_it_and_keeps_the_other_and_the_index() {
+    let repo = Repo::new();
+    let original: String = (1..=20).map(|n| format!("line {n}\n")).collect();
+    repo.commit("notes.txt", &original, "Base");
+    let edited = original.replace("line 2\n", "two\n").replace("line 19\n", "nineteen\n");
+    repo.write("notes.txt", &edited);
+
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    let hunks = DiffHunk::grouped(&review.lines, 0);
+    assert_eq!(hunks.len(), 2);
+    let undo = client().discard_lines_keeping_undo(&hunks[0].changed_indices, &review, repo.path()).expect("discard the first hunk");
+
+    assert_eq!(repo.read("notes.txt"), original.replace("line 19\n", "nineteen\n"), "only the first hunk is put back");
+    assert_eq!(repo.index_text("notes.txt"), original, "the index is untouched");
+    // The discard can be undone while the file is as the discard left it.
+    let undo = undo.expect("the discard can be undone");
+    client().undo_discard(&undo, repo.path()).expect("undo");
+    assert_eq!(repo.read("notes.txt"), edited);
+}
+
+#[test]
+fn discarding_lines_handles_a_missing_final_newline() {
+    let repo = Repo::new();
+    repo.commit("end.txt", "a\nb\n", "Base");
+    repo.write("end.txt", "a\nB");
+
+    let review = client().file_review("end.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-b", "+B"]);
+    client().discard_lines_keeping_undo(&selected, &review, repo.path()).expect("discard the replacement");
+    assert_eq!(repo.read("end.txt"), "a\nb\n");
+}
+
+#[test]
+fn discarding_some_lines_of_a_new_file_keeps_the_rest_and_all_of_them_removes_it() {
+    let repo = Repo::new();
+    repo.commit("keep.txt", "k\n", "Base");
+    repo.write("new.txt", "one\ntwo\nthree\n");
+
+    let review = client().file_review("new.txt", false, repo.path()).expect("review");
+    client().discard_lines_keeping_undo(&select(&review, &["+two"]), &review, repo.path()).expect("discard one line");
+    assert_eq!(repo.read("new.txt"), "one\nthree\n");
+
+    let review = client().file_review("new.txt", false, repo.path()).expect("review");
+    let all = select(&review, &["+one", "+three"]);
+    let undo = client().discard_lines_keeping_undo(&all, &review, repo.path()).expect("discard every line");
+    assert!(!repo.path().join("new.txt").exists(), "discarding every line of a new file removes it");
+    client().undo_discard(&undo.expect("undoable"), repo.path()).expect("undo");
+    assert_eq!(repo.read("new.txt"), "one\nthree\n");
+}
+
+#[test]
+fn discarding_lines_from_a_stale_or_staged_review_is_refused() {
+    let repo = Repo::new();
+    repo.commit("stale.txt", "a\nb\n", "Base");
+    repo.write("stale.txt", "a\nB\n");
+    let review = client().file_review("stale.txt", false, repo.path()).expect("review");
+    repo.write("stale.txt", "a\nB2\n");
+    let selected = select(&review, &["-b", "+B"]);
+    let error = client().discard_lines_keeping_undo(&selected, &review, repo.path()).expect_err("stale review refused");
+    assert!(error.to_string().contains("changed"), "unexpected error: {error}");
+    assert_eq!(repo.read("stale.txt"), "a\nB2\n", "the newer edit is kept");
+
+    repo.git(&["add", "--", "stale.txt"]);
+    let staged = client().file_review("stale.txt", true, repo.path()).expect("staged review");
+    let selected = select(&staged, &["-b", "+B2"]);
+    assert!(client().discard_lines_keeping_undo(&selected, &staged, repo.path()).is_err(), "staged lines are unstaged, not discarded");
+}
+
 #[test]
 fn binary_files_are_refused_for_line_staging() {
     let repo = Repo::new();

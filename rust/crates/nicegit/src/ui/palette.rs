@@ -20,6 +20,7 @@ pub struct PaletteState {
 
 #[derive(Clone)]
 enum Run {
+    Shortcuts,
     Fetch,
     Pull,
     Push,
@@ -110,6 +111,7 @@ impl NiceGitApp {
             command("Unstage all changes", "", icon::MINUS_CIRCLE, idle && snapshot.is_some_and(|s| s.staged_count() > 0), Run::UnstageAll),
             command("Show terminal", "Ctrl-`", icon::TERMINAL_WINDOW, has, Run::Terminal),
             command("Settings", "Appearance, graph colours, and diffs", icon::GEAR, true, Run::Settings),
+            command("Keyboard shortcuts", "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
             command("Open repository…", "Ctrl/Cmd-O", icon::FOLDER_OPEN, self.busy.is_none(), Run::Open),
             command("Clone repository…", "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
             command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
@@ -255,6 +257,7 @@ impl NiceGitApp {
             Run::Redo => self.confirm_redo(),
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
+            Run::Shortcuts => self.show_shortcuts = true,
             Run::Open => self.choose_folder(),
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
             Run::NewRepository => self.create_repository(),
