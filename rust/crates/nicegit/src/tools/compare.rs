@@ -504,7 +504,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn heic_images_are_decoded_on_macos() {
-        let folder = tempfile::tempdir().unwrap();
+        let folder = crate::ui_tests::temp_dir();
         let (png, heic) = (folder.path().join("in.png"), folder.path().join("out.heic"));
         std::fs::write(&png, encoded(6, 5, image::ImageFormat::Png)).unwrap();
         let made =

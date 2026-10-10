@@ -286,7 +286,7 @@ fn apply_an_identity_profile_from_repository_settings() {
 
 #[test]
 fn search_history_finds_a_commit_older_than_the_loaded_page() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir();
     let path = dir.path();
     git(path, &["init", "-q", "-b", "main"]);
     // More commits than one page loads. The oldest carries a message no other commit has.
@@ -505,11 +505,11 @@ fn open_a_repository_from_the_repository_menu_and_the_empty_window() {
 fn fetch_and_refresh_from_the_toolbar() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     git(path, &["push", "-q", "-u", "origin", "main"]);
-    let other = tempfile::tempdir().unwrap();
+    let other = temp_dir();
     let clone = other.path().join("clone");
     git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
     git(&clone, &["config", "user.name", "Other"]);

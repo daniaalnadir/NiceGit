@@ -106,7 +106,7 @@ fn a_commit_draft_and_the_side_by_side_choice_survive_a_relaunch() {
 fn amending_a_commit_already_on_a_remote_warns_before_amending() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     let head = git(path, &["rev-parse", "HEAD"]);

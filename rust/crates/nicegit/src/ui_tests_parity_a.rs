@@ -57,7 +57,7 @@ fn set_filter(harness: &mut App, text: &str) {
 fn sidebar_filter_narrows_tags_and_remote_branches() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     git(path, &["branch", "release/1.0"]);
@@ -97,7 +97,7 @@ fn sidebar_filter_narrows_tags_and_remote_branches() {
 fn filter_reveals_remote_branches_under_a_collapsed_remote() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     git(path, &["branch", "review/remote-only"]);

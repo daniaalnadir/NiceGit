@@ -18,9 +18,20 @@ pub(crate) fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
+/// A temporary folder for a test. On Windows it is left for the runner to discard: deleting
+/// it as the test ends can block indefinitely while the app's file watcher and finished Git
+/// processes are still releasing their handles, which once held a CI job until it timed out.
+pub(crate) fn temp_dir() -> tempfile::TempDir {
+    #[allow(unused_mut)]
+    let mut dir = tempfile::tempdir().expect("temporary folder");
+    #[cfg(windows)]
+    dir.disable_cleanup(true);
+    dir
+}
+
 /// A repository with two commits on main, a `feature` branch, and local-only configuration.
 pub(crate) fn repository() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().expect("temporary folder");
+    let dir = temp_dir();
     let path = dir.path();
     git(path, &["init", "-q", "-b", "main"]);
     for (key, value) in
@@ -123,6 +134,7 @@ pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done:
             // A window or menu that just appeared spends its first frames measuring itself and
             // ignores clicks, so let it settle before the test acts on it.
             harness.run_steps(3);
+            note_progress(|| format!("finished waiting for {what}"));
             return;
         }
         assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for {what}");
@@ -510,7 +522,7 @@ pub(crate) fn folder_name(path: &Path) -> String {
 #[test]
 fn clone_a_repository_through_its_dialog() {
     let source = repository();
-    let target_parent = tempfile::tempdir().unwrap();
+    let target_parent = temp_dir();
     let destination = target_parent.path().join("cloned");
     let mut harness = open(source.path());
     loaded(&mut harness);
@@ -530,7 +542,7 @@ fn clone_a_repository_through_its_dialog() {
 #[test]
 fn create_and_remove_a_worktree_from_the_interface() {
     let repo = repository();
-    let parent = tempfile::tempdir().unwrap();
+    let parent = temp_dir();
     let mut harness = open(repo.path());
     loaded(&mut harness);
 

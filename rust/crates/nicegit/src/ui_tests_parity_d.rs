@@ -47,14 +47,14 @@ fn replace_text(harness: &mut App, label: &str, text: &str) {
 
 /// A bare repository that stands in for a remote server.
 fn bare_remote() -> tempfile::TempDir {
-    let remote = tempfile::tempdir().expect("temporary folder");
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
     remote
 }
 
 #[test]
 fn create_a_repository_from_the_empty_window() {
-    let parent = tempfile::tempdir().unwrap();
+    let parent = temp_dir();
     let folder = parent.path().join("fresh-project");
     std::fs::create_dir(&folder).unwrap();
     let mut harness = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(|cc| NiceGitApp::new(cc, None));
@@ -77,7 +77,7 @@ fn clone_from_a_file_url_through_the_dialog() {
     let remote_path = remote.path().to_string_lossy().into_owned();
     git(source.path(), &["push", "-q", &remote_path, "main"]);
     let url = format!("file://{remote_path}");
-    let target_parent = tempfile::tempdir().unwrap();
+    let target_parent = temp_dir();
     let destination = target_parent.path().join("from-url");
     let mut harness = open(source.path());
     loaded(&mut harness);
@@ -147,7 +147,7 @@ fn check_out_a_remote_branch_creates_a_tracking_branch() {
     git(path, &["remote", "add", "origin", &remote_path]);
     git(path, &["push", "-q", "origin", "main"]);
     // Another clone publishes a branch that this repository has never checked out.
-    let other = tempfile::tempdir().unwrap();
+    let other = temp_dir();
     let clone = other.path().join("publisher");
     git(other.path(), &["clone", "-q", &remote_path, &clone.to_string_lossy()]);
     git(&clone, &["config", "user.name", "Test"]);

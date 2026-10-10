@@ -153,7 +153,7 @@ fn delete_a_local_tag_from_the_sidebar_after_confirming() {
 fn push_the_current_branch_with_the_toolbar_button() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
     git(path, &["remote", "add", "origin", &remote.path().display().to_string()]);
     git(path, &["push", "-q", "-u", "origin", "main"]);

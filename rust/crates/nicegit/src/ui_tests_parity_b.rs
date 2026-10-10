@@ -192,7 +192,7 @@ fn bisect_skip_marks_a_commit_untestable_and_git_records_it() {
 fn interactive_rebase_warns_about_commits_already_on_a_remote() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().display().to_string()]);
     git(path, &["push", "-q", "-u", "origin", "main"]);

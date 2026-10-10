@@ -197,7 +197,7 @@ fn edit_and_save_a_working_file_in_the_built_in_editor() {
 
 #[test]
 fn load_older_history_reads_the_next_page() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = temp_dir();
     let path = dir.path();
     git(path, &["init", "-q", "-b", "main"]);
     // One more page's worth of commits than a single load reads, made in one Git process.
@@ -277,7 +277,7 @@ fn copy_a_github_commit_link_from_the_graph() {
 fn save_a_commit_as_a_patch_and_apply_it_again() {
     let repo = repository();
     let path = repo.path();
-    let folder = tempfile::tempdir().unwrap();
+    let folder = temp_dir();
     let patch = folder.path().join("second-line.patch");
     let mut harness = open(path);
     loaded(&mut harness);
@@ -443,7 +443,7 @@ fn folder_tree_groups_changed_files_by_folder() {
 fn add_a_remote_in_repository_settings() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     let mut harness = open(path);
     loaded(&mut harness);
@@ -553,7 +553,7 @@ fn the_inspector_shows_the_whole_commit_message_as_written() {
 fn the_status_bar_shows_a_running_action_and_actions_wait_for_it() {
     let repo = repository();
     // With a remote, Fetch is available whenever nothing else is running.
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(repo.path(), &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     let mut harness = open(repo.path());
@@ -578,7 +578,7 @@ fn the_status_bar_shows_a_running_action_and_actions_wait_for_it() {
 fn copy_reveal_and_open_a_worktree_from_the_sidebar() {
     let repo = repository();
     let path = repo.path();
-    let folder = tempfile::tempdir().unwrap();
+    let folder = temp_dir();
     let linked = folder.path().join("linked");
     git(path, &["worktree", "add", "-q", "-b", "linked-work", &linked.to_string_lossy()]);
     let linked = std::fs::canonicalize(&linked).unwrap();
@@ -799,7 +799,7 @@ fn command_f_moves_to_find_in_diff() {
 fn publish_a_branch_through_its_dialog() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     let mut harness = open(path);
@@ -857,7 +857,7 @@ fn drag_a_branch_onto_the_current_branch_to_rebase_onto_it() {
 
 /// A bare repository holding `path`'s main branch, which `path` tracks as origin.
 fn publish_to_bare(path: &Path) -> tempfile::TempDir {
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     // Clones of it check out main, whatever this machine's default branch name is.
     git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
@@ -871,7 +871,7 @@ fn undo_a_pull_from_the_toolbar() {
     let path = repo.path();
     let remote = publish_to_bare(path);
     // Someone else pushes a commit.
-    let other = tempfile::tempdir().unwrap();
+    let other = temp_dir();
     let clone = other.path().join("clone");
     git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
     git(&clone, &["config", "user.name", "Other"]);
@@ -899,7 +899,7 @@ fn undo_a_pull_from_the_toolbar() {
 fn publish_a_branch_from_the_command_palette() {
     let repo = repository();
     let path = repo.path();
-    let remote = tempfile::tempdir().unwrap();
+    let remote = temp_dir();
     git(remote.path(), &["init", "-q", "--bare"]);
     git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
     let mut harness = open(path);
@@ -982,7 +982,7 @@ fn check_out_a_submodule_at_its_recorded_commit() {
 fn the_inspector_shows_a_verified_signature() {
     let repo = repository();
     let path = repo.path();
-    let keys = tempfile::tempdir().unwrap();
+    let keys = temp_dir();
     let key = keys.path().join("signing");
     let Ok(made) = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output() else {
         eprintln!("ssh-keygen is not installed; skipping");
