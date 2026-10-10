@@ -23,6 +23,21 @@ const WATCH_DEBOUNCE: Duration = Duration::from_millis(400);
 pub struct Notice {
     pub text: String,
     pub is_error: bool,
+    /// An action the message offers as a button, such as pulling after a rejected push.
+    pub action: Option<NoticeAction>,
+}
+
+/// What a message's button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeAction {
+    /// Fetch, then offer to merge the upstream's commits or rebase onto them.
+    Integrate,
+}
+
+/// Whether a push failed because the remote has commits the branch does not, so pulling them
+/// first would let it through.
+pub fn push_needs_pull(error: &str) -> bool {
+    ["non-fast-forward", "fetch first", "tip of your current branch is behind"].iter().any(|sign| error.contains(sign))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -229,6 +244,8 @@ pub struct NiceGitApp {
     pub palette: Option<crate::ui::palette::PaletteState>,
     pub show_settings: bool,
     pub show_shortcuts: bool,
+    /// Whether the fetch running now should end by offering to merge or rebase onto the upstream.
+    pub integrate_after_fetch: bool,
     /// Whether the saved interface size has been applied since launch.
     pub(crate) zoom_applied: bool,
     pub git_missing: bool,
@@ -273,6 +290,7 @@ impl NiceGitApp {
             palette: None,
             show_settings: false,
             show_shortcuts: false,
+            integrate_after_fetch: false,
             zoom_applied: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
             generation: 0,
@@ -566,7 +584,7 @@ impl NiceGitApp {
     }
 
     pub fn notify(&mut self, text: impl Into<String>, is_error: bool) {
-        self.notice = Some(Notice { text: text.into(), is_error });
+        self.notice = Some(Notice { text: text.into(), is_error, action: None });
     }
 
     fn receive(&mut self) {
@@ -598,19 +616,44 @@ impl NiceGitApp {
                             }
                         }
                     }
+                    let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
+                    let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     if let Some((label, result)) = action {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
                             Ok(None) => {}
+                            Err(error) if matches!(label.as_str(), "Push" | "Commit and push") && push_needs_pull(&error.to_string()) => {
+                                action_failed = true;
+                                let committed = if label == "Commit and push" { "Your commit was made, but the " } else { "The " };
+                                self.notice = Some(Notice {
+                                    text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
+                                    is_error: true,
+                                    action: Some(NoticeAction::Integrate),
+                                });
+                            }
                             Err(error) => {
                                 action_failed = true;
                                 self.notify(format!("{label} failed: {error}"), true);
                             }
                         }
                     }
+                    // Only the fetch started for a refused push offers the choice; a failed one ends it.
+                    let offer_integration = fetched && std::mem::take(&mut self.integrate_after_fetch);
+                    if fetch_failed {
+                        self.integrate_after_fetch = false;
+                    }
                     match *snapshot {
-                        Ok(snapshot) => self.apply(index, snapshot),
+                        Ok(snapshot) => {
+                            self.apply(index, snapshot);
+                            // After fetching for a refused push, the upstream's commits are offered
+                            // through the usual merge or rebase choice, with its preview.
+                            if offer_integration && !action_failed && index == self.active {
+                                if let Some(upstream) = self.upstream_branch() {
+                                    self.dialog = Some(crate::ui::dialogs::Dialog::Integrate { source: upstream });
+                                }
+                            }
+                        }
                         Err(error) => {
                             if self.repos[index].snapshot.is_none() {
                                 self.repos[index].error = Some(error.to_string());
@@ -868,6 +911,23 @@ impl NiceGitApp {
             Selection::Commit { hash, file } => self.select_commit_file(hash, file),
             _ => {}
         }
+    }
+
+    /// Fetches, then offers to merge the current branch's upstream or rebase onto it.
+    pub fn integrate_upstream(&mut self) {
+        if self.busy.is_some() {
+            return;
+        }
+        self.fetch();
+        self.integrate_after_fetch = self.busy.is_some();
+    }
+
+    /// The current branch's upstream, as a remote branch from the latest refresh.
+    fn upstream_branch(&self) -> Option<Branch> {
+        let snapshot = self.snapshot()?;
+        let current = snapshot.branches.iter().find(|b| b.is_current && !b.is_remote)?;
+        let upstream = current.upstream.as_deref()?;
+        snapshot.branches.iter().find(|b| b.is_remote && format!("refs/{}", b.name) == upstream).cloned()
     }
 
     /// Stages the open file, or unstages it when its staged side is open. A conflicted file is

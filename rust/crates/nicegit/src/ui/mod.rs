@@ -305,15 +305,32 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         ui.horizontal(|ui| {
             if let Some(notice) = &self.notice {
+                let action = notice.action;
                 let color = if notice.is_error { c.danger } else { c.accent };
                 let glyph = if notice.is_error { icon::WARNING_CIRCLE } else { icon::CHECK_CIRCLE };
                 ui.label(RichText::new(glyph).color(color));
-                ui.add(
-                    egui::Label::new(RichText::new(&notice.text).color(if notice.is_error { c.danger } else { ui.visuals().text_color() }))
-                        .truncate(),
-                );
-                if ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked() {
+                let text = RichText::new(notice.text.clone()).color(if notice.is_error { c.danger } else { ui.visuals().text_color() });
+                // The buttons are laid out from the right first, so a long message is shortened
+                // rather than pushing them out of view; the whole message is in its tooltip.
+                let (mut dismiss, mut pull) = (false, false);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
+                    if action == Some(crate::app::NoticeAction::Integrate) {
+                        pull = ui
+                            .add_enabled(self.idle(), egui::Button::new("Merge or rebase…"))
+                            .on_hover_text("Fetch, then choose whether to merge the remote's commits or rebase onto them")
+                            .clicked();
+                    }
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        let full = text.text().to_string();
+                        ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
+                    });
+                });
+                if dismiss || pull {
                     self.notice = None;
+                }
+                if pull {
+                    self.integrate_upstream();
                 }
                 return;
             }

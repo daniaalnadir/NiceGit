@@ -1864,3 +1864,46 @@ fn a_large_changed_file_is_pointed_out_and_the_open_file_can_be_discarded() {
     idle(&mut harness);
     wait(&mut harness, "the discard", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\n");
 }
+
+#[test]
+fn a_refused_push_explains_why_and_offers_to_merge_or_rebase() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"theirs\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    commit_file(path, "mine.txt", b"mine\n", "Work from here");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The button counts the commits to push, as "Push 1".
+    let push_label = |h: &App| match h.state().snapshot().and_then(|s| s.ahead) {
+        Some(ahead) if ahead > 0 => format!("Push {ahead}"),
+        _ => "Push".to_string(),
+    };
+    let label = push_label(&harness);
+    toolbar_button(&mut harness, &label);
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "the remote has commits this branch does not") && h.query_by_label("Merge or rebase…").is_some()
+    });
+    harness.get_by_label("Merge or rebase…").click();
+    idle(&mut harness);
+    // After fetching, the usual merge or rebase choice opens for the upstream.
+    wait(&mut harness, "the merge or rebase choice", |h| shows(h, "Integrate origin/main"));
+    harness.get_by_label(&format!("{}  Merge…", icon::GIT_MERGE)).click();
+    wait(&mut harness, "the merge confirmation", |h| shows(h, "Merge origin/main into main?"));
+    harness.get_by_role_and_label(Role::Button, "Merge").click();
+    idle(&mut harness);
+    wait(&mut harness, "their commit merged in", |_| path.join("theirs.txt").exists());
+
+    let label = push_label(&harness);
+    toolbar_button(&mut harness, &label);
+    idle(&mut harness);
+    wait(&mut harness, "the push", |_| git(remote.path(), &["rev-parse", "main"]) == git(path, &["rev-parse", "HEAD"]));
+}

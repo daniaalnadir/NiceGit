@@ -6,6 +6,8 @@
   it is committed by mistake; GitHub refuses files over 100 MB.
 - Discard the open file's changes from the diff's header, after confirming; the discard can
   be undone from the Changes panel.
+- When a push is refused because the remote has newer commits, the message says so plainly
+  and offers Merge or rebase…, which fetches and opens the usual choice with its preview.
 
 ## 1.4.0 - Sizes everywhere
 
