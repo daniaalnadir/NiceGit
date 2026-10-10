@@ -2,6 +2,8 @@
 
 ## 1.3.0 - Line by line
 
+- Each added or removed line in a diff has a + to its left, before the line numbers, that
+  stages just that line; in a staged diff a − unstages it.
 - New files can be staged line by line, and their changes staged or discarded from the diff,
   like changes to tracked files.
 - With lines selected, Discard selected lines puts them back after confirming; the discard

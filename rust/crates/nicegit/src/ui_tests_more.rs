@@ -1615,3 +1615,28 @@ fn the_interface_size_changes_from_settings_or_the_keyboard_and_is_remembered() 
     harness.state_mut().zoom_applied = false;
     wait(&mut harness, "the saved size", |h| (h.ctx.zoom_factor() - 1.3).abs() < 0.001);
 }
+
+#[test]
+fn the_plus_beside_a_line_stages_it_and_the_minus_unstages_it() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\nfourth\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the line buttons", |h| h.query_by_label("Stage line 4").is_some());
+
+    // + stages the one line beside it.
+    harness.get_by_label("Stage line 4").click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged line", |_| git(path, &["show", ":notes.txt"]) == "first\nsecond\nfourth");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nthird\nfourth\n");
+
+    // In the staged diff, − unstages it again.
+    let staged = harness.state().snapshot().unwrap().status.iter().find(|e| e.path == "notes.txt").cloned().unwrap();
+    harness.state_mut().select_change(staged, true);
+    wait(&mut harness, "the staged line's button", |h| h.query_by_label("Unstage line 3").is_some());
+    harness.get_by_label("Unstage line 3").click();
+    idle(&mut harness);
+    wait(&mut harness, "nothing staged", |_| git(path, &["diff", "--cached", "--name-only"]).is_empty());
+}
