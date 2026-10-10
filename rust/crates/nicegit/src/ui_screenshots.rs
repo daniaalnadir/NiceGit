@@ -16,9 +16,12 @@ use crate::ui_tests::*;
 type App = Harness<'static, NiceGitApp>;
 
 fn open_rendering(path: &Path, appearance: Appearance) -> App {
+    open_rendering_at(path, appearance, egui::vec2(1440.0, 900.0))
+}
+
+fn open_rendering_at(path: &Path, appearance: Appearance, size: egui::Vec2) -> App {
     let path: PathBuf = path.to_path_buf();
-    let mut harness =
-        Harness::builder().with_size(egui::vec2(1440.0, 900.0)).wgpu().build_eframe(move |cc| NiceGitApp::new(cc, Some(path)));
+    let mut harness = Harness::builder().with_size(size).wgpu().build_eframe(move |cc| NiceGitApp::new(cc, Some(path)));
     harness.state_mut().settings.appearance = appearance;
     loaded(&mut harness);
     harness
@@ -71,5 +74,13 @@ fn screenshots() {
         harness.state_mut().show_settings = true;
         save(&mut harness, &folder, &format!("settings-{theme}"));
         harness.state_mut().show_settings = false;
+
+        // Side by side needs a diff panel at least 560 points wide, which a 1440-point window
+        // with both sidebars open does not leave; a wider window shows it in effect.
+        let mut wide = open_rendering_at(&path, appearance, egui::vec2(1920.0, 1080.0));
+        wide.state_mut().settings.split_diff = true;
+        wide.get_all_by_label(&file).next().expect("a changed file").click();
+        wait(&mut wide, "the diff", |h| h.state().repo().is_some_and(|r| r.diff.is_some() && !r.diff_loading));
+        save(&mut wide, &folder, &format!("diff-split-wide-{theme}"));
     }
 }
