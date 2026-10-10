@@ -15,6 +15,8 @@
 - Reuse a recent commit summary from the button beside the summary's character count.
 - When the toolbar's button fetches, a badge on it counts the commits waiting to be pulled.
 - Copy the open diff as a patch from the button in the diff's header.
+- Scrolling to the end of the history loads older commits by itself; the Load older history
+  button stays for a history that fits without scrolling.
 - Every local branch in the sidebar shows how far it is from its upstream (↑ to push, ↓ to
   pull), or that its upstream is gone from the remote; before, only the current branch did.
 - Clean Up Branches also lists branches whose remote branch was deleted, as after a merged

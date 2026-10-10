@@ -332,11 +332,11 @@ fn load_older_history_reads_the_next_page() {
     let loaded_commits = |h: &App| h.state().snapshot().map(|s| (s.commits.len(), s.has_more_commits));
     assert_eq!(loaded_commits(&harness), Some((crate::app::PAGE, true)));
 
-    // Scroll to the end of the graph, where the button is.
+    // Scrolling to the end of the graph, where the Load older history row is, loads the next
+    // page without a click.
     let newest = harness.get_by_label(&format!("Commit number {total}")).rect().center();
-    let button = format!("{}  Load older history", icon::CARET_DOUBLE_DOWN);
     for _ in 0..200 {
-        if harness.query_by_label(&button).is_some() {
+        if harness.state().repo().is_some_and(|r| r.history_limit > crate::app::PAGE) {
             break;
         }
         harness.hover_at(newest);
@@ -348,8 +348,6 @@ fn load_older_history_reads_the_next_page() {
         });
         harness.step();
     }
-    settle(&mut harness);
-    harness.get_by_label(&button).click();
     idle(&mut harness);
     wait(&mut harness, "the older commits", |h| loaded_commits(h) == Some((total, false)));
     assert!(shows(&harness, "Commit number 1"), "the oldest commit is listed");

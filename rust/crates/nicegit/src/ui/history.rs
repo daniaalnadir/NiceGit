@@ -213,6 +213,10 @@ impl NiceGitApp {
             self.repos[self.active].scroll_to_selection = false;
         }
 
+        // Scrolling down to the last row loads the next page of history by itself; a history that
+        // fits without scrolling keeps the button, so nothing loads unasked.
+        let scrolled = ui.data(|d| d.get_temp::<(f32, f32)>(ui.make_persistent_id("history_view"))).is_some_and(|(offset, _)| offset > 0.0);
+        let mut load_older = false;
         let output = scroll_area.show_rows(ui, ROW_HEIGHT, count, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for position in range {
@@ -221,19 +225,20 @@ impl NiceGitApp {
                         let left = ui.max_rect().left();
                         let layout = self.settings.history_columns.layout(left, left + ui.available_width(), graph_width);
                         ui.add_space(layout.message().min - left);
-                        if ui
+                        let clicked = ui
                             .add_enabled(self.idle(), egui::Button::new(format!("{}  Load older history", icon::CARET_DOUBLE_DOWN)))
-                            .clicked()
-                        {
-                            self.repos[self.active].history_limit += crate::app::PAGE;
-                            self.load(false);
-                        }
+                            .clicked();
+                        load_older = clicked || scrolled;
                     });
                     continue;
                 };
                 self.history_row(ui, index, &snapshot, graph_width, background, filter.is_empty(), &marked);
             }
         });
+        if load_older && self.idle() && self.repo().is_some_and(|r| !r.loading) {
+            self.repos[self.active].history_limit += crate::app::PAGE;
+            self.load(false);
+        }
         let view_id = ui.make_persistent_id("history_view");
         ui.data_mut(|d| d.insert_temp(view_id, (output.state.offset.y, output.inner_rect.height())));
         // A row cut by the bottom edge fades out, so it reads as more history below rather than
