@@ -37,7 +37,44 @@ pub(crate) fn repository() -> tempfile::TempDir {
     dir
 }
 
+/// Stops the test run if one test thread runs for minutes, naming it, so a frame stuck in a
+/// blocked call fails quickly instead of holding CI until its job times out.
+struct Watchdog(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for Watchdog {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+thread_local! {
+    static WATCHDOG: std::cell::RefCell<Option<Watchdog>> = const { std::cell::RefCell::new(None) };
+}
+
+fn arm_watchdog() {
+    WATCHDOG.with(|watchdog| {
+        if watchdog.borrow().is_some() {
+            return;
+        }
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let finished = done.clone();
+        let name = std::thread::current().name().unwrap_or("an interface test").to_string();
+        std::thread::spawn(move || {
+            let start = Instant::now();
+            while !finished.load(std::sync::atomic::Ordering::Relaxed) {
+                if start.elapsed() > Duration::from_secs(180) {
+                    eprintln!("{name} has been stuck for three minutes; stopping the test run");
+                    std::process::exit(101);
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        });
+        *watchdog.borrow_mut() = Some(Watchdog(done));
+    });
+}
+
 pub(crate) fn open(path: &Path) -> Harness<'static, NiceGitApp> {
+    arm_watchdog();
     let path: PathBuf = path.to_path_buf();
     Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(move |cc| NiceGitApp::new(cc, Some(path)))
 }
