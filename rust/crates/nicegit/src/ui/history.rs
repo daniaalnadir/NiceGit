@@ -252,6 +252,11 @@ impl NiceGitApp {
         });
         let view_id = ui.make_persistent_id("history_view");
         ui.data_mut(|d| d.insert_temp(view_id, (output.state.offset.y, output.inner_rect.height())));
+        // A row cut by the bottom edge fades out, so it reads as more history below rather than
+        // a broken row.
+        if more_below(output.state.offset.y, output.inner_rect.height(), output.content_size.y) {
+            paint_fade(ui.painter(), output.inner_rect, background);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -701,4 +706,38 @@ pub(crate) fn middle_ellipsis(text: &str, max: usize) -> String {
     let head = max / 2;
     let tail = max - head - 1;
     format!("{}…{}", chars[..head].iter().collect::<String>(), chars[chars.len() - tail..].iter().collect::<String>())
+}
+
+/// How tall the fade at the bottom of the history is.
+const FADE_HEIGHT: f32 = 20.0;
+
+/// Whether rows continue below the visible part of the history.
+fn more_below(offset: f32, visible_height: f32, content_height: f32) -> bool {
+    offset + visible_height < content_height - 0.5
+}
+
+/// Fades the bottom edge of `rect` into `background`.
+fn paint_fade(painter: &egui::Painter, rect: egui::Rect, background: Color32) {
+    let top = (rect.bottom() - FADE_HEIGHT).max(rect.top());
+    let clear = background.gamma_multiply(0.0);
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(egui::pos2(rect.left(), top), clear);
+    mesh.colored_vertex(egui::pos2(rect.right(), top), clear);
+    mesh.colored_vertex(egui::pos2(rect.left(), rect.bottom()), background);
+    mesh.colored_vertex(egui::pos2(rect.right(), rect.bottom()), background);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(1, 3, 2);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_fade_shows_only_while_rows_continue_below() {
+        assert!(more_below(0.0, 300.0, 340.0), "a row cut by the bottom edge");
+        assert!(!more_below(40.0, 300.0, 340.0), "scrolled to the end");
+        assert!(!more_below(0.0, 300.0, 200.0), "every row fits");
+    }
 }

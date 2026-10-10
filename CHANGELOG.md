@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.20 - Soft edge
+
+- The commit history fades out at its bottom edge while more commits are below, so a row cut
+  by the diff panel reads as more history rather than a broken row.
+
 ## 0.6.19 - Whole names
 
 - A diff file header too long for its row is shortened in the middle of its paths, at a folder

@@ -196,6 +196,29 @@ fn edit_and_save_a_working_file_in_the_built_in_editor() {
 }
 
 #[test]
+fn the_main_window_stays_usable_while_the_editor_is_open() {
+    // As in the Mac app, where the file editor sits in the workspace rather than a sheet, the
+    // editor does not block or dim the window behind it.
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    let edit = format!("{}  Edit", icon::PENCIL_SIMPLE);
+    wait(&mut harness, "the Edit button", |h| h.query_by_label(&edit).is_some());
+    idle(&mut harness);
+    harness.get_by_label(&edit).click_accesskit();
+    wait(&mut harness, "the editor", |h| h.query_by_role_and_label(Role::TextInput, "File contents").is_some());
+
+    harness.get_all_by_label("Start the notes").next().expect("the first commit's row").click_accesskit();
+    wait(&mut harness, "the commit to be selected", |h| {
+        h.state().repo().is_some_and(|r| matches!(&r.selection, crate::app::Selection::Commit { .. }))
+    });
+    assert!(harness.query_by_role_and_label(Role::TextInput, "File contents").is_some(), "the editor stays open");
+}
+
+#[test]
 fn load_older_history_reads_the_next_page() {
     let dir = temp_dir();
     let path = dir.path();
