@@ -5,7 +5,7 @@
 
 version: 2
 updates:
-  - package-ecosystem: "swift"
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "cargo"
+    directory: "/rust" # Location of the Cargo workspace
     schedule:
       interval: "weekly"

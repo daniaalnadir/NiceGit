@@ -1,31 +1,33 @@
 # Contributing to NiceGit
 
-NiceGit is a free, MIT-licensed native macOS Git client. Small, focused fixes and
-well-tested workflow improvements are welcome. Discuss substantial features in
+NiceGit is a free, MIT-licensed Git client for macOS, Windows, and Linux. Small, focused
+fixes and well-tested workflow improvements are welcome. Discuss substantial features in
 an issue before starting a large change.
 
 ## Development
 
-Use a Mac with Swift 6.3 or newer and Git. From the repository root:
+Install Rust 1.95 or newer and Git. On Linux, first install the packages listed in the
+[README](README.md#build-from-source). From the repository root:
 
 ```sh
-swift package resolve --force-resolved-versions
-swift run --build-system native NiceGit
-swift test --build-system native
-bash scripts/build-app.sh release
+cd rust
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-The native SwiftPM backend is currently required by the validated packaging path;
-it emits a deprecation warning. See README for the Xcode 27 shader-build caveat.
-CI checks Xcode 26.6 on GitHub's macOS 26 runner; a successful hosted run must be
-confirmed after publishing, not inferred from local results.
+`rust/scripts/test-all.sh` runs the test suite on your Mac and in a Linux Docker container
+at the same time. See [rust/README.md](rust/README.md) for how it works.
+
+CI runs the same checks on Ubuntu, macOS, and Windows. A hosted run confirms each platform;
+local results do not prove the hosted runners behave the same way.
 
 ## Project Layout
 
-- `Sources/NiceGit`: SwiftUI/AppKit interface and application state.
-- `Sources/NiceGitCore`: Git subprocesses, parsers, graph layout, and GitHub reads.
-- `Tests`: isolated repository integration tests and app-model tests.
-- `scripts`: local packaging, icons, and disposable preview fixtures.
+- `rust/crates/nicegit`: the interface and application state.
+- `rust/crates/nicegit-core`: Git subprocesses, parsers, graph layout, and GitHub reads.
+- `rust/crates/nicegit-core/tests`: isolated repository integration tests.
+- `rust/scripts`: packaging, the test runner, and a disposable demo repository script.
 
 ## Safety and Tests
 
@@ -35,22 +37,20 @@ changes separately; stale selections must not silently target a different HEAD.
 History-changing UI actions need clear confirmations. Git operations must remain
 cancellable and must not run synchronously on the UI thread.
 
-App-model tests are serialized because their synchronous fixture setup shares
-the main actor. Keep ordinary core tests independent and parallelizable.
-
-The normal suite requires no GitHub account. The optional read-only live check is:
+The normal suite requires no GitHub account. The one test that reads GitHub is ignored by
+default; it requires your existing `gh` login and reads the public `cli/cli` repository:
 
 ```sh
-NICEGIT_LIVE_GITHUB_TEST=1 swift test --build-system native --filter liveGitHubSidebarLoadsPublicRepository
+cd rust
+cargo test -p nicegit -- --ignored github_pull_requests_and_issues_load_from_github
 ```
 
-It requires your existing `gh` login and reads the public `cli/cli` repository.
 Do not add tokens, shell histories, private repository contents, signing keys,
-generated app bundles, or local Xcode preferences to a pull request.
+generated app bundles, or local IDE preferences to a pull request.
 
 ## Pull Requests
 
 Describe the behavior changed, tests run, and any known limits. Include screenshots
 for interface changes with private paths, repository names, and account data
-removed. Run the full test suite and release packaging before requesting review.
+removed. Run the full test suite and the checks above before requesting review.
 Contributions are made under this repository's MIT license.

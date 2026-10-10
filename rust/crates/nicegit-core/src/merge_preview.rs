@@ -1,5 +1,5 @@
 //! What merging, or rebasing onto, a commit would do, worked out without touching the working
-//! tree or the index. Port of `GitMergePreview.swift`.
+//! tree or the index. Ported from the original Mac app.
 
 use std::path::Path;
 

@@ -1,5 +1,5 @@
 //! Interactive rebase, plus rebase, revert, and cherry-pick started from a chosen commit or
-//! branch. Port of `GitInteractiveRebase.swift` and the related parts of `GitClient.swift`.
+//! branch. Ported from the original Mac app.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
