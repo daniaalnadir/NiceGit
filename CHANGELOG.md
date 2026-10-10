@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 - Tidy tabs
+
+- Middle-click a repository tab to close it, as in a browser.
+- Command-W (Control-W elsewhere) closes the open window, such as the editor, or else the
+  repository tab; a window with unsaved text stays open.
+- A repository tab's right-click menu can close it or every other tab, copy its path, or
+  show it in the file manager.
+- Clicking a tab's name now switches to it; before, only the tab's edges responded.
+
 ## 1.5.0 - Fewer surprises
 
 - A changed file of 50 MB or more shows its size with a warning in the Changes panel, before

@@ -32,6 +32,8 @@ impl NiceGitApp {
             }
             let mut switch = None;
             let mut close = None;
+            let mut tab_action: Option<(usize, TabAction)> = None;
+            let tab_count = self.repos.len();
             egui::ScrollArea::vertical().id_salt("repositories").auto_shrink([false, true]).max_height(ui.available_height() * 0.6).show(
                 ui,
                 |ui| {
@@ -43,6 +45,8 @@ impl NiceGitApp {
                         let response = ui
                             .scope_builder(egui::UiBuilder::new().sense(egui::Sense::click()), |ui| {
                                 frame.show(ui, |ui| {
+                                    // Selectable labels sense clicks and drags, so they would take the tab's clicks.
+                                    ui.style_mut().interaction.selectable_labels = false;
                                     ui.set_width(ui.available_width());
                                     ui.horizontal(|ui| {
                                         let glyph = if active { icon::FOLDER_OPEN } else { icon::FOLDER };
@@ -97,6 +101,29 @@ impl NiceGitApp {
                         if response.clicked() {
                             switch = Some(index);
                         }
+                        // Middle-click closes a tab, as in browsers.
+                        if response.middle_clicked() {
+                            close = Some(index);
+                        }
+                        response.context_menu(|ui| {
+                            if ui.button(format!("{}  Close", icon::X)).clicked() {
+                                tab_action = Some((index, TabAction::Close));
+                                ui.close();
+                            }
+                            if ui.add_enabled(tab_count > 1, egui::Button::new(format!("{}  Close other tabs", icon::X_SQUARE))).clicked() {
+                                tab_action = Some((index, TabAction::CloseOthers));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+                                tab_action = Some((index, TabAction::CopyPath));
+                                ui.close();
+                            }
+                            if ui.button(format!("{}  Show in file manager", icon::FOLDER_OPEN)).clicked() {
+                                tab_action = Some((index, TabAction::Reveal));
+                                ui.close();
+                            }
+                        });
                         ui.add_space(2.0);
                     }
                 },
@@ -107,6 +134,23 @@ impl NiceGitApp {
             }
             if let Some(index) = switch {
                 self.switch_to(index);
+                return;
+            }
+            if let Some((index, action)) = tab_action {
+                match action {
+                    TabAction::Close => self.close_tab(index),
+                    TabAction::CloseOthers => self.close_other_tabs(index),
+                    TabAction::CopyPath => {
+                        if let Some(repo) = self.repos.get(index) {
+                            ui.ctx().copy_text(repo.path.display().to_string());
+                        }
+                    }
+                    TabAction::Reveal => {
+                        if let Some(repo) = self.repos.get(index) {
+                            crate::ui::changes::reveal(&repo.path);
+                        }
+                    }
+                }
                 return;
             }
             // Recently opened repositories that are not open as tabs.
@@ -131,6 +175,15 @@ impl NiceGitApp {
             }
         });
     }
+}
+
+/// What the right-click menu of a repository tab does, applied after the tabs are drawn.
+#[derive(Clone, Copy)]
+enum TabAction {
+    Close,
+    CloseOthers,
+    CopyPath,
+    Reveal,
 }
 
 /// Shortens a long path by replacing its middle with an ellipsis.

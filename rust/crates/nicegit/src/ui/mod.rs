@@ -57,6 +57,16 @@ impl NiceGitApp {
                 }
             }
         }
+        // Command-W closes the newest open window first, then the active repository tab.
+        if ctx.input_mut(|i| i.consume_shortcut(&command(Key::W))) && self.dialog.is_none() && self.palette.is_none() {
+            if self.tools.last().is_some_and(|tool| tool.has_unsaved_changes()) {
+                self.notify("Save or close the file you are editing first.", true);
+            } else if !self.tools.is_empty() {
+                self.tools.pop();
+            } else if !self.repos.is_empty() {
+                self.close_tab(self.active);
+            }
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::S))) && self.showing_diff() {
             self.toggle_stage_open_file();
         }
