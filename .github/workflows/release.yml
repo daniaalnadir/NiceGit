@@ -18,8 +18,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      prerelease: ${{ steps.kind.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Releases are made from main only, so a tag pushed from a work branch builds nothing.
+      - name: Tag is on main
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "refs/tags/$TAG^{commit}" origin/main; then
+            echo "::error::$TAG does not point to a commit on main. Merge to main, then tag there."
+            exit 1
+          fi
+
+      - name: Tag matches the app's version
+        run: |
+          set -euo pipefail
+          version="$(git show "refs/tags/${TAG}:rust/Cargo.toml" | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::$TAG does not match version $version in rust/Cargo.toml."
+            exit 1
+          fi
+
+      # A version with a suffix, such as v1.1.0-rc.1, is a pre-release; v1.0.0 is a full release.
+      - name: Release kind
+        id: kind
+        run: |
+          case "$TAG" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
   macos:
     name: macOS universal app
+    needs: check
     runs-on: macos-14
     timeout-minutes: 60
     env:
@@ -92,6 +135,7 @@ jobs:
 
   windows:
     name: Windows x64
+    needs: check
     runs-on: windows-latest
     timeout-minutes: 60
     env:
@@ -132,6 +176,7 @@ jobs:
 
   linux:
     name: Linux x86_64
+    needs: check
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
@@ -195,11 +240,12 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: [macos, windows, linux]
+    needs: [check, macos, windows, linux]
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+      PRERELEASE: ${{ needs.check.outputs.prerelease }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Derive version
@@ -217,9 +263,10 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
+            if [ "$PRERELEASE" = "true" ]; then kind=--prerelease; else kind=--latest; fi
             gh release create "$TAG" release/* \
               --title "NiceGit $VERSION" \
               --generate-notes \
-              --prerelease \
+              "$kind" \
               --repo "$GITHUB_REPOSITORY"
           fi
