@@ -862,6 +862,13 @@ impl GitClient {
         self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", &remote, &refspec], directory).map(drop)
     }
 
+    /// Each local branch's distance from its upstream, for showing beside branch names. Read
+    /// separately from the snapshot, as counting can take a while with many branches.
+    pub fn branch_tracking(&self, directory: &Path) -> Result<std::collections::HashMap<String, crate::parsers::Tracking>> {
+        let output = self.run(&["for-each-ref", "--format=%(refname)%09%(upstream:track,nobracket)", "refs/heads/"], directory)?;
+        Ok(crate::parsers::parse_tracking(&output))
+    }
+
     /// Commits the staged changes with `message`, then pushes that commit to the upstream, as
     /// Push would. Refuses before committing unless the branch and HEAD are still those in
     /// `snapshot` and the branch has an upstream; pushes only the commit just made, on top of

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
+use nicegit_core::parsers::Tracking;
 use nicegit_core::{Branch, GitClient, Snapshot};
 
 use crate::app::{NiceGitApp, Selection};
@@ -130,6 +131,7 @@ impl NiceGitApp {
         let other_worktrees = GitClient::branches_in_other_worktrees(snapshot);
 
         let locals: Vec<Branch> = snapshot.branches.iter().filter(|b| !b.is_remote && matches(&b.name)).cloned().collect();
+        let tracking = self.repos[self.active].branch_tracking.as_mut().and_then(|task| task.get()).cloned().flatten().unwrap_or_default();
         section(ui, "local", icon::LAPTOP, "Local", locals.len(), true, |ui| {
             if locals.is_empty() {
                 ui.label(RichText::new("   No local branches").small().color(c.muted));
@@ -149,11 +151,25 @@ impl NiceGitApp {
                 } else if in_other {
                     Some(RichText::new(icon::FOLDERS).color(c.muted))
                 } else {
-                    None
+                    // Other branches show how far they are from their upstreams too.
+                    match tracking.get(&branch.name) {
+                        Some(Tracking::Counts { ahead, behind }) => {
+                            Some(RichText::new(format!("↑{ahead} ↓{behind}")).small().monospace().color(c.muted))
+                        }
+                        Some(Tracking::Gone) => Some(RichText::new("gone").small().color(c.warning)),
+                        None => None,
+                    }
+                };
+                let tracking_note = match tracking.get(&branch.name) {
+                    Some(Tracking::Counts { ahead, behind }) if !branch.is_current => {
+                        format!("\n{ahead} commit{} to push, {behind} to pull", if *ahead == 1 { "" } else { "s" })
+                    }
+                    Some(Tracking::Gone) => "\nIts upstream branch no longer exists on the remote".to_string(),
+                    _ => String::new(),
                 };
                 let response = row(ui, glyph, color, text, trailing, false);
                 let response = response.on_hover_text(format!(
-                    "{}  {}{}",
+                    "{}  {}{}{tracking_note}",
                     short(&branch.tip),
                     branch.subject,
                     if in_other { "\nChecked out in another worktree" } else { "" }

@@ -132,6 +132,8 @@ pub struct Repo {
     pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
     /// The open image's versions, uploaded for drawing once read.
     pub image_textures: Option<crate::tools::compare::Textures>,
+    /// Each local branch's distance from its upstream, read after each refresh.
+    pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
     /// Text that narrows the Changes panel's lists to matching paths.
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
@@ -178,6 +180,7 @@ impl Repo {
             submodules: None,
             line_counts: None,
             change_filter: String::new(),
+            branch_tracking: None,
             image_preview: None,
             image_textures: None,
             github: [None, None],
@@ -729,6 +732,10 @@ impl NiceGitApp {
             .map(|e| e.path.clone())
             .collect();
         let counts_path = path.clone();
+        let tracking_path = path.clone();
+        let previous_tracking = self.repos[index].branch_tracking.take().and_then(|mut task| task.get().cloned().flatten());
+        self.repos[index].branch_tracking =
+            Some(Task::spawn_with(&context, previous_tracking.map(Some), move || GitClient::new().branch_tracking(&tracking_path).ok()));
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
         // The previous counts stay until the new ones arrive, so the numbers do not flicker.
         let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());

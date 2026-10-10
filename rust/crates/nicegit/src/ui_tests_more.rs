@@ -1640,3 +1640,23 @@ fn the_plus_beside_a_line_stages_it_and_the_minus_unstages_it() {
     idle(&mut harness);
     wait(&mut harness, "nothing staged", |_| git(path, &["diff", "--cached", "--name-only"]).is_empty());
 }
+
+#[test]
+fn local_branches_show_how_far_they_are_from_their_upstreams() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    // feature is pushed, then gets a commit of its own; old is pushed, then deleted remotely.
+    git(path, &["push", "-q", "-u", "origin", "feature"]);
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "feature.txt", b"work\n", "Feature work");
+    git(path, &["switch", "-q", "main"]);
+    git(path, &["branch", "old", "main"]);
+    git(path, &["push", "-q", "-u", "origin", "old"]);
+    git(remote.path(), &["branch", "-D", "old"]);
+    git(path, &["fetch", "-q", "--prune"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    wait(&mut harness, "the tracking", |h| shows(h, "↑1 ↓0") && shows(h, "gone"));
+}

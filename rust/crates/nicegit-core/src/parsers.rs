@@ -174,6 +174,45 @@ pub fn parse_branches(output: &str) -> Vec<Branch> {
         .collect()
 }
 
+/// How far a local branch has moved from its upstream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tracking {
+    /// Commits only on the branch, and commits only on its upstream.
+    Counts { ahead: usize, behind: usize },
+    /// The upstream branch no longer exists, usually because it was deleted on the remote.
+    Gone,
+}
+
+/// Each local branch's distance from its upstream, from
+/// `for-each-ref --format=%(refname)%09%(upstream:track,nobracket) refs/heads/`. Branches
+/// without an upstream, or level with it, are left out. Ref names cannot contain tabs or
+/// newlines, so those separate the fields.
+pub fn parse_tracking(output: &str) -> std::collections::HashMap<String, Tracking> {
+    let mut tracking = std::collections::HashMap::new();
+    for line in output.lines() {
+        let Some((reference, track)) = line.split_once('\t') else { continue };
+        let Some(name) = reference.strip_prefix("refs/heads/") else { continue };
+        let track = track.trim();
+        if track.is_empty() {
+            continue;
+        }
+        if track == "gone" {
+            tracking.insert(name.to_string(), Tracking::Gone);
+            continue;
+        }
+        let (mut ahead, mut behind) = (0, 0);
+        for part in track.split(", ") {
+            match part.split_once(' ') {
+                Some(("ahead", count)) => ahead = count.parse().unwrap_or(0),
+                Some(("behind", count)) => behind = count.parse().unwrap_or(0),
+                _ => {}
+            }
+        }
+        tracking.insert(name.to_string(), Tracking::Counts { ahead, behind });
+    }
+    tracking
+}
+
 pub fn parse_log(output: &str) -> Vec<Commit> {
     output
         .split('\u{1e}')
@@ -270,6 +309,22 @@ pub fn parse_worktrees(output: &str) -> Vec<Worktree> {
 /// Tag names and the object each points to, from `for-each-ref --format=%(refname:strip=2)%09%(objectname)`.
 pub fn parse_tags(output: &str) -> Vec<(String, String)> {
     output.split('\n').filter_map(|line| line.split_once('\t')).map(|(name, tip)| (name.to_string(), tip.to_string())).collect()
+}
+
+#[cfg(test)]
+mod tracking_tests {
+    use super::{parse_tracking, Tracking};
+
+    #[test]
+    fn reads_ahead_behind_both_and_gone_upstreams() {
+        let output = "refs/heads/main\t\nrefs/heads/feature\tahead 2\nrefs/heads/old\tbehind 3\nrefs/heads/both/x\tahead 1, behind 4\nrefs/heads/deleted\tgone\n";
+        let tracking = parse_tracking(output);
+        assert_eq!(tracking.get("main"), None, "level with its upstream");
+        assert_eq!(tracking["feature"], Tracking::Counts { ahead: 2, behind: 0 });
+        assert_eq!(tracking["old"], Tracking::Counts { ahead: 0, behind: 3 });
+        assert_eq!(tracking["both/x"], Tracking::Counts { ahead: 1, behind: 4 });
+        assert_eq!(tracking["deleted"], Tracking::Gone);
+    }
 }
 
 #[cfg(test)]

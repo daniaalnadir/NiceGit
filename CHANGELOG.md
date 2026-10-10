@@ -12,6 +12,8 @@
   or under Layout in Settings; the size is remembered, and the panels are fitted to the
   window again when it changes.
 - Restore default panel widths also restores the history's column widths.
+- Every local branch in the sidebar shows how far it is from its upstream (↑ to push, ↓ to
+  pull), or that its upstream is gone from the remote; before, only the current branch did.
 
 ## 1.2.0 - At a glance
 
