@@ -54,6 +54,14 @@ impl NiceGitApp {
                     crate::tools::widgets::checkbox(ui, true, &mut self.settings.ignore_whitespace, "Hide whitespace-only changes")
                         .changed();
                 crate::tools::widgets::checkbox(ui, true, &mut self.settings.split_diff, "Show diffs side by side");
+                ui.label(
+                    RichText::new(format!(
+                        "Used when the diff panel is at least {} points wide; narrower, diffs show in one column.",
+                        crate::diff_view::MIN_SPLIT_WIDTH
+                    ))
+                    .small()
+                    .color(theme::of(ui).muted),
+                );
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(

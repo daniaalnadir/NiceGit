@@ -141,7 +141,9 @@ impl ToolWindow for EditorWindow {
                     let color = ui.visuals().text_color();
                     let digits = self.text.split('\n').count().to_string().len();
                     let digit_width = ui.ctx().fonts_mut(|fonts| fonts.glyph_width(&font, '0'));
-                    let wrap_width = (ui.available_width() - digits as f32 * digit_width - GUTTER_SPACING).max(20.0 * digit_width);
+                    // The text has what is left beside the numbers, their divider, and the gaps around it.
+                    let wrap_width =
+                        (ui.available_width() - digits as f32 * digit_width - 2.0 * GUTTER_SPACING - 1.0).max(20.0 * digit_width);
                     // The gutter and the editor share one layout, so the numbers follow the wrapping.
                     let layout = |ui: &egui::Ui, text: &str| {
                         let job = egui::text::LayoutJob::simple(text.to_owned(), font.clone(), color, wrap_width);
@@ -154,6 +156,7 @@ impl ToolWindow for EditorWindow {
                         ui.spacing_mut().item_spacing.x = GUTTER_SPACING;
                         let gutter = RichText::new(numbers.join("\n")).monospace().color(c.muted);
                         ui.add(egui::Label::new(gutter).wrap_mode(egui::TextWrapMode::Extend));
+                        ui.separator();
                         ui.add(
                             egui::TextEdit::multiline(&mut self.text)
                                 .code_editor()

@@ -124,11 +124,15 @@ pub fn hash_label(ui: &mut Ui, hash: &str) -> egui::Response {
 /// A checkbox with squarer corners than other widgets, so it reads as a checkbox rather than
 /// a radio button.
 pub fn checkbox(ui: &mut Ui, enabled: bool, checked: &mut bool, text: impl Into<egui::WidgetText>) -> egui::Response {
+    // Outlined like the radio buttons, so an unticked box reads as a control on either theme.
+    let outline = egui::Stroke::new(1.0, crate::theme::of(ui).muted);
     ui.scope(|ui| {
         let widgets = &mut ui.visuals_mut().widgets;
         for state in [&mut widgets.inactive, &mut widgets.hovered, &mut widgets.active, &mut widgets.noninteractive] {
             state.corner_radius = egui::CornerRadius::same(3);
         }
+        widgets.inactive.bg_stroke = outline;
+        widgets.hovered.bg_stroke = outline;
         ui.add_enabled(enabled, egui::Checkbox::new(checked, text))
     })
     .inner

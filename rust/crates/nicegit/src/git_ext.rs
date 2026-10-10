@@ -44,7 +44,7 @@ pub fn merge_preview_text(source: &str, rebase: bool, directory: &Path) -> Resul
     Ok(format!("{text}{estimate}{ignored}"))
 }
 
-/// A commit's signature as display text and a level: 0 verified, 1 untrusted or unverifiable, 2 bad.
+/// A commit's signature as display text, a colour level, and tooltip help.
 pub fn signature_summary(hash: &str, directory: &Path) -> Option<SignatureSummary> {
     let signature = GitClient::new().signature(hash, directory).ok()??;
     Some(summarize_signature(&signature))

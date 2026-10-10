@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.13 - Every control readable
+
+- Checkboxes have the same clear outline as radio buttons.
+- Settings explains that side-by-side diffs need a diff panel at least 560 points wide.
+- The editor has a divider between its line numbers and the text.
+- Tests check that the Repository Settings window, as well as Stashes, holds refreshes.
+
 ## 0.6.12 - Clear controls
 
 - Radio buttons have a clear outline, so unselected choices read as controls in the light

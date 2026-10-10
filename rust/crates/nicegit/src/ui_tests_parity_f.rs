@@ -539,24 +539,27 @@ fn fetch_and_refresh_from_the_toolbar() {
 
 #[test]
 fn outside_changes_wait_while_a_review_window_is_open() {
-    let repo = repository();
-    let path = repo.path();
-    let mut harness = open(path);
-    loaded(&mut harness);
-    let listed = |h: &Harness<'static, NiceGitApp>| h.state().snapshot().is_some_and(|s| s.status.iter().any(|e| e.path == "outside.txt"));
+    // As in the Mac app's sheets, these windows hold refreshes while they are open.
+    for (item, id) in [("Stashes", "stashes"), ("Repository settings", "repository-settings")] {
+        let repo = repository();
+        let path = repo.path();
+        let mut harness = open(path);
+        loaded(&mut harness);
+        let listed =
+            |h: &Harness<'static, NiceGitApp>| h.state().snapshot().is_some_and(|s| s.status.iter().any(|e| e.path == "outside.txt"));
 
-    // As in the Mac app, the Stashes window holds refreshes while it is open.
-    repository_menu(&mut harness, &folder_name(path), "Stashes");
-    wait(&mut harness, "the Stashes window", |h| h.state().tools.iter().any(|t| t.id() == "stashes"));
-    std::thread::sleep(Duration::from_millis(600));
-    std::fs::write(path.join("outside.txt"), "made in another app\n").unwrap();
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(1500) {
-        harness.step();
-        std::thread::sleep(Duration::from_millis(30));
+        repository_menu(&mut harness, &folder_name(path), item);
+        wait(&mut harness, item, |h| h.state().tools.iter().any(|t| t.id() == id));
+        std::thread::sleep(Duration::from_millis(600));
+        std::fs::write(path.join("outside.txt"), "made in another app\n").unwrap();
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_millis(1500) {
+            harness.step();
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        assert!(!listed(&harness), "nothing refreshes under the {item} window");
+
+        harness.state_mut().tools.clear();
+        wait(&mut harness, "the refresh once it closes", listed);
     }
-    assert!(!listed(&harness), "nothing refreshes under the Stashes window");
-
-    harness.state_mut().tools.clear();
-    wait(&mut harness, "the refresh once it closes", listed);
 }
