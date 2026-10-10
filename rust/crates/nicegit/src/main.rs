@@ -43,7 +43,9 @@ fn icon() -> Option<egui::IconData> {
 fn main() -> eframe::Result {
     // A folder passed on the command line opens straight away, as `nicegit .` would.
     let initial = std::env::args_os().nth(1).map(PathBuf::from);
+    // Folders dropped onto the window open as repositories.
     let mut viewport = egui::ViewportBuilder::default()
+        .with_drag_and_drop(true)
         .with_title("NiceGit")
         .with_app_id("nicegit")
         .with_inner_size([1440.0, 900.0])

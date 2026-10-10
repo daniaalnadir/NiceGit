@@ -113,6 +113,10 @@ pub struct Repo {
     pub bisect: Option<Task<Option<nicegit_core::bisect::BisectStatus>>>,
     /// Submodules recorded in the index, read after each refresh.
     pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
+    /// Lines added and removed in each changed file, read after each refresh.
+    pub line_counts: Option<Task<Option<nicegit_core::line_counts::LineCounts>>>,
+    /// Text that narrows the Changes panel's lists to matching paths.
+    pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
     pub github: [Option<crate::ui::github_section::GitHubList>; 2],
 }
@@ -155,6 +159,8 @@ impl Repo {
             scroll_to_selection: false,
             bisect: None,
             submodules: None,
+            line_counts: None,
+            change_filter: String::new(),
             github: [None, None],
         }
     }
@@ -299,6 +305,37 @@ impl NiceGitApp {
         self.active = self.repos.len() - 1;
         self.tools.clear();
         self.load_repo(self.active, true);
+    }
+
+    /// Opens folders dropped onto the window as repositories. While something is dragged over
+    /// the window, it says what dropping it will do.
+    fn drop_folders(&mut self, ctx: &egui::Context) {
+        let (hovering, dropped) = ctx.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.clone()));
+        if hovering {
+            let screen = ctx.content_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop target")));
+            let c = crate::theme::colors(ctx.theme() == egui::Theme::Dark);
+            painter.rect_filled(screen, 0.0, c.accent.gamma_multiply(0.12));
+            painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
+            // On a solid label, so the words stay readable over whatever is beneath.
+            let text =
+                painter.layout_no_wrap("Drop a folder to open it as a repository".into(), egui::FontId::proportional(18.0), c.accent_text);
+            let label = egui::Rect::from_center_size(screen.center(), text.size() + egui::vec2(36.0, 22.0));
+            painter.rect_filled(label, 10.0, c.accent);
+            painter.galley(label.center() - text.size() / 2.0, text, c.accent_text);
+        }
+        let paths: Vec<PathBuf> =
+            dropped.iter().map(|file| file.path().to_path_buf()).filter(|path| !path.as_os_str().is_empty()).collect();
+        if paths.is_empty() {
+            return;
+        }
+        let (folders, files): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|path| path.is_dir());
+        for folder in folders {
+            self.open(folder);
+        }
+        if !files.is_empty() {
+            self.notify("Drop a folder, not a file, to open it as a repository.", true);
+        }
     }
 
     pub fn switch_to(&mut self, index: usize) {
@@ -645,7 +682,19 @@ impl NiceGitApp {
         let path = self.repos[index].path.clone();
         let bisect_path = path.clone();
         self.repos[index].bisect = Some(Task::spawn(&context, move || GitClient::new().bisect_status(&bisect_path).ok().flatten()));
+        let untracked: Vec<String> = self.repos[index]
+            .snapshot
+            .iter()
+            .flat_map(|s| &s.status)
+            .filter(|e| e.kind == nicegit_core::StatusKind::Untracked)
+            .map(|e| e.path.clone())
+            .collect();
+        let counts_path = path.clone();
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
+        // The previous counts stay until the new ones arrive, so the numbers do not flicker.
+        let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
+        self.repos[index].line_counts =
+            Some(Task::spawn_with(&context, previous.map(Some), move || GitClient::new().line_counts(&untracked, &counts_path).ok()));
         if index != self.active {
             return;
         }
@@ -1194,6 +1243,7 @@ impl eframe::App for NiceGitApp {
         self.receive();
         self.finish_clone();
         self.shortcuts(&ctx);
+        self.drop_folders(&ctx);
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
         self.debug_open(&ctx);

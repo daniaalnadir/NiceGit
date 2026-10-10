@@ -93,6 +93,11 @@ fn screenshots() {
         save(&mut harness, &folder, &format!("settings-{theme}"));
         harness.state_mut().show_settings = false;
 
+        // Something dragged over the window.
+        harness.input_mut().hovered_files.push(egui::HoveredFile::default());
+        save(&mut harness, &folder, &format!("drop-target-{theme}"));
+        harness.input_mut().hovered_files.clear();
+
         // The keyboard shortcuts.
         harness.state_mut().show_shortcuts = true;
         save(&mut harness, &folder, &format!("shortcuts-{theme}"));

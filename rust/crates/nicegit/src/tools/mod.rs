@@ -159,6 +159,13 @@ impl<T: Send + 'static> Task<T> {
         Self { receiver: Some(receiver), value: None }
     }
 
+    /// Like `spawn`, but `get` returns `stale` until the new value arrives.
+    pub fn spawn_with(ctx: &egui::Context, stale: Option<T>, work: impl FnOnce() -> T + Send + 'static) -> Self {
+        let mut task = Self::spawn(ctx, work);
+        task.value = stale;
+        task
+    }
+
     /// A task that already has its value.
     #[allow(dead_code)]
     pub fn ready(value: T) -> Self {

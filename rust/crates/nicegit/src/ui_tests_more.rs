@@ -1349,3 +1349,86 @@ fn the_keyboard_shortcuts_open_from_the_keyboard_the_palette_and_settings() {
     harness.get_by_label("Keyboard shortcuts").click();
     wait(&mut harness, "the shortcuts from settings", shown);
 }
+
+/// A file or folder dropped onto the window, as the windowing system reports it.
+#[derive(Debug)]
+struct Dropped(std::path::PathBuf);
+
+impl egui::DroppedFile for Dropped {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|error| error.to_string())
+    }
+}
+
+#[test]
+fn a_folder_dropped_on_the_window_opens_as_a_repository() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(second.path().to_path_buf())));
+    wait(&mut harness, "the dropped repository", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    let active = harness.state().repo().unwrap().path.clone();
+    assert_eq!(active.canonicalize().unwrap(), second.path().canonicalize().unwrap(), "the dropped folder is the active tab");
+
+    // A file is not a repository: dropping one says so and opens nothing.
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(second.path().join("notes.txt"))));
+    wait(&mut harness, "the hint", |h| h.state().notice.as_ref().is_some_and(|n| n.text.contains("Drop a folder")));
+    assert_eq!(harness.state().repos.len(), 2);
+}
+
+#[test]
+fn changed_files_show_how_many_lines_they_add_and_remove() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nSECOND\nthird\n").unwrap();
+    std::fs::write(path.join("new.txt"), "a\nb\nc\nd\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the counts", |h| h.query_by_label("+4").is_some());
+    // notes.txt replaces one line and adds one; new.txt adds four.
+    assert!(harness.query_by_label("+2").is_some() && harness.query_by_label("−1").is_some());
+}
+
+#[test]
+fn a_long_list_of_changes_can_be_filtered_by_path() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::create_dir_all(path.join("docs")).unwrap();
+    for n in 0..12 {
+        std::fs::write(path.join(format!("file{n:02}.txt")), "x\n").unwrap();
+    }
+    std::fs::write(path.join("docs/guide.md"), "# Guide\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(harness.query_by_label("Filter changed files").is_some(), "many changes offer a filter");
+
+    harness.get_by_label("Filter changed files").click();
+    harness.step();
+    harness.event(egui::Event::Text("GUIDE".into()));
+    wait(&mut harness, "the filtered list", |h| h.query_by_label_contains("Unstaged files (1 of 13)").is_some());
+    assert!(harness.query_by_label("guide.md").is_some() || harness.query_by_label("docs/guide.md").is_some());
+    assert!(harness.query_by_label("file00.txt").is_none(), "other files are hidden");
+}
+
+#[test]
+fn a_changed_file_opens_in_its_default_app_from_its_menu() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED.with(|opened| opened.borrow_mut().clear());
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the file's menu", |h| h.query_by_label_contains("Open in default app").is_some());
+    harness.get_by_label_contains("Open in default app").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED.with(|opened| opened.borrow().clone());
+    let canonical = |p: &Path| p.canonicalize().unwrap();
+    assert_eq!(opened.iter().map(|p| canonical(p)).collect::<Vec<_>>(), vec![canonical(&path.join("notes.txt"))]);
+}

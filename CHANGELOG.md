@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 - At a glance
+
+- Each changed file shows how many lines it adds and removes, such as +12 −3, or that it is
+  binary; new files count their lines too.
+- With more than ten changed files, a filter narrows the Changes panel by path; each list
+  shows how many of its files match.
+- Open a changed file in its default app from its menu in the Changes panel.
+- Drag a folder onto the window to open it as a repository.
+
 ## 1.1.0 - Change by change
 
 - Hover a change in a diff to stage it, unstage it, or discard it on its own. Discarding asks
