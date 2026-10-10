@@ -88,12 +88,33 @@ impl NiceGitApp {
                 .on_hover_text("How often the open repository is fetched in the background, so ahead and behind counts stay current");
                 ui.add_space(10.0);
                 widgets::section(ui, "Layout");
+                ui.horizontal(|ui| {
+                    ui.label("Interface size");
+                    let zoom = ctx.zoom_factor();
+                    let step = |zoom: f32, by: f32| ((zoom + by) * 10.0).round() / 10.0;
+                    if ui
+                        .add_enabled(zoom > crate::app::MIN_ZOOM + 0.01, egui::Button::new("−"))
+                        .on_hover_text("Smaller (Ctrl/Cmd-minus)")
+                        .clicked()
+                    {
+                        ctx.set_zoom_factor(step(zoom, -0.1).max(crate::app::MIN_ZOOM));
+                    }
+                    ui.label(RichText::new(format!("{:.0}%", zoom * 100.0)).monospace());
+                    if ui
+                        .add_enabled(zoom < crate::app::MAX_ZOOM - 0.01, egui::Button::new("+"))
+                        .on_hover_text("Larger (Ctrl/Cmd-plus)")
+                        .clicked()
+                    {
+                        ctx.set_zoom_factor(step(zoom, 0.1).min(crate::app::MAX_ZOOM));
+                    }
+                    if ui.add_enabled((zoom - 1.0).abs() > 0.01, egui::Button::new("Normal size")).on_hover_text("Ctrl/Cmd-0").clicked() {
+                        ctx.set_zoom_factor(1.0);
+                    }
+                });
+                ui.add_space(4.0);
                 if ui.button("Restore default panel widths").on_hover_text("Columns and panels return to their original sizes").clicked() {
-                    ctx.data_mut(|data| {
-                        for id in ["repositories", "sidebar", "changes", "diff", "terminal"] {
-                            data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id));
-                        }
-                    });
+                    crate::app::restore_panel_widths(ctx);
+                    self.settings.history_columns.widths.clear();
                 }
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {

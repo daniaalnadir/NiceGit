@@ -98,6 +98,13 @@ fn screenshots() {
         save(&mut harness, &folder, &format!("drop-target-{theme}"));
         harness.input_mut().hovered_files.clear();
 
+        // The interface at 130%, as someone who has made everything larger sees it.
+        harness.ctx.set_zoom_factor(1.3);
+        harness.run_steps(3);
+        save(&mut harness, &folder, &format!("large-{theme}"));
+        harness.ctx.set_zoom_factor(1.0);
+        harness.run_steps(3);
+
         // The keyboard shortcuts.
         harness.state_mut().show_shortcuts = true;
         save(&mut harness, &folder, &format!("shortcuts-{theme}"));

@@ -70,6 +70,8 @@ pub struct Settings {
     /// How often the open repository is fetched from its remotes in the background, in
     /// minutes; 0 turns it off.
     pub auto_fetch_minutes: u32,
+    /// How large the whole interface is drawn: 1.0 is normal size.
+    pub zoom: f32,
     pub file_view: FileView,
     pub show_repositories: bool,
     /// Whether the toolbar's Fetch and Pull button fetches or pulls.
@@ -94,6 +96,7 @@ impl Default for Settings {
             ignore_whitespace: false,
             auto_refresh: true,
             auto_fetch_minutes: 15,
+            zoom: 1.0,
             file_view: FileView::Path,
             show_repositories: true,
             sync_action: SyncAction::Fetch,

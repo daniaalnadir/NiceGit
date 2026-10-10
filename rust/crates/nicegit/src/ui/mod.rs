@@ -553,6 +553,18 @@ impl NiceGitApp {
                             self.act(label, move |client, path| client.stage_lines(&lines, &review, path).map(|_| None));
                         }
                     }
+                    // Unstaged lines can also be discarded, as a run's Discard button does.
+                    if !staged {
+                        let discard = egui::Button::new(
+                            RichText::new(format!("{}  Discard selected lines", icon::ARROW_COUNTER_CLOCKWISE)).color(c.removed),
+                        );
+                        if ui.add_enabled(self.busy.is_none(), discard).clicked() {
+                            let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
+                            if let (Some(review), Some(lines)) = (review.clone(), lines) {
+                                self.run_block_action(crate::diff_view::BlockAction::Discard, lines, review);
+                            }
+                        }
+                    }
                     if ui.button("Clear").clicked() {
                         self.repos[self.active].diff_options.selected.clear();
                     }

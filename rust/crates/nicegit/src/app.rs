@@ -51,6 +51,19 @@ impl HistoryEntry {
     }
 }
 
+/// Returns every side and bottom panel to its default width, a share of the window.
+pub fn restore_panel_widths(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        for id in ["repositories", "sidebar", "changes", "terminal"] {
+            data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id));
+        }
+    });
+}
+
+/// The smallest and largest interface sizes Settings offers.
+pub const MIN_ZOOM: f32 = 0.6;
+pub const MAX_ZOOM: f32 = 2.0;
+
 /// The busy label of a fetch NiceGit starts on its own; its result is reported quietly.
 pub const BACKGROUND_FETCH: &str = "Fetching in the background";
 /// How long after a repository opens its first background fetch waits.
@@ -207,6 +220,8 @@ pub struct NiceGitApp {
     pub palette: Option<crate::ui::palette::PaletteState>,
     pub show_settings: bool,
     pub show_shortcuts: bool,
+    /// Whether the saved interface size has been applied since launch.
+    pub(crate) zoom_applied: bool,
     pub git_missing: bool,
     generation: u64,
     was_focused: bool,
@@ -249,6 +264,7 @@ impl NiceGitApp {
             palette: None,
             show_settings: false,
             show_shortcuts: false,
+            zoom_applied: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
             generation: 0,
             was_focused: true,
@@ -311,6 +327,23 @@ impl NiceGitApp {
         self.active = self.repos.len() - 1;
         self.tools.clear();
         self.load_repo(self.active, true);
+    }
+
+    /// Applies the saved interface size at launch, then remembers changes to it, whether from
+    /// Settings or from Command-plus, Command-minus, and Command-0.
+    fn keep_zoom(&mut self, ctx: &egui::Context) {
+        if self.zoom_applied {
+            let zoom = ctx.zoom_factor();
+            // The panels' widths are in points, so after a change in size they are fitted to the
+            // window again; otherwise a larger interface would squeeze the history and diff.
+            if (zoom - self.settings.zoom).abs() > 0.001 {
+                restore_panel_widths(ctx);
+            }
+            self.settings.zoom = zoom;
+        } else {
+            ctx.set_zoom_factor(self.settings.zoom.clamp(MIN_ZOOM, MAX_ZOOM));
+            self.zoom_applied = true;
+        }
     }
 
     /// Opens folders dropped onto the window as repositories. While something is dragged over
@@ -836,7 +869,8 @@ impl NiceGitApp {
         repo.details = None;
         repo.selection = Selection::Change { entry: entry.clone(), staged };
         let title = entry.path.clone();
-        if !ignore_whitespace && entry.kind != nicegit_core::StatusKind::Untracked {
+        // New files can be staged line by line too; an untracked folder has no lines.
+        if !ignore_whitespace && !entry.path.ends_with('/') {
             // A review carries the same lines as the diff, plus what staging single lines needs.
             let (review_path, file) = (path.clone(), entry.path.clone());
             let context = self.worker.context.clone();
@@ -1308,6 +1342,7 @@ impl eframe::App for NiceGitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.apply_theme(&ctx);
+        self.keep_zoom(&ctx);
         self.fit_to_monitor(&ctx);
         self.receive();
         self.finish_clone();

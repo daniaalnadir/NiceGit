@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0 - Line by line
+
+- New files can be staged line by line, and their changes staged or discarded from the diff,
+  like changes to tracked files.
+- With lines selected, Discard selected lines puts them back after confirming; the discard
+  can be undone from the Changes panel.
+- Make everything larger or smaller with Command-plus and Command-minus (Control elsewhere),
+  or under Layout in Settings; the size is remembered, and the panels are fitted to the
+  window again when it changes.
+- Restore default panel widths also restores the history's column widths.
+
 ## 1.2.0 - At a glance
 
 - Each changed file shows how many lines it adds and removes, such as +12 −3, or that it is

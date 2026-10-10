@@ -1540,3 +1540,78 @@ fn a_pull_request_opens_on_github_for_the_current_branch() {
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
     assert_eq!(opened, vec!["https://github.com/acme/app/compare/main?expand=1".to_string()]);
 }
+
+/// Selects the shown diff's line with this text, as clicking it would.
+fn select_line(harness: &mut App, text: &str) {
+    let app = harness.state_mut();
+    let active = app.active;
+    let repo = &mut app.repos[active];
+    let index = repo.diff.as_ref().unwrap().lines.iter().position(|line| line.text == text).expect("the line is shown");
+    repo.diff_options.selected.insert(index);
+}
+
+#[test]
+fn lines_of_a_new_file_can_be_staged_on_their_own() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("new.txt"), "one\ntwo\nthree\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("new.txt").click();
+    wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+
+    select_line(&mut harness, "+two");
+    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Stage selected lines").is_some());
+    harness.get_by_label_contains("Stage selected lines").click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged line", |_| git(path, &["show", ":new.txt"]) == "two");
+    assert_eq!(std::fs::read_to_string(path.join("new.txt")).unwrap(), "one\ntwo\nthree\n", "the file keeps every line");
+}
+
+#[test]
+fn selected_lines_can_be_discarded_and_the_discard_undone() {
+    let repo = repository();
+    let path = repo.path();
+    let edited = "first\nsecond\nthird\nfourth\n";
+    std::fs::write(path.join("notes.txt"), edited).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+
+    select_line(&mut harness, "+third");
+    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Discard selected lines").is_some());
+    harness.get_by_label_contains("Discard selected lines").click();
+    wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Discard").last().expect("the confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the line discarded", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\nfourth\n");
+    wait(&mut harness, "Undo discard", |h| h.query_by_label_contains("Undo discard").is_some());
+    harness.get_by_label_contains("Undo discard").click();
+    idle(&mut harness);
+    wait(&mut harness, "the line restored", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == edited);
+}
+
+#[test]
+fn the_interface_size_changes_from_settings_or_the_keyboard_and_is_remembered() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.state_mut().show_settings = true;
+    wait(&mut harness, "settings", |h| h.query_by_label("100%").is_some());
+    harness.get_by_label("+").click();
+    wait(&mut harness, "a larger interface", |h| {
+        (h.ctx.zoom_factor() - 1.1).abs() < 0.001 && (h.state().settings.zoom - 1.1).abs() < 0.001
+    });
+    assert!(harness.query_by_label("110%").is_some());
+
+    harness.state_mut().show_settings = false;
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num0);
+    wait(&mut harness, "normal size", |h| (h.state().settings.zoom - 1.0).abs() < 0.001);
+
+    // A size saved earlier is applied when NiceGit starts.
+    harness.state_mut().settings.zoom = 1.3;
+    harness.state_mut().zoom_applied = false;
+    wait(&mut harness, "the saved size", |h| (h.ctx.zoom_factor() - 1.3).abs() < 0.001);
+}
