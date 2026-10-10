@@ -1,81 +1,100 @@
 name: Release
 
+# A version tag on main, such as v1.0.0, builds every platform's downloads and creates a draft
+# GitHub release to check and publish by hand. Running this workflow by hand on main is a dry
+# run: it builds, signs, notarizes, and checks everything without creating a release.
+#
+# The macOS job alone runs in the `release` environment, which holds the Apple signing secrets
+# and only admits main and v* tags. Without the secrets the app is built unsigned, and the
+# signing check reports it as such. See docs/RELEASING.md.
+
 "on":
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to build and publish, for example v0.2.0"
-        required: true
-        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ github.ref }}
+  # Never cancel a run mid-notarization or mid-upload; a newer run waits its turn.
   cancel-in-progress: false
 
 jobs:
   check:
-    name: Check the tag
+    name: Check the version
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
     outputs:
-      prerelease: ${{ steps.kind.outputs.prerelease }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      # Releases are made from main only, so a tag pushed from a work branch builds nothing.
-      - name: Tag is on main
+      - name: Resolve the version
+        id: version
         run: |
           set -euo pipefail
-          git fetch --quiet origin main
-          if ! git merge-base --is-ancestor "refs/tags/$TAG^{commit}" origin/main; then
-            echo "::error::$TAG does not point to a commit on main. Merge to main, then tag there."
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' rust/Cargo.toml | head -n1)"
+          if ! printf '%s' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' in rust/Cargo.toml is not a version like 1.2.3 or 1.2.3-rc.1."
             exit 1
           fi
-
-      - name: Tag matches the app's version
-        run: |
-          set -euo pipefail
-          version="$(git show "refs/tags/${TAG}:rust/Cargo.toml" | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n1)"
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error::$TAG does not match version $version in rust/Cargo.toml."
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # Releases are made from main only, and the tag must name the version being built.
+            git fetch --quiet origin main
+            if ! git merge-base --is-ancestor HEAD origin/main; then
+              echo "::error::$GITHUB_REF_NAME does not point to a commit on main. Merge to main, then tag there."
+              exit 1
+            fi
+            if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::$GITHUB_REF_NAME does not match version $version in rust/Cargo.toml."
+              exit 1
+            fi
+            publish=true
+          elif [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo "::notice::Dry run of v$version: everything is built and checked, and no release is created."
+            publish=false
+          else
+            echo "::error::Run releases by tagging main, or run this workflow on main for a dry run."
             exit 1
           fi
-
-      # A version with a suffix, such as v1.1.0-rc.1, is a pre-release; v1.0.0 is a full release.
-      - name: Release kind
-        id: kind
-        run: |
-          case "$TAG" in
-            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
-            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
-          esac
+          # A version with a suffix, such as 1.1.0-rc.1, is a pre-release; 1.0.0 is a full release.
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "prerelease=$prerelease"
+            echo "publish=$publish"
+          } >>"$GITHUB_OUTPUT"
+          echo "### NiceGit v$version (\`${GITHUB_SHA::9}\`)$([ "$publish" = true ] || echo ', dry run')" >>"$GITHUB_STEP_SUMMARY"
 
   macos:
     name: macOS universal app
     needs: check
     runs-on: macos-14
-    timeout-minutes: 60
+    timeout-minutes: 90
+    environment: release
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      VERSION: ${{ needs.check.outputs.version }}
       DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
       DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      # Notarization signs in with either an App Store Connect API key or an Apple ID.
       NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
       NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
       NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
@@ -86,46 +105,45 @@ jobs:
         with:
           workspaces: rust
 
-      - name: Derive version
-        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
       - name: Import signing certificate
         if: env.DEVELOPER_ID_P12 != ''
         run: |
           set -euo pipefail
+          keychain="$RUNNER_TEMP/nicegit-signing.keychain-db"
           keychain_password="$(openssl rand -base64 32)"
           cert_path="$RUNNER_TEMP/developer-id.p12"
           printf '%s' "$DEVELOPER_ID_P12" | base64 --decode > "$cert_path"
 
-          security create-keychain -p "$keychain_password" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$keychain_password" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed 's/"//g')
+          security create-keychain -p "$keychain_password" "$keychain"
+          echo "MACOS_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed 's/"//g')
 
-          security import "$cert_path" -k build.keychain -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" build.keychain
+          security import "$cert_path" -k "$keychain" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
           rm -f "$cert_path"
 
-          identity="$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n1)"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n1)"
           if [ -z "$identity" ]; then
-            echo "No Developer ID Application identity found in the imported certificate." >&2
+            echo "::error::DEVELOPER_ID_P12 holds no Developer ID Application certificate with its private key."
             exit 1
           fi
           echo "MACOS_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
 
-      - name: Prepare notarization key
+      - name: Prepare the notarization API key
         if: env.NOTARY_KEY_P8 != ''
         run: |
           set -euo pipefail
           key_path="$RUNNER_TEMP/AuthKey.p8"
           printf '%s' "$NOTARY_KEY_P8" | base64 --decode > "$key_path"
           echo "NOTARY_KEY_PATH=$key_path" >> "$GITHUB_ENV"
-          echo "NOTARY_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
-          echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
 
-      - name: Build and package
+      - name: Build, sign, and notarize
         run: bash rust/scripts/package-macos.sh
+
+      - name: Check the signature and notarization
+        run: bash rust/scripts/verify-macos.sh "rust/dist/NiceGit-$VERSION-macos-universal.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -133,17 +151,22 @@ jobs:
           path: rust/dist/*.dmg
           if-no-files-found: error
 
+      - name: Remove the signing keychain and key
+        if: always()
+        run: |
+          if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+
   windows:
     name: Windows x64
     needs: check
     runs-on: windows-latest
     timeout-minutes: 60
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
@@ -157,7 +180,7 @@ jobs:
         working-directory: rust
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = $env:TAG -replace '^v', ''
+          $version = $env:VERSION
           $stage = Join-Path $env:RUNNER_TEMP "NiceGit-$version-windows-x64"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           New-Item -ItemType Directory -Force -Path dist | Out-Null
@@ -180,11 +203,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
@@ -209,7 +231,7 @@ jobs:
         working-directory: rust
         run: |
           set -euo pipefail
-          version="${TAG#v}"
+          version="$VERSION"
           root="$GITHUB_WORKSPACE"
           stage="$RUNNER_TEMP/NiceGit-$version-linux-x86_64"
           rm -rf "$stage"
@@ -239,34 +261,58 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish GitHub release
+    name: Draft GitHub release
     needs: [check, macos, windows, linux]
+    if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    permissions:
+      contents: write
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.check.outputs.tag }}
+      VERSION: ${{ needs.check.outputs.version }}
       PRERELEASE: ${{ needs.check.outputs.prerelease }}
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - name: Derive version
-        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
-
       - uses: actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
 
-      - name: Create or update release
+      - name: Checksums
+        working-directory: release
         run: |
           set -euo pipefail
-          ls -l release
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS.txt"
+          mv "$RUNNER_TEMP/SHA256SUMS.txt" .
+          cat SHA256SUMS.txt
+
+      # A draft is checked and published by hand. Running again replaces a draft's files, but a
+      # published release is never changed: release a new version instead.
+      - name: Create or update the draft release
+        working-directory: release
+        run: |
+          set -euo pipefail
+          title="NiceGit $VERSION"
+          if draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$draft" != true ]; then
+              echo "::error::$TAG is already published. Bump the version in rust/Cargo.toml and tag again."
+              exit 1
+            fi
+            echo "Updating the draft $TAG"
+            gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r asset; do
+              gh release delete-asset "$TAG" "$asset" --yes
+            done
+            gh release edit "$TAG" --draft --title "$title" --prerelease="$PRERELEASE"
+            gh release upload "$TAG" --clobber -- *
           else
-            if [ "$PRERELEASE" = "true" ]; then kind=--prerelease; else kind=--latest; fi
-            gh release create "$TAG" release/* \
-              --title "NiceGit $VERSION" \
-              --generate-notes \
-              "$kind" \
-              --repo "$GITHUB_REPOSITORY"
+            pre=()
+            if [ "$PRERELEASE" = true ]; then pre=(--prerelease); fi
+            gh release create "$TAG" --draft --verify-tag --title "$title" --generate-notes "${pre[@]}" -- *
           fi
+          {
+            echo "Draft release **$title** is ready to check and publish:"
+            echo
+            sed 's/^/    /' SHA256SUMS.txt
+          } >>"$GITHUB_STEP_SUMMARY"
