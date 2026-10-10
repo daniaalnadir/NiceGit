@@ -29,6 +29,25 @@ pub struct Notice {
     pub detail: Option<String>,
 }
 
+/// A plainer explanation of an everyday mistake Git reports in its own terms: a name it will not
+/// accept or that is taken, or a folder that is not empty. `None` for any other error.
+pub fn naming_problem(error: &str) -> Option<&'static str> {
+    let lower = error.to_lowercase();
+    if lower.contains("is not a valid branch name") || lower.contains("is not a valid tag name") || lower.contains("not a valid ref name") {
+        Some("That name cannot be used. Names cannot contain spaces, \"..\", \"~\", \"^\", \":\", \"?\", \"*\", or \"[\", or end with \".lock\" or \"/\".")
+    } else if lower.contains("a branch named") && lower.contains("already exists") {
+        Some("A branch with that name already exists. Choose another name, or check out the existing branch.")
+    } else if lower.contains("tag") && lower.contains("already exists") {
+        Some("A tag with that name already exists. Choose another name, or delete the old tag first.")
+    } else if lower.contains("already exists and is not an empty directory") {
+        Some("That folder already has files in it. Choose a new or empty folder.")
+    } else if lower.contains("would clobber existing tag") {
+        Some("A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.")
+    } else {
+        None
+    }
+}
+
 /// A plainer explanation of a remote failing to answer or refusing a sign-in, from Git's own
 /// words; `None` for any other error.
 pub fn remote_problem(error: &str) -> Option<&'static str> {
@@ -719,9 +738,9 @@ impl NiceGitApp {
                                     detail: Some(error.to_string()),
                                 });
                             }
-                            Err(error) if remote_problem(&error.to_string()).is_some() => {
+                            Err(error) if remote_problem(&error.to_string()).or(naming_problem(&error.to_string())).is_some() => {
                                 action_failed = true;
-                                let plain = remote_problem(&error.to_string()).unwrap_or_default();
+                                let plain = remote_problem(&error.to_string()).or(naming_problem(&error.to_string())).unwrap_or_default();
                                 self.notice = Some(Notice {
                                     text: format!("{label} failed. {plain}"),
                                     is_error: true,
@@ -1629,6 +1648,22 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+#[cfg(test)]
+mod naming_problem_tests {
+    use super::naming_problem;
+
+    #[test]
+    fn everyday_naming_mistakes_read_plainly() {
+        let says = |error: &str, words: &str| naming_problem(error).is_some_and(|plain| plain.contains(words));
+        assert!(says("fatal: 'my branch' is not a valid branch name", "cannot be used"));
+        assert!(says("fatal: a branch named 'topic' already exists", "branch with that name"));
+        assert!(says("fatal: tag 'v1.0' already exists", "tag with that name"));
+        assert!(says("fatal: destination path 'app' already exists and is not an empty directory.", "already has files"));
+        assert!(says(" ! [rejected]        v1.0       -> v1.0  (would clobber existing tag)", "would not replace"));
+        assert_eq!(naming_problem("fatal: not a git repository"), None);
+    }
 }
 
 #[cfg(test)]

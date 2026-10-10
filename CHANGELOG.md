@@ -22,6 +22,8 @@
   disabled until one was typed.
 - A merge, rebase, cherry-pick, or revert that stops at conflicts says so and what to do next,
   instead of reporting that Git exited with status 1.
+- A branch or tag name Git refuses or that is already taken, a clone into a folder that is not
+  empty, and a tag the remote would not replace are explained in plain words.
 
 ## 1.4.0 - Sizes everywhere
 

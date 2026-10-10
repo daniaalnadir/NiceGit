@@ -2024,3 +2024,25 @@ fn a_merge_that_stops_at_conflicts_says_what_to_do_next() {
     );
     assert!(notice.1.is_some_and(|detail| detail.contains("git merge")), "Git's words stay in the tooltip");
 }
+
+#[test]
+fn a_branch_name_git_refuses_is_explained() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let create = |harness: &mut App, name: &str| {
+        toolbar_button(harness, "Branch");
+        wait(harness, "the new branch dialog", |h| h.state().dialog.is_some());
+        harness.event(egui::Event::Text(name.into()));
+        harness.step();
+        harness.get_by_label("OK").click();
+        idle(harness);
+    };
+    create(&mut harness, "my new..branch");
+    wait(&mut harness, "the explanation", |h| h.state().notice.as_ref().is_some_and(|n| n.text.contains("That name cannot be used")));
+    create(&mut harness, "feature");
+    wait(&mut harness, "the explanation", |h| {
+        h.state().notice.as_ref().is_some_and(|n| n.text.contains("A branch with that name already exists"))
+    });
+    assert_eq!(git(repo.path(), &["branch", "--show-current"]), "main");
+}
