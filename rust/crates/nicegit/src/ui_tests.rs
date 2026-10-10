@@ -39,7 +39,7 @@ pub(crate) fn repository() -> tempfile::TempDir {
 
 /// Stops the test run if one test thread runs for minutes, naming it, so a frame stuck in a
 /// blocked call fails quickly instead of holding CI until its job times out.
-struct Watchdog(std::sync::Arc<std::sync::atomic::AtomicBool>);
+struct Watchdog(std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::Arc<std::sync::Mutex<String>>);
 
 impl Drop for Watchdog {
     fn drop(&mut self) {
@@ -58,18 +58,34 @@ fn arm_watchdog() {
         }
         let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let finished = done.clone();
+        let progress = std::sync::Arc::new(std::sync::Mutex::new(String::from("opening the app")));
+        let last = progress.clone();
         let name = std::thread::current().name().unwrap_or("an interface test").to_string();
         std::thread::spawn(move || {
             let start = Instant::now();
             while !finished.load(std::sync::atomic::Ordering::Relaxed) {
                 if start.elapsed() > Duration::from_secs(180) {
-                    eprintln!("{name} has been stuck for three minutes; stopping the test run");
+                    let last = last.lock().map(|text| text.clone()).unwrap_or_default();
+                    // Written to stderr directly: the test harness captures eprintln output.
+                    use std::io::Write;
+                    let _ = writeln!(std::io::stderr(), "{name} has been stuck for three minutes, last {last}; stopping the test run");
                     std::process::exit(101);
                 }
                 std::thread::sleep(Duration::from_secs(1));
             }
         });
-        *watchdog.borrow_mut() = Some(Watchdog(done));
+        *watchdog.borrow_mut() = Some(Watchdog(done, progress));
+    });
+}
+
+/// Records what the test is doing, for the watchdog to report if it stalls.
+fn note_progress(text: impl FnOnce() -> String) {
+    WATCHDOG.with(|watchdog| {
+        if let Some(Watchdog(_, progress)) = watchdog.borrow().as_ref() {
+            if let Ok(mut slot) = progress.lock() {
+                *slot = text();
+            }
+        }
     });
 }
 
@@ -82,7 +98,13 @@ pub(crate) fn open(path: &Path) -> Harness<'static, NiceGitApp> {
 /// Runs frames until `done` holds, failing after a generous timeout.
 pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done: impl Fn(&Harness<'static, NiceGitApp>) -> bool) {
     let start = Instant::now();
+    let mut frames = 0;
     loop {
+        frames += 1;
+        note_progress(|| {
+            let busy = harness.state().busy.clone();
+            format!("waiting for {what}: frame {frames}, {:.1}s in, busy {busy:?}", start.elapsed().as_secs_f32())
+        });
         harness.step();
         if done(harness) {
             // A window or menu that just appeared spends its first frames measuring itself and
@@ -105,6 +127,7 @@ pub(crate) fn idle(harness: &mut Harness<'static, NiceGitApp>) {
 
 /// New menus and popups spend their first frame measuring themselves, disabled.
 pub(crate) fn settle(harness: &mut Harness<'static, NiceGitApp>) {
+    note_progress(|| "settling frames".into());
     harness.run_steps(3);
 }
 
@@ -450,6 +473,7 @@ fn smallest_window_lays_out_every_panel() {
 
 /// Types into the text field with this accessible label.
 pub(crate) fn type_into(harness: &mut Harness<'static, NiceGitApp>, label: &str, text: &str) {
+    note_progress(|| format!("typing into {label}"));
     let role = egui::accesskit::Role::TextInput;
     harness.get_by_role_and_label(role, label).focus();
     harness.step();
