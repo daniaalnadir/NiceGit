@@ -72,6 +72,9 @@ pub struct Settings {
     pub auto_fetch_minutes: u32,
     /// How large the whole interface is drawn: 1.0 is normal size.
     pub zoom: f32,
+    /// The command that opens a file in the person's own editor, such as `code` or `zed`; the
+    /// file's path is added after it. Empty when none is set.
+    pub external_editor: String,
     pub file_view: FileView,
     pub show_repositories: bool,
     /// Whether the toolbar's Fetch and Pull button fetches or pulls.
@@ -97,6 +100,7 @@ impl Default for Settings {
             auto_refresh: true,
             auto_fetch_minutes: 15,
             zoom: 1.0,
+            external_editor: String::new(),
             file_view: FileView::Path,
             show_repositories: true,
             sync_action: SyncAction::Fetch,

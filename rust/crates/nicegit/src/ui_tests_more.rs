@@ -1724,3 +1724,121 @@ fn the_open_diff_can_be_copied() {
     git(path, &["apply", "copied.patch"]);
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n");
 }
+
+#[test]
+fn a_commits_files_show_how_many_lines_they_change() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.get_by_label("Add a second line").click();
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    // The commit adds the line "second" to notes.txt.
+    wait(&mut harness, "the count", |h| h.query_by_label("+1").is_some());
+    harness.get_by_label("+1").hover();
+    wait(&mut harness, "the exact count", |h| shows(h, "1 line added, 0 lines removed"));
+}
+
+#[test]
+fn repository_tabs_count_their_uncommitted_changes() {
+    let first = repository();
+    let second = repository();
+    for n in 0..7 {
+        std::fs::write(second.path().join(format!("new{n}.txt")), "x\n").unwrap();
+    }
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    wait(&mut harness, "the second tab", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    // The first tab is clean, so only the second shows a count.
+    let count = format!("{} 7", icon::PENCIL_SIMPLE);
+    wait(&mut harness, "the count", |h| h.query_by_label(&count).is_some());
+    harness.get_by_label(&count).hover();
+    wait(&mut harness, "the tooltip", |h| shows(h, "7 uncommitted changes"));
+}
+
+#[test]
+fn changed_files_open_in_the_external_editor_from_settings() {
+    assert_eq!(crate::ui::changes::editor_name("code --reuse-window"), "VS Code");
+    assert_eq!(crate::ui::changes::editor_name("/usr/local/bin/zed"), "Zed");
+    assert_eq!(crate::ui::changes::editor_name("nvim-qt"), "nvim-qt");
+
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::EDITED.with(|edited| edited.borrow_mut().clear());
+    let edited = || crate::ui::changes::EDITED.with(|edited| edited.borrow().clone());
+    let canonical = |p: &Path| p.canonicalize().unwrap();
+
+    // With no editor set, the menu does not offer one.
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the file's menu", |h| shows(h, "Open in default app"));
+    assert!(!shows(&harness, "Open in VS Code"));
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+
+    harness.state_mut().settings.external_editor = "code --reuse-window".into();
+    harness.get_by_label("notes.txt").click_secondary();
+    wait(&mut harness, "the editor in the menu", |h| shows(h, "Open in VS Code"));
+    harness.get_by_label_contains("Open in VS Code").click();
+    settle(&mut harness);
+    let opened = edited();
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0].0, "code --reuse-window");
+    assert_eq!(canonical(&opened[0].1), canonical(&path.join("notes.txt")));
+
+    // The open diff offers it too.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff's editor button", |h| h.query_by_label("Open in VS Code").is_some());
+    harness.get_by_label("Open in VS Code").click();
+    settle(&mut harness);
+    assert_eq!(edited().len(), 2);
+}
+
+#[test]
+fn the_open_file_stages_and_unstages_from_the_diff_and_stays_open() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let open_side = |h: &App| match &h.state().repo().unwrap().selection {
+        crate::app::Selection::Change { entry, staged } if entry.path == "notes.txt" => Some(*staged),
+        _ => None,
+    };
+    // The exact labels: the commit button can read "Stage files to commit".
+    let stage = format!("{}  Stage file", icon::PLUS_CIRCLE);
+    let unstage = format!("{}  Unstage file", icon::MINUS_CIRCLE);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label(&stage).is_some());
+
+    harness.get_by_label(&stage).click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged side", |h| open_side(h) == Some(true) && h.query_by_label(&unstage).is_some());
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "notes.txt");
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::S);
+    idle(&mut harness);
+    wait(&mut harness, "the unstaged side", |h| open_side(h) == Some(false));
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "");
+}
+
+#[test]
+fn every_change_can_be_staged_and_committed_at_once() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    std::fs::write(path.join("new.txt"), "new\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(!shows(&harness, "Stage all 2 and commit"), "offered only once a summary is written");
+
+    type_into(&mut harness, "Commit summary", "Everything at once");
+    wait(&mut harness, "the button", |h| shows(h, "Stage all 2 and commit"));
+    harness.get_by_label_contains("Stage all 2 and commit").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Everything at once");
+    assert_eq!(git(path, &["status", "--porcelain"]), "", "every change went into the commit");
+    assert_eq!(git(path, &["show", "--name-only", "--format="]), "new.txt\nnotes.txt");
+}

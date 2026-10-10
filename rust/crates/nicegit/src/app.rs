@@ -51,6 +51,9 @@ impl HistoryEntry {
     }
 }
 
+/// Lines added and removed in each file, by path.
+pub type FileLineCounts = std::collections::HashMap<String, nicegit_core::line_counts::LineCount>;
+
 /// Returns every side and bottom panel to its default width, a share of the window.
 pub fn restore_panel_widths(ctx: &egui::Context) {
     ctx.data_mut(|data| {
@@ -134,6 +137,8 @@ pub struct Repo {
     pub image_textures: Option<crate::tools::compare::Textures>,
     /// Each local branch's distance from its upstream, read after each refresh.
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
+    /// Lines added and removed in each file of the selected commit, with that commit's hash.
+    pub commit_line_counts: Option<(String, Task<Option<FileLineCounts>>)>,
     /// Text that narrows the Changes panel's lists to matching paths.
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
@@ -180,6 +185,7 @@ impl Repo {
             submodules: None,
             line_counts: None,
             change_filter: String::new(),
+            commit_line_counts: None,
             branch_tracking: None,
             image_preview: None,
             image_textures: None,
@@ -683,8 +689,12 @@ impl NiceGitApp {
         if let Selection::Change { entry, staged } = &repo.selection {
             let same_file = |e: &&StatusEntry| e.path == entry.path && e.original_path == entry.original_path;
             let side = |e: &&StatusEntry| if *staged { e.is_staged() } else { e.is_unstaged() };
+            let other_side = |e: &&StatusEntry| if *staged { e.is_unstaged() } else { e.is_staged() };
             if let Some(current) = snapshot.status.iter().filter(same_file).find(side) {
                 repo.selection = Selection::Change { entry: current.clone(), staged: *staged };
+            } else if let Some(moved) = snapshot.status.iter().filter(same_file).find(other_side) {
+                // Staging or unstaging the whole file moved it to the other side; it stays open there.
+                repo.selection = Selection::Change { entry: moved.clone(), staged: !*staged };
             }
         }
         // Keep the selection only while it still exists in the new state.
@@ -858,6 +868,20 @@ impl NiceGitApp {
         }
     }
 
+    /// Stages the open file, or unstages it when its staged side is open. A conflicted file is
+    /// left for the conflict editor, as in the Changes panel.
+    pub fn toggle_stage_open_file(&mut self) {
+        let Some(Selection::Change { entry, staged }) = self.repo().map(|r| r.selection.clone()) else { return };
+        if entry.kind == nicegit_core::StatusKind::Conflicted {
+            return;
+        }
+        if staged {
+            self.act("Unstage", move |client, path| client.unstage(&entry, path).map(|_| None));
+        } else {
+            self.act("Stage", move |client, path| client.stage(&entry.path, path).map(|_| None));
+        }
+    }
+
     /// Closes the open diff and returns to the history, keeping the commit or the working tree
     /// it came from selected.
     pub fn close_diff(&mut self) {
@@ -926,6 +950,13 @@ impl NiceGitApp {
         let (details_path, details_hash) = (path.clone(), hash.clone());
         repo.details = Some(Task::spawn(&context, move || GitClient::new().commit_details(&details_hash, &details_path)));
         self.worker.commit_files(generation, path.clone(), hash.clone());
+        // Line counts for the commit's files, read once per commit.
+        let repo = self.repo_mut().expect("active repository");
+        if repo.commit_line_counts.as_ref().is_none_or(|(counted, _)| *counted != hash) {
+            let (counts_path, counts_hash) = (path.clone(), hash.clone());
+            let task = Task::spawn(&context, move || GitClient::new().commit_line_counts(&counts_hash, &counts_path).ok());
+            repo.commit_line_counts = Some((hash.clone(), task));
+        }
         let title = format!("Commit {}", short(&hash));
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, ignore_whitespace, &path));
     }
@@ -1009,6 +1040,37 @@ impl NiceGitApp {
             if let Some(repo) = self.repo_mut() {
                 repo.draft = Draft::default();
                 repo.amend = false;
+            }
+            self.save_draft();
+        }
+    }
+
+    /// Whether every change can be staged and committed in one step: a summary is written,
+    /// nothing is staged yet, there are changes, none is a conflict, and this is not an amend.
+    pub fn can_stage_all_and_commit(&self) -> bool {
+        let (Some(snapshot), Some(repo)) = (self.snapshot(), self.repo()) else { return false };
+        self.idle()
+            && !repo.amend
+            && !repo.draft.summary.trim().is_empty()
+            && snapshot.staged_count() == 0
+            && !snapshot.status.is_empty()
+            && !snapshot.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted)
+    }
+
+    /// Stages every change, as Stage All Changes does, and commits it with the draft message.
+    pub fn stage_all_and_commit(&mut self) {
+        if !self.can_stage_all_and_commit() {
+            return;
+        }
+        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        let count = self.snapshot().map_or(0, |s| s.status.len());
+        self.act_recording("Commit", "Commit", move |client, path| {
+            client.stage_all(path)?;
+            client.commit(&message, path).map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
+        });
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.draft = Draft::default();
             }
             self.save_draft();
         }

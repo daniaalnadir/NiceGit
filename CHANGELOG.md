@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0 - Sizes everywhere
+
+- A commit's files in the inspector show how many lines each adds and removes, as changed
+  files do in the Changes panel.
+- Each repository tab shows how many uncommitted changes it has, so work in progress is
+  visible in every open repository.
+- Set an external editor in Settings, such as `code` or `zed`, and open changed files in it
+  from their menu or the diff's header.
+- Stage or unstage the open file from the diff's header, or with Shift-Command-S; the file
+  stays open on its other side instead of closing.
+- With a summary written and nothing staged, Stage all and commit stages every change and
+  commits it in one step.
+
 ## 1.3.0 - Line by line
 
 - Each added or removed line in a diff has a + to its left, before the line numbers, that

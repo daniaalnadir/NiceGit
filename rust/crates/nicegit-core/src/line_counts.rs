@@ -48,6 +48,18 @@ impl GitClient {
     }
 }
 
+impl GitClient {
+    /// Counts the lines each file of a commit adds and removes, against its first parent as the
+    /// commit's file list compares them, so the two always agree.
+    pub fn commit_line_counts(&self, hash: &str, directory: &Path) -> Result<HashMap<String, LineCount>> {
+        let output = self.run(
+            &["diff-tree", "--root", "--no-commit-id", "--first-parent", "-m", "-r", "--no-renames", "--numstat", "-z", hash, "--"],
+            directory,
+        )?;
+        Ok(parse_numstat(&output))
+    }
+}
+
 /// Parses `git diff --numstat -z`: `added<TAB>removed<TAB>path<NUL>` for each file, or for a
 /// rename `added<TAB>removed<TAB><NUL>old<NUL>new<NUL>`. Binary files show `-` for both counts.
 pub fn parse_numstat(output: &str) -> HashMap<String, LineCount> {

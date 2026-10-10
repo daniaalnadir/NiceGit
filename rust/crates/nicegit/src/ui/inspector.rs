@@ -132,13 +132,30 @@ impl NiceGitApp {
                 if ui.add(egui::Button::selectable(all_selected, RichText::new(format!("{}  All files", icon::FILES)))).clicked() {
                     self.select_commit_file(hash.clone(), None);
                 }
+                let counts = self.repos[self.active]
+                    .commit_line_counts
+                    .as_mut()
+                    .filter(|(counted, _)| *counted == hash)
+                    .and_then(|(_, task)| task.get().cloned().flatten())
+                    .unwrap_or_default();
                 for (status, path) in &files {
                     let selected = file.as_deref() == Some(path.as_str());
                     let color = widgets::change_letter_color(ui, status);
                     let response = ui
                         .horizontal(|ui| {
                             ui.label(RichText::new(status.chars().next().unwrap_or('M').to_string()).monospace().strong().color(color));
-                            ui.add(egui::Button::selectable(selected, path.as_str()).truncate())
+                            // The counts are laid out first, from the right, so a long path is
+                            // shortened rather than pushing them out of view.
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if let Some(count) = counts.get(path) {
+                                    crate::ui::changes::line_count(ui, *count);
+                                }
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                    ui.add(egui::Button::selectable(selected, path.as_str()).truncate())
+                                })
+                                .inner
+                            })
+                            .inner
                         })
                         .inner
                         .on_hover_text(path);
