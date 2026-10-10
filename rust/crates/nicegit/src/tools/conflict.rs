@@ -72,6 +72,10 @@ impl ConflictWindow {
 }
 
 impl ToolWindow for ConflictWindow {
+    fn holds_refresh(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> String {
         format!("conflict:{}", self.path)
     }

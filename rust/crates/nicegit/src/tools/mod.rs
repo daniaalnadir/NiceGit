@@ -131,6 +131,12 @@ pub trait ToolWindow {
     fn has_unsaved_changes(&self) -> bool {
         false
     }
+    /// True while the tool shows something the user is reviewing, as the Mac app's sheets for
+    /// stashes, repository settings, and conflicts did; automatic refreshes and the refresh for
+    /// returning to the app wait until it closes.
+    fn holds_refresh(&self) -> bool {
+        self.has_unsaved_changes()
+    }
     /// Called after the repository is reloaded, so the tool can reread its data.
     fn repository_changed(&mut self, _snapshot: &Snapshot) {}
 }

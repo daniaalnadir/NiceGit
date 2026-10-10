@@ -950,7 +950,12 @@ impl NiceGitApp {
                 }
             }
         }
-        let quiet = self.busy.is_none() && self.dialog.is_none() && self.repo().is_some_and(|r| !r.loading && r.snapshot.is_some());
+        // As in the Mac app, nothing refreshes under an action, a dialog, or a window the user is
+        // reviewing.
+        let quiet = self.busy.is_none()
+            && self.dialog.is_none()
+            && !self.tools.iter().any(|tool| tool.holds_refresh())
+            && self.repo().is_some_and(|r| !r.loading && r.snapshot.is_some());
         if !quiet {
             return;
         }

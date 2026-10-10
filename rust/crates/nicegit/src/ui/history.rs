@@ -110,9 +110,13 @@ impl NiceGitApp {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let search_width = 170.0;
-                egui::Frame::new().fill(ui.visuals().extreme_bg_color).corner_radius(6.0).inner_margin(egui::Margin::symmetric(8, 4)).show(
-                    ui,
-                    |ui| {
+                // A border, as on other text fields, so the light theme's white field reads as one.
+                egui::Frame::new()
+                    .fill(ui.visuals().extreme_bg_color)
+                    .stroke(egui::Stroke::new(1.0, c.border))
+                    .corner_radius(6.0)
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .show(ui, |ui| {
                         ui.set_width((ui.available_width() - search_width - 16.0).max(80.0));
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(icon::FUNNEL_SIMPLE).color(c.muted));
@@ -127,8 +131,7 @@ impl NiceGitApp {
                                 .on_hover_text("Matches each commit's message, author, ID, branches, and tags");
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter loaded commits"));
                         });
-                    },
-                );
+                    });
                 if ui
                     .add_sized([search_width, 28.0], egui::Button::new(format!("{}  Search all history", icon::MAGNIFYING_GLASS)))
                     .on_hover_text("Shift-Ctrl/Cmd-F")

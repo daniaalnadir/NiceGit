@@ -220,14 +220,34 @@ impl NiceGitApp {
             }
         };
         let value = cell.lock().unwrap_or_else(|p| p.into_inner()).clone();
-        value.flatten().map(|summary| {
-            let color = match summary.level {
-                0 => c.added,
-                1 => c.warning,
-                2 => c.danger,
-                _ => c.muted,
-            };
-            (summary.text, color, summary.help)
-        })
+        value.flatten().map(|summary| (summary.text, signature_color(summary.level, &c), summary.help))
+    }
+}
+
+/// The colour for a signature's level, as the Mac app colours it: green when verified, orange
+/// for an untrusted key, red when bad, and secondary when it cannot be checked.
+fn signature_color(level: u8, c: &theme::Colors) -> egui::Color32 {
+    match level {
+        0 => c.added,
+        1 => c.warning,
+        2 => c.danger,
+        _ => c.muted,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::signature_color;
+    use crate::theme;
+
+    #[test]
+    fn signature_levels_take_the_mac_apps_colours() {
+        for dark in [false, true] {
+            let c = theme::colors(dark);
+            assert_eq!(signature_color(0, &c), c.added, "verified is green");
+            assert_eq!(signature_color(1, &c), c.warning, "untrusted is orange");
+            assert_eq!(signature_color(2, &c), c.danger, "bad is red");
+            assert_eq!(signature_color(3, &c), c.muted, "cannot be checked is secondary");
+        }
     }
 }

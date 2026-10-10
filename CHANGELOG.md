@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.11 - Refresh like the Mac app
+
+- As in the Mac app, automatic refreshes and the refresh for returning to NiceGit wait while
+  the Stashes, Repository Settings, or conflict window is open, or the editor holds unsaved
+  text, and run once it closes.
+- The history filter field has a border in the light theme.
+- Signature colours are tested for every state.
+
 ## 0.6.10 - Clear choices
 
 - Only the Split choice is dimmed when a diff cannot be split; the active Unified choice keeps

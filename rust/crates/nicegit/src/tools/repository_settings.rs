@@ -534,6 +534,10 @@ fn middle_truncated(ui: &Ui, text: &str, width: f32) -> String {
 }
 
 impl ToolWindow for RepositorySettingsWindow {
+    fn holds_refresh(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> String {
         "repository-settings".to_string()
     }

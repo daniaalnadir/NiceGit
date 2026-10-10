@@ -399,6 +399,10 @@ fn action_button(ui: &mut Ui, text: &str, tooltip: &str, enabled: bool) -> egui:
 }
 
 impl ToolWindow for StashWindow {
+    fn holds_refresh(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> String {
         "stashes".to_string()
     }
