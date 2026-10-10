@@ -1,23 +1,24 @@
 # NiceGit Feature Guide
 
-NiceGit is a free native macOS Git client built with SwiftUI. The goal is to make the everyday GitKraken-style workflow available without paid seats or feature gates.
+NiceGit is a free Git client for macOS, Windows, and Linux, built with Rust. The goal is to make the everyday GitKraken-style workflow available without paid seats or feature gates.
 
-**Status: 0.1.0 preview.** A working desktop client under active development, not
+**Status: 1.5.0 preview.** A working desktop client under active development, not
 a drop-in replacement for every GitKraken feature. Back up important work before
 trying history-changing operations. NiceGit is an independent project and is not
 affiliated with GitKraken.
 
 ## Requirements
 
-- macOS 14 or newer (deployment target). Interactive verification currently covers
-  macOS 27 on Apple Silicon; older systems and Intel Macs need runtime testing.
-- Xcode with Swift 6.3 or newer, with its command-line tools selected and initial
-  setup completed. The local release build was verified with Xcode 27.
+- Downloads are available for macOS 11 or newer, Windows 10 or newer (64-bit), and
+  x86_64 Linux. See the [README](../README.md#download).
+- Building from source needs Rust 1.95 or newer, and on Linux the development packages
+  listed in the [README](../README.md#build-from-source).
 - Git available on your PATH. GitHub CLI (`gh`) is optional, needed only for the
   GitHub pull-request and issue sidebar; sign in using `gh auth login` yourself.
-- SwiftPM downloads dependencies on the first build. NiceGit has no paid tier.
+- Cargo downloads dependencies on the first build. NiceGit has no paid tier.
 
-Start from a clone of this repository and run the commands below in its root.
+Start from a clone of this repository and run the commands below from its `rust/`
+folder. Keyboard shortcuts written with Command use Ctrl on Windows and Linux.
 See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 [Publishing](RELEASING.md) for development and release guidance.
 
@@ -30,7 +31,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Run Git operations in the background with a busy indicator.
 - View local and remote branches.
 - Browse linked worktree folders and branches, and open another checkout from the sidebar.
-- Open a worktree, reveal it in Finder, or copy its path from the worktree context menu.
+- Open a worktree, show it in the file manager, or copy its path from the worktree context menu.
 - Create a linked worktree for an existing local branch from its context menu.
 - Keep separate commit-message drafts for each checkout across app restarts, stored in local preferences (not sent to a server).
 - Filter local branches, remote branches, and tags by name in the sidebar.
@@ -57,7 +58,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Resize the repositories column and the branches sidebar by dragging their dividers;
   double-click a divider to restore its default width. Widths are remembered.
 - Undo or redo the last NiceGit action that moved the current branch (commit, amend, reset,
-  merge, rebase, cherry-pick, revert, or pull) or deleted branches, from the action bar or
+  merge, rebase, cherry-pick, revert, or pull) or deleted branches, from the toolbar or
   the command palette.
 - Clean up branches (Repository > Clean Up Branches): delete local branches merged into the
   current branch, and optionally unmerged ones with no recent commits, as one undoable step.
@@ -87,12 +88,12 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   or on another commit, and whether they have uncommitted changes); open one, or check out
   its recorded commit.
 - See whether a commit's GPG or SSH signature is verified, untrusted, bad, or cannot be
-  checked on this Mac, in the commit inspector.
+  checked on this computer, in the commit inspector.
 - Hide whitespace-only changes in any diff; the choice is remembered.
 - Compare changed images side by side with their dimensions and file sizes.
 - Recover lost work from Repository > Recover Lost Work: every position HEAD has had,
   with commits on no branch marked, and a branch can be created at any of them.
-- Stash only selected files (including untracked ones) from the Stashes sheet.
+- Stash only selected files (including untracked ones) from the Stashes window.
 - Remove a clean linked worktree, and forget worktrees whose folders were deleted.
 - Command palette (Shift-Command-P) for repository actions, branch switching, and recent
   repositories, with fuzzy matching.
@@ -133,32 +134,26 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 ## Run
 
 ```sh
-swift run --build-system native NiceGit
+cd rust
+cargo run -p nicegit --release
 ```
-
-## Build a macOS App
-
-```sh
-bash scripts/build-app.sh
-open dist/NiceGit.app
-```
-
-The bundle is ad-hoc signed. Downloaded copies may be blocked by Gatekeeper;
-Developer ID signing and notarization are not yet configured.
 
 ## Tests
 
 ```sh
-swift test --build-system native
+cd rust
+cargo test --workspace
 ```
+
+`rust/scripts/test-all.sh` runs the same tests on macOS and Linux at the same time. See
+[rust/README.md](../rust/README.md).
 
 ## Behavior and Limitations
 
-The action bar includes Undo/Redo for the last successful non-initial commit made
-in NiceGit during this session. Undo uses soft reset and preserves the index and
-working files; Redo restores that commit. Both confirm before changing local
-history and reject a changed branch or HEAD. This is not a general undo stack for
-all Git operations, and it does not persist across restarts.
+The toolbar's Undo and Redo cover the actions listed under Current Features. For a commit,
+Undo uses soft reset and preserves the index and working files; Redo restores that commit.
+Both confirm before changing local history and reject a changed branch or HEAD. This is
+not a general undo stack for all Git operations, and it does not persist across restarts.
 
 Restoring a file from a commit replaces only that path, in both the index and the
 working tree, and never moves HEAD or changes other files. The confirmation says
@@ -296,24 +291,17 @@ Remote checkout reuses a unique existing local tracking branch, including rename
 branches, without resetting local commits. Ambiguous tracking branches must be
 selected explicitly from Local.
 
-- Authentication and remote account integrations.
-- Developer ID signing and notarization for public distribution.
+NiceGit has no accounts or sign-in of its own: fetching, pulling, and pushing use your
+Git credentials, and the GitHub sidebar uses your GitHub CLI login.
 
-## macOS 27 and Embedded Terminal
+## Embedded Terminal
 
-The app has been built and launched on macOS 27 with Xcode 27. The minimum
-deployment target remains macOS 14; older-system runtime testing is separate.
-The packaging script uses SwiftPM's native build backend to avoid the Xcode 27
-default backend's SwiftTerm Metal shader build failure. This backend currently
-emits a deprecation warning.
-
-The action bar's Terminal button opens a resizable bottom panel using SwiftTerm.
-Control-backtick or View > Show/Hide Terminal toggles the same panel. Hiding it
-refreshes repository state so changes made in the shell appear in the workbench.
+The toolbar's Terminal button, Control-backtick, and the command palette's Show terminal
+entry open a resizable bottom panel. Hiding it refreshes repository state so changes made
+in the shell appear in the workbench.
 Each checkout gets its own shell starting in that checkout's directory. Hiding
 the panel keeps its shell running for the current app session. Use the stop
 button to end a session, with confirmation; an exited shell can be restarted.
-SwiftTerm is MIT-licensed and its license is included in the packaged app.
 
 ## License
 

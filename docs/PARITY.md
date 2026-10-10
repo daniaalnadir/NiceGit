@@ -1,5 +1,7 @@
 # Cross-platform Feature Parity
 
+The original Swift app was removed from the repository after the port; this table records how each of its features carried over.
+
 Each feature in the Mac app's [feature guide](FEATURES.md), where the cross-platform app in
 [`rust/`](../rust) provides it, and what checks it. Test names refer to:
 
@@ -131,7 +133,7 @@ command palette now ask first, as the toolbar's buttons do.
 
 ## Platform differences
 
-- The Mac app is a native SwiftUI app. The cross-platform app uses egui and looks the same on
+- The original Mac app was a native SwiftUI app. The cross-platform app uses egui and looks the same on
   every system, with the Inter typeface and Phosphor icons. Menus live in the Repository picker,
   the toolbar's More menu, and the command palette rather than a macOS menu bar.
 - HEIC images preview on macOS, through the system's own `sips` tool. No pure-Rust HEIC

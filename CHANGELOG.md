@@ -26,6 +26,8 @@
   empty, and a tag the remote would not replace are explained in plain words.
 - New branch, rename, and tag dialogs check the name as it is typed, say what Git would not
   accept, and keep OK disabled until the name is valid.
+- The original Swift app for macOS is removed from the repository; NiceGit is the Rust app
+  for macOS, Windows, and Linux.
 
 ## 1.4.0 - Sizes everywhere
 

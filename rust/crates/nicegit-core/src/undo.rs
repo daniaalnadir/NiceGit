@@ -1,5 +1,5 @@
 //! Undo and redo for NiceGit's own actions: branch moves (commits, resets, rebases), branch
-//! deletions, and discards. Port of `GitUndo.swift` and `GitDiscardUndo.swift`.
+//! deletions, and discards. Ported from the original Mac app.
 
 use std::ffi::OsStr;
 use std::fs;

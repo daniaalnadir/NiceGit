@@ -59,10 +59,10 @@
 - Before the first commit, unstage with `rm --cached --force` so edits made after staging remain in the working files.
 - Parse graph decorations with control-character separators; commas are valid inside branch and tag names.
 - Pin the checkout's first-parent line to the leftmost graph lane in colour 0, keep each other line's colour from tip to end, and never reserve a lane for a HEAD appended below its page.
-- Build working-file URLs with `appendingPathComponent` on the repository URL; `URL(fileURLWithPath:relativeTo:)` resolves against the parent folder when the base lacks a trailing slash, so safety checks can inspect the wrong file.
+- Build working-file paths by joining the relative path onto the repository directory with `Path::join`, and never resolve them against a URL base: a base without a trailing slash resolves against its parent folder, and a leading `/` replaces the base, so safety checks can inspect the wrong file.
 - Restore from a commit only after checking the captured branch and HEAD, no unfinished operation or conflict stages, and no untracked, ignored, or folder entry at the path; verify both index and working file match the source afterwards.
 - Parse `log -z --name-status` file history by NUL tokens only; paths can contain newlines and Git's field separators, and renames list two paths.
-- Split Git output that carries file contents (such as blame) on bytes; Swift treats CRLF as one character, so splitting a String on newline merges lines of Windows-format files.
+- Split Git output that carries file contents (such as blame) on bytes; splitting a decoded string on line breaks can merge lines of Windows-format files.
 - Resolve user-selected revisions to object IDs before passing them to commands with their own argument parsing: `git blame` misreads paths after `--end-of-options`, and `rev-list` treats `--not` after it as a revision.
 - `git check-ignore` rejects literal pathspec magic; it takes plain pathnames, so leave it out of `GIT_LITERAL_PATHSPECS` commands.
 - Interactive rebase writes the todo through `GIT_SEQUENCE_EDITOR`, stores new messages as blobs applied by `exec` lines so stopped rebases can continue, disables update-refs, auto-stash, and auto-squash, and keeps `#` lines in messages with whitespace cleanup.
@@ -71,17 +71,15 @@
 - List submodules from index gitlinks (`ls-files --stage -z`, mode 160000), not `submodule status`, whose unquoted paths are ambiguous. Keep Git's file-transport protection for submodule clones.
 - GitFlow finish must be resumable: skip targets that already contain the branch, reuse a version tag only if it already includes the branch, and delete the branch only after every merge succeeds.
 - Refuse to add `filter=lfs` patterns while git-lfs is missing; Git would silently commit the full files.
-- Check layout at a typical 1440-point window: with both sidebars and the Changes panel open, the graph pane is under 500 points wide. Use `UIDriverTests` to click and type through the real window when a change affects interaction.
+- Check layout at a typical 1440-point window: with both sidebars and the Changes panel open, the graph pane is under 500 points wide. Use the interface tests in `rust/crates/nicegit/src/ui_tests*.rs` (egui_kittest) to click and type through the real window when a change affects interaction.
 - Scroll the graph to a selected row vertically only (anchor x 0); centring it horizontally hides the branch column.
 - Run Git with `GIT_OPTIONAL_LOCKS=0`; an index rewritten by `git status` contends with the user's commands and wakes the repository watcher in a loop.
 - Skip watched changes older than the snapshot's last refresh, so NiceGit's own actions do not refresh twice.
-- Compute a merge preview before opening its confirmation; macOS confirmation dialogs may not update their message after appearing.
+- Compute a merge preview before opening its confirmation, so the dialog shows the outcome from its first frame.
 - Undo branch moves with the inverse of how they were made: soft for commits and amends, the same mode for soft and mixed resets, and `reset --keep` otherwise; never record a step when an operation stopped partway.
 - Restore deleted branches with `update-ref` against the all-zero object ID so a reused name is never replaced, and delete unmerged branches only atomically against the listed tip.
 - Parse `git grep --null` by NUL tokens and end each match's text at its first newline; paths can contain newlines.
-- Wait for Git with a termination handler installed before launch; polling `Process.isRunning` added about 80 ms to every command.
-- Launch Git by absolute path found once in NiceGit's PATH, keep independent reads concurrent (about six at a time), and validate actions with `checkoutState` rather than a full snapshot.
-- After commits, amends, resets, and cherry-picks, refresh with `loadSnapshot(reusing:)`; only merges, rebases, pulls, and explicit refreshes reread remotes, worktrees, tags, and stashes.
-- Let `git status` write the index only on deliberate loads (opening, Command-R); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
-- Measure with `PerformanceBenchmarkTests` against a generated repository before and after performance changes.
-- Build draggable dividers from an AppKit view that tracks the drag with `nextEvent(matching:)` and shows the cursor through cursor rects; SwiftUI overlays outside a parent's frame do not receive hits, so a SwiftUI drag handle is effectively one point wide.
+- Wait for Git by blocking on the child process (`Command::output` or `Child::wait`) rather than polling its status; polling added about 80 ms to every command.
+- Launch Git by absolute path found once in NiceGit's PATH, keep independent reads concurrent (about six at a time), and validate actions with `checkout_state` rather than a full snapshot.
+- Let `git status` write the index only on deliberate loads (opening, and Command-R, which is Ctrl-R on Windows and Linux); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
+- Measure against a generated repository before and after performance changes.

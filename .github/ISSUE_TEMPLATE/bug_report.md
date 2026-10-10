@@ -18,9 +18,8 @@ For security vulnerabilities, follow SECURITY.md instead of filing details here.
 
 ## Environment
 
-- macOS version and Apple Silicon/Intel:
+- Operating system (macOS, Windows, or Linux) and version:
 - NiceGit version or commit:
-- Xcode/Swift version (if built from source):
 - Git version:
 
 ## Evidence
