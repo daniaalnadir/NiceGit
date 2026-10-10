@@ -169,6 +169,32 @@ fn wrap_line(job: &mut LayoutJob, kind: DiffLineKind, width: f32, char_width: f3
     }
 }
 
+/// Shortens a header to `columns` characters by replacing part of its middle with an ellipsis,
+/// cutting only at path or word boundaries so the end, with the file's name, stays whole.
+/// Returns `None` when the header fits, or when no boundary allows a cut; the caller then lets
+/// the line end in an ellipsis instead.
+fn elide_header(text: &str, columns: usize) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= columns || !text.contains('/') {
+        return None;
+    }
+    // Keep at least the first word ("diff", "index", "---"), so the line's kind stays readable.
+    let first_word = chars.iter().position(|&c| c == ' ').map_or(chars.len(), |space| space + 1);
+    // The tail is the last path, from the space before it where that fits, otherwise from the
+    // first '/' in it that leaves room for the head.
+    let last_path = chars.iter().rposition(|&c| c == ' ').unwrap_or(0).max(1);
+    let tail = (last_path..chars.len())
+        .filter(|&i| chars[i - 1] == '/' || chars[i] == ' ')
+        .find(|&i| chars.len() - i + 1 + first_word <= columns)?;
+    // The head ends after a '/' or a space, and is the longest that fits before the ellipsis.
+    let room = columns - (chars.len() - tail) - 1;
+    let head = (first_word..=room.min(tail)).rev().find(|&i| matches!(chars[i - 1], '/' | ' '))?;
+    let mut elided: String = chars[..head].iter().collect();
+    elided.push('…');
+    elided.extend(&chars[tail..]);
+    Some(elided)
+}
+
 /// The find bar's state. The caller keeps it between frames.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DiffFind {
@@ -436,7 +462,14 @@ impl View<'_> {
             DiffLineKind::Metadata => self.style.muted,
             _ => self.style.text,
         };
-        let mut job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
+        // A file header too long for its row loses the middle of its paths rather than the end,
+        // so the file's name stays whole.
+        let columns = (wrap_width_of(diff_line.kind, self.style.wrap_width, self.style.char_width) / self.style.char_width + 0.01) as usize;
+        let elided = (wrap && diff_line.kind == DiffLineKind::Metadata).then(|| elide_header(&diff_line.text, columns)).flatten();
+        let mut job = match &elided {
+            Some(text) => layout(text, &self.style.font, text_color, &[]),
+            None => layout(&diff_line.text, &self.style.font, text_color, &self.spans(line)),
+        };
         if wrap {
             // Lines wrap between words where they can, as measured for the row heights.
             wrap_line(&mut job, diff_line.kind, self.style.wrap_width, self.style.char_width);
@@ -867,5 +900,24 @@ mod tests {
             assert_eq!(style.unified_row_height(0), style.row_height, "the header takes one ordinary row");
         });
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn long_headers_lose_the_middle_of_their_paths() {
+        let header = "diff --git a/App/HourlyView.swift b/App/HourlyView.swift";
+        assert_eq!(elide_header(header, header.len()), None, "a header that fits is unchanged");
+        let short = elide_header(header, 50).unwrap();
+        assert_eq!(short, "diff --git a/App/… b/App/HourlyView.swift");
+        assert!(short.chars().count() <= 50);
+        assert_eq!(elide_header(header, 30).unwrap(), "diff … b/App/HourlyView.swift");
+        assert_eq!(elide_header(header, 24).unwrap(), "diff …HourlyView.swift");
+        for columns in 20..header.len() {
+            if let Some(elided) = elide_header(header, columns) {
+                assert!(elided.chars().count() <= columns, "{elided} in {columns}");
+                assert!(elided.ends_with("HourlyView.swift"), "{elided}");
+            }
+        }
+        assert_eq!(elide_header("index 1f0d598..ae14e08 100644", 20), None, "a line without paths has its end cut");
+        assert_eq!(elide_header(header, 15), None, "with no boundary leaving room, the end is cut");
     }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.19 - Whole names
+
+- A diff file header too long for its row is shortened in the middle of its paths, at a folder
+  boundary, so the file's name is never cut.
+
 ## 0.6.18 - Tidy edges
 
 - Long file headers in a diff stay on one line and end in an ellipsis, rather than wrapping
