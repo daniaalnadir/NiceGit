@@ -57,6 +57,9 @@ impl NiceGitApp {
                 }
             }
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::S))) && self.showing_diff() {
+            self.toggle_stage_open_file();
+        }
         // Checked first: Command-Enter also matches while Shift is held.
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
             self.commit_and_push();
@@ -454,7 +457,7 @@ impl NiceGitApp {
             _ => None,
         };
         // A narrow panel puts the view controls on a second row, so the file's name keeps room.
-        let wide = panel_width >= 700.0;
+        let wide = panel_width >= 820.0;
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let back = ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)");
@@ -640,6 +643,16 @@ impl NiceGitApp {
             if ui.button(format!("{}  Edit", icon::PENCIL_SIMPLE)).on_hover_text("Edit this file in NiceGit").clicked() {
                 let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
                 self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
+            }
+        }
+        // Stage or unstage the whole open file without going back to the Changes panel.
+        if let Some(Selection::Change { entry, staged }) = self.repo().map(|r| r.selection.clone()) {
+            if entry.kind != nicegit_core::StatusKind::Conflicted {
+                let (glyph, label) = if staged { (icon::MINUS_CIRCLE, "Unstage file") } else { (icon::PLUS_CIRCLE, "Stage file") };
+                let button = ui.add_enabled(self.idle(), egui::Button::new(format!("{glyph}  {label}")));
+                if button.on_hover_text("Shift-Ctrl/Cmd-S").clicked() {
+                    self.toggle_stage_open_file();
+                }
             }
         }
         // The open working file in the person's own editor, when one is set in Settings.

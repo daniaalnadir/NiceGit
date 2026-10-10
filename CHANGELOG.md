@@ -8,6 +8,8 @@
   visible in every open repository.
 - Set an external editor in Settings, such as `code` or `zed`, and open changed files in it
   from their menu or the diff's header.
+- Stage or unstage the open file from the diff's header, or with Shift-Command-S; the file
+  stays open on its other side instead of closing.
 
 ## 1.3.0 - Line by line
 

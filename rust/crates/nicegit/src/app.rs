@@ -689,8 +689,12 @@ impl NiceGitApp {
         if let Selection::Change { entry, staged } = &repo.selection {
             let same_file = |e: &&StatusEntry| e.path == entry.path && e.original_path == entry.original_path;
             let side = |e: &&StatusEntry| if *staged { e.is_staged() } else { e.is_unstaged() };
+            let other_side = |e: &&StatusEntry| if *staged { e.is_unstaged() } else { e.is_staged() };
             if let Some(current) = snapshot.status.iter().filter(same_file).find(side) {
                 repo.selection = Selection::Change { entry: current.clone(), staged: *staged };
+            } else if let Some(moved) = snapshot.status.iter().filter(same_file).find(other_side) {
+                // Staging or unstaging the whole file moved it to the other side; it stays open there.
+                repo.selection = Selection::Change { entry: moved.clone(), staged: !*staged };
             }
         }
         // Keep the selection only while it still exists in the new state.
@@ -861,6 +865,20 @@ impl NiceGitApp {
             Selection::Change { entry, staged } => self.select_change(entry, staged),
             Selection::Commit { hash, file } => self.select_commit_file(hash, file),
             _ => {}
+        }
+    }
+
+    /// Stages the open file, or unstages it when its staged side is open. A conflicted file is
+    /// left for the conflict editor, as in the Changes panel.
+    pub fn toggle_stage_open_file(&mut self) {
+        let Some(Selection::Change { entry, staged }) = self.repo().map(|r| r.selection.clone()) else { return };
+        if entry.kind == nicegit_core::StatusKind::Conflicted {
+            return;
+        }
+        if staged {
+            self.act("Unstage", move |client, path| client.unstage(&entry, path).map(|_| None));
+        } else {
+            self.act("Stage", move |client, path| client.stage(&entry.path, path).map(|_| None));
         }
     }
 

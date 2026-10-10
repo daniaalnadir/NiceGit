@@ -1795,3 +1795,31 @@ fn changed_files_open_in_the_external_editor_from_settings() {
     settle(&mut harness);
     assert_eq!(edited().len(), 2);
 }
+
+#[test]
+fn the_open_file_stages_and_unstages_from_the_diff_and_stays_open() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let open_side = |h: &App| match &h.state().repo().unwrap().selection {
+        crate::app::Selection::Change { entry, staged } if entry.path == "notes.txt" => Some(*staged),
+        _ => None,
+    };
+    // The exact labels: the commit button can read "Stage files to commit".
+    let stage = format!("{}  Stage file", icon::PLUS_CIRCLE);
+    let unstage = format!("{}  Unstage file", icon::MINUS_CIRCLE);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label(&stage).is_some());
+
+    harness.get_by_label(&stage).click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged side", |h| open_side(h) == Some(true) && h.query_by_label(&unstage).is_some());
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "notes.txt");
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::S);
+    idle(&mut harness);
+    wait(&mut harness, "the unstaged side", |h| open_side(h) == Some(false));
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "");
+}

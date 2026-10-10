@@ -38,6 +38,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             "Diff",
             vec![
                 (with("Alt-Up, Alt-Down"), "Open the previous or next changed file"),
+                (with("Shift-Cmd-S"), "Stage or unstage the open file"),
                 (with("Cmd-F"), "Find in the diff"),
                 ("Enter, Shift-Enter".to_string(), "Next or previous match"),
                 ("Escape".to_string(), "Back to the history"),
