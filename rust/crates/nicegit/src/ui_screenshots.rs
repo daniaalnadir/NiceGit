@@ -88,5 +88,13 @@ fn screenshots() {
         wide.get_all_by_label(&file).next().expect("a changed file").click();
         wait(&mut wide, "the diff", |h| h.state().repo().is_some_and(|r| r.diff.is_some() && !r.diff_loading));
         save(&mut wide, &folder, &format!("diff-split-wide-{theme}"));
+
+        // The history at full width, with every column, and its header's menu of columns.
+        wide.state_mut().close_diff();
+        wait(&mut wide, "the history", |h| h.query_by_label("History columns").is_some());
+        save(&mut wide, &folder, &format!("history-wide-{theme}"));
+        wide.get_by_label("History columns").click_secondary();
+        wait(&mut wide, "the columns menu", |h| h.query_by_label("Restore column widths").is_some());
+        save(&mut wide, &folder, &format!("history-columns-menu-{theme}"));
     }
 }

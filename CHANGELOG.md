@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1 - Your columns
+
+- The commit history has Branch / tag, Graph, Commit message, Author, Date, and Commit
+  columns. Drag a heading's edge to resize its column; double-click the edge to restore it.
+- Right-click the headings to show or hide columns, or restore every column's width. The
+  choices are remembered.
+- A narrow history leaves out Author, then Date, then Commit, until there is room again.
+
 ## 0.7.0 - Room to read
 
 - A file's diff takes the whole main area in place of the commit history. History, or

@@ -71,6 +71,8 @@ pub struct Settings {
     pub show_repositories: bool,
     /// Whether the toolbar's Fetch and Pull button fetches or pulls.
     pub sync_action: SyncAction,
+    /// The history's columns: which are shown and how wide.
+    pub history_columns: crate::ui::history_columns::HistoryColumns,
     /// Repositories open as tabs, in order.
     pub open: Vec<PathBuf>,
     pub active: usize,
@@ -91,6 +93,7 @@ impl Default for Settings {
             file_view: FileView::Path,
             show_repositories: true,
             sync_action: SyncAction::Fetch,
+            history_columns: Default::default(),
             open: Vec::new(),
             active: 0,
             recent: Vec::new(),

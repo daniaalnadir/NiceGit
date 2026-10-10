@@ -582,3 +582,98 @@ fn settings_say_when_side_by_side_is_not_in_effect() {
     harness.state_mut().settings.split_diff = false;
     wait(&mut harness, "the plain note", |h| h.query_all_by_label_contains("Needs a diff panel at least").next().is_some());
 }
+
+/// Drags the history column edge with this accessible name by `dx` points.
+fn drag_column_edge(harness: &mut App, name: &str, dx: f32) {
+    let edge = harness.get_by_label(name).rect().center();
+    let press = |down: bool, pos: egui::Pos2| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed: down,
+        modifiers: Modifiers::NONE,
+    };
+    harness.hover_at(edge);
+    harness.step();
+    harness.event(press(true, edge));
+    harness.step();
+    for step in 1..=10 {
+        harness.event(egui::Event::PointerMoved(edge + egui::vec2(dx * step as f32 / 10.0, 0.0)));
+        harness.step();
+    }
+    harness.event(press(false, edge + egui::vec2(dx, 0.0)));
+    settle(harness);
+}
+
+#[test]
+fn history_columns_resize_by_dragging_their_header_edges() {
+    use crate::ui::history_columns::Column;
+    let repo = repository();
+    let mut harness = open(repo.path());
+    // Without the repositories column, the history has room to widen its columns.
+    harness.state_mut().settings.show_repositories = false;
+    loaded(&mut harness);
+    let width = |h: &App, column| h.state().settings.history_columns.width(column, 0.0);
+    let refs = width(&harness, Column::Refs);
+    let id = width(&harness, Column::Id);
+    let message = harness.get_by_label("Add a second line").rect();
+
+    // Branch / tag widens from its right edge, pushing the message right.
+    drag_column_edge(&mut harness, "Resize the Branch / tag column", 60.0);
+    assert!((width(&harness, Column::Refs) - (refs + 60.0)).abs() < 2.0, "{}", width(&harness, Column::Refs));
+    // The commit's ID widens from its left edge, toward the message.
+    drag_column_edge(&mut harness, "Resize the Commit column", -40.0);
+    assert!((width(&harness, Column::Id) - (id + 40.0)).abs() < 2.0, "{}", width(&harness, Column::Id));
+    // Rows follow the header: the row is unchanged, but its columns moved.
+    assert_eq!(harness.get_by_label("Add a second line").rect(), message, "a row spans the history whatever its columns");
+
+    // Dragging far stops before the message is squeezed under its minimum, leaving out the
+    // columns after it; narrowing again brings them back.
+    drag_column_edge(&mut harness, "Resize the Branch / tag column", 1000.0);
+    let header = harness.get_by_label("History columns").rect();
+    let graph = harness.get_by_label("Resize the Graph column").rect().center().x
+        - harness.get_by_label("Resize the Branch / tag column").rect().center().x;
+    let layout = harness.state().settings.history_columns.layout(header.left(), header.right(), graph);
+    assert!(layout.message().span() >= crate::ui::history_columns::MIN_MESSAGE - 1.0, "{:?}", layout.message());
+    assert!(harness.query_by_label("Resize the Commit column").is_none(), "the ID makes room");
+    drag_column_edge(&mut harness, "Resize the Branch / tag column", -1000.0);
+    assert!(harness.query_by_label("Resize the Commit column").is_some(), "the ID returns");
+
+    // The header's menu restores every column's width.
+    harness.get_by_label("History columns").click_secondary();
+    wait(&mut harness, "the columns menu", |h| h.query_by_label("Restore column widths").is_some());
+    harness.get_by_label("Restore column widths").click();
+    settle(&mut harness);
+    assert!(harness.state().settings.history_columns.widths.is_empty());
+    assert_eq!(width(&harness, Column::Refs), refs);
+}
+
+#[test]
+fn right_clicking_the_history_header_chooses_its_columns() {
+    use crate::ui::history_columns::Column;
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let header = |h: &mut App| {
+        h.get_by_label("History columns").click_secondary();
+        wait(h, "the columns menu", |h| h.query_by_role_and_label(Role::CheckBox, "Graph").is_some());
+    };
+
+    header(&mut harness);
+    let checked = |h: &App, name: &str| h.get_by_role_and_label(Role::CheckBox, name).accesskit_node().toggled();
+    assert_eq!(checked(&harness, "Graph"), Some(Toggled::True));
+    assert!(harness.get_by_role_and_label(Role::CheckBox, "Commit message").accesskit_node().is_disabled(), "the message stays");
+    harness.get_by_role_and_label(Role::CheckBox, "Graph").click();
+    settle(&mut harness);
+    assert!(!harness.state().settings.history_columns.shown(Column::Graph));
+    assert!(harness.query_by_label("Resize the Graph column").is_none(), "a hidden column has no edge to drag");
+
+    // Ticking it again brings it back.
+    if harness.query_by_role_and_label(Role::CheckBox, "Graph").is_none() {
+        header(&mut harness);
+    }
+    assert_eq!(checked(&harness, "Graph"), Some(Toggled::False));
+    harness.get_by_role_and_label(Role::CheckBox, "Graph").click();
+    settle(&mut harness);
+    assert!(harness.state().settings.history_columns.shown(Column::Graph));
+    assert!(harness.query_by_label("Resize the Graph column").is_some());
+}

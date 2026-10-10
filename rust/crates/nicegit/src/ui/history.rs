@@ -9,9 +9,9 @@ use crate::graph_view::{self, Node};
 use crate::theme;
 use crate::tools::{self, widgets};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
+use crate::ui::history_columns::{self, Column};
 
 const ROW_HEIGHT: f32 = 34.0;
-const LABEL_COLUMN: f32 = 184.0;
 
 #[derive(Clone, Copy, PartialEq)]
 enum LabelKind {
@@ -170,27 +170,9 @@ impl NiceGitApp {
             }
         });
 
-        // Column headers.
+        // Column headers, which resize the columns and choose which are shown.
         let graph_width = graph_view::width_for(self.repo().map(|r| r.lanes).unwrap_or(1)).clamp(44.0, 240.0);
-        // Painted where each row draws its columns: labels and the message 10 points in, and
-        // "Graph" over the first lane.
-        {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), Sense::hover());
-            let painter = ui.painter();
-            let font = egui::TextStyle::Small.resolve(ui.style());
-            let y = rect.center().y;
-            painter.text(egui::pos2(rect.left() + 10.0, y), egui::Align2::LEFT_CENTER, "Branch / tag", font.clone(), c.muted);
-            let graph_rect =
-                egui::Rect::from_min_size(egui::pos2(rect.left() + LABEL_COLUMN, rect.top()), egui::vec2(graph_width, ROW_HEIGHT));
-            painter.text(egui::pos2(graph_view::lane_x(graph_rect, 0), y), egui::Align2::CENTER_CENTER, "Graph", font.clone(), c.muted);
-            painter.text(
-                egui::pos2(rect.left() + LABEL_COLUMN + graph_width + 10.0, y),
-                egui::Align2::LEFT_CENTER,
-                "Commit message",
-                font,
-                c.muted,
-            );
-        }
+        history_columns::header(ui, &mut self.settings.history_columns, graph_width, ROW_HEIGHT);
 
         let dirty = !snapshot.status.is_empty();
         let rows: Vec<usize> = if filter.is_empty() {
@@ -236,7 +218,9 @@ impl NiceGitApp {
             for position in range {
                 let Some(&index) = rows.get(position) else {
                     ui.horizontal(|ui| {
-                        ui.add_space(LABEL_COLUMN + graph_width);
+                        let left = ui.max_rect().left();
+                        let layout = self.settings.history_columns.layout(left, left + ui.available_width(), graph_width);
+                        ui.add_space(layout.message().min - left);
                         if ui
                             .add_enabled(self.idle(), egui::Button::new(format!("{}  Load older history", icon::CARET_DOUBLE_DOWN)))
                             .clicked()
@@ -296,7 +280,9 @@ impl NiceGitApp {
         };
         let is_marked = commit.as_ref().is_some_and(|c| marked.contains(&c.hash));
         let painter = ui.painter().with_clip_rect(rect);
-        let message_left = rect.left() + LABEL_COLUMN + graph_width;
+        let layout = self.settings.history_columns.layout(rect.left(), rect.right(), graph_width);
+        let cell = |span: egui::Rangef| egui::Rect::from_x_y_ranges(span, rect.y_range());
+        let message_left = layout.message().min;
         let message_rect = egui::Rect::from_min_max(egui::pos2(message_left - 4.0, rect.top()), rect.max);
         // A band in the line's colour, stronger when selected.
         // Only the selected or hovered row is tinted, so selection stands out; every row keeps
@@ -312,18 +298,20 @@ impl NiceGitApp {
         painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(lane_color.r(), lane_color.g(), lane_color.b(), alpha));
         painter.rect_filled(egui::Rect::from_min_size(message_rect.min, egui::vec2(3.0, ROW_HEIGHT)), 0.0, lane_color);
 
-        let graph_rect = egui::Rect::from_min_size(egui::pos2(rect.left() + LABEL_COLUMN, rect.top()), egui::vec2(graph_width, ROW_HEIGHT));
+        let graph_rect = layout.get(Column::Graph).map(cell);
         let initials = commit.as_ref().map(|c| graph_view::initials(&c.author_name)).unwrap_or_default();
         let node = if is_working_tree {
             Node::WorkingTree
         } else {
             Node::Commit { initials: &initials, merge: commit.as_ref().is_some_and(|c| c.parents.len() > 1) }
         };
-        if draw_graph {
-            graph_view::paint_row(&ui.painter().with_clip_rect(graph_rect), graph_rect, &row, node, background);
-        } else {
-            let single = nicegit_core::graph::GraphRow { lane: 0, lane_count: 1, segments: vec![], color: row.color, line: row.line };
-            graph_view::paint_row(&ui.painter().with_clip_rect(graph_rect), graph_rect, &single, node, background);
+        if let Some(graph_rect) = graph_rect {
+            if draw_graph {
+                graph_view::paint_row(&ui.painter().with_clip_rect(graph_rect), graph_rect, &row, node, background);
+            } else {
+                let single = nicegit_core::graph::GraphRow { lane: 0, lane_count: 1, segments: vec![], color: row.color, line: row.line };
+                graph_view::paint_row(&ui.painter().with_clip_rect(graph_rect), graph_rect, &single, node, background);
+            }
         }
 
         let y = rect.center().y;
@@ -331,19 +319,21 @@ impl NiceGitApp {
         let small = FontId::proportional(11.5);
         let mono = FontId::monospace(11.5);
         let text = ui.visuals().text_color();
-        let message_width = rect.right() - message_left;
-        let show_meta = message_width > 460.0;
-        let meta_width = if show_meta { 250.0_f32.min(message_width * 0.42) } else { 70.0 };
-        let subject_right = rect.right() - meta_width - 8.0;
+        let subject_right = layout.message().max - 8.0;
 
         if is_working_tree {
             let count = snapshot.status.len();
-            text_at(&painter, rect.left() + 18.0, y, format!("{}  Working tree", icon::PENCIL_SIMPLE), body.clone(), c.accent);
+            if let Some(refs) = layout.get(Column::Refs) {
+                let label = format!("{}  Working tree", icon::PENCIL_SIMPLE);
+                text_at(&painter.with_clip_rect(cell(refs)), refs.min + 18.0, y, label, body.clone(), c.accent);
+            }
             let subject = format!("{count} uncommitted file{}", if count == 1 { "" } else { "s" });
             let clip = egui::Rect::from_min_max(egui::pos2(message_left, rect.top()), egui::pos2(subject_right, rect.bottom()));
             text_at(&painter.with_clip_rect(clip), message_left + 10.0, y, subject, FontId::proportional(13.5), text);
-            if show_meta {
-                painter.text(egui::pos2(rect.right() - 12.0, y), egui::Align2::RIGHT_CENTER, "Not committed yet", small, c.muted);
+            // Beside the message when there is room; it already says the files are uncommitted.
+            let note = painter.layout_no_wrap("Not committed yet".into(), small, c.muted);
+            if let Some(trailing) = layout.trailing().filter(|span| span.span() >= note.size().x + 20.0) {
+                painter.galley(egui::pos2(trailing.max - 12.0 - note.size().x, y - note.size().y / 2.0), note, c.muted);
             }
             if response.clicked() {
                 self.select_working_tree();
@@ -355,9 +345,10 @@ impl NiceGitApp {
         // Branch and tag labels, joined to the node by a line in the lane colour.
         let all_labels = labels(&commit, snapshot);
         let mut draggable: Vec<(egui::Rect, Branch)> = Vec::new();
-        if !all_labels.is_empty() {
-            let mut x = rect.left() + 10.0;
-            let label_limit = rect.left() + LABEL_COLUMN - 8.0;
+        if let (false, Some(refs)) = (all_labels.is_empty(), layout.get(Column::Refs)) {
+            let painter = painter.with_clip_rect(cell(refs));
+            let mut x = refs.min + 10.0;
+            let label_limit = refs.max - 8.0;
             let shown = all_labels.len().min(2);
             let mut last_right = x;
             for (i, label) in all_labels.iter().take(shown).enumerate() {
@@ -404,8 +395,10 @@ impl NiceGitApp {
                     break;
                 }
             }
-            let node_x = graph_view::lane_x(graph_rect, if draw_graph { row.lane } else { 0 }) - graph_view::NODE_RADIUS - 2.0;
-            if node_x > last_right + 2.0 {
+            // The line runs on into the graph to the commit's node.
+            let node_x = graph_rect
+                .map(|graph_rect| graph_view::lane_x(graph_rect, if draw_graph { row.lane } else { 0 }) - graph_view::NODE_RADIUS - 2.0);
+            if let Some(node_x) = node_x.filter(|&x| x > last_right + 2.0) {
                 painter.line_segment(
                     [egui::pos2(last_right + 2.0, y), egui::pos2(node_x, y)],
                     egui::Stroke::new(1.5, lane_color.gamma_multiply(0.8)),
@@ -422,10 +415,17 @@ impl NiceGitApp {
         if is_head && drawn.right() + 90.0 < subject_right {
             text_at(&painter, drawn.right() + 10.0, y, "You are here", FontId::proportional(11.0), c.accent);
         }
-        let meta = if show_meta { format!("{} · {}", commit.author_name, commit.relative_date) } else { String::new() };
-        let meta_rect = egui::Rect::from_min_max(egui::pos2(subject_right, rect.top()), egui::pos2(rect.right() - 78.0, rect.bottom()));
-        painter.with_clip_rect(meta_rect).text(egui::pos2(meta_rect.right() - 6.0, y), egui::Align2::RIGHT_CENTER, meta, small, c.muted);
-        painter.text(egui::pos2(rect.right() - 12.0, y), egui::Align2::RIGHT_CENTER, &commit.short_hash, mono, c.muted);
+        for (column, text, font) in [
+            (Column::Author, commit.author_name.as_str(), small.clone()),
+            (Column::Date, commit.relative_date.as_str(), small.clone()),
+            (Column::Id, commit.short_hash.as_str(), mono.clone()),
+        ] {
+            if let Some(span) = layout.get(column) {
+                let painter = painter.with_clip_rect(cell(span));
+                let text = truncate_to(&painter, text, span.span() - 16.0, font.clone());
+                painter.text(egui::pos2(span.min + 8.0, y), egui::Align2::LEFT_CENTER, text, font, c.muted);
+            }
+        }
 
         // Drag a branch label onto the current commit to merge it in or rebase onto it.
         for (index, (pill, branch)) in draggable.into_iter().enumerate() {
