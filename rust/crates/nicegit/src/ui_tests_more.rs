@@ -1165,3 +1165,187 @@ fn drag_a_graph_label_onto_the_current_row_to_rebase_onto_it() {
     });
     assert_eq!(git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count(), 2, "history stays linear");
 }
+
+/// Moves the pointer down the diff until a run of changed lines shows `button`, as a person
+/// hovering the change would.
+fn hover_change_until(harness: &mut App, button: &str) {
+    let field = harness.get_by_label("Find in diff").rect();
+    for step in 0..120 {
+        harness.hover_at(egui::pos2(field.center().x + 120.0, field.bottom() + 8.0 + step as f32 * 5.0));
+        harness.run_steps(2);
+        if harness.query_by_label(button).is_some() {
+            return;
+        }
+    }
+    panic!("no change showed {button}");
+}
+
+#[test]
+fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_undone() {
+    let repo = repository();
+    let path = repo.path();
+    let original: String = (1..=30).map(|n| format!("line {n}\n")).collect();
+    commit_file(path, "long.txt", original.as_bytes(), "Add a long file");
+    let edited = original.replace("line 3\n", "three\n").replace("line 28\n", "twenty-eight\n");
+    std::fs::write(path.join("long.txt"), &edited).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("long.txt").click();
+    wait(&mut harness, "lines to be stageable", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+
+    // Stage the first change alone.
+    hover_change_until(&mut harness, "Stage this change");
+    harness.get_by_label("Stage this change").click();
+    idle(&mut harness);
+    // The test helper trims Git's output, so the staged text is compared without its last newline.
+    let staged = original.replace("line 3\n", "three\n");
+    wait(&mut harness, "the first change staged", |_| git(path, &["show", ":long.txt"]) == staged.trim_end());
+    assert_eq!(std::fs::read_to_string(path.join("long.txt")).unwrap(), edited, "staging leaves the file as it was");
+
+    // Discard the other change after confirming, then undo the discard.
+    wait(&mut harness, "lines to be stageable", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+    hover_change_until(&mut harness, "Discard this change");
+    harness.get_by_label("Discard this change").click();
+    wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Discard").last().expect("the confirm button").click();
+    idle(&mut harness);
+    let discarded = original.replace("line 3\n", "three\n");
+    wait(&mut harness, "the change discarded", |_| std::fs::read_to_string(path.join("long.txt")).unwrap() == discarded);
+    wait(&mut harness, "Undo discard", |h| h.query_by_label_contains("Undo discard").is_some());
+    harness.get_by_label_contains("Undo discard").click();
+    idle(&mut harness);
+    wait(&mut harness, "the change restored", |_| std::fs::read_to_string(path.join("long.txt")).unwrap() == edited);
+}
+
+#[test]
+fn the_open_diff_steps_through_the_other_changed_files() {
+    let repo = repository();
+    let path = repo.path();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        std::fs::write(path.join(name), format!("{name}\n")).unwrap();
+    }
+    git(path, &["add", "c.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let open_file = |h: &App| match &h.state().repo().unwrap().selection {
+        crate::app::Selection::Change { entry, staged } => Some((entry.path.clone(), *staged)),
+        _ => None,
+    };
+    harness.get_by_label("a.txt").click();
+    wait(&mut harness, "a.txt", |h| open_file(h) == Some(("a.txt".into(), false)));
+    // Unstaged files come first, in the Changes panel's order, then staged ones.
+    let unstaged: Vec<String> = {
+        let mut names: Vec<String> =
+            harness.state().snapshot().unwrap().status.iter().filter(|e| e.is_unstaged()).map(|e| e.path.clone()).collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        names
+    };
+    let count = unstaged.len() + 1;
+    let first = unstaged.iter().position(|n| n == "a.txt").unwrap();
+    assert!(harness.query_by_label(&format!("{} of {count}", first + 1)).is_some());
+
+    harness.get_by_label_contains("Next file").click();
+    wait(&mut harness, "the next file", |h| open_file(h) == Some((unstaged[first + 1].clone(), false)));
+    // Option (Alt) with Down goes on to the last unstaged file, then to the staged one.
+    for expected in unstaged.iter().skip(first + 2).map(|n| (n.clone(), false)).chain([("c.txt".to_string(), true)]) {
+        harness.key_press_modifiers(Modifiers::ALT, Key::ArrowDown);
+        wait(&mut harness, "the next file", |h| open_file(h) == Some(expected.clone()));
+    }
+    assert!(harness.get_by_label_contains("Next file").accesskit_node().is_disabled(), "the last file has no next");
+    harness.key_press_modifiers(Modifiers::ALT, Key::ArrowUp);
+    wait(&mut harness, "the previous file", |h| open_file(h) == Some((unstaged.last().unwrap().clone(), false)));
+}
+
+/// Turns background fetching on and makes it due now.
+fn fetch_in_the_background_now(harness: &mut App) {
+    let app = harness.state_mut();
+    app.settings.auto_fetch_minutes = 5;
+    let active = app.active;
+    app.repos[active].next_fetch = std::time::Instant::now();
+}
+
+#[test]
+fn the_repository_is_fetched_in_the_background_and_the_counts_update_quietly() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"from the other clone\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert_eq!(harness.state().snapshot().unwrap().behind, Some(0), "not fetched yet");
+    harness.state_mut().notify("A message the person is reading", false);
+
+    fetch_in_the_background_now(&mut harness);
+    wait(&mut harness, "the background fetch", |h| h.state().snapshot().is_some_and(|s| s.behind == Some(1)) && h.state().busy.is_none());
+    let state = harness.state();
+    assert!(state.repo().unwrap().last_fetched.is_some());
+    assert_eq!(
+        state.notice.as_ref().map(|n| n.text.as_str()),
+        Some("A message the person is reading"),
+        "a quiet fetch leaves messages alone"
+    );
+    assert!(state.repo().unwrap().next_fetch > std::time::Instant::now() + std::time::Duration::from_secs(240), "the next is minutes away");
+    harness.state_mut().notice = None;
+    settle(&mut harness);
+    assert!(harness.query_by_label("Fetched just now").is_some());
+}
+
+#[test]
+fn a_failed_background_fetch_shows_quietly_in_the_status_bar() {
+    let repo = repository();
+    let path = repo.path();
+    let missing = temp_dir();
+    git(path, &["remote", "add", "origin", &missing.path().join("gone.git").to_string_lossy()]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    fetch_in_the_background_now(&mut harness);
+    wait(&mut harness, "the background fetch to fail", |h| {
+        h.state().repo().is_some_and(|r| r.fetch_problem.is_some()) && h.state().busy.is_none()
+    });
+    assert!(harness.state().notice.is_none(), "no error message pops up");
+    settle(&mut harness);
+    assert!(harness.query_by_label_contains("Couldn't fetch").is_some());
+
+    // Turned off, it does not run again.
+    let app = harness.state_mut();
+    app.settings.auto_fetch_minutes = 0;
+    let active = app.active;
+    app.repos[active].next_fetch = std::time::Instant::now();
+    app.repos[active].fetch_problem = None;
+    harness.run_steps(5);
+    assert!(harness.state().busy.is_none() && harness.state().repo().unwrap().fetch_problem.is_none());
+}
+
+#[test]
+fn the_keyboard_shortcuts_open_from_the_keyboard_the_palette_and_settings() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let shown = |h: &App| h.query_by_label_contains("previous or next changed file").is_some();
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Slash);
+    wait(&mut harness, "the shortcuts from the keyboard", shown);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Slash);
+    wait(&mut harness, "the shortcuts to close", |h| !shown(h));
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("keyboard shortcuts".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    wait(&mut harness, "the shortcuts from the palette", shown);
+    harness.state_mut().show_shortcuts = false;
+    settle(&mut harness);
+
+    harness.state_mut().show_settings = true;
+    wait(&mut harness, "settings", |h| h.query_by_label("Keyboard shortcuts").is_some());
+    harness.get_by_label("Keyboard shortcuts").click();
+    wait(&mut harness, "the shortcuts from settings", shown);
+}

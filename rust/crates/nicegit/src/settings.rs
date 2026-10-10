@@ -67,6 +67,9 @@ pub struct Settings {
     pub split_diff: bool,
     pub ignore_whitespace: bool,
     pub auto_refresh: bool,
+    /// How often the open repository is fetched from its remotes in the background, in
+    /// minutes; 0 turns it off.
+    pub auto_fetch_minutes: u32,
     pub file_view: FileView,
     pub show_repositories: bool,
     /// Whether the toolbar's Fetch and Pull button fetches or pulls.
@@ -90,6 +93,7 @@ impl Default for Settings {
             split_diff: false,
             ignore_whitespace: false,
             auto_refresh: true,
+            auto_fetch_minutes: 15,
             file_view: FileView::Path,
             show_repositories: true,
             sync_action: SyncAction::Fetch,

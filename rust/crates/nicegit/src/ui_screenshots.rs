@@ -67,6 +67,18 @@ fn screenshots() {
         wait(&mut harness, "the diff", |h| h.state().repo().is_some_and(|r| r.diff.is_some() && !r.diff_loading));
         save(&mut harness, &folder, &format!("diff-unified-{theme}"));
 
+        // A change's own buttons, shown while the pointer is over it.
+        wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+        let field = harness.get_by_label("Find in diff").rect();
+        for step in 0..120 {
+            harness.hover_at(egui::pos2(field.center().x + 120.0, field.bottom() + 8.0 + step as f32 * 5.0));
+            harness.run_steps(2);
+            if harness.query_by_label("Stage this change").is_some() {
+                break;
+            }
+        }
+        save(&mut harness, &folder, &format!("diff-change-buttons-{theme}"));
+
         // The built-in editor on the same file.
         let edit = format!("{}  Edit", icon::PENCIL_SIMPLE);
         if harness.query_by_label(&edit).is_some() {
@@ -80,6 +92,11 @@ fn screenshots() {
         harness.state_mut().show_settings = true;
         save(&mut harness, &folder, &format!("settings-{theme}"));
         harness.state_mut().show_settings = false;
+
+        // The keyboard shortcuts.
+        harness.state_mut().show_shortcuts = true;
+        save(&mut harness, &folder, &format!("shortcuts-{theme}"));
+        harness.state_mut().show_shortcuts = false;
 
         // Side by side needs a diff panel at least 560 points wide, which a 1440-point window
         // with both sidebars open does not leave; a wider window shows it in effect.

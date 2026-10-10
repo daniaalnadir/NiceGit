@@ -12,21 +12,69 @@ use crate::tools::widgets;
 pub enum Pending {
     Discard(StatusEntry),
     DiscardAll(Vec<StatusEntry>),
-    DeleteBranch { branch: Branch, force: bool },
-    DeleteTag { name: String, tip: String },
+    /// Discarding some of a file's unstaged lines, as indices into the review's lines.
+    DiscardLines {
+        lines: std::collections::BTreeSet<usize>,
+        review: nicegit_core::staging::FileReview,
+    },
+    DeleteBranch {
+        branch: Branch,
+        force: bool,
+    },
+    DeleteTag {
+        name: String,
+        tip: String,
+    },
     DropStash(Stash),
-    Merge { source: Branch, branch: String, head: Option<String> },
-    Rebase { onto: Branch, branch: String, head: Option<String> },
-    CherryPick { commits: Vec<String>, branch: String, head: Option<String> },
-    Revert { commit: String, branch: String, head: Option<String> },
+    Merge {
+        source: Branch,
+        branch: String,
+        head: Option<String>,
+    },
+    Rebase {
+        onto: Branch,
+        branch: String,
+        head: Option<String>,
+    },
+    CherryPick {
+        commits: Vec<String>,
+        branch: String,
+        head: Option<String>,
+    },
+    Revert {
+        commit: String,
+        branch: String,
+        head: Option<String>,
+    },
     Abort(Operation),
-    UndoCommit { branch: String, head: String },
-    PushBranch { branch: Branch, remote: String, addresses: std::collections::BTreeMap<String, Vec<String>> },
-    ApplyPatch { file: std::path::PathBuf, branch: String, head: Option<String> },
+    UndoCommit {
+        branch: String,
+        head: String,
+    },
+    PushBranch {
+        branch: Branch,
+        remote: String,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
+    ApplyPatch {
+        file: std::path::PathBuf,
+        branch: String,
+        head: Option<String>,
+    },
     Undo,
     Redo,
-    RestoreFile { path: String, source: String, branch: String, head: Option<String> },
-    DeleteRemoteTag { tag: String, tip: String, remote: String, addresses: std::collections::BTreeMap<String, Vec<String>> },
+    RestoreFile {
+        path: String,
+        source: String,
+        branch: String,
+        head: Option<String>,
+    },
+    DeleteRemoteTag {
+        tag: String,
+        tip: String,
+        remote: String,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
     PopStash(Stash),
 }
 
@@ -367,6 +415,15 @@ impl NiceGitApp {
                 self.act_with_record("Discard", move |client, path| {
                     let undo = client.discard_keeping_undo(&entry, path)?;
                     Ok((Some(format!("Discarded changes to {name}.")), undo.map(crate::app::Recorded::Discard)))
+                })
+            }
+            Pending::DiscardLines { lines, review } => {
+                let name = review.path.clone();
+                let count = lines.len();
+                self.act_with_record("Discard lines", move |client, path| {
+                    let undo = client.discard_lines_keeping_undo(&lines, &review, path)?;
+                    let message = format!("Discarded {count} changed line{} in {name}.", if count == 1 { "" } else { "s" });
+                    Ok((Some(message), undo.map(crate::app::Recorded::Discard)))
                 })
             }
             Pending::DiscardAll(entries) => self.act("Discard", move |client, path| {
