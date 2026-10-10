@@ -305,15 +305,54 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         ui.horizontal(|ui| {
             if let Some(notice) = &self.notice {
+                let action = notice.action;
+                let detail = notice.detail.clone();
                 let color = if notice.is_error { c.danger } else { c.accent };
                 let glyph = if notice.is_error { icon::WARNING_CIRCLE } else { icon::CHECK_CIRCLE };
                 ui.label(RichText::new(glyph).color(color));
-                ui.add(
-                    egui::Label::new(RichText::new(&notice.text).color(if notice.is_error { c.danger } else { ui.visuals().text_color() }))
-                        .truncate(),
-                );
-                if ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked() {
+                let text = RichText::new(notice.text.clone()).color(if notice.is_error { c.danger } else { ui.visuals().text_color() });
+                // The buttons are laid out from the right first, so a long message is shortened
+                // rather than pushing them out of view; the whole message is in its tooltip.
+                let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
+                    if action == Some(crate::app::NoticeAction::Stash) {
+                        stash = ui.add_enabled(self.idle(), egui::Button::new("Stash changes…")).clicked();
+                    }
+                    if action == Some(crate::app::NoticeAction::SetIdentity) {
+                        identity = ui.button("Set your identity…").clicked();
+                    }
+                    if action == Some(crate::app::NoticeAction::Integrate) {
+                        pull = ui
+                            .add_enabled(self.idle(), egui::Button::new("Merge or rebase…"))
+                            .on_hover_text("Fetch, then choose whether to merge the remote's commits or rebase onto them")
+                            .clicked();
+                    }
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        // The full message, and Git's own words when the message explains them.
+                        let full = match &detail {
+                            Some(detail) => format!("{}\n\nGit said:\n{detail}", text.text()),
+                            None => text.text().to_string(),
+                        };
+                        ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
+                    });
+                });
+                if dismiss || pull || identity || stash {
                     self.notice = None;
+                }
+                if stash {
+                    self.dialog = Some(crate::ui::dialogs::Dialog::input(
+                        "Stash changes",
+                        "Message (optional)",
+                        "",
+                        crate::ui::dialogs::InputKind::SaveStash,
+                    ));
+                }
+                if identity {
+                    self.open_tool(Box::new(crate::tools::repository_settings::RepositorySettingsWindow::new()));
+                }
+                if pull {
+                    self.integrate_upstream();
                 }
                 return;
             }
@@ -331,8 +370,9 @@ impl NiceGitApp {
                 // When the remotes were last fetched, or why the background fetch failed.
                 if let Some(repo) = self.repo().filter(|_| !snapshot.remotes.is_empty()) {
                     if let Some(problem) = &repo.fetch_problem {
+                        let plain = crate::app::remote_problem(problem).map(|plain| format!("{plain}\n\n")).unwrap_or_default();
                         ui.label(RichText::new(format!("{}  Couldn't fetch", icon::CLOUD_SLASH)).small().color(c.warning))
-                            .on_hover_text(format!("The last automatic fetch failed:\n{problem}"));
+                            .on_hover_text(format!("The last automatic fetch failed. {plain}Git said:\n{problem}"));
                     } else if let Some(when) = repo.last_fetched {
                         ui.label(RichText::new(fetched_ago(when.elapsed())).small().color(c.muted))
                             .on_hover_text("Remotes are fetched automatically; change how often in Settings.");
@@ -652,6 +692,10 @@ impl NiceGitApp {
                 let button = ui.add_enabled(self.idle(), egui::Button::new(format!("{glyph}  {label}")));
                 if button.on_hover_text("Shift-Ctrl/Cmd-S").clicked() {
                     self.toggle_stage_open_file();
+                }
+                // Discarding asks first, as from the Changes panel, and can be undone there.
+                if !staged && widgets::icon_button(ui, icon::TRASH, "Discard this file's changes…", self.idle()).clicked() {
+                    self.confirm_discard(entry.clone());
                 }
             }
         }

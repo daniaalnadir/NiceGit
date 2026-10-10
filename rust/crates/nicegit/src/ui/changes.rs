@@ -247,15 +247,12 @@ impl NiceGitApp {
         let mut stage_clicked = false;
         let mut discard_clicked = false;
         let mut resolve_clicked = false;
-        let count = self.repos[self.active]
-            .line_counts
-            .as_mut()
-            .and_then(|task| task.get())
-            .and_then(|counts| counts.as_ref())
-            .and_then(|counts| if staged { counts.staged.get(&entry.path) } else { counts.unstaged.get(&entry.path) })
-            .copied();
+        let counts = self.repos[self.active].line_counts.as_mut().and_then(|task| task.get()).and_then(|counts| counts.as_ref());
+        let count =
+            counts.and_then(|counts| if staged { counts.staged.get(&entry.path) } else { counts.unstaged.get(&entry.path) }).copied();
+        let large = counts.and_then(|counts| counts.large.get(&entry.path)).copied();
         let buttons = if staged { 1.0 } else { 2.0 };
-        let counts_width = if count.is_some() { 64.0 } else { 0.0 };
+        let counts_width = if count.is_some() { 64.0 } else { 0.0 } + if large.is_some() { 64.0 } else { 0.0 };
         let label_width = (child.available_width() - buttons * 30.0 - counts_width).max(40.0);
         child.allocate_ui_with_layout(egui::vec2(label_width, height), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add(egui::Label::new(RichText::new(text).color(ui.visuals().text_color())).truncate().selectable(false))
@@ -275,6 +272,13 @@ impl NiceGitApp {
             }
             if let Some(count) = count {
                 line_count(ui, count);
+            }
+            // A file this large is easy to commit by mistake and hard to remove from history.
+            if let Some(bytes) = large {
+                let c = theme::of(ui);
+                ui.label(RichText::new(format!("{} {}", icon::WARNING, megabytes(bytes))).small().color(c.warning)).on_hover_text(
+                    "A large file. GitHub warns about files over 50 MB and refuses files over 100 MB; consider Git LFS or ignoring it.",
+                );
             }
         });
         if resolve_clicked {
@@ -297,7 +301,7 @@ impl NiceGitApp {
         response.context_menu(|ui| self.change_menu(ui, entry, staged, idle, snapshot));
     }
 
-    fn confirm_discard(&mut self, entry: StatusEntry) {
+    pub(crate) fn confirm_discard(&mut self, entry: StatusEntry) {
         // Renames, conflicts, folders, and submodules are discarded without a saved copy.
         let undoable = entry.original_path.is_none()
             && !matches!(entry.kind, StatusKind::Conflicted | StatusKind::Renamed)
@@ -414,6 +418,28 @@ impl NiceGitApp {
             ui.label(RichText::new("Commit").size(15.0).strong());
         });
         ui.add_space(6.0);
+        // A commit made away from any branch is easily lost; outside a rebase or similar, where
+        // that is expected, offer a branch first.
+        if !snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none() {
+            widgets::callout(
+                ui,
+                "You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.",
+                true,
+            );
+            ui.add_space(4.0);
+            if ui.add_enabled(self.idle(), egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+                self.dialog = Some(crate::ui::dialogs::Dialog::input(
+                    "New branch",
+                    "Create a branch at HEAD and switch to it",
+                    "",
+                    crate::ui::dialogs::InputKind::CreateBranch {
+                        branch: snapshot.current_branch.clone(),
+                        head: snapshot.head_hash.clone(),
+                    },
+                ));
+            }
+            ui.add_space(6.0);
+        }
         let can_amend = snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none();
         let head_published = self.head_published();
         let repo = &mut self.repos[self.active];
@@ -581,6 +607,11 @@ impl NiceGitApp {
         shifted.head_hash = Some(tip.to_string());
         Self::branch_is_merged(&fake, &shifted)
     }
+}
+
+/// A size in whole megabytes, as file sizes are usually given.
+fn megabytes(bytes: u64) -> String {
+    format!("{} MB", bytes / 1_000_000)
 }
 
 /// The number of changed files above which the Changes panel offers a filter.

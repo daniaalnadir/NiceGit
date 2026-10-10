@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.5.0 - Fewer surprises
+
+- A changed file of 50 MB or more shows its size with a warning in the Changes panel, before
+  it is committed by mistake; GitHub refuses files over 100 MB.
+- Discard the open file's changes from the diff's header, after confirming; the discard can
+  be undone from the Changes panel.
+- When a push is refused because the remote has newer commits, the message says so plainly
+  and offers Merge or rebase…, which fetches and opens the usual choice with its preview.
+- A commit Git refuses because it does not know your name and email is explained, with Set
+  your identity… to open Repository Settings.
+- A commit that fails gives its message back to the commit box; before, it was lost.
+- A remote that cannot be reached, refuses your sign-in or SSH key, or cannot be found is
+  explained in plain words, with Git's own message in the tooltip; the Couldn't fetch note
+  explains it too.
+- Away from any branch, as after checking out a tag, the commit box warns that a commit there
+  could be lost and offers Create branch here….
+- A pull, merge, or other change stopped because it would overwrite uncommitted changes is
+  explained, with Stash changes… to set them aside first.
+- Stashing from the toolbar works without a message, as its dialog says; OK used to stay
+  disabled until one was typed.
+- A merge, rebase, cherry-pick, or revert that stops at conflicts says so and what to do next,
+  instead of reporting that Git exited with status 1.
+- A branch or tag name Git refuses or that is already taken, a clone into a folder that is not
+  empty, and a tag the remote would not replace are explained in plain words.
+- New branch, rename, and tag dialogs check the name as it is typed, say what Git would not
+  accept, and keep OK disabled until the name is valid.
+
 ## 1.4.0 - Sizes everywhere
 
 - A commit's files in the inspector show how many lines each adds and removes, as changed

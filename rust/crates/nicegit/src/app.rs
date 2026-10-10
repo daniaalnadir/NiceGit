@@ -23,6 +23,87 @@ const WATCH_DEBOUNCE: Duration = Duration::from_millis(400);
 pub struct Notice {
     pub text: String,
     pub is_error: bool,
+    /// An action the message offers as a button, such as pulling after a rejected push.
+    pub action: Option<NoticeAction>,
+    /// Git's own words, when the message explains them more plainly; shown in its tooltip.
+    pub detail: Option<String>,
+}
+
+/// A plainer explanation of an everyday mistake Git reports in its own terms: a name it will not
+/// accept or that is taken, or a folder that is not empty. `None` for any other error.
+pub fn naming_problem(error: &str) -> Option<&'static str> {
+    let lower = error.to_lowercase();
+    if lower.contains("is not a valid branch name") || lower.contains("is not a valid tag name") || lower.contains("not a valid ref name") {
+        Some("That name cannot be used. Names cannot contain spaces, \"..\", \"~\", \"^\", \":\", \"?\", \"*\", or \"[\", or end with \".lock\" or \"/\".")
+    } else if lower.contains("a branch named") && lower.contains("already exists") {
+        Some("A branch with that name already exists. Choose another name, or check out the existing branch.")
+    } else if lower.contains("tag") && lower.contains("already exists") {
+        Some("A tag with that name already exists. Choose another name, or delete the old tag first.")
+    } else if lower.contains("already exists and is not an empty directory") {
+        Some("That folder already has files in it. Choose a new or empty folder.")
+    } else if lower.contains("would clobber existing tag") {
+        Some("A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.")
+    } else {
+        None
+    }
+}
+
+/// A plainer explanation of a remote failing to answer or refusing a sign-in, from Git's own
+/// words; `None` for any other error.
+pub fn remote_problem(error: &str) -> Option<&'static str> {
+    let lower = error.to_lowercase();
+    let any = |signs: &[&str]| signs.iter().any(|sign| lower.contains(sign));
+    if any(&["permission denied (publickey", "host key verification failed"]) {
+        Some("The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.")
+    } else if any(&[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "invalid username or password",
+        "returned error: 403",
+    ]) {
+        Some("The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.")
+    } else if any(&[
+        "could not resolve host",
+        "connection timed out",
+        "failed to connect",
+        "network is unreachable",
+        "connection refused",
+        "operation timed out",
+    ]) {
+        Some("The remote could not be reached. Check your internet connection, and that the remote's address is right.")
+    } else if any(&["repository not found", "does not appear to be a git repository"]) {
+        Some("The remote repository was not found, or your account cannot see it. Check its address and your access.")
+    } else {
+        None
+    }
+}
+
+/// What a message's button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeAction {
+    /// Fetch, then offer to merge the upstream's commits or rebase onto them.
+    Integrate,
+    /// Open Repository Settings, where the commit identity is set.
+    SetIdentity,
+    /// Open the stash dialog, to set uncommitted changes aside.
+    Stash,
+}
+
+/// Whether Git stopped because uncommitted changes would be overwritten.
+pub fn blocked_by_local_changes(error: &str) -> bool {
+    error.contains("would be overwritten by") || error.contains("Please commit your changes or stash them")
+}
+
+/// Whether Git refused to commit because it does not know who is committing.
+pub fn needs_identity(error: &str) -> bool {
+    ["Please tell me who you are", "empty ident name", "unable to auto-detect email address"].iter().any(|sign| error.contains(sign))
+}
+
+/// Whether a push failed because the remote has commits the branch does not, so pulling them
+/// first would let it through.
+pub fn push_needs_pull(error: &str) -> bool {
+    ["non-fast-forward", "fetch first", "tip of your current branch is behind"].iter().any(|sign| error.contains(sign))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -115,6 +196,8 @@ pub struct Repo {
     pub line_map: Option<Option<std::sync::Arc<Vec<Option<usize>>>>>,
     pub diff_options: crate::diff_view::DiffOptions,
     pub draft: Draft,
+    /// The message of a commit being made, put back in the commit box if the commit fails.
+    pub sent_draft: Option<Draft>,
     pub draft_key: Option<String>,
     pub amend: bool,
     pub commit_filter: String,
@@ -173,6 +256,7 @@ impl Repo {
             line_map: None,
             diff_options: crate::diff_view::DiffOptions::default(),
             draft: Draft::default(),
+            sent_draft: None,
             draft_key: None,
             amend: false,
             commit_filter: String::new(),
@@ -229,6 +313,8 @@ pub struct NiceGitApp {
     pub palette: Option<crate::ui::palette::PaletteState>,
     pub show_settings: bool,
     pub show_shortcuts: bool,
+    /// Whether the fetch running now should end by offering to merge or rebase onto the upstream.
+    pub integrate_after_fetch: bool,
     /// Whether the saved interface size has been applied since launch.
     pub(crate) zoom_applied: bool,
     pub git_missing: bool,
@@ -273,6 +359,7 @@ impl NiceGitApp {
             palette: None,
             show_settings: false,
             show_shortcuts: false,
+            integrate_after_fetch: false,
             zoom_applied: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
             generation: 0,
@@ -566,7 +653,7 @@ impl NiceGitApp {
     }
 
     pub fn notify(&mut self, text: impl Into<String>, is_error: bool) {
-        self.notice = Some(Notice { text: text.into(), is_error });
+        self.notice = Some(Notice { text: text.into(), is_error, action: None, detail: None });
     }
 
     fn receive(&mut self) {
@@ -598,19 +685,109 @@ impl NiceGitApp {
                             }
                         }
                     }
+                    let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
+                    let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
+                    // A commit that failed gives its message back; one that was made keeps it cleared.
+                    if let Some((label, result)) = &action {
+                        if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") {
+                            let repo = &mut self.repos[index];
+                            let sent = repo.sent_draft.take();
+                            let committed = match result {
+                                Ok(_) => true,
+                                Err(error) => label == "Commit and push" && error.to_string().contains("The commit was made"),
+                            };
+                            if let (false, Some(sent)) = (committed, sent) {
+                                if repo.draft.is_empty() {
+                                    repo.draft = sent;
+                                }
+                            }
+                        }
+                    }
+                    // Git's own error, when an action failed in a way the refresh may explain better.
+                    let mut stopped_with: Option<String> = None;
                     if let Some((label, result)) = action {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
                             Ok(None) => {}
+                            Err(error) if matches!(label.as_str(), "Push" | "Commit and push") && push_needs_pull(&error.to_string()) => {
+                                action_failed = true;
+                                let committed = if label == "Commit and push" { "Your commit was made, but the " } else { "The " };
+                                self.notice = Some(Notice {
+                                    text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
+                                    is_error: true,
+                                    action: Some(NoticeAction::Integrate),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if blocked_by_local_changes(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: format!("{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again."),
+                                    is_error: true,
+                                    action: Some(NoticeAction::Stash),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if needs_identity(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: "Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.".into(),
+                                    is_error: true,
+                                    action: Some(NoticeAction::SetIdentity),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if remote_problem(&error.to_string()).or(naming_problem(&error.to_string())).is_some() => {
+                                action_failed = true;
+                                let plain = remote_problem(&error.to_string()).or(naming_problem(&error.to_string())).unwrap_or_default();
+                                self.notice = Some(Notice {
+                                    text: format!("{label} failed. {plain}"),
+                                    is_error: true,
+                                    action: None,
+                                    detail: Some(error.to_string()),
+                                });
+                            }
                             Err(error) => {
                                 action_failed = true;
                                 self.notify(format!("{label} failed: {error}"), true);
+                                stopped_with = Some(error.to_string());
                             }
                         }
                     }
+                    // Only the fetch started for a refused push offers the choice; a failed one ends it.
+                    let offer_integration = fetched && std::mem::take(&mut self.integrate_after_fetch);
+                    if fetch_failed {
+                        self.integrate_after_fetch = false;
+                    }
                     match *snapshot {
-                        Ok(snapshot) => self.apply(index, snapshot),
+                        Ok(snapshot) => {
+                            // An action that stopped at conflicts left an operation to finish: that
+                            // is a pause for the person, not a failure, so it is described as one.
+                            if let (Some(detail), Some(operation)) = (stopped_with.take(), snapshot.operation) {
+                                let conflicts = snapshot.status.iter().filter(|e| e.kind == nicegit_core::StatusKind::Conflicted).count();
+                                if conflicts > 0 {
+                                    let plural = if conflicts == 1 { "" } else { "s" };
+                                    self.notice = Some(Notice {
+                                        text: format!(
+                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.",
+                                            operation.name()
+                                        ),
+                                        is_error: true,
+                                        action: None,
+                                        detail: Some(detail),
+                                    });
+                                }
+                            }
+                            self.apply(index, snapshot);
+                            // After fetching for a refused push, the upstream's commits are offered
+                            // through the usual merge or rebase choice, with its preview.
+                            if offer_integration && !action_failed && index == self.active {
+                                if let Some(upstream) = self.upstream_branch() {
+                                    self.dialog = Some(crate::ui::dialogs::Dialog::Integrate { source: upstream });
+                                }
+                            }
+                        }
                         Err(error) => {
                             if self.repos[index].snapshot.is_none() {
                                 self.repos[index].error = Some(error.to_string());
@@ -741,6 +918,7 @@ impl NiceGitApp {
             .filter(|e| e.kind == nicegit_core::StatusKind::Untracked)
             .map(|e| e.path.clone())
             .collect();
+        let changed: Vec<String> = self.repos[index].snapshot.iter().flat_map(|s| &s.status).map(|e| e.path.clone()).collect();
         let counts_path = path.clone();
         let tracking_path = path.clone();
         let previous_tracking = self.repos[index].branch_tracking.take().and_then(|mut task| task.get().cloned().flatten());
@@ -749,8 +927,9 @@ impl NiceGitApp {
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
         // The previous counts stay until the new ones arrive, so the numbers do not flicker.
         let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
-        self.repos[index].line_counts =
-            Some(Task::spawn_with(&context, previous.map(Some), move || GitClient::new().line_counts(&untracked, &counts_path).ok()));
+        self.repos[index].line_counts = Some(Task::spawn_with(&context, previous.map(Some), move || {
+            GitClient::new().line_counts(&untracked, &changed, &counts_path).ok()
+        }));
         if index != self.active {
             return;
         }
@@ -866,6 +1045,23 @@ impl NiceGitApp {
             Selection::Commit { hash, file } => self.select_commit_file(hash, file),
             _ => {}
         }
+    }
+
+    /// Fetches, then offers to merge the current branch's upstream or rebase onto it.
+    pub fn integrate_upstream(&mut self) {
+        if self.busy.is_some() {
+            return;
+        }
+        self.fetch();
+        self.integrate_after_fetch = self.busy.is_some();
+    }
+
+    /// The current branch's upstream, as a remote branch from the latest refresh.
+    fn upstream_branch(&self) -> Option<Branch> {
+        let snapshot = self.snapshot()?;
+        let current = snapshot.branches.iter().find(|b| b.is_current && !b.is_remote)?;
+        let upstream = current.upstream.as_deref()?;
+        snapshot.branches.iter().find(|b| b.is_remote && format!("refs/{}", b.name) == upstream).cloned()
     }
 
     /// Stages the open file, or unstages it when its staged side is open. A conflicted file is
@@ -1038,7 +1234,7 @@ impl NiceGitApp {
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
                 repo.amend = false;
             }
             self.save_draft();
@@ -1070,7 +1266,7 @@ impl NiceGitApp {
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
             }
             self.save_draft();
         }
@@ -1088,7 +1284,7 @@ impl NiceGitApp {
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
             }
             self.save_draft();
         }
@@ -1452,6 +1648,39 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+#[cfg(test)]
+mod naming_problem_tests {
+    use super::naming_problem;
+
+    #[test]
+    fn everyday_naming_mistakes_read_plainly() {
+        let says = |error: &str, words: &str| naming_problem(error).is_some_and(|plain| plain.contains(words));
+        assert!(says("fatal: 'my branch' is not a valid branch name", "cannot be used"));
+        assert!(says("fatal: a branch named 'topic' already exists", "branch with that name"));
+        assert!(says("fatal: tag 'v1.0' already exists", "tag with that name"));
+        assert!(says("fatal: destination path 'app' already exists and is not an empty directory.", "already has files"));
+        assert!(says(" ! [rejected]        v1.0       -> v1.0  (would clobber existing tag)", "would not replace"));
+        assert_eq!(naming_problem("fatal: not a git repository"), None);
+    }
+}
+
+#[cfg(test)]
+mod remote_problem_tests {
+    use super::remote_problem;
+
+    #[test]
+    fn common_remote_failures_read_plainly_and_others_are_left_alone() {
+        let says = |error: &str, words: &str| remote_problem(error).is_some_and(|plain| plain.contains(words));
+        assert!(says("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.", "SSH key"));
+        assert!(says("fatal: Authentication failed for 'https://github.com/a/b.git/'", "sign-in"));
+        assert!(says("fatal: could not read Username for 'https://github.com': terminal prompts disabled", "sign-in"));
+        assert!(says("fatal: unable to access 'https://x.invalid/': Could not resolve host: x.invalid", "could not be reached"));
+        assert!(says("remote: Repository not found.\nfatal: repository 'https://github.com/a/b.git/' not found", "not found"));
+        assert_eq!(remote_problem("error: failed to push some refs to 'origin'\nhint: Updates were rejected"), None);
+        assert_eq!(remote_problem("fatal: bad object 4038f00d"), None, "a hash containing 403 is not a sign-in failure");
+    }
 }
 
 #[cfg(test)]

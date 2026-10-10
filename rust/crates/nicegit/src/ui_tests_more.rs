@@ -1842,3 +1842,215 @@ fn every_change_can_be_staged_and_committed_at_once() {
     assert_eq!(git(path, &["status", "--porcelain"]), "", "every change went into the commit");
     assert_eq!(git(path, &["show", "--name-only", "--format="]), "new.txt\nnotes.txt");
 }
+
+#[test]
+fn a_large_changed_file_is_pointed_out_and_the_open_file_can_be_discarded() {
+    let repo = repository();
+    let path = repo.path();
+    // A sparse file: large on paper, quick to make.
+    std::fs::File::create(path.join("video.mov")).unwrap().set_len(51_000_000).unwrap();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let tag = format!("{} 51 MB", icon::WARNING);
+    wait(&mut harness, "the size warning", |h| h.query_by_label(&tag).is_some());
+
+    // The open file's diff can discard it, after confirming.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label("Discard this file's changes…").is_some());
+    harness.get_by_label("Discard this file's changes…").click();
+    wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Discard").last().expect("the confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the discard", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\n");
+}
+
+#[test]
+fn a_refused_push_explains_why_and_offers_to_merge_or_rebase() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"theirs\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    commit_file(path, "mine.txt", b"mine\n", "Work from here");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The button counts the commits to push, as "Push 1".
+    let push_label = |h: &App| match h.state().snapshot().and_then(|s| s.ahead) {
+        Some(ahead) if ahead > 0 => format!("Push {ahead}"),
+        _ => "Push".to_string(),
+    };
+    let label = push_label(&harness);
+    toolbar_button(&mut harness, &label);
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "the remote has commits this branch does not") && h.query_by_label("Merge or rebase…").is_some()
+    });
+    harness.get_by_label("Merge or rebase…").click();
+    idle(&mut harness);
+    // After fetching, the usual merge or rebase choice opens for the upstream.
+    wait(&mut harness, "the merge or rebase choice", |h| shows(h, "Integrate origin/main"));
+    harness.get_by_label(&format!("{}  Merge…", icon::GIT_MERGE)).click();
+    wait(&mut harness, "the merge confirmation", |h| shows(h, "Merge origin/main into main?"));
+    harness.get_by_role_and_label(Role::Button, "Merge").click();
+    idle(&mut harness);
+    wait(&mut harness, "their commit merged in", |_| path.join("theirs.txt").exists());
+
+    let label = push_label(&harness);
+    toolbar_button(&mut harness, &label);
+    idle(&mut harness);
+    wait(&mut harness, "the push", |_| git(remote.path(), &["rev-parse", "main"]) == git(path, &["rev-parse", "HEAD"]));
+}
+
+#[test]
+fn a_commit_without_an_identity_explains_and_opens_its_settings() {
+    let repo = repository();
+    let path = repo.path();
+    // An empty name in the repository's own config, as Git refuses for someone not yet set up.
+    git(path, &["config", "user.name", ""]);
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    type_into(&mut harness, "Commit summary", "Without a name");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "Git needs your name and email") && h.query_by_label("Set your identity…").is_some()
+    });
+    harness.get_by_label("Set your identity…").click();
+    wait(&mut harness, "repository settings", |h| h.state().tools.iter().any(|tool| tool.title().contains("Settings")));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "nothing was committed");
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Without a name", "the message is given back");
+}
+
+#[test]
+fn an_unreachable_remote_is_explained_in_plain_words() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://nicegit-test.invalid/app.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    toolbar_button(&mut harness, "Fetch");
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        h.state().notice.as_ref().is_some_and(|n| {
+            n.text.contains("could not be reached") && n.detail.as_deref().is_some_and(|d| d.contains("nicegit-test.invalid"))
+        })
+    });
+}
+
+#[test]
+fn committing_away_from_a_branch_warns_and_offers_a_branch_first() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["checkout", "-q", "--detach", "HEAD"]);
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the warning", |h| shows(h, "You are not on a branch"));
+
+    harness.get_by_label_contains("Create branch here…").click();
+    wait(&mut harness, "the new branch dialog", |h| h.state().dialog.is_some());
+    harness.event(egui::Event::Text("rescued-work".into()));
+    harness.step();
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the new branch", |_| git(path, &["branch", "--show-current"]) == "rescued-work");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n", "the change is kept");
+    wait(&mut harness, "the warning gone", |h| !shows(h, "You are not on a branch"));
+}
+
+#[test]
+fn a_pull_blocked_by_uncommitted_changes_offers_to_stash_them() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "notes.txt", b"first\nsecond\nfrom elsewhere\n", "Edit the notes elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nmine\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.state_mut().pull();
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "would overwrite uncommitted changes") && h.query_by_label("Stash changes…").is_some()
+    });
+    harness.get_by_label("Stash changes…").click();
+    wait(&mut harness, "the stash dialog", |h| h.state().dialog.is_some());
+    // The message is optional, so OK works with the field left empty.
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash", |_| !git(path, &["stash", "list"]).is_empty());
+
+    harness.state_mut().pull();
+    idle(&mut harness);
+    wait(&mut harness, "the pull", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap().contains("from elsewhere"));
+}
+
+#[test]
+fn a_merge_that_stops_at_conflicts_says_what_to_do_next() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    std::fs::write(path.join("notes.txt"), "first\nfrom feature\n").unwrap();
+    git(path, &["commit", "-qam", "Change notes on feature"]);
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(&mut harness, "the merge confirmation", |h| h.state().dialog.is_some());
+    harness.get_by_label("Merge").click();
+    idle(&mut harness);
+    let notice = harness.state().notice.as_ref().map(|n| (n.text.clone(), n.detail.clone())).expect("a message");
+    assert_eq!(
+        notice.0,
+        "The merge stopped at conflicts in 1 file. Resolve them from the banner above the history, then continue, or abort to go back."
+    );
+    assert!(notice.1.is_some_and(|detail| detail.contains("git merge")), "Git's words stay in the tooltip");
+}
+
+#[test]
+fn a_branch_name_git_refuses_is_explained() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let create = |harness: &mut App, name: &str| {
+        toolbar_button(harness, "Branch");
+        wait(harness, "the new branch dialog", |h| h.state().dialog.is_some());
+        harness.event(egui::Event::Text(name.into()));
+        harness.step();
+        harness.get_by_label("OK").click();
+        idle(harness);
+    };
+    // A name Git would refuse is explained while it is typed, and OK waits for a valid one.
+    toolbar_button(&mut harness, "Branch");
+    wait(&mut harness, "the new branch dialog", |h| h.state().dialog.is_some());
+    harness.event(egui::Event::Text("my new..branch".into()));
+    wait(&mut harness, "the hint", |h| shows(h, "Names cannot contain spaces."));
+    assert!(harness.get_by_label("OK").accesskit_node().is_disabled());
+    harness.key_press(Key::Escape);
+    harness.state_mut().dialog = None;
+    settle(&mut harness);
+    // A name that is taken is only known to Git, which refuses it; that is explained afterwards.
+    create(&mut harness, "feature");
+    wait(&mut harness, "the explanation", |h| {
+        h.state().notice.as_ref().is_some_and(|n| n.text.contains("A branch with that name already exists"))
+    });
+    assert_eq!(git(repo.path(), &["branch", "--show-current"]), "main");
+}
