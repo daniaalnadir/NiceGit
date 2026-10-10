@@ -1907,3 +1907,26 @@ fn a_refused_push_explains_why_and_offers_to_merge_or_rebase() {
     idle(&mut harness);
     wait(&mut harness, "the push", |_| git(remote.path(), &["rev-parse", "main"]) == git(path, &["rev-parse", "HEAD"]));
 }
+
+#[test]
+fn a_commit_without_an_identity_explains_and_opens_its_settings() {
+    let repo = repository();
+    let path = repo.path();
+    // An empty name in the repository's own config, as Git refuses for someone not yet set up.
+    git(path, &["config", "user.name", ""]);
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    type_into(&mut harness, "Commit summary", "Without a name");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "Git needs your name and email") && h.query_by_label("Set your identity…").is_some()
+    });
+    harness.get_by_label("Set your identity…").click();
+    wait(&mut harness, "repository settings", |h| h.state().tools.iter().any(|tool| tool.title().contains("Settings")));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "nothing was committed");
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Without a name", "the message is given back");
+}

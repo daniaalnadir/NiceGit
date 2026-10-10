@@ -8,6 +8,9 @@
   be undone from the Changes panel.
 - When a push is refused because the remote has newer commits, the message says so plainly
   and offers Merge or rebase…, which fetches and opens the usual choice with its preview.
+- A commit Git refuses because it does not know your name and email is explained, with Set
+  your identity… to open Repository Settings.
+- A commit that fails gives its message back to the commit box; before, it was lost.
 
 ## 1.4.0 - Sizes everywhere
 

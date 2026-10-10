@@ -32,6 +32,13 @@ pub struct Notice {
 pub enum NoticeAction {
     /// Fetch, then offer to merge the upstream's commits or rebase onto them.
     Integrate,
+    /// Open Repository Settings, where the commit identity is set.
+    SetIdentity,
+}
+
+/// Whether Git refused to commit because it does not know who is committing.
+pub fn needs_identity(error: &str) -> bool {
+    ["Please tell me who you are", "empty ident name", "unable to auto-detect email address"].iter().any(|sign| error.contains(sign))
 }
 
 /// Whether a push failed because the remote has commits the branch does not, so pulling them
@@ -130,6 +137,8 @@ pub struct Repo {
     pub line_map: Option<Option<std::sync::Arc<Vec<Option<usize>>>>>,
     pub diff_options: crate::diff_view::DiffOptions,
     pub draft: Draft,
+    /// The message of a commit being made, put back in the commit box if the commit fails.
+    pub sent_draft: Option<Draft>,
     pub draft_key: Option<String>,
     pub amend: bool,
     pub commit_filter: String,
@@ -188,6 +197,7 @@ impl Repo {
             line_map: None,
             diff_options: crate::diff_view::DiffOptions::default(),
             draft: Draft::default(),
+            sent_draft: None,
             draft_key: None,
             amend: false,
             commit_filter: String::new(),
@@ -619,6 +629,22 @@ impl NiceGitApp {
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
+                    // A commit that failed gives its message back; one that was made keeps it cleared.
+                    if let Some((label, result)) = &action {
+                        if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") {
+                            let repo = &mut self.repos[index];
+                            let sent = repo.sent_draft.take();
+                            let committed = match result {
+                                Ok(_) => true,
+                                Err(error) => label == "Commit and push" && error.to_string().contains("The commit was made"),
+                            };
+                            if let (false, Some(sent)) = (committed, sent) {
+                                if repo.draft.is_empty() {
+                                    repo.draft = sent;
+                                }
+                            }
+                        }
+                    }
                     if let Some((label, result)) = action {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
@@ -630,6 +656,14 @@ impl NiceGitApp {
                                     text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
+                                });
+                            }
+                            Err(error) if needs_identity(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: "Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.".into(),
+                                    is_error: true,
+                                    action: Some(NoticeAction::SetIdentity),
                                 });
                             }
                             Err(error) => {
@@ -1100,7 +1134,7 @@ impl NiceGitApp {
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
                 repo.amend = false;
             }
             self.save_draft();
@@ -1132,7 +1166,7 @@ impl NiceGitApp {
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
             }
             self.save_draft();
         }
@@ -1150,7 +1184,7 @@ impl NiceGitApp {
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
-                repo.draft = Draft::default();
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
             }
             self.save_draft();
         }
