@@ -116,7 +116,13 @@ fn note_progress(text: impl FnOnce() -> String) {
 pub(crate) fn open(path: &Path) -> Harness<'static, NiceGitApp> {
     arm_watchdog();
     let path: PathBuf = path.to_path_buf();
-    Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(move |cc| NiceGitApp::new(cc, Some(path)))
+    Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(move |cc| {
+        let mut app = NiceGitApp::new(cc, Some(path));
+        // A fetch starting on its own would make tests depend on timing; the tests of
+        // background fetching turn it on themselves.
+        app.settings.auto_fetch_minutes = 0;
+        app
+    })
 }
 
 /// Runs frames until `done` holds, failing after a generous timeout.

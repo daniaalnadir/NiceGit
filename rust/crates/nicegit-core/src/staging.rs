@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::client::GitClient;
 use crate::diff::{parse_diff, DiffLine, DiffLineKind};
 use crate::models::{GitError, Result, StatusKind};
+use crate::undo::DiscardUndo;
 
 const NO_NEWLINE: &str = "\\ No newline at end of file";
 
@@ -92,6 +93,30 @@ impl DiffHunk {
     }
 }
 
+/// Matches each line of a diff as shown (usually with a few lines of context) to the same line
+/// of `review`'s full-file diff, by its kind, its old and new line numbers, and its text, so
+/// lines chosen in the shown diff can be staged. Headers and notes map to `None`. Returns
+/// `None` when a shown line has no exact counterpart, as when the file changed between the two.
+pub fn line_map(shown: &[DiffLine], review: &FileReview) -> Option<Vec<Option<usize>>> {
+    let key = |line: &DiffLine| (line.kind as u8, line.old_number, line.new_number);
+    let mut index = std::collections::HashMap::with_capacity(review.lines.len());
+    for (position, line) in review.lines.iter().enumerate() {
+        if matches!(line.kind, DiffLineKind::Context | DiffLineKind::Addition | DiffLineKind::Deletion) {
+            index.insert(key(line), position);
+        }
+    }
+    shown
+        .iter()
+        .map(|line| {
+            if !matches!(line.kind, DiffLineKind::Context | DiffLineKind::Addition | DiffLineKind::Deletion) {
+                return Some(None);
+            }
+            let position = *index.get(&key(line))?;
+            (review.lines[position].text == line.text).then_some(Some(position))
+        })
+        .collect()
+}
+
 fn is_change(line: &DiffLine) -> bool {
     matches!(line.kind, DiffLineKind::Addition | DiffLineKind::Deletion)
 }
@@ -155,7 +180,55 @@ impl GitClient {
             return Err(review_error("The selected lines do not change the index."));
         }
         let patch = build_patch(review, &baseline, &target);
-        apply_to_index(self, &patch, directory)
+        apply_patch(self, &patch, true, directory)
+    }
+
+    /// Discards the selected lines of a file's unstaged changes, putting them back as they are
+    /// in the index, and first saves what is needed to undo it. `selected` holds indices into
+    /// `review.lines`, which must be the unstaged diff. Refuses if the file or index changed
+    /// since `review` was read; the change is applied with `git apply`, which refuses rather
+    /// than writes when the working file does not match. Returns `None` (after discarding) when
+    /// the file's versions could not be saved for undo.
+    pub fn discard_lines_keeping_undo(
+        &self,
+        selected: &BTreeSet<usize>,
+        review: &FileReview,
+        directory: &Path,
+    ) -> Result<Option<DiscardUndo>> {
+        if review.staged {
+            return Err(review_error("Only unstaged changes can be discarded line by line."));
+        }
+        if let Some(reason) = &review.line_staging_unavailable {
+            return Err(review_error(reason));
+        }
+        let all_changes = selected.iter().all(|&index| review.lines.get(index).is_some_and(is_change));
+        if selected.is_empty() || !all_changes {
+            return Err(review_error("Select added or removed lines first."));
+        }
+        let fresh = self.file_review(&review.path, false, directory)?;
+        if fresh.patch != review.patch || fresh.line_staging_unavailable.is_some() {
+            return Err(review_error("The file or index changed. Reload the diff before discarding lines."));
+        }
+
+        // Read as the working file against the index, reverting the selected lines is what
+        // unstaging them would do to the index; the patch is applied to the working file.
+        let reverse = FileReview { staged: true, ..review.clone() };
+        let (working, target) = line_sides(&reverse, selected);
+        if working == target {
+            return Err(review_error("The selected lines do not change the file."));
+        }
+        let before = match (self.index_version(&review.path, directory), self.working_version(&review.path, directory, true)) {
+            (Ok(index), Ok(working)) => Some((index, working)),
+            _ => None,
+        };
+        let patch = build_patch(&reverse, &working, &target);
+        apply_patch(self, &patch, false, directory)?;
+        let Some((index_before, working_before)) = before else { return Ok(None) };
+        let after = match (self.index_version(&review.path, directory), self.working_version(&review.path, directory, false)) {
+            (Ok(index), Ok(working)) => (index, working),
+            _ => return Ok(None),
+        };
+        Ok(Some(DiscardUndo { path: review.path.clone(), index_before, working_before, index_after: after.0, working_after: after.1 }))
     }
 }
 
@@ -313,14 +386,20 @@ fn build_patch(review: &FileReview, baseline: &str, target: &str) -> String {
 
 static PATCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Writes the patch to a temporary file, applies it to the index, and removes the file.
-fn apply_to_index(client: &GitClient, patch: &str, directory: &Path) -> Result<()> {
+/// Writes the patch to a temporary file, applies it to the index (`cached`) or the working
+/// files, and removes the file.
+fn apply_patch(client: &GitClient, patch: &str, cached: bool, directory: &Path) -> Result<()> {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|time| time.as_nanos()).unwrap_or(0);
     let sequence = PATCH_COUNTER.fetch_add(1, Ordering::Relaxed);
     let file = std::env::temp_dir().join(format!("nicegit-lines-{}-{nanos}-{sequence}.patch", std::process::id()));
     std::fs::write(&file, patch.as_bytes()).map_err(|error| GitError::failed("stage lines", error.to_string()))?;
     let file_text = file.to_string_lossy().into_owned();
-    let result = client.run(&["apply", "--cached", "--whitespace=nowarn", "--", &file_text], directory).map(drop);
+    let mut arguments = vec!["apply"];
+    if cached {
+        arguments.push("--cached");
+    }
+    arguments.extend(["--whitespace=nowarn", "--", &file_text]);
+    let result = client.run(&arguments, directory).map(drop);
     let _ = std::fs::remove_file(&file);
     result
 }
@@ -328,6 +407,30 @@ fn apply_to_index(client: &GitClient, patch: &str, directory: &Path) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn review_of(patch: &str) -> FileReview {
+        FileReview {
+            path: "f".into(),
+            staged: false,
+            untracked: false,
+            patch: patch.into(),
+            lines: parse_diff(patch),
+            line_staging_unavailable: None,
+        }
+    }
+
+    #[test]
+    fn shown_lines_map_to_the_full_file_diff_by_number_and_text() {
+        let review = review_of("diff --git a/f b/f\n@@ -1,8 +1,8 @@\n a\n b\n c\n-d\n+D\n e\n f\n g\n h\n");
+        let shown = parse_diff("diff --git a/f b/f\n@@ -2,5 +2,5 @@\n b\n c\n-d\n+D\n e\n f\n");
+        let map = line_map(&shown, &review).expect("every shown line has a counterpart");
+        let texts: Vec<Option<&str>> = map.iter().map(|m| m.map(|i| review.lines[i].text.as_str())).collect();
+        // The header, the hunk line, and the empty line after the last newline map to nothing.
+        assert_eq!(texts, [None, None, Some(" b"), Some(" c"), Some("-d"), Some("+D"), Some(" e"), Some(" f"), None]);
+        // A shown line that differs from the review's, as after an edit, has no counterpart.
+        let edited = parse_diff("@@ -4 +4 @@\n-d\n+E\n");
+        assert_eq!(line_map(&edited, &review), None);
+    }
 
     #[test]
     fn quotes_control_characters_and_quotes_as_c_escapes() {

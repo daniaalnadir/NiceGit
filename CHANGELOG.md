@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 - Change by change
+
+- Hover a change in a diff to stage it, unstage it, or discard it on its own. Discarding asks
+  first and can be undone from the Changes panel.
+- Staging individual lines now works in files of any length; before, it was available only
+  when the whole file fit in the diff.
+- Step through the changed files from the open diff with its arrows or Option-Up and
+  Option-Down (Alt elsewhere), on through the staged files.
+- A file stays open after staging part of it, showing what is left.
+- The open repository is fetched in the background every 15 minutes, so ahead and behind
+  counts stay current. The status bar shows when it last fetched, or quietly says it could
+  not. Choose how often, or turn it off, in Settings.
+- Every keyboard shortcut is listed in one place: Command-/ (Control-/ elsewhere), the
+  command palette, or the link in Settings.
+- The diff's view controls move to a second row in a narrow panel, so the file's name keeps
+  its room.
+
 ## 1.0.0 - NiceGit everywhere
 
 The first release of NiceGit for macOS, Windows, and Linux, rewritten in Rust with every

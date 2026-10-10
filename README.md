@@ -28,6 +28,8 @@ Git itself. Built with SwiftUI and AppKit, and released under the [MIT License](
 **Make changes**
 - Stage and unstage whole files or individual lines, edit working files in place, and
   keep a separate commit draft for each checkout.
+- In the cross-platform app, hover a change in a diff to stage, unstage, or discard just
+  that change, and step through every changed file without leaving the diff.
 - Interactive rebase: drag to reorder, and pick, reword, squash, fix up, or drop commits.
 - Merge, rebase, cherry-pick one or many commits, revert, amend, reset, and resolve
   conflicts, with a preview of which files will conflict before you start.
@@ -49,7 +51,9 @@ Git itself. Built with SwiftUI and AppKit, and released under the [MIT License](
 **Work quickly**
 - A command palette for actions, branches, and repositories (Shift-Command-P).
 - An embedded terminal for each checkout (Control-backtick).
-- Automatic refresh when files change in other apps.
+- Automatic refresh when files change in other apps, and in the cross-platform app a
+  background fetch every 15 minutes (adjustable in Settings).
+- Every keyboard shortcut in one list (Command-/ in the cross-platform app).
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
 - Pull requests and issues from github.com through your existing GitHub CLI login.
 

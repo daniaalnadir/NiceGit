@@ -289,7 +289,7 @@ impl GitClient {
     }
 
     /// The stage-zero index entry for a path, if any.
-    fn index_version(&self, path: &str, directory: &Path) -> Result<Option<FileVersion>> {
+    pub(crate) fn index_version(&self, path: &str, directory: &Path) -> Result<Option<FileVersion>> {
         let output = self.run(&["ls-files", "-z", "--stage", "--", path], directory)?;
         for record in output.split('\0') {
             let Some((fields, name)) = record.split_once('\t') else { continue };
@@ -303,7 +303,7 @@ impl GitClient {
 
     /// The file on disk as Git would record it. `store` also writes its contents to the object
     /// database. A missing file is `None`; a folder or other kind of entry is an error.
-    fn working_version(&self, path: &str, directory: &Path, store: bool) -> Result<Option<FileVersion>> {
+    pub(crate) fn working_version(&self, path: &str, directory: &Path, store: bool) -> Result<Option<FileVersion>> {
         const COMMAND: &str = "discard";
         let file = directory.join(path);
         let metadata = match fs::symlink_metadata(&file) {

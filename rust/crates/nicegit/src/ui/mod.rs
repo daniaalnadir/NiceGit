@@ -10,6 +10,7 @@ pub mod inspector;
 pub mod palette;
 pub mod repositories;
 pub mod settings_window;
+pub mod shortcuts_window;
 pub mod sidebar;
 pub mod toolbar;
 
@@ -40,6 +41,9 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::O))) {
             self.choose_folder();
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Slash))) {
+            self.show_shortcuts = !self.show_shortcuts;
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Comma))) {
             self.show_settings = !self.show_settings;
         }
@@ -55,8 +59,12 @@ impl NiceGitApp {
             let (up, down, escape) =
                 ctx.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown), i.key_pressed(Key::Escape)));
             let diff = self.showing_diff();
-            // The graph is hidden while a diff is open, so the arrows do not move through it.
-            if (up || down) && !diff {
+            let alt = ctx.input(|i| i.modifiers.alt);
+            // While a diff is open, Option (Alt) with an arrow opens the previous or next file;
+            // the graph is hidden, so the arrows alone do not move through it.
+            if (up || down) && diff && alt {
+                self.step_diff_file(if up { -1 } else { 1 });
+            } else if (up || down) && !diff {
                 self.move_selection(if up { -1 } else { 1 });
             }
             if escape && diff {
@@ -303,6 +311,18 @@ impl NiceGitApp {
                 if let Some(head) = &snapshot.head_hash {
                     ui.label(RichText::new(nicegit_core::models::short(head)).monospace().small().color(c.muted));
                 }
+                // When the remotes were last fetched, or why the background fetch failed.
+                if let Some(repo) = self.repo().filter(|_| !snapshot.remotes.is_empty()) {
+                    if let Some(problem) = &repo.fetch_problem {
+                        ui.label(RichText::new(format!("{}  Couldn't fetch", icon::CLOUD_SLASH)).small().color(c.warning))
+                            .on_hover_text(format!("The last automatic fetch failed:\n{problem}"));
+                    } else if let Some(when) = repo.last_fetched {
+                        ui.label(RichText::new(fetched_ago(when.elapsed())).small().color(c.muted))
+                            .on_hover_text("Remotes are fetched automatically; change how often in Settings.");
+                        // The age is in minutes, so it is redrawn once a minute.
+                        ui.ctx().request_repaint_after(std::time::Duration::from_secs(60));
+                    }
+                }
                 if self.repo().is_some_and(|r| r.loading) {
                     ui.spinner();
                 }
@@ -419,61 +439,59 @@ impl NiceGitApp {
             Selection::Change { entry, staged: false } if entry.kind != nicegit_core::StatusKind::Deleted => Some(entry.path.clone()),
             _ => None,
         };
+        // A narrow panel puts the view controls on a second row, so the file's name keeps room.
+        let wide = panel_width >= 700.0;
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let back = ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)");
                 if back.clicked() {
                     self.close_diff();
                 }
+                // Step through the other changed files without going back to the list, when there
+                // are others.
+                if let Some((position, count)) = self.diff_file_position().filter(|&(_, count)| count > 1) {
+                    let shortcut = if cfg!(target_os = "macos") { "Option" } else { "Alt" };
+                    let previous = format!("Previous file ({shortcut}-Up)");
+                    if widgets::icon_button(ui, icon::CARET_UP, &previous, position > 0).clicked() {
+                        self.step_diff_file(-1);
+                    }
+                    let next = format!("Next file ({shortcut}-Down)");
+                    if widgets::icon_button(ui, icon::CARET_DOWN, &next, position + 1 < count).clicked() {
+                        self.step_diff_file(1);
+                    }
+                    ui.label(RichText::new(format!("{} of {count}", position + 1)).small().color(c.muted));
+                }
                 ui.add_space(6.0);
-                // The controls are laid out from the right first, so the file's name takes only the
-                // room left between them and the History button, and is shortened to fit it.
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let mut split = self.settings.split_diff;
-                    // A diff with only one side always shows in one column.
-                    let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
-                    let narrow = !crate::diff_view::split_fits(panel_width);
-                    let reason = if one_sided {
-                        "A new or deleted file has only one side, so it is shown in one column"
+                let file_name = |ui: &mut egui::Ui| {
+                    // A spinner stands in for the icon while the diff reloads: one widget either
+                    // way, so the buttons after it keep their identities.
+                    if loading {
+                        ui.add(egui::Spinner::new());
                     } else {
-                        "Widen the diff panel to show changes side by side"
-                    };
-                    let available = !one_sided && !narrow;
-                    // The control shows the layout on screen: Unified whenever Split cannot apply,
-                    // while the saved preference waits for a diff and a panel that suit it.
-                    // Only Split is disabled, so the active Unified keeps full emphasis.
-                    let shown = split && available;
-                    if ui.add_enabled(available, egui::Button::selectable(shown, "Split")).on_disabled_hover_text(reason).clicked() {
-                        split = true;
+                        ui.label(RichText::new(icon::GIT_DIFF).color(c.muted));
                     }
-                    if ui.add(egui::Button::selectable(!shown, "Unified")).clicked() && available {
-                        split = false;
-                    }
-                    self.settings.split_diff = split;
-                    let mut ignore = self.settings.ignore_whitespace;
-                    if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
-                        self.settings.ignore_whitespace = ignore;
-                        self.reload_diff();
-                    }
-                    if let Some(path) = editable {
-                        if ui.button(format!("{}  Edit", icon::PENCIL_SIMPLE)).on_hover_text("Edit this file in NiceGit").clicked() {
-                            let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
-                            self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
-                        }
-                    }
-                    ui.add_space(8.0);
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        // A spinner stands in for the icon while the diff reloads. It comes after
-                        // the buttons, so their identities stay the same either way.
-                        if loading {
-                            ui.add(egui::Spinner::new());
-                        } else {
-                            ui.label(RichText::new(icon::GIT_DIFF).color(c.muted));
-                        }
-                        ui.add(egui::Label::new(RichText::new(&title).strong()).truncate()).on_hover_text(&title);
+                    ui.add(egui::Label::new(RichText::new(&title).strong()).truncate()).on_hover_text(&title);
+                };
+                if wide {
+                    // The controls are laid out from the right first, so the file's name takes
+                    // only the room left between them and the History button.
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.diff_view_controls(ui, panel_width, editable.clone());
+                        ui.add_space(8.0);
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), file_name);
+                    });
+                } else {
+                    file_name(ui);
+                }
+            });
+            if !wide {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.diff_view_controls(ui, panel_width, editable.clone());
                     });
                 });
-            });
+            }
         });
         ui.separator();
         let split = self.settings.split_diff;
@@ -481,12 +499,25 @@ impl NiceGitApp {
         repo.diff_options.split = split;
         // Lines can be staged one by one once the review has loaded and matches the diff shown.
         let review = repo.review.as_mut().and_then(|task| task.get()).and_then(|r| r.as_ref().ok()).cloned();
-        let selectable =
-            review.as_ref().is_some_and(|r| r.line_staging_unavailable.is_none() && repo.diff.as_ref().is_some_and(|d| d.lines == r.lines));
+        // The shown diff has a few lines of context and the review the whole file, so lines are
+        // matched between them once both have loaded.
+        if let (None, Some(review), Some(diff)) = (&repo.line_map, &review, &repo.diff) {
+            repo.line_map = Some(nicegit_core::staging::line_map(&diff.lines, review).map(std::sync::Arc::new));
+        }
+        let line_map = repo.line_map.clone().flatten();
+        let selectable = review.as_ref().is_some_and(|r| r.line_staging_unavailable.is_none()) && line_map.is_some();
         repo.diff_options.selectable = selectable;
         if !selectable {
             repo.diff_options.selected.clear();
         }
+        // Each run of changed lines offers Stage and Discard, or Unstage, while hovered.
+        repo.diff_options.block_buttons = review.as_ref().map(|review| {
+            if review.staged {
+                crate::diff_view::BlockButtons::Unstage
+            } else {
+                crate::diff_view::BlockButtons::StageAndDiscard
+            }
+        });
         let selected = repo.diff_options.selected.clone();
         if selectable && !selected.is_empty() {
             let staged = review.as_ref().is_some_and(|r| r.staged);
@@ -502,9 +533,10 @@ impl NiceGitApp {
                         format!("{}  Stage selected lines", icon::PLUS_CIRCLE)
                     };
                     if widgets::primary_button(ui, &text, self.busy.is_none()).clicked() {
-                        if let Some(review) = review.clone() {
+                        let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
+                        if let (Some(review), Some(lines)) = (review.clone(), lines) {
                             let label = if staged { "Unstage lines" } else { "Stage lines" };
-                            self.act(label, move |client, path| client.stage_lines(&selected, &review, path).map(|_| None));
+                            self.act(label, move |client, path| client.stage_lines(&lines, &review, path).map(|_| None));
                         }
                     }
                     if ui.button("Clear").clicked() {
@@ -519,10 +551,103 @@ impl NiceGitApp {
             });
         }
         let repo = &mut self.repos[self.active];
+        let mut block_action = None;
         if let Some(diff) = repo.diff.as_ref() {
-            crate::diff_view::show_with(ui, diff, &mut repo.diff_options);
+            block_action = crate::diff_view::show_with(ui, diff, &mut repo.diff_options).block_action;
         } else {
             ui.take_available_space();
+        }
+        let lines = block_action.as_ref().and_then(|(_, lines)| line_map.as_deref().and_then(|map| in_review(map, lines)));
+        if let (Some((action, _)), Some(lines), Some(review)) = (block_action, lines, review) {
+            self.run_block_action(action, lines, review);
+        }
+    }
+}
+
+impl NiceGitApp {
+    /// The diff's view controls, laid out from the right: Split and Unified, Hide whitespace,
+    /// and Edit for a working file.
+    fn diff_view_controls(&mut self, ui: &mut egui::Ui, panel_width: f32, editable: Option<String>) {
+        let mut split = self.settings.split_diff;
+        // A diff with only one side always shows in one column.
+        let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
+        let narrow = !crate::diff_view::split_fits(panel_width);
+        let reason = if one_sided {
+            "A new or deleted file has only one side, so it is shown in one column"
+        } else {
+            "Widen the diff panel to show changes side by side"
+        };
+        let available = !one_sided && !narrow;
+        // The control shows the layout on screen: Unified whenever Split cannot apply,
+        // while the saved preference waits for a diff and a panel that suit it.
+        // Only Split is disabled, so the active Unified keeps full emphasis.
+        let shown = split && available;
+        if ui.add_enabled(available, egui::Button::selectable(shown, "Split")).on_disabled_hover_text(reason).clicked() {
+            split = true;
+        }
+        if ui.add(egui::Button::selectable(!shown, "Unified")).clicked() && available {
+            split = false;
+        }
+        self.settings.split_diff = split;
+        let mut ignore = self.settings.ignore_whitespace;
+        if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
+            self.settings.ignore_whitespace = ignore;
+            self.reload_diff();
+        }
+        if let Some(path) = editable {
+            if ui.button(format!("{}  Edit", icon::PENCIL_SIMPLE)).on_hover_text("Edit this file in NiceGit").clicked() {
+                let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
+                self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
+            }
+        }
+    }
+}
+
+/// How long ago the remotes were fetched, in words.
+fn fetched_ago(elapsed: std::time::Duration) -> String {
+    match elapsed.as_secs() / 60 {
+        0 => "Fetched just now".to_string(),
+        minutes @ 1..=59 => format!("Fetched {minutes} min ago"),
+        minutes => format!("Fetched {} h ago", minutes / 60),
+    }
+}
+
+/// The review's indices for lines chosen in the shown diff, or `None` if one has no counterpart.
+fn in_review(map: &[Option<usize>], shown: &std::collections::BTreeSet<usize>) -> Option<std::collections::BTreeSet<usize>> {
+    shown.iter().map(|&line| map.get(line).copied().flatten()).collect()
+}
+
+impl NiceGitApp {
+    /// Stages, unstages, or (after confirming) discards one run of a file's changed lines.
+    fn run_block_action(
+        &mut self,
+        action: crate::diff_view::BlockAction,
+        lines: std::collections::BTreeSet<usize>,
+        review: nicegit_core::staging::FileReview,
+    ) {
+        use crate::diff_view::BlockAction;
+        if self.busy.is_some() {
+            return;
+        }
+        let count = lines.len();
+        let plural = if count == 1 { "" } else { "s" };
+        match action {
+            BlockAction::Stage | BlockAction::Unstage => {
+                let (label, done) = if action == BlockAction::Stage { ("Stage lines", "Staged") } else { ("Unstage lines", "Unstaged") };
+                let name = review.path.clone();
+                self.act(label, move |client, path| {
+                    client.stage_lines(&lines, &review, path).map(|_| Some(format!("{done} {count} line{plural} in {name}.")))
+                });
+            }
+            BlockAction::Discard => {
+                let what = if review.untracked {
+                    format!("{count} new line{plural} are removed from {}.", review.path)
+                } else {
+                    format!("{count} changed line{plural} in {} go back to their staged version.", review.path)
+                };
+                let message = format!("{what} You can undo this from the Changes panel until the file changes again.");
+                self.confirm("Discard this change?", message, "Discard", crate::ui::dialogs::Pending::DiscardLines { lines, review });
+            }
         }
     }
 }
