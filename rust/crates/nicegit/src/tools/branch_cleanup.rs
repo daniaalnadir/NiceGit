@@ -167,7 +167,13 @@ impl ToolWindow for BranchCleanupWindow {
         let mut slider_dragging = false;
         let c = theme::of(ui);
         let current = cx.snapshot.current_branch.as_str();
-        ui.label(RichText::new(format!("Local branches merged into {current}, or with no commits for a while.")).small().color(c.muted));
+        ui.label(
+            RichText::new(format!(
+                "Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while."
+            ))
+            .small()
+            .color(c.muted),
+        );
         ui.add_space(6.0);
 
         ui.horizontal(|ui| {
@@ -279,6 +285,11 @@ impl ToolWindow for BranchCleanupWindow {
                             }
                             let (label, fill) = if candidate.is_merged { ("Merged", c.added) } else { ("Not merged", c.conflict) };
                             widgets::pill(ui, label, fill);
+                            if candidate.upstream_gone {
+                                widgets::pill(ui, "Upstream gone", c.warning).on_hover_text(
+                                    "Its branch on the remote was deleted, as usually happens once a pull request is merged",
+                                );
+                            }
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if let Some(time) = candidate.last_commit_time {
                                     ui.label(RichText::new(age_text(time)).small().color(c.muted));

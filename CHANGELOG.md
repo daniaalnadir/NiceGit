@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0 - Line by line
+
+- Each added or removed line in a diff has a + to its left, before the line numbers, that
+  stages just that line; in a staged diff a − unstages it.
+- New files can be staged line by line, and their changes staged or discarded from the diff,
+  like changes to tracked files.
+- With lines selected, Discard selected lines puts them back after confirming; the discard
+  can be undone from the Changes panel.
+- Make everything larger or smaller with Command-plus and Command-minus (Control elsewhere),
+  or under Layout in Settings; the size is remembered, and the panels are fitted to the
+  window again when it changes.
+- Restore default panel widths also restores the history's column widths.
+- Reuse a recent commit summary from the button beside the summary's character count.
+- When the toolbar's button fetches, a badge on it counts the commits waiting to be pulled.
+- Copy the open diff as a patch from the button in the diff's header.
+- Scrolling to the end of the history loads older commits by itself; the Load older history
+  button stays for a history that fits without scrolling.
+- Every local branch in the sidebar shows how far it is from its upstream (↑ to push, ↓ to
+  pull), or that its upstream is gone from the remote; before, only the current branch did.
+- Clean Up Branches also lists branches whose remote branch was deleted, as after a merged
+  pull request, marked Upstream gone; unmerged ones still need Include unmerged to delete.
+
 ## 1.2.0 - At a glance
 
 - Each changed file shows how many lines it adds and removes, such as +12 −3, or that it is

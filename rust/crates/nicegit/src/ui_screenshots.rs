@@ -54,6 +54,13 @@ fn screenshots() {
         let mut harness = open_rendering(&path, appearance);
         save(&mut harness, &folder, &format!("main-{theme}"));
 
+        // Commits waiting to be pulled, counted on the Fetch button.
+        let active = harness.state().active;
+        let behind = harness.state().repos[active].snapshot.as_ref().and_then(|s| s.behind);
+        harness.state_mut().repos[active].snapshot.as_mut().unwrap().behind = Some(3);
+        save(&mut harness, &folder, &format!("toolbar-badge-{theme}"));
+        harness.state_mut().repos[active].snapshot.as_mut().unwrap().behind = behind;
+
         // The menu that chooses what the Fetch and Pull button does.
         harness.get_by_label("Fetch and Pull options").click();
         wait(&mut harness, "the Fetch and Pull menu", |h| h.query_by_role_and_label(Role::RadioButton, "Pull").is_some());
@@ -98,6 +105,13 @@ fn screenshots() {
         save(&mut harness, &folder, &format!("drop-target-{theme}"));
         harness.input_mut().hovered_files.clear();
 
+        // The interface at 130%, as someone who has made everything larger sees it.
+        harness.ctx.set_zoom_factor(1.3);
+        harness.run_steps(3);
+        save(&mut harness, &folder, &format!("large-{theme}"));
+        harness.ctx.set_zoom_factor(1.0);
+        harness.run_steps(3);
+
         // The keyboard shortcuts.
         harness.state_mut().show_shortcuts = true;
         save(&mut harness, &folder, &format!("shortcuts-{theme}"));
@@ -115,6 +129,11 @@ fn screenshots() {
         wide.state_mut().close_diff();
         wait(&mut wide, "the history", |h| h.query_by_label("History columns").is_some());
         save(&mut wide, &folder, &format!("history-wide-{theme}"));
+        let active = wide.state().active;
+        let behind = wide.state().repos[active].snapshot.as_ref().and_then(|s| s.behind);
+        wide.state_mut().repos[active].snapshot.as_mut().unwrap().behind = Some(3);
+        save(&mut wide, &folder, &format!("toolbar-badge-wide-{theme}"));
+        wide.state_mut().repos[active].snapshot.as_mut().unwrap().behind = behind;
         wide.get_by_label("History columns").click_secondary();
         wait(&mut wide, "the columns menu", |h| h.query_by_label("Restore column widths").is_some());
         save(&mut wide, &folder, &format!("history-columns-menu-{theme}"));

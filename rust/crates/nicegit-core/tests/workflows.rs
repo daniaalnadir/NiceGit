@@ -403,6 +403,23 @@ fn cleanup_lists_merged_branches_and_stale_ones_only() {
 }
 
 #[test]
+fn cleanup_lists_a_recent_unmerged_branch_whose_upstream_is_gone() {
+    let (repo, _) = cleanup_repo();
+    let remote = tempfile::tempdir().expect("remote folder");
+    git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
+    repo.git(&["remote", "add", "origin", remote.path().to_str().expect("utf-8 path")]);
+    repo.git(&["push", "-q", "-u", "origin", "unmerged-work"]);
+    // The pull request was merged elsewhere and its branch deleted on the remote.
+    git(remote.path(), &["branch", "-D", "unmerged-work"]);
+    repo.git(&["fetch", "-q", "--prune"]);
+
+    let candidates = client().branch_cleanup_candidates(90, repo.path()).expect("candidates");
+    let gone = candidate(&candidates, "unmerged-work").expect("a branch whose upstream is gone is listed, however recent");
+    assert!(gone.upstream_gone && !gone.is_merged);
+    assert!(candidate(&candidates, "merged-done").is_some_and(|candidate| !candidate.upstream_gone));
+}
+
+#[test]
 fn cleanup_deletes_merged_branches_and_restore_brings_back_upstream() {
     let (repo, _) = cleanup_repo();
     repo.git(&["config", "branch.merged-done.remote", "origin"]);

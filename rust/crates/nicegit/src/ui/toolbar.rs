@@ -46,11 +46,13 @@ struct ToolItem {
     action: ToolAction,
     /// Whether an arrow beside the button opens a menu, for the Fetch and Pull choice.
     menu: bool,
+    /// A count drawn on the button's corner, such as commits waiting to be pulled.
+    badge: Option<usize>,
 }
 
 impl ToolItem {
     fn new(glyph: &'static str, label: &str, tip: String, enabled: bool, action: ToolAction) -> Self {
-        Self { glyph, label: label.to_string(), tip, enabled, action, menu: false }
+        Self { glyph, label: label.to_string(), tip, enabled, action, menu: false, badge: None }
     }
 
     fn with_menu(mut self) -> Self {
@@ -58,10 +60,28 @@ impl ToolItem {
         self
     }
 
+    fn with_badge(mut self, count: usize) -> Self {
+        self.badge = (count > 0).then_some(count);
+        self
+    }
+
     /// The room the button takes in `style`, including its arrow.
     fn width(&self, ui: &Ui, style: ToolStyle) -> f32 {
         tool_width(ui, &self.label, style) + 2.0 + if self.menu { CARET_WIDTH + 2.0 } else { 0.0 }
     }
+}
+
+/// A small count on a toolbar button's icon, at its upper right.
+fn badge(ui: &Ui, rect: egui::Rect, count: usize, style: ToolStyle) {
+    let c = theme::of(ui);
+    let text = if count > 99 { "99+".to_string() } else { count.to_string() };
+    let galley = ui.painter().layout_no_wrap(text, egui::FontId::proportional(9.5), c.accent_text);
+    // Over the icon: lower in a labelled button, where the label sits above it.
+    let icon_top = if style == ToolStyle::Full { rect.bottom() - 26.0 } else { rect.center().y - 12.0 };
+    let size = egui::vec2((galley.size().x + 7.0).max(15.0), 15.0);
+    let badge = egui::Rect::from_min_size(egui::pos2(rect.center().x + 3.0, icon_top - 3.0), size);
+    ui.painter().rect_filled(badge, 7.5, c.accent);
+    ui.painter().galley(badge.center() - galley.size() / 2.0, galley, c.accent_text);
 }
 
 /// The arrow beside a button that opens its menu of choices.
@@ -216,13 +236,20 @@ impl NiceGitApp {
             vec![
                 // Fetch and Pull share one button; its arrow chooses which one it does.
                 match sync_action {
+                    // Fetching leaves the branch where it is, so commits waiting to be pulled are
+                    // counted on the button.
                     SyncAction::Fetch => ToolItem::new(
                         icon::CLOUD_ARROW_DOWN,
                         "Fetch",
-                        "Download from all remotes".into(),
+                        if behind > 0 {
+                            format!("Download from all remotes · {behind} commit{} to pull", if behind == 1 { "" } else { "s" })
+                        } else {
+                            "Download from all remotes".into()
+                        },
                         idle && has_remote,
                         ToolAction::Fetch,
-                    ),
+                    )
+                    .with_badge(behind),
                     SyncAction::Pull => ToolItem::new(
                         icon::ARROW_LINE_DOWN,
                         &pull_label,
@@ -329,7 +356,11 @@ impl NiceGitApp {
                 }
                 for item in group {
                     if index < shown {
-                        if tool(ui, item.glyph, &item.label, &item.tip, item.enabled, style).clicked() {
+                        let button = tool(ui, item.glyph, &item.label, &item.tip, item.enabled, style);
+                        if let Some(count) = item.badge {
+                            badge(ui, button.rect, count, style);
+                        }
+                        if button.clicked() {
                             chosen = Some(item.action);
                         }
                         if item.menu {

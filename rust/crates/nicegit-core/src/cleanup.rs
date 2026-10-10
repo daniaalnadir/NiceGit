@@ -9,7 +9,8 @@ use crate::client::GitClient;
 use crate::models::{GitError, Result};
 use crate::parsers::parse_worktrees;
 
-const CANDIDATE_FORMAT: &str = "%(refname)%09%(objectname)%09%(committerdate:unix)%09%(HEAD)%09%(contents:subject)";
+const CANDIDATE_FORMAT: &str =
+    "%(refname)%09%(objectname)%09%(committerdate:unix)%09%(HEAD)%09%(upstream:track,nobracket)%09%(contents:subject)";
 const RESTORED_MESSAGE: &str = "branch: restored by NiceGit";
 const SECONDS_PER_DAY: i64 = 86_400;
 
@@ -24,6 +25,9 @@ pub struct BranchCandidate {
     pub subject: String,
     /// Every commit on the branch is already in the current branch, so deleting it loses nothing.
     pub is_merged: bool,
+    /// The branch's upstream no longer exists, as after its pull request was merged and the
+    /// remote branch deleted.
+    pub upstream_gone: bool,
 }
 
 /// A deleted local branch, with what is needed to recreate it exactly.
@@ -45,8 +49,8 @@ pub struct BranchDeletionReport {
 }
 
 impl GitClient {
-    /// Local branches merged into the current branch, plus those whose tip has no commit newer than
-    /// `inactive_days`. The current branch, and branches checked out in other worktrees, are never listed.
+    /// Local branches merged into the current branch, those whose upstream is gone from the remote,
+    /// and those whose tip has no commit newer than `inactive_days`. The current branch, and branches checked out in other worktrees, are never listed.
     /// Oldest first.
     pub fn branch_cleanup_candidates(&self, inactive_days: i64, directory: &Path) -> Result<Vec<BranchCandidate>> {
         let merged: HashSet<String> = if self.head(directory).is_some() {
@@ -65,8 +69,8 @@ impl GitClient {
 
         let mut candidates = Vec::new();
         for line in output.lines() {
-            let fields: Vec<&str> = line.splitn(5, '\t').collect();
-            if fields.len() != 5 || fields[3] == "*" {
+            let fields: Vec<&str> = line.splitn(6, '\t').collect();
+            if fields.len() != 6 || fields[3] == "*" {
                 continue;
             }
             let Some(name) = fields[0].strip_prefix("refs/heads/") else { continue };
@@ -76,15 +80,17 @@ impl GitClient {
             let is_merged = merged.contains(fields[0]);
             let last_commit_time = fields[2].parse::<i64>().ok();
             let stale = last_commit_time.is_some_and(|time| time < cutoff);
-            if !is_merged && !stale {
+            let upstream_gone = fields[4] == "gone";
+            if !is_merged && !stale && !upstream_gone {
                 continue;
             }
             candidates.push(BranchCandidate {
                 name: name.to_string(),
                 tip: fields[1].to_string(),
                 last_commit_time,
-                subject: fields[4].to_string(),
+                subject: fields[5].to_string(),
                 is_merged,
+                upstream_gone,
             });
         }
         candidates.sort_by_key(|candidate| candidate.last_commit_time);

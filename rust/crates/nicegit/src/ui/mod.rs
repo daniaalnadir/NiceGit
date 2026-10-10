@@ -553,6 +553,18 @@ impl NiceGitApp {
                             self.act(label, move |client, path| client.stage_lines(&lines, &review, path).map(|_| None));
                         }
                     }
+                    // Unstaged lines can also be discarded, as a run's Discard button does.
+                    if !staged {
+                        let discard = egui::Button::new(
+                            RichText::new(format!("{}  Discard selected lines", icon::ARROW_COUNTER_CLOCKWISE)).color(c.removed),
+                        );
+                        if ui.add_enabled(self.busy.is_none(), discard).clicked() {
+                            let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
+                            if let (Some(review), Some(lines)) = (review.clone(), lines) {
+                                self.run_block_action(crate::diff_view::BlockAction::Discard, lines, review);
+                            }
+                        }
+                    }
                     if ui.button("Clear").clicked() {
                         self.repos[self.active].diff_options.selected.clear();
                     }
@@ -561,7 +573,15 @@ impl NiceGitApp {
         } else if selectable {
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                ui.label(RichText::new("Click or drag over changed lines to stage just those lines.").small().color(c.muted));
+                ui.label(
+                    RichText::new(if review.as_ref().is_some_and(|r| r.staged) {
+                        "Press − beside a line to unstage it, or click and drag over lines to choose several."
+                    } else {
+                        "Press + beside a line to stage it, or click and drag over lines to choose several."
+                    })
+                    .small()
+                    .color(c.muted),
+                );
             });
         }
         let repo = &mut self.repos[self.active];
@@ -620,6 +640,17 @@ impl NiceGitApp {
             if ui.button(format!("{}  Edit", icon::PENCIL_SIMPLE)).on_hover_text("Edit this file in NiceGit").clicked() {
                 let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
                 self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
+            }
+        }
+        // The diff as Git printed it, to paste into a message or an issue.
+        let patch = self
+            .repo()
+            .and_then(|r| r.diff.as_ref())
+            .map(|diff| diff.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n"));
+        if let Some(patch) = patch.filter(|patch| !patch.trim().is_empty()) {
+            if widgets::icon_button(ui, icon::COPY, "Copy this diff", true).clicked() {
+                ui.ctx().copy_text(format!("{}\n", patch.trim_end()));
+                self.notify("Copied the diff.", false);
             }
         }
     }

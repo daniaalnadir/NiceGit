@@ -299,7 +299,9 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     // Beside an empty column, a new or deleted file's lines would have half the room; and a
     // narrow panel leaves each side too little room to read.
     let split = options.split && !content.is_one_sided() && split_fits(ui.available_width());
-    let style = Style::new(ui, content, split);
+    // Each changed line has a + (or −) button before its numbers while lines can be staged.
+    let lead = if options.selectable && options.block_buttons.is_some() { LINE_BUTTON } else { 0.0 };
+    let style = Style::new(ui, content, split, lead);
     let rows = if split { content.split.len() } else { content.lines.len() };
     // Where each row starts: as high as its line wraps, or a split row's longer side.
     let mut tops = Vec::with_capacity(rows + 1);
@@ -319,7 +321,8 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
         let row = content.row_of(line, split);
         area = area.vertical_scroll_offset((tops[row] - ui.available_height() * 0.4).max(0.0));
     }
-    let view = View { content, occurrences: &occurrences, current: options.find.current, split, style, drag_id };
+    let buttons = options.block_buttons.filter(|_| options.selectable);
+    let view = View { content, occurrences: &occurrences, current: options.find.current, split, style, drag_id, buttons };
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
         ui.spacing_mut().item_spacing.y = 0.0;
@@ -423,6 +426,9 @@ struct Style {
     muted: Color32,
     /// Width of one line-number column.
     gutter: f32,
+    /// Width of the column before the line numbers that holds each changed line's + or −
+    /// button; zero when lines cannot be staged.
+    lead: f32,
     row_height: f32,
     /// Width of the whole diff, at least the width of its widest line.
     total: f32,
@@ -440,7 +446,7 @@ struct Style {
 }
 
 impl Style {
-    fn new(ui: &Ui, content: &DiffContent, split: bool) -> Self {
+    fn new(ui: &Ui, content: &DiffContent, split: bool, lead: f32) -> Self {
         let font = TextStyle::Monospace.resolve(ui.style());
         let char_width = ui.ctx().fonts_mut(|fonts| fonts.glyph_width(&font, '0'));
         let gutter = NUMBER_COLUMNS * char_width + PADDING;
@@ -448,13 +454,13 @@ impl Style {
         // Text wraps to the room it has, down to a narrow minimum below which the view scrolls.
         let minimum_text = MIN_WRAP_COLUMNS as f32 * char_width + 2.0 * PADDING;
         let (total, half, gutters) = if split {
-            let half = ((available - SPLIT_GAP) / 2.0).max(gutter + minimum_text);
+            let half = ((available - SPLIT_GAP) / 2.0).max(lead + gutter + minimum_text);
             (2.0 * half + SPLIT_GAP, half, 1.0)
         } else {
-            let total = available.max(2.0 * gutter + minimum_text);
+            let total = available.max(lead + 2.0 * gutter + minimum_text);
             (total, total, 2.0)
         };
-        let wrap_width = (half - gutters * gutter - 2.0 * PADDING).max(char_width);
+        let wrap_width = (half - lead - gutters * gutter - 2.0 * PADDING).max(char_width);
         let wrap_columns = Some(((wrap_width / char_width).floor() as usize).max(1));
         let rows = content.rows_at(ui.ctx(), &font, wrap_width, char_width);
         Self {
@@ -463,6 +469,7 @@ impl Style {
             text: ui.visuals().text_color(),
             muted: ui.visuals().weak_text_color(),
             gutter,
+            lead,
             row_height: ui.text_style_height(&TextStyle::Monospace) + 2.0,
             total,
             half,
@@ -507,6 +514,8 @@ struct View<'a> {
     split: bool,
     style: Style,
     drag_id: Id,
+    /// What each changed line's button does, when lines can be staged.
+    buttons: Option<BlockButtons>,
 }
 
 impl View<'_> {
@@ -557,7 +566,7 @@ impl View<'_> {
         let first_line_center = rect.top() + self.style.row_height / 2.0;
         for (column, number) in numbers.iter().enumerate() {
             if let Some(number) = number {
-                let x = rect.left() + (column + 1) as f32 * self.style.gutter - PADDING / 2.0;
+                let x = rect.left() + self.style.lead + (column + 1) as f32 * self.style.gutter - PADDING / 2.0;
                 painter.text(
                     pos2(x, first_line_center),
                     Align2::RIGHT_CENTER,
@@ -585,7 +594,11 @@ impl View<'_> {
             wrap_line(&mut job, diff_line.kind, self.style.wrap_width, self.style.char_width);
         }
         let galley = painter.layout_job(job);
-        let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING + text_offset(diff_line.kind, self.style.char_width);
+        let x = rect.left()
+            + self.style.lead
+            + numbers.len() as f32 * self.style.gutter
+            + PADDING
+            + text_offset(diff_line.kind, self.style.char_width);
         let y = first_line_center - (self.style.row_height - 2.0) / 2.0;
         painter.galley(pos2(x, y), galley, text_color);
     }
@@ -602,6 +615,7 @@ fn draw_unified_row(ui: &mut Ui, line: usize, row_rect: Rect, view: &View, optio
     let diff_line = &view.content.lines[line];
     let numbers = [diff_line.old_number, diff_line.new_number];
     view.paint_line(ui, row_rect, line, &numbers, selected, true);
+    line_button(ui, view, row_rect, line, response);
 }
 
 /// Draws one row of a split diff into `row_rect`, each side wrapping its long lines.
@@ -619,6 +633,7 @@ fn draw_split_row(ui: &mut Ui, row: usize, row_rect: Rect, view: &View, options:
                     let selected = select_by_pointer(ui, view, left_rect, line, options, response);
                     let number = view.content.lines[line].old_number;
                     view.paint_line(ui, left_rect, line, &[number], selected, true);
+                    line_button(ui, view, left_rect, line, response);
                 }
                 None => view.paint_empty(ui, left_rect),
             }
@@ -627,12 +642,50 @@ fn draw_split_row(ui: &mut Ui, row: usize, row_rect: Rect, view: &View, options:
                     let selected = select_by_pointer(ui, view, right_rect, line, options, response);
                     let number = view.content.lines[line].new_number;
                     view.paint_line(ui, right_rect, line, &[number], selected, true);
+                    line_button(ui, view, right_rect, line, response);
                 }
                 None => view.paint_empty(ui, right_rect),
             }
             let divider = row_rect.left() + view.style.half + SPLIT_GAP / 2.0;
             ui.painter().vline(divider, row_rect.y_range(), Stroke::new(1.0, view.style.colors.border));
         }
+    }
+}
+
+/// Draws a changed line's button before its numbers: + to stage the line in an unstaged diff,
+/// − to unstage it in a staged one. It is faint until the pointer is on the line.
+fn line_button(ui: &mut Ui, view: &View, rect: Rect, line: usize, response: &mut DiffResponse) {
+    let diff_line = &view.content.lines[line];
+    let Some(buttons) = view.buttons.filter(|_| view.style.lead > 0.0) else { return };
+    if !matches!(diff_line.kind, DiffLineKind::Addition | DiffLineKind::Deletion) {
+        return;
+    }
+    let (glyph, action, verb) = match buttons {
+        BlockButtons::StageAndDiscard => (icon::PLUS, BlockAction::Stage, "Stage"),
+        BlockButtons::Unstage => (icon::MINUS, BlockAction::Unstage, "Unstage"),
+    };
+    let area = Rect::from_min_size(rect.min, vec2(view.style.lead, view.style.row_height));
+    let button = ui.interact(area, view.drag_id.with(("line button", line)), Sense::click());
+    let number = diff_line.new_number.or(diff_line.old_number).unwrap_or(line);
+    let name = format!("{verb} line {number}");
+    button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+    let colors = view.style.colors;
+    let line_hovered = ui.rect_contains_pointer(rect);
+    let color = if button.hovered() {
+        colors.accent_text
+    } else if line_hovered {
+        colors.accent
+    } else {
+        view.style.muted
+    };
+    if button.hovered() {
+        ui.painter().rect_filled(area.shrink(2.0), 4.0, colors.accent);
+        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+    }
+    ui.painter().text(area.center(), Align2::CENTER_CENTER, glyph, FontId::proportional(12.0), color);
+    let button = button.on_hover_text(format!("{verb} this line"));
+    if button.clicked() {
+        response.block_action = Some((action, BTreeSet::from([line])));
     }
 }
 
@@ -652,7 +705,9 @@ fn select_by_pointer(ui: &Ui, view: &View, rect: Rect, line: usize, options: &mu
         ui.input(|input| (input.pointer.primary_pressed(), input.pointer.primary_down(), input.pointer.interact_pos()));
     // A press on a run's buttons is for the button, not the line beneath it.
     let buttons: Option<Rect> = ui.ctx().data(|data| data.get_temp::<Option<Rect>>(view.drag_id.with("block buttons"))).flatten();
-    let inside = pointer.is_some_and(|position| rect.contains(position) && !buttons.is_some_and(|area| area.contains(position)));
+    let inside = pointer.is_some_and(|position| {
+        rect.contains(position) && position.x >= rect.left() + view.style.lead && !buttons.is_some_and(|area| area.contains(position))
+    });
     if inside {
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
@@ -804,6 +859,9 @@ fn append_run(job: &mut LayoutJob, run: &mut String, background: Option<Color32>
     run.clear();
 }
 
+/// Width of the column holding each changed line's + or − button.
+const LINE_BUTTON: f32 = 22.0;
+
 /// The narrowest panel that shows a diff side by side; narrower, each side would wrap most
 /// lines, so the diff is shown in one column.
 pub const MIN_SPLIT_WIDTH: f32 = 560.0;
@@ -859,7 +917,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, true);
+            let style = Style::new(ui, &content, true, 0.0);
             let row = content.split[content.row_of(0, true)];
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
@@ -898,9 +956,10 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 400.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, false);
+            let style = Style::new(ui, &content, false, 0.0);
             let colors = style.colors;
-            let view = View { content: &content, occurrences: &[], current: 0, split: false, style, drag_id: Id::new("test-diff") };
+            let view =
+                View { content: &content, occurrences: &[], current: 0, split: false, style, drag_id: Id::new("test-diff"), buttons: None };
             let removed = view.spans(0);
             let added = view.spans(1);
             assert!(removed
@@ -940,7 +999,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, false);
+            let style = Style::new(ui, &content, false, 0.0);
             assert!(style.wrapped_lines(0) > 1, "a 600-column line wraps in a 700-point view");
             assert!(style.total <= 700.0, "the view fits its width instead of scrolling sideways");
         });
@@ -972,7 +1031,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, false);
+            let style = Style::new(ui, &content, false, 0.0);
             assert_eq!(text_offset(DiffLineKind::Hunk, style.char_width), style.char_width);
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a long hunk header wraps in a 700-point view");
@@ -1000,7 +1059,7 @@ mod tests {
         let ctx = egui::Context::default();
         let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
         let mut output = ctx.run_ui(input, |ui| {
-            let style = Style::new(ui, &content, false);
+            let style = Style::new(ui, &content, false, 0.0);
             assert_eq!(style.wrapped_lines(0), 1, "a file header is measured as one row");
             // The drawn header is one row too, cut short with an ellipsis.
             let mut job = layout(&header, &style.font, Color32::RED, &[]);

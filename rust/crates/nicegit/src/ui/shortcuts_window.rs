@@ -21,6 +21,8 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 (with("Alt-Cmd-F"), "Search file contents"),
                 ("Ctrl-`".to_string(), "Show or hide the terminal"),
                 (with("Cmd-,"), "Settings"),
+                (with("Cmd-+, Cmd-−"), "Make everything larger or smaller"),
+                (with("Cmd-0"), "Normal size"),
                 (with("Cmd-/"), "These shortcuts"),
             ],
         ),

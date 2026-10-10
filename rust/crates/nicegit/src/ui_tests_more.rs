@@ -332,11 +332,11 @@ fn load_older_history_reads_the_next_page() {
     let loaded_commits = |h: &App| h.state().snapshot().map(|s| (s.commits.len(), s.has_more_commits));
     assert_eq!(loaded_commits(&harness), Some((crate::app::PAGE, true)));
 
-    // Scroll to the end of the graph, where the button is.
+    // Scrolling to the end of the graph, where the Load older history row is, loads the next
+    // page without a click.
     let newest = harness.get_by_label(&format!("Commit number {total}")).rect().center();
-    let button = format!("{}  Load older history", icon::CARET_DOUBLE_DOWN);
     for _ in 0..200 {
-        if harness.query_by_label(&button).is_some() {
+        if harness.state().repo().is_some_and(|r| r.history_limit > crate::app::PAGE) {
             break;
         }
         harness.hover_at(newest);
@@ -348,8 +348,6 @@ fn load_older_history_reads_the_next_page() {
         });
         harness.step();
     }
-    settle(&mut harness);
-    harness.get_by_label(&button).click();
     idle(&mut harness);
     wait(&mut harness, "the older commits", |h| loaded_commits(h) == Some((total, false)));
     assert!(shows(&harness, "Commit number 1"), "the oldest commit is listed");
@@ -1539,4 +1537,190 @@ fn a_pull_request_opens_on_github_for_the_current_branch() {
     settle(&mut harness);
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
     assert_eq!(opened, vec!["https://github.com/acme/app/compare/main?expand=1".to_string()]);
+}
+
+/// Selects the shown diff's line with this text, as clicking it would.
+fn select_line(harness: &mut App, text: &str) {
+    let app = harness.state_mut();
+    let active = app.active;
+    let repo = &mut app.repos[active];
+    let index = repo.diff.as_ref().unwrap().lines.iter().position(|line| line.text == text).expect("the line is shown");
+    repo.diff_options.selected.insert(index);
+}
+
+#[test]
+fn lines_of_a_new_file_can_be_staged_on_their_own() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("new.txt"), "one\ntwo\nthree\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("new.txt").click();
+    wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+
+    select_line(&mut harness, "+two");
+    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Stage selected lines").is_some());
+    harness.get_by_label_contains("Stage selected lines").click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged line", |_| git(path, &["show", ":new.txt"]) == "two");
+    assert_eq!(std::fs::read_to_string(path.join("new.txt")).unwrap(), "one\ntwo\nthree\n", "the file keeps every line");
+}
+
+#[test]
+fn selected_lines_can_be_discarded_and_the_discard_undone() {
+    let repo = repository();
+    let path = repo.path();
+    let edited = "first\nsecond\nthird\nfourth\n";
+    std::fs::write(path.join("notes.txt"), edited).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+
+    select_line(&mut harness, "+third");
+    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Discard selected lines").is_some());
+    harness.get_by_label_contains("Discard selected lines").click();
+    wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Discard").last().expect("the confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the line discarded", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\nfourth\n");
+    wait(&mut harness, "Undo discard", |h| h.query_by_label_contains("Undo discard").is_some());
+    harness.get_by_label_contains("Undo discard").click();
+    idle(&mut harness);
+    wait(&mut harness, "the line restored", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == edited);
+}
+
+#[test]
+fn the_interface_size_changes_from_settings_or_the_keyboard_and_is_remembered() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.state_mut().show_settings = true;
+    wait(&mut harness, "settings", |h| h.query_by_label("100%").is_some());
+    harness.get_by_label("+").click();
+    wait(&mut harness, "a larger interface", |h| {
+        (h.ctx.zoom_factor() - 1.1).abs() < 0.001 && (h.state().settings.zoom - 1.1).abs() < 0.001
+    });
+    assert!(harness.query_by_label("110%").is_some());
+
+    harness.state_mut().show_settings = false;
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Num0);
+    wait(&mut harness, "normal size", |h| (h.state().settings.zoom - 1.0).abs() < 0.001);
+
+    // A size saved earlier is applied when NiceGit starts.
+    harness.state_mut().settings.zoom = 1.3;
+    harness.state_mut().zoom_applied = false;
+    wait(&mut harness, "the saved size", |h| (h.ctx.zoom_factor() - 1.3).abs() < 0.001);
+}
+
+#[test]
+fn the_plus_beside_a_line_stages_it_and_the_minus_unstages_it() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\nfourth\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the line buttons", |h| h.query_by_label("Stage line 4").is_some());
+
+    // + stages the one line beside it.
+    harness.get_by_label("Stage line 4").click();
+    idle(&mut harness);
+    wait(&mut harness, "the staged line", |_| git(path, &["show", ":notes.txt"]) == "first\nsecond\nfourth");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nthird\nfourth\n");
+
+    // In the staged diff, − unstages it again.
+    let staged = harness.state().snapshot().unwrap().status.iter().find(|e| e.path == "notes.txt").cloned().unwrap();
+    harness.state_mut().select_change(staged, true);
+    wait(&mut harness, "the staged line's button", |h| h.query_by_label("Unstage line 3").is_some());
+    harness.get_by_label("Unstage line 3").click();
+    idle(&mut harness);
+    wait(&mut harness, "nothing staged", |_| git(path, &["diff", "--cached", "--name-only"]).is_empty());
+}
+
+#[test]
+fn local_branches_show_how_far_they_are_from_their_upstreams() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    // feature is pushed, then gets a commit of its own; old is pushed, then deleted remotely.
+    git(path, &["push", "-q", "-u", "origin", "feature"]);
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "feature.txt", b"work\n", "Feature work");
+    git(path, &["switch", "-q", "main"]);
+    git(path, &["branch", "old", "main"]);
+    git(path, &["push", "-q", "-u", "origin", "old"]);
+    git(remote.path(), &["branch", "-D", "old"]);
+    git(path, &["fetch", "-q", "--prune"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    wait(&mut harness, "the tracking", |h| shows(h, "↑1 ↓0") && shows(h, "gone"));
+}
+
+#[test]
+fn a_recent_commit_summary_can_be_reused() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.get_by_label("Recent commit summaries").click();
+    wait(&mut harness, "the recent summaries", |h| h.query_by_label("Use a recent summary").is_some());
+    // The menu is drawn over everything else, so its entry is the last with that name.
+    harness.get_all_by_role_and_label(Role::Button, "Start the notes").last().expect("the menu entry").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Start the notes");
+}
+
+#[test]
+fn the_fetch_button_counts_commits_waiting_to_be_pulled() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"theirs\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    git(path, &["fetch", "-q"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert_eq!(harness.state().snapshot().unwrap().behind, Some(1));
+
+    harness.get_by_label("Fetch").hover();
+    wait(&mut harness, "the count in the tooltip", |h| shows(h, "1 commit to pull"));
+}
+
+#[test]
+fn the_open_diff_can_be_copied() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label("Copy this diff").is_some());
+    harness.get_by_label("Copy this diff").click();
+    let mut copied = None;
+    for _ in 0..5 {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+        if copied.is_some() {
+            break;
+        }
+    }
+    let copied = copied.expect("the diff was copied");
+    assert!(copied.starts_with("diff --git a/notes.txt b/notes.txt\n"), "{copied}");
+    assert!(copied.contains("\n-second\n+changed\n"), "{copied}");
+    // What was copied applies as a patch, as Git printed it.
+    git(path, &["checkout", "--", "notes.txt"]);
+    std::fs::write(path.join("copied.patch"), &copied).unwrap();
+    git(path, &["apply", "copied.patch"]);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n");
 }
