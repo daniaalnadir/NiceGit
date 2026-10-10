@@ -55,7 +55,7 @@ Git itself. Built with SwiftUI and AppKit, and released under the [MIT License](
   background fetch every 15 minutes (adjustable in Settings).
 - Every keyboard shortcut in one list (Command-/ in the cross-platform app).
 - In the cross-platform app, see each changed file's added and removed lines, filter a long
-  list of changes, and drag a folder onto the window to open it.
+  list of changes, commit and push in one step, and drag a folder onto the window to open it.
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
 - Pull requests and issues from github.com through your existing GitHub CLI login.
 

@@ -40,7 +40,14 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 ("Escape".to_string(), "Back to the history"),
             ],
         ),
-        ("Committing", vec![(with("Cmd-Enter"), "Commit the staged changes"), (with("Cmd-S"), "Save in the built-in editor")]),
+        (
+            "Committing",
+            vec![
+                (with("Cmd-Enter"), "Commit the staged changes"),
+                (with("Shift-Cmd-Enter"), "Commit and push"),
+                (with("Cmd-S"), "Save in the built-in editor"),
+            ],
+        ),
     ]
 }
 

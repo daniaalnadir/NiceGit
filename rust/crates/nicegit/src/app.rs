@@ -927,6 +927,29 @@ impl NiceGitApp {
         }
     }
 
+    /// Commits the staged changes and pushes the new commit to the branch's upstream.
+    pub fn commit_and_push(&mut self) {
+        if !self.can_commit_and_push() {
+            return;
+        }
+        let Some(snapshot) = self.snapshot().cloned() else { return };
+        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        self.act_recording("Commit and push", "Commit", move |client, path| {
+            client.commit_and_push(&message, &snapshot, path).map(|_| Some("Committed and pushed.".into()))
+        });
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.draft = Draft::default();
+            }
+            self.save_draft();
+        }
+    }
+
+    /// Whether a commit can be made and pushed: the branch has an upstream and this is not an amend.
+    pub fn can_commit_and_push(&self) -> bool {
+        self.can_commit() && self.repo().is_some_and(|repo| !repo.amend) && self.snapshot().is_some_and(|s| s.upstream.is_some())
+    }
+
     pub fn can_commit(&self) -> bool {
         let (Some(snapshot), Some(repo)) = (self.snapshot(), self.repo()) else { return false };
         self.idle()

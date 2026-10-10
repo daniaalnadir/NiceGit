@@ -485,6 +485,24 @@ impl NiceGitApp {
         if clicked {
             self.commit();
         }
+        // Committing and pushing in one step, for a branch that already has an upstream.
+        if let (Some(upstream), false) = (snapshot.upstream.as_deref(), self.repos[self.active].amend) {
+            ui.add_space(4.0);
+            let enabled = self.can_commit_and_push();
+            // The upstream is in the tooltip, so a long branch name cannot widen the panel.
+            let text = RichText::new(format!("{}  Commit and push", icon::ARROW_LINE_UP)).color(if enabled { c.accent } else { c.muted });
+            let button = egui::Button::new(text)
+                .fill(egui::Color32::TRANSPARENT)
+                .stroke(egui::Stroke::new(1.0, if enabled { c.accent } else { c.border }))
+                .min_size(egui::vec2(ui.available_width(), 28.0));
+            let push = ui
+                .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add_enabled(enabled, button))
+                .inner
+                .on_hover_text(format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)"));
+            if push.clicked() {
+                self.commit_and_push();
+            }
+        }
     }
 
     /// Whether HEAD is already on a remote-tracking branch, judged from the loaded history.

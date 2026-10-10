@@ -8,6 +8,9 @@
   shows how many of its files match.
 - Open a changed file in its default app from its menu in the Changes panel.
 - Drag a folder onto the window to open it as a repository.
+- Commit and push in one step from the commit box, or with Shift-Command-Enter
+  (Shift-Control-Enter elsewhere), on a branch with an upstream. If the push fails, the
+  commit is kept and the message says so.
 
 ## 1.1.0 - Change by change
 

@@ -47,6 +47,10 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Comma))) {
             self.show_settings = !self.show_settings;
         }
+        // Checked first: Command-Enter also matches while Shift is held.
+        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
+            self.commit_and_push();
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Enter))) && self.can_commit() {
             self.commit();
         }

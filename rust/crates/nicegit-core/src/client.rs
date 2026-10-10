@@ -862,6 +862,33 @@ impl GitClient {
         self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", &remote, &refspec], directory).map(drop)
     }
 
+    /// Commits the staged changes with `message`, then pushes that commit to the upstream, as
+    /// Push would. Refuses before committing unless the branch and HEAD are still those in
+    /// `snapshot` and the branch has an upstream; pushes only the commit just made, on top of
+    /// that HEAD. If the push fails, the commit stays and the error says so.
+    pub fn commit_and_push(&self, message: &str, snapshot: &Snapshot, directory: &Path) -> Result<()> {
+        const COMMAND: &str = "commit and push";
+        let branch = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).unwrap_or_default();
+        let head = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD"], directory);
+        if branch.is_empty() || branch != snapshot.current_branch || head != snapshot.head_hash {
+            return Err(GitError::failed(COMMAND, "The current branch changed since it was shown. Refresh and try again."));
+        }
+        if snapshot.upstream.is_none() {
+            return Err(GitError::failed(COMMAND, "Publish the branch before pushing commits to it."));
+        }
+        self.commit(message, directory)?;
+        let committed = self.run_trimmed(&["rev-parse", "--verify", "HEAD"], directory)?;
+        let parent = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD^"], directory);
+        let still_here = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).ok() == Some(branch);
+        if parent != snapshot.head_hash || !still_here {
+            return Err(GitError::failed(COMMAND, "The commit was made, but the branch moved meanwhile, so it was not pushed."));
+        }
+        let mut committed_snapshot = snapshot.clone();
+        committed_snapshot.head_hash = Some(committed);
+        self.push(&committed_snapshot, directory)
+            .map_err(|error| GitError::failed(COMMAND, format!("The commit was made, but pushing it failed: {error}")))
+    }
+
     /// Pushes the current branch to `remote` under the same name and sets it as the upstream.
     pub fn publish(&self, remote: &str, snapshot: &Snapshot, directory: &Path) -> Result<()> {
         let branch = self

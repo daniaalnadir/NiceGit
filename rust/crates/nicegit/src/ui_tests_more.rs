@@ -1432,3 +1432,34 @@ fn a_changed_file_opens_in_its_default_app_from_its_menu() {
     let canonical = |p: &Path| p.canonicalize().unwrap();
     assert_eq!(opened.iter().map(|p| canonical(p)).collect::<Vec<_>>(), vec![canonical(&path.join("notes.txt"))]);
 }
+
+#[test]
+fn commit_and_push_sends_the_new_commit_from_the_commit_box_or_the_keyboard() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    std::fs::write(path.join("notes.txt"), "pushed\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    let remote_head = || git(remote.path(), &["rev-parse", "refs/heads/main"]);
+
+    type_into(&mut harness, "Commit summary", "Push from the commit box");
+    harness.get_by_label_contains("Commit and push").click();
+    idle(&mut harness);
+    wait(&mut harness, "the push", |_| remote_head() == git(path, &["rev-parse", "HEAD"]));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Push from the commit box");
+    assert!(harness.state().repo().unwrap().draft.is_empty(), "the message is cleared");
+
+    std::fs::write(path.join("notes.txt"), "pushed again\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    harness.state_mut().load(true);
+    idle(&mut harness);
+    wait(&mut harness, "the staged change", |h| h.state().snapshot().is_some_and(|s| s.staged_count() == 1));
+    type_into(&mut harness, "Commit summary", "Push from the keyboard");
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Enter);
+    idle(&mut harness);
+    wait(&mut harness, "the second push", |_| remote_head() == git(path, &["rev-parse", "HEAD"]));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Push from the keyboard");
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "4", "one commit each time, not two");
+}
