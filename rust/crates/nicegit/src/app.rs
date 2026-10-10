@@ -25,6 +25,39 @@ pub struct Notice {
     pub is_error: bool,
     /// An action the message offers as a button, such as pulling after a rejected push.
     pub action: Option<NoticeAction>,
+    /// Git's own words, when the message explains them more plainly; shown in its tooltip.
+    pub detail: Option<String>,
+}
+
+/// A plainer explanation of a remote failing to answer or refusing a sign-in, from Git's own
+/// words; `None` for any other error.
+pub fn remote_problem(error: &str) -> Option<&'static str> {
+    let lower = error.to_lowercase();
+    let any = |signs: &[&str]| signs.iter().any(|sign| lower.contains(sign));
+    if any(&["permission denied (publickey", "host key verification failed"]) {
+        Some("The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.")
+    } else if any(&[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "invalid username or password",
+        "returned error: 403",
+    ]) {
+        Some("The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.")
+    } else if any(&[
+        "could not resolve host",
+        "connection timed out",
+        "failed to connect",
+        "network is unreachable",
+        "connection refused",
+        "operation timed out",
+    ]) {
+        Some("The remote could not be reached. Check your internet connection, and that the remote's address is right.")
+    } else if any(&["repository not found", "does not appear to be a git repository"]) {
+        Some("The remote repository was not found, or your account cannot see it. Check its address and your access.")
+    } else {
+        None
+    }
 }
 
 /// What a message's button does.
@@ -594,7 +627,7 @@ impl NiceGitApp {
     }
 
     pub fn notify(&mut self, text: impl Into<String>, is_error: bool) {
-        self.notice = Some(Notice { text: text.into(), is_error, action: None });
+        self.notice = Some(Notice { text: text.into(), is_error, action: None, detail: None });
     }
 
     fn receive(&mut self) {
@@ -656,6 +689,7 @@ impl NiceGitApp {
                                     text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
+                                    detail: Some(error.to_string()),
                                 });
                             }
                             Err(error) if needs_identity(&error.to_string()) => {
@@ -664,6 +698,17 @@ impl NiceGitApp {
                                     text: "Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.".into(),
                                     is_error: true,
                                     action: Some(NoticeAction::SetIdentity),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if remote_problem(&error.to_string()).is_some() => {
+                                action_failed = true;
+                                let plain = remote_problem(&error.to_string()).unwrap_or_default();
+                                self.notice = Some(Notice {
+                                    text: format!("{label} failed. {plain}"),
+                                    is_error: true,
+                                    action: None,
+                                    detail: Some(error.to_string()),
                                 });
                             }
                             Err(error) => {
@@ -1548,6 +1593,23 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+#[cfg(test)]
+mod remote_problem_tests {
+    use super::remote_problem;
+
+    #[test]
+    fn common_remote_failures_read_plainly_and_others_are_left_alone() {
+        let says = |error: &str, words: &str| remote_problem(error).is_some_and(|plain| plain.contains(words));
+        assert!(says("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.", "SSH key"));
+        assert!(says("fatal: Authentication failed for 'https://github.com/a/b.git/'", "sign-in"));
+        assert!(says("fatal: could not read Username for 'https://github.com': terminal prompts disabled", "sign-in"));
+        assert!(says("fatal: unable to access 'https://x.invalid/': Could not resolve host: x.invalid", "could not be reached"));
+        assert!(says("remote: Repository not found.\nfatal: repository 'https://github.com/a/b.git/' not found", "not found"));
+        assert_eq!(remote_problem("error: failed to push some refs to 'origin'\nhint: Updates were rejected"), None);
+        assert_eq!(remote_problem("fatal: bad object 4038f00d"), None, "a hash containing 403 is not a sign-in failure");
+    }
 }
 
 #[cfg(test)]

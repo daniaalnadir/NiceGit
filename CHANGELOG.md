@@ -11,6 +11,9 @@
 - A commit Git refuses because it does not know your name and email is explained, with Set
   your identity… to open Repository Settings.
 - A commit that fails gives its message back to the commit box; before, it was lost.
+- A remote that cannot be reached, refuses your sign-in or SSH key, or cannot be found is
+  explained in plain words, with Git's own message in the tooltip; the Couldn't fetch note
+  explains it too.
 
 ## 1.4.0 - Sizes everywhere
 

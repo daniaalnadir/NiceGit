@@ -1930,3 +1930,19 @@ fn a_commit_without_an_identity_explains_and_opens_its_settings() {
     assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "nothing was committed");
     assert_eq!(harness.state().repo().unwrap().draft.summary, "Without a name", "the message is given back");
 }
+
+#[test]
+fn an_unreachable_remote_is_explained_in_plain_words() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://nicegit-test.invalid/app.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    toolbar_button(&mut harness, "Fetch");
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        h.state().notice.as_ref().is_some_and(|n| {
+            n.text.contains("could not be reached") && n.detail.as_deref().is_some_and(|d| d.contains("nicegit-test.invalid"))
+        })
+    });
+}

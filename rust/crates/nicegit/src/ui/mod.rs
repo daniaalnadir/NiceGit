@@ -306,6 +306,7 @@ impl NiceGitApp {
         ui.horizontal(|ui| {
             if let Some(notice) = &self.notice {
                 let action = notice.action;
+                let detail = notice.detail.clone();
                 let color = if notice.is_error { c.danger } else { c.accent };
                 let glyph = if notice.is_error { icon::WARNING_CIRCLE } else { icon::CHECK_CIRCLE };
                 ui.label(RichText::new(glyph).color(color));
@@ -325,7 +326,11 @@ impl NiceGitApp {
                             .clicked();
                     }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        let full = text.text().to_string();
+                        // The full message, and Git's own words when the message explains them.
+                        let full = match &detail {
+                            Some(detail) => format!("{}\n\nGit said:\n{detail}", text.text()),
+                            None => text.text().to_string(),
+                        };
                         ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
                     });
                 });
@@ -354,8 +359,9 @@ impl NiceGitApp {
                 // When the remotes were last fetched, or why the background fetch failed.
                 if let Some(repo) = self.repo().filter(|_| !snapshot.remotes.is_empty()) {
                     if let Some(problem) = &repo.fetch_problem {
+                        let plain = crate::app::remote_problem(problem).map(|plain| format!("{plain}\n\n")).unwrap_or_default();
                         ui.label(RichText::new(format!("{}  Couldn't fetch", icon::CLOUD_SLASH)).small().color(c.warning))
-                            .on_hover_text(format!("The last automatic fetch failed:\n{problem}"));
+                            .on_hover_text(format!("The last automatic fetch failed. {plain}Git said:\n{problem}"));
                     } else if let Some(when) = repo.last_fetched {
                         ui.label(RichText::new(fetched_ago(when.elapsed())).small().color(c.muted))
                             .on_hover_text("Remotes are fetched automatically; change how often in Settings.");
