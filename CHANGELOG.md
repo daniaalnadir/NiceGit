@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.17 - One band
+
+- A selected commit's tint spans the whole row, labels and graph included.
+
 ## 0.6.16 - Quieter history
 
 - Only the selected or hovered commit row is tinted; every row keeps its lane-coloured bar,

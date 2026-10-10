@@ -303,7 +303,8 @@ impl NiceGitApp {
         } else {
             0
         };
-        painter.rect_filled(message_rect, 0.0, Color32::from_rgba_unmultiplied(lane_color.r(), lane_color.g(), lane_color.b(), alpha));
+        // The tint spans the whole row, labels and graph too, so a selection reads as one band.
+        painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(lane_color.r(), lane_color.g(), lane_color.b(), alpha));
         painter.rect_filled(egui::Rect::from_min_size(message_rect.min, egui::vec2(3.0, ROW_HEIGHT)), 0.0, lane_color);
 
         let graph_rect = egui::Rect::from_min_size(egui::pos2(rect.left() + LABEL_COLUMN, rect.top()), egui::vec2(graph_width, ROW_HEIGHT));
