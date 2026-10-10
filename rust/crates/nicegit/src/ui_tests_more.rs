@@ -1660,3 +1660,16 @@ fn local_branches_show_how_far_they_are_from_their_upstreams() {
 
     wait(&mut harness, "the tracking", |h| shows(h, "↑1 ↓0") && shows(h, "gone"));
 }
+
+#[test]
+fn a_recent_commit_summary_can_be_reused() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.get_by_label("Recent commit summaries").click();
+    wait(&mut harness, "the recent summaries", |h| h.query_by_label("Use a recent summary").is_some());
+    // The menu is drawn over everything else, so its entry is the last with that name.
+    harness.get_all_by_role_and_label(Role::Button, "Start the notes").last().expect("the menu entry").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Start the notes");
+}

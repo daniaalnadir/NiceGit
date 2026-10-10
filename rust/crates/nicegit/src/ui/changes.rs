@@ -421,7 +421,7 @@ impl NiceGitApp {
                         egui::TextEdit::singleline(&mut repo.draft.summary)
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
-                            .desired_width((ui.available_width() - 64.0).max(40.0)),
+                            .desired_width((ui.available_width() - 92.0).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
                     // Characters used out of the 72-character guideline, e.g. "0/72".
@@ -429,6 +429,34 @@ impl NiceGitApp {
                     let color = if length > 72 { c.warning } else { c.muted };
                     ui.label(RichText::new(format!("{length}/72")).small().monospace().color(color))
                         .on_hover_text("Summaries read best under 72 characters");
+                    // Recent summaries from this branch's history, to reuse one.
+                    let mut recent: Vec<&str> = Vec::new();
+                    for commit in snapshot.commits.iter().filter(|commit| commit.parents.len() <= 1) {
+                        if recent.len() == 10 {
+                            break;
+                        }
+                        if !recent.contains(&commit.subject.as_str()) {
+                            recent.push(&commit.subject);
+                        }
+                    }
+                    if !recent.is_empty() {
+                        // Without a frame at rest, like the panel's other icon buttons.
+                        let visuals = &mut ui.visuals_mut().widgets.inactive;
+                        visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
+                        visuals.bg_stroke = egui::Stroke::NONE;
+                        let menu = ui.menu_button(RichText::new(icon::CLOCK_COUNTER_CLOCKWISE).color(c.muted), |ui| {
+                            ui.label(RichText::new("Use a recent summary").small().color(c.muted));
+                            for subject in &recent {
+                                if ui.add(egui::Button::new(*subject).truncate()).clicked() {
+                                    repo.draft.summary = subject.to_string();
+                                    ui.close();
+                                }
+                            }
+                        });
+                        menu.response
+                            .on_hover_text("Recent commit summaries")
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Recent commit summaries"));
+                    }
                 });
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
