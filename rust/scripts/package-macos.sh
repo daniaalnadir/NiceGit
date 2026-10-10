@@ -62,6 +62,13 @@ sed -i '' "s/__VERSION__/$VERSION/g" "$app/Contents/Info.plist"
 plutil -lint "$app/Contents/Info.plist"
 cp assets/NiceGit.icns "$app/Contents/Resources/NiceGit.icns"
 cp "$repo_dir/LICENSE" "$app/Contents/Resources/LICENSE"
+# Copied before signing: a file added after codesign breaks the signature.
+licenses="$dist/THIRD_PARTY_LICENSES.txt"
+# Regenerated whenever cargo-about is installed, so a local build never ships a stale list.
+if command -v cargo-about >/dev/null 2>&1 || [ ! -f "$licenses" ]; then
+    bash "$rust_dir/scripts/third-party-licenses.sh" "$licenses"
+fi
+cp "$licenses" "$app/Contents/Resources/THIRD_PARTY_LICENSES.txt"
 
 if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
     codesign --force --options runtime --timestamp \

@@ -105,6 +105,12 @@ jobs:
         with:
           workspaces: rust
 
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked --version 0.9.2 --features cli
+
+      - name: Generate the third-party license file
+        run: bash rust/scripts/third-party-licenses.sh rust/dist/THIRD_PARTY_LICENSES.txt
+
       - name: Import signing certificate
         if: env.DEVELOPER_ID_P12 != ''
         run: |
@@ -175,6 +181,14 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked --version 0.9.2 --features cli
+
+      # The same script as on macOS and Linux, through Git Bash, so every download's file is alike.
+      - name: Generate the third-party license file
+        shell: bash
+        run: bash rust/scripts/third-party-licenses.sh rust/dist/THIRD_PARTY_LICENSES.txt
+
       - name: Package
         shell: pwsh
         working-directory: rust
@@ -187,6 +201,7 @@ jobs:
           Copy-Item -Path 'target/release/nicegit.exe' -Destination $stage
           Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'LICENSE') -Destination $stage
           Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'README.md') -Destination $stage
+          Copy-Item -Path 'dist/THIRD_PARTY_LICENSES.txt' -Destination $stage
           $zip = Join-Path (Get-Location) "dist/NiceGit-$version-windows-x64.zip"
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
           Write-Host "Created $zip"
@@ -227,6 +242,12 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
+      - name: Install cargo-about
+        run: cargo install cargo-about --locked --version 0.9.2 --features cli
+
+      - name: Generate the third-party license file
+        run: bash rust/scripts/third-party-licenses.sh rust/dist/THIRD_PARTY_LICENSES.txt
+
       - name: Package tarball and deb
         working-directory: rust
         run: |
@@ -239,6 +260,7 @@ jobs:
 
           cp target/release/nicegit "$stage/nicegit"
           cp "$root/LICENSE" "$root/README.md" "$stage/"
+          cp dist/THIRD_PARTY_LICENSES.txt "$stage/"
           cp packaging/linux/nicegit.desktop "$stage/"
           cp assets/icon-256.png "$stage/nicegit.png"
           tar -czf "dist/NiceGit-$version-linux-x86_64.tar.gz" -C "$stage" .

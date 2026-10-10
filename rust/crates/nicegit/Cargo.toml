@@ -7,6 +7,8 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+# Not published to crates.io. cargo-about skips unpublished crates in the third-party license file.
+publish = false
 
 [dependencies]
 nicegit-core = { path = "../nicegit-core" }
@@ -41,4 +43,5 @@ assets = [
     ["target/release/nicegit", "usr/bin/", "755"],
     ["../../packaging/linux/nicegit.desktop", "usr/share/applications/", "644"],
     ["../../assets/icon-256.png", "usr/share/icons/hicolor/256x256/apps/nicegit.png", "644"],
+    ["../../dist/THIRD_PARTY_LICENSES.txt", "usr/share/doc/nicegit/THIRD_PARTY_LICENSES.txt", "644"],
 ]

@@ -1,0 +1,40 @@
+NiceGit third-party licenses
+============================
+
+This file lists the open-source components built into NiceGit, and the license each one is
+used under. Each component's copyright notice and license text are included as its license
+requires.
+
+NiceGit itself is MIT-licensed; see the LICENSE file.
+
+The Inter font (SIL Open Font License 1.1) and the Phosphor icons (MIT License) are not Rust
+crates; their notices and licenses follow at the end of this file.
+
+
+Overview
+--------
+
+{{#each overview}}
+{{{name}}} ({{{id}}}): {{{count}}} crate(s)
+{{/each}}
+
+
+Licenses and the crates that use them
+-------------------------------------
+
+Each license text is followed by the crates under it. A license whose text differs between
+crates, because each crate carries its own copyright notice, appears once for each notice.
+
+{{#each licenses}}
+================================================================================
+{{{name}}} ({{{id}}})
+================================================================================
+
+{{{text}}}
+
+Crates under this license:
+{{#each used_by}}
+  {{{crate.name}}} {{{crate.version}}}
+{{/each}}
+
+{{/each}}

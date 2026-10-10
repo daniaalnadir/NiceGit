@@ -20,6 +20,15 @@ NiceGit's own source is covered by the root MIT LICENSE.
 Git and GitHub CLI are external user-installed tools, not bundled with NiceGit.
 Apple system frameworks are supplied by macOS. No GitKraken artwork is bundled.
 
+## Rust crates
+
+The Rust crates NiceGit is built from are listed with their full license texts and copyright
+notices in `THIRD_PARTY_LICENSES.txt`, followed by the Inter font's license and the Phosphor
+icons' notice. Every download includes the file: inside NiceGit.app's
+Resources folder on macOS, next to the program in the Windows and Linux archives, and under
+`/usr/share/doc/nicegit/` in the .deb package. The file is generated from the dependency tree
+by `rust/scripts/third-party-licenses.sh`, using cargo-about.
+
 # GitHub Logo
 
 The GitHub logo shown in the toolbar and command palette is the Phosphor icon. GitHub's
