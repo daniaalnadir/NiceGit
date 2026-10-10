@@ -54,12 +54,11 @@ fn screenshots() {
         let mut harness = open_rendering(&path, appearance);
         save(&mut harness, &folder, &format!("main-{theme}"));
 
-        // A changed file's diff, unified and then side by side.
+        // A changed file's diff. Side by side is rendered below from a wider window, since this
+        // diff panel is narrower than it needs and would show the same single column.
         harness.get_all_by_label(&file).next().expect("a changed file").click();
         wait(&mut harness, "the diff", |h| h.state().repo().is_some_and(|r| r.diff.is_some() && !r.diff_loading));
         save(&mut harness, &folder, &format!("diff-unified-{theme}"));
-        harness.state_mut().settings.split_diff = true;
-        save(&mut harness, &folder, &format!("diff-split-{theme}"));
 
         // The built-in editor on the same file.
         let edit = format!("{}  Edit", icon::PENCIL_SIMPLE);

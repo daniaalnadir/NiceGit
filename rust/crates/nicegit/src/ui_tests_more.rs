@@ -219,6 +219,18 @@ fn the_main_window_stays_usable_while_the_editor_is_open() {
 }
 
 #[test]
+fn compact_toolbar_icons_name_themselves_on_hover() {
+    // At 1440 points with both sidebars and the Changes panel open, the toolbar shows icons
+    // alone; each still has its name as its accessible label and at the start of its tooltip.
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    assert!(!shows(&harness, "Fetch: Download from all remotes"), "no tooltip before hovering");
+    harness.get_by_label("Fetch").hover();
+    wait(&mut harness, "the tooltip", |h| shows(h, "Fetch: Download from all remotes"));
+}
+
+#[test]
 fn load_older_history_reads_the_next_page() {
     let dir = temp_dir();
     let path = dir.path();
