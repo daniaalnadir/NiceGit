@@ -200,7 +200,10 @@ fn double_clicking_the_repositories_edge_restores_its_width() {
     }
     settle(&mut harness);
     let restored = settled_width(&mut harness, id);
-    assert!((restored - default).abs() < 1.0, "restored {restored} to the default {default}");
+    // The first width can be wider than the default when a long folder path stretches the
+    // column's contents (as Windows temporary paths do), so the restored default is at most it.
+    assert!(restored < dragged - 30.0, "the double-click undid the drag: {dragged} -> {restored}");
+    assert!(restored <= default + 1.0, "restored {restored}, no wider than the starting {default}");
 }
 
 /// The width a side panel settles at. Its contents set a minimum width that can change over the
