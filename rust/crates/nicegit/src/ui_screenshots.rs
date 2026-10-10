@@ -129,6 +129,12 @@ fn screenshots() {
         wide.state_mut().close_diff();
         wait(&mut wide, "the history", |h| h.query_by_label("History columns").is_some());
         save(&mut wide, &folder, &format!("history-wide-{theme}"));
+        // A commit's inspector, with each file's line counts.
+        let head = wide.state().snapshot().and_then(|s| s.head_hash.clone()).expect("a commit");
+        wide.state_mut().select_commit(head);
+        wait(&mut wide, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+        save(&mut wide, &folder, &format!("inspector-{theme}"));
+        wide.state_mut().clear_selection();
         let active = wide.state().active;
         let behind = wide.state().repos[active].snapshot.as_ref().and_then(|s| s.behind);
         wide.state_mut().repos[active].snapshot.as_mut().unwrap().behind = Some(3);

@@ -50,7 +50,24 @@ impl NiceGitApp {
                                         ui.vertical(|ui| {
                                             ui.spacing_mut().item_spacing.y = 0.0;
                                             let name = RichText::new(repo.name());
-                                            ui.add(egui::Label::new(if active { name.strong() } else { name }).truncate());
+                                            // Uncommitted changes beside the name, so work in progress shows in every
+                                            // tab; the row stops short of the close button.
+                                            let changes = repo.snapshot.as_ref().map_or(0, |snapshot| snapshot.status.len());
+                                            let row = egui::vec2((ui.available_width() - 24.0).max(40.0), 18.0);
+                                            ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                if changes > 0 {
+                                                    let plural = if changes == 1 { "" } else { "s" };
+                                                    ui.label(
+                                                        RichText::new(format!("{} {changes}", icon::PENCIL_SIMPLE))
+                                                            .small()
+                                                            .color(c.modified),
+                                                    )
+                                                    .on_hover_text(format!("{changes} uncommitted change{plural}"));
+                                                }
+                                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                                    ui.add(egui::Label::new(if active { name.strong() } else { name }).truncate());
+                                                });
+                                            });
                                             let path = repo.path.display().to_string();
                                             ui.add(
                                                 egui::Label::new(RichText::new(middle_truncate(&path, 30)).small().color(c.muted))

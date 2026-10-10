@@ -563,7 +563,7 @@ impl NiceGitApp {
 const FILTER_FROM: usize = 10;
 
 /// How many lines a file's change adds and removes, laid out from the right.
-fn line_count(ui: &mut Ui, count: LineCount) {
+pub(crate) fn line_count(ui: &mut Ui, count: LineCount) {
     let c = theme::of(ui);
     ui.add_space(4.0);
     let (text, tip) = match count {

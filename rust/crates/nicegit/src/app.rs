@@ -51,6 +51,9 @@ impl HistoryEntry {
     }
 }
 
+/// Lines added and removed in each file, by path.
+pub type FileLineCounts = std::collections::HashMap<String, nicegit_core::line_counts::LineCount>;
+
 /// Returns every side and bottom panel to its default width, a share of the window.
 pub fn restore_panel_widths(ctx: &egui::Context) {
     ctx.data_mut(|data| {
@@ -134,6 +137,8 @@ pub struct Repo {
     pub image_textures: Option<crate::tools::compare::Textures>,
     /// Each local branch's distance from its upstream, read after each refresh.
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
+    /// Lines added and removed in each file of the selected commit, with that commit's hash.
+    pub commit_line_counts: Option<(String, Task<Option<FileLineCounts>>)>,
     /// Text that narrows the Changes panel's lists to matching paths.
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
@@ -180,6 +185,7 @@ impl Repo {
             submodules: None,
             line_counts: None,
             change_filter: String::new(),
+            commit_line_counts: None,
             branch_tracking: None,
             image_preview: None,
             image_textures: None,
@@ -926,6 +932,13 @@ impl NiceGitApp {
         let (details_path, details_hash) = (path.clone(), hash.clone());
         repo.details = Some(Task::spawn(&context, move || GitClient::new().commit_details(&details_hash, &details_path)));
         self.worker.commit_files(generation, path.clone(), hash.clone());
+        // Line counts for the commit's files, read once per commit.
+        let repo = self.repo_mut().expect("active repository");
+        if repo.commit_line_counts.as_ref().is_none_or(|(counted, _)| *counted != hash) {
+            let (counts_path, counts_hash) = (path.clone(), hash.clone());
+            let task = Task::spawn(&context, move || GitClient::new().commit_line_counts(&counts_hash, &counts_path).ok());
+            repo.commit_line_counts = Some((hash.clone(), task));
+        }
         let title = format!("Commit {}", short(&hash));
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, ignore_whitespace, &path));
     }

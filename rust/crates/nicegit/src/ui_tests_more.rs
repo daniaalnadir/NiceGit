@@ -1724,3 +1724,34 @@ fn the_open_diff_can_be_copied() {
     git(path, &["apply", "copied.patch"]);
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n");
 }
+
+#[test]
+fn a_commits_files_show_how_many_lines_they_change() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.get_by_label("Add a second line").click();
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    // The commit adds the line "second" to notes.txt.
+    wait(&mut harness, "the count", |h| h.query_by_label("+1").is_some());
+    harness.get_by_label("+1").hover();
+    wait(&mut harness, "the exact count", |h| shows(h, "1 line added, 0 lines removed"));
+}
+
+#[test]
+fn repository_tabs_count_their_uncommitted_changes() {
+    let first = repository();
+    let second = repository();
+    for n in 0..7 {
+        std::fs::write(second.path().join(format!("new{n}.txt")), "x\n").unwrap();
+    }
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    wait(&mut harness, "the second tab", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    // The first tab is clean, so only the second shows a count.
+    let count = format!("{} 7", icon::PENCIL_SIMPLE);
+    wait(&mut harness, "the count", |h| h.query_by_label(&count).is_some());
+    harness.get_by_label(&count).hover();
+    wait(&mut harness, "the tooltip", |h| shows(h, "7 uncommitted changes"));
+}

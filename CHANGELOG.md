@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 - Sizes everywhere
+
+- A commit's files in the inspector show how many lines each adds and removes, as changed
+  files do in the Changes panel.
+- Each repository tab shows how many uncommitted changes it has, so work in progress is
+  visible in every open repository.
+
 ## 1.3.0 - Line by line
 
 - Each added or removed line in a diff has a + to its left, before the line numbers, that
