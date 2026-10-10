@@ -17,6 +17,16 @@ pub enum FileView {
     Tree,
 }
 
+/// What the toolbar's combined Fetch and Pull button does when clicked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SyncAction {
+    /// Download from all remotes without changing the current branch.
+    #[default]
+    Fetch,
+    /// Fetch, then fast-forward the current branch.
+    Pull,
+}
+
 /// A commit message being written, kept per checkout (repository and branch).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Draft {
@@ -59,6 +69,8 @@ pub struct Settings {
     pub auto_refresh: bool,
     pub file_view: FileView,
     pub show_repositories: bool,
+    /// Whether the toolbar's Fetch and Pull button fetches or pulls.
+    pub sync_action: SyncAction,
     /// Repositories open as tabs, in order.
     pub open: Vec<PathBuf>,
     pub active: usize,
@@ -78,6 +90,7 @@ impl Default for Settings {
             auto_refresh: true,
             file_view: FileView::Path,
             show_repositories: true,
+            sync_action: SyncAction::Fetch,
             open: Vec::new(),
             active: 0,
             recent: Vec::new(),

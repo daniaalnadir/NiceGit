@@ -2,6 +2,7 @@ use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 
 use crate::app::NiceGitApp;
+use crate::settings::SyncAction;
 use crate::theme;
 use crate::tools::{self};
 use crate::ui::dialogs::{Dialog, InputKind};
@@ -9,6 +10,8 @@ use crate::ui::dialogs::{Dialog, InputKind};
 /// Space either side of a labelled button's label.
 const LABEL_PADDING: f32 = 7.0;
 const COMPACT_WIDTH: f32 = 34.0;
+/// The width of the arrow beside a button that has a menu of choices.
+const CARET_WIDTH: f32 = 16.0;
 /// The room between two groups of buttons: space, a thin rule, and space.
 const GROUP_GAP: f32 = 15.0;
 
@@ -41,12 +44,39 @@ struct ToolItem {
     tip: String,
     enabled: bool,
     action: ToolAction,
+    /// Whether an arrow beside the button opens a menu, for the Fetch and Pull choice.
+    menu: bool,
 }
 
 impl ToolItem {
     fn new(glyph: &'static str, label: &str, tip: String, enabled: bool, action: ToolAction) -> Self {
-        Self { glyph, label: label.to_string(), tip, enabled, action }
+        Self { glyph, label: label.to_string(), tip, enabled, action, menu: false }
     }
+
+    fn with_menu(mut self) -> Self {
+        self.menu = true;
+        self
+    }
+
+    /// The room the button takes in `style`, including its arrow.
+    fn width(&self, ui: &Ui, style: ToolStyle) -> f32 {
+        tool_width(ui, &self.label, style) + 2.0 + if self.menu { CARET_WIDTH + 2.0 } else { 0.0 }
+    }
+}
+
+/// The arrow beside a button that opens its menu of choices.
+fn menu_caret(ui: &mut Ui, label: &str) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(CARET_WIDTH, 44.0), egui::Sense::click());
+    let response = response.on_hover_text(format!("Choose what {label} does"));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{label} options")));
+    if ui.is_rect_visible(rect) {
+        if response.hovered() {
+            ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
+        }
+        let color = theme::of(ui).muted;
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon::CARET_DOWN, egui::FontId::proportional(12.0), color);
+    }
+    response
 }
 
 /// A toolbar button: an icon above a short label, or the icon alone when space is tight.
@@ -121,6 +151,33 @@ fn picker(ui: &mut Ui, caption: &str, value: &str, add: impl FnOnce(&mut Ui)) {
     });
 }
 
+/// The choice of what the Fetch and Pull button does.
+fn sync_menu(ui: &mut Ui, action: &mut SyncAction) {
+    let c = theme::of(ui);
+    ui.set_min_width(250.0);
+    ui.label(RichText::new("Toolbar button").small().color(c.muted));
+    ui.add_space(4.0);
+    // Each description lines up under its choice's name.
+    let indent = ui.spacing().icon_width + ui.spacing().icon_spacing;
+    for (choice, name, detail) in [
+        (SyncAction::Fetch, "Fetch", "Download from all remotes"),
+        (SyncAction::Pull, "Pull", "Fetch, then fast-forward the current branch"),
+    ] {
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            if tools::widgets::radio(ui, *action == choice, name).clicked() {
+                *action = choice;
+                ui.close();
+            }
+            ui.horizontal(|ui| {
+                ui.add_space(indent);
+                ui.label(RichText::new(detail).small().color(c.muted));
+            });
+        });
+        ui.add_space(6.0);
+    }
+}
+
 impl NiceGitApp {
     pub fn toolbar(&mut self, ui: &mut Ui) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
@@ -139,6 +196,7 @@ impl NiceGitApp {
             .unwrap_or_else(|| "Nothing to redo".into());
         let can_undo = idle && self.repo().is_some_and(|r| r.undo.as_ref().is_some_and(|s| s.applies_to(&snapshot.current_branch)));
         let can_redo = idle && self.repo().is_some_and(|r| r.redo.as_ref().is_some_and(|s| s.applies_to(&snapshot.current_branch)));
+        let mut sync_action = self.settings.sync_action;
         let behind = snapshot.behind.unwrap_or(0);
         let ahead = snapshot.ahead.unwrap_or(0);
         let pull_label = if behind > 0 { format!("Pull {behind}") } else { "Pull".into() };
@@ -156,14 +214,24 @@ impl NiceGitApp {
                 ToolItem::new(icon::ARROW_CLOCKWISE, "Redo", redo_tip.clone(), can_redo, ToolAction::Redo),
             ],
             vec![
-                ToolItem::new(icon::CLOUD_ARROW_DOWN, "Fetch", "Download from all remotes".into(), idle && has_remote, ToolAction::Fetch),
-                ToolItem::new(
-                    icon::ARROW_LINE_DOWN,
-                    &pull_label,
-                    "Fetch and fast-forward the current branch".into(),
-                    idle && clean && snapshot.upstream.is_some(),
-                    ToolAction::Pull,
-                ),
+                // Fetch and Pull share one button; its arrow chooses which one it does.
+                match sync_action {
+                    SyncAction::Fetch => ToolItem::new(
+                        icon::CLOUD_ARROW_DOWN,
+                        "Fetch",
+                        "Download from all remotes".into(),
+                        idle && has_remote,
+                        ToolAction::Fetch,
+                    ),
+                    SyncAction::Pull => ToolItem::new(
+                        icon::ARROW_LINE_DOWN,
+                        &pull_label,
+                        "Fetch and fast-forward the current branch".into(),
+                        idle && clean && snapshot.upstream.is_some(),
+                        ToolAction::Pull,
+                    ),
+                }
+                .with_menu(),
                 ToolItem::new(
                     icon::ARROW_LINE_UP,
                     &push_label,
@@ -235,7 +303,7 @@ impl NiceGitApp {
                         if seen >= shown {
                             break;
                         }
-                        total += tool_width(ui, &item.label, style) + 2.0;
+                        total += item.width(ui, style);
                         seen += 1;
                     }
                 }
@@ -263,6 +331,10 @@ impl NiceGitApp {
                     if index < shown {
                         if tool(ui, item.glyph, &item.label, &item.tip, item.enabled, style).clicked() {
                             chosen = Some(item.action);
+                        }
+                        if item.menu {
+                            let caret = menu_caret(ui, "Fetch and Pull");
+                            egui::Popup::menu(&caret).show(|ui| sync_menu(ui, &mut sync_action));
                         }
                     } else {
                         overflow.push(item);
@@ -298,6 +370,7 @@ impl NiceGitApp {
             }
         });
 
+        self.settings.sync_action = sync_action;
         match chosen {
             Some(ToolAction::Undo) => self.confirm_undo(),
             Some(ToolAction::Redo) => self.confirm_redo(),

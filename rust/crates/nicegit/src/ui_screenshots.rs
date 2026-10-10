@@ -54,6 +54,13 @@ fn screenshots() {
         let mut harness = open_rendering(&path, appearance);
         save(&mut harness, &folder, &format!("main-{theme}"));
 
+        // The menu that chooses what the Fetch and Pull button does.
+        harness.get_by_label("Fetch and Pull options").click();
+        wait(&mut harness, "the Fetch and Pull menu", |h| h.query_by_role_and_label(Role::RadioButton, "Pull").is_some());
+        save(&mut harness, &folder, &format!("sync-menu-{theme}"));
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(2);
+
         // A changed file's diff. Side by side is rendered below from a wider window, since this
         // diff panel is narrower than it needs and would show the same single column.
         harness.get_all_by_label(&file).next().expect("a changed file").click();

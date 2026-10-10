@@ -614,19 +614,29 @@ impl NiceGitApp {
         Some((repo.diff_generation, repo.path.clone()))
     }
 
+    /// Selects the working tree, listing its changes without opening a file: a file's diff
+    /// takes the history's place, so it opens only when a file is chosen.
     pub fn select_working_tree(&mut self) {
-        let first = self.snapshot().and_then(|s| s.status.first().cloned());
-        match first {
-            Some(entry) => {
-                let staged = !entry.is_unstaged();
-                self.select_change(entry, staged);
-            }
-            None => {
-                self.clear_selection();
-                if let Some(repo) = self.repo_mut() {
-                    repo.selection = Selection::WorkingTree;
-                }
-            }
+        self.clear_selection();
+        if let Some(repo) = self.repo_mut() {
+            repo.selection = Selection::WorkingTree;
+        }
+    }
+
+    /// Whether a file's diff is open. It fills the main area in place of the history.
+    pub fn showing_diff(&self) -> bool {
+        self.repo().is_some_and(|r| {
+            matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
+        })
+    }
+
+    /// Closes the open diff and returns to the history, keeping the commit or the working tree
+    /// it came from selected.
+    pub fn close_diff(&mut self) {
+        match self.repo().map(|r| r.selection.clone()) {
+            Some(Selection::Commit { hash, file: Some(_) }) => self.select_commit(hash),
+            Some(Selection::Change { .. }) => self.select_working_tree(),
+            _ => self.clear_selection(),
         }
     }
 

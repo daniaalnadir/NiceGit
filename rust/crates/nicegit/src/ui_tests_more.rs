@@ -211,6 +211,9 @@ fn the_main_window_stays_usable_while_the_editor_is_open() {
     harness.get_by_label(&edit).click_accesskit();
     wait(&mut harness, "the editor", |h| h.query_by_role_and_label(Role::TextInput, "File contents").is_some());
 
+    // The diff fills the main area; going back to the history leaves the editor open.
+    harness.get_by_label_contains("History").click_accesskit();
+    wait(&mut harness, "the history", |h| h.query_by_label("Start the notes").is_some());
     harness.get_all_by_label("Start the notes").next().expect("the first commit's row").click_accesskit();
     wait(&mut harness, "the commit to be selected", |h| {
         h.state().repo().is_some_and(|r| matches!(&r.selection, crate::app::Selection::Commit { .. }))
@@ -228,6 +231,81 @@ fn compact_toolbar_icons_name_themselves_on_hover() {
     assert!(!shows(&harness, "Fetch: Download from all remotes"), "no tooltip before hovering");
     harness.get_by_label("Fetch").hover();
     wait(&mut harness, "the tooltip", |h| shows(h, "Fetch: Download from all remotes"));
+}
+
+/// Chooses what the toolbar's Fetch and Pull button does, from the menu beside it.
+fn choose_sync_action(harness: &mut App, name: &str) {
+    settle(harness);
+    harness.get_by_label("Fetch and Pull options").click();
+    wait(harness, "the Fetch and Pull menu", |h| h.query_by_role_and_label(Role::RadioButton, name).is_some());
+    harness.get_by_role_and_label(Role::RadioButton, name).click();
+    settle(harness);
+}
+
+#[test]
+fn fetch_and_pull_share_a_button_whose_menu_chooses_the_default() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let button = |h: &App, name: &str| h.query_by_role_and_label(Role::Button, name).is_some();
+    assert!(button(&harness, "Fetch") && !button(&harness, "Pull"), "the button fetches at first");
+
+    choose_sync_action(&mut harness, "Pull");
+    assert_eq!(harness.state().settings.sync_action, crate::settings::SyncAction::Pull);
+    assert!(button(&harness, "Pull") && !button(&harness, "Fetch"), "the button now pulls");
+
+    // The menu shows the current choice selected, and choosing Fetch switches back.
+    harness.get_by_label("Fetch and Pull options").click();
+    wait(&mut harness, "the menu", |h| h.query_by_role_and_label(Role::RadioButton, "Pull").is_some());
+    assert_eq!(harness.get_by_role_and_label(Role::RadioButton, "Pull").accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
+    harness.get_by_role_and_label(Role::RadioButton, "Fetch").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().settings.sync_action, crate::settings::SyncAction::Fetch);
+    assert!(button(&harness, "Fetch") && !button(&harness, "Pull"));
+}
+
+#[test]
+fn a_file_diff_takes_the_place_of_the_history() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    // The first commit's row: the inspector names only the selected commit, so this is shown
+    // by the history alone.
+    let history_shown = |h: &App| h.query_by_label("Start the notes").is_some();
+    assert!(history_shown(&harness));
+
+    // Choosing the working tree lists its changes and keeps the history in view.
+    harness.state_mut().select_working_tree();
+    settle(&mut harness);
+    assert!(history_shown(&harness), "no file is open yet");
+
+    // Opening a changed file replaces the history with its diff.
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.state().repo().is_some_and(|r| r.diff.is_some() && !r.diff_loading));
+    assert!(!history_shown(&harness), "the diff fills the main area");
+
+    // History goes back, with the working tree still selected.
+    harness.get_by_label_contains("History").click_accesskit();
+    wait(&mut harness, "the history", history_shown);
+    assert!(matches!(harness.state().repo().unwrap().selection, crate::app::Selection::WorkingTree));
+
+    // Escape also goes back, and from a commit's file it returns to that commit.
+    let head = git(path, &["rev-parse", "HEAD"]);
+    harness.state_mut().select_commit(head.clone());
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    settle(&mut harness);
+    harness.get_by_label("notes.txt").click_accesskit();
+    wait(&mut harness, "the commit's diff", |h| {
+        h.state().repo().is_some_and(|r| matches!(r.selection, crate::app::Selection::Commit { file: Some(_), .. })) && !history_shown(h)
+    });
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the history", history_shown);
+    assert!(
+        matches!(&harness.state().repo().unwrap().selection, crate::app::Selection::Commit { hash, file: None } if *hash == head),
+        "the commit stays selected"
+    );
 }
 
 #[test]
@@ -918,6 +996,7 @@ fn undo_a_pull_from_the_toolbar() {
     let mut harness = open(path);
     loaded(&mut harness);
 
+    choose_sync_action(&mut harness, "Pull");
     toolbar_button(&mut harness, "Pull");
     idle(&mut harness);
     wait(&mut harness, "the pull", |_| git(path, &["rev-parse", "HEAD"]) == theirs);

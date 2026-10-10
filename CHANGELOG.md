@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 - Room to read
+
+- A file's diff takes the whole main area in place of the commit history. History, or
+  Escape, goes back, keeping the commit or working tree it came from selected.
+- Choosing the working tree lists its changes without opening the first file.
+- Fetch and Pull share one toolbar button. The arrow beside it chooses which one the button
+  does, and the choice is remembered.
+
 ## 0.6.20 - Soft edge
 
 - The commit history fades out at its bottom edge while more commits are below, so a row cut

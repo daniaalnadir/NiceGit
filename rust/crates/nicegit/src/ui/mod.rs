@@ -53,10 +53,14 @@ impl NiceGitApp {
         if !typing && self.dialog.is_none() && self.palette.is_none() {
             let (up, down, escape) =
                 ctx.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown), i.key_pressed(Key::Escape)));
-            if up || down {
+            let diff = self.showing_diff();
+            // The graph is hidden while a diff is open, so the arrows do not move through it.
+            if (up || down) && !diff {
                 self.move_selection(if up { -1 } else { 1 });
             }
-            if escape {
+            if escape && diff {
+                self.close_diff();
+            } else if escape {
                 self.clear_selection();
                 if let Some(repo) = self.repo_mut() {
                     repo.marked.clear();
@@ -185,25 +189,19 @@ impl NiceGitApp {
             egui::Panel::bottom("statusbar")
                 .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 5)))
                 .show(ui, |ui| self.status_bar(ui));
-            let showing_diff = self.repo().is_some_and(|r| {
-                matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
-            });
-            if showing_diff {
-                // The diff opens at just under half the history column: enough to read a change
-                // without dragging the divider, while the graph keeps the larger share.
-                let height = ui.available_height();
-                let shown = egui::Panel::bottom("diff")
-                    .resizable(true)
-                    .default_size((height * 0.45).max(280.0))
-                    .size_range(220.0..=(height * 0.85).max(260.0))
-                    .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(0, 0)))
-                    .show(ui, |ui| self.diff_panel(ui));
-                edges.push(("diff", PanelEdge::Top(shown.response.rect)));
-            }
             self.terminal_panel(ui);
             self.operation_banner(ui);
             self.bisect_banner(ui);
-            self.history(ui);
+            // A file's diff takes the whole main area in place of the history, so long lines
+            // and side-by-side views have room; History or Escape goes back.
+            if self.showing_diff() {
+                egui::Frame::new().fill(ui.visuals().extreme_bg_color).show(ui, |ui| {
+                    ui.set_min_size(ui.available_size());
+                    self.diff_panel(ui);
+                });
+            } else {
+                self.history(ui);
+            }
         });
         restore_on_double_click(ui.ctx(), &edges);
     }
@@ -422,16 +420,14 @@ impl NiceGitApp {
         };
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(icon::GIT_DIFF).color(c.muted));
-                ui.add(egui::Label::new(RichText::new(&title).strong()).truncate());
-                // The spinner's place is always taken, so the buttons after it keep the same
-                // identity whether or not the diff is reloading; otherwise a click or screen
-                // reader action aimed at Edit during a reload would miss it.
-                ui.add_visible(loading, egui::Spinner::new());
+                let back = ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)");
+                if back.clicked() {
+                    self.close_diff();
+                }
+                ui.add_space(6.0);
+                // The controls are laid out from the right first, so the file's name takes only the
+                // room left between them and the History button, and is shortened to fit it.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, icon::X, "Close diff", true).clicked() {
-                        self.clear_selection();
-                    }
                     let mut split = self.settings.split_diff;
                     // A diff with only one side always shows in one column.
                     let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
@@ -464,6 +460,17 @@ impl NiceGitApp {
                             self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
                         }
                     }
+                    ui.add_space(8.0);
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        // A spinner stands in for the icon while the diff reloads. It comes after
+                        // the buttons, so their identities stay the same either way.
+                        if loading {
+                            ui.add(egui::Spinner::new());
+                        } else {
+                            ui.label(RichText::new(icon::GIT_DIFF).color(c.muted));
+                        }
+                        ui.add(egui::Label::new(RichText::new(&title).strong()).truncate()).on_hover_text(&title);
+                    });
                 });
             });
         });
