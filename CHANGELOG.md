@@ -24,6 +24,8 @@
   instead of reporting that Git exited with status 1.
 - A branch or tag name Git refuses or that is already taken, a clone into a folder that is not
   empty, and a tag the remote would not replace are explained in plain words.
+- New branch, rename, and tag dialogs check the name as it is typed, say what Git would not
+  accept, and keep OK disabled until the name is valid.
 
 ## 1.4.0 - Sizes everywhere
 

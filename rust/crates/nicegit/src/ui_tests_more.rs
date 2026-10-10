@@ -2038,8 +2038,16 @@ fn a_branch_name_git_refuses_is_explained() {
         harness.get_by_label("OK").click();
         idle(harness);
     };
-    create(&mut harness, "my new..branch");
-    wait(&mut harness, "the explanation", |h| h.state().notice.as_ref().is_some_and(|n| n.text.contains("That name cannot be used")));
+    // A name Git would refuse is explained while it is typed, and OK waits for a valid one.
+    toolbar_button(&mut harness, "Branch");
+    wait(&mut harness, "the new branch dialog", |h| h.state().dialog.is_some());
+    harness.event(egui::Event::Text("my new..branch".into()));
+    wait(&mut harness, "the hint", |h| shows(h, "Names cannot contain spaces."));
+    assert!(harness.get_by_label("OK").accesskit_node().is_disabled());
+    harness.key_press(Key::Escape);
+    harness.state_mut().dialog = None;
+    settle(&mut harness);
+    // A name that is taken is only known to Git, which refuses it; that is explained afterwards.
     create(&mut harness, "feature");
     wait(&mut harness, "the explanation", |h| {
         h.state().notice.as_ref().is_some_and(|n| n.text.contains("A branch with that name already exists"))

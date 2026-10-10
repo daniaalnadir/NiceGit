@@ -97,6 +97,39 @@ pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str) -> V
         .collect()
 }
 
+/// Why Git would refuse `name` as a branch or tag name, following `git check-ref-format`, so a
+/// dialog can say so while it is typed; `None` for an acceptable or empty name.
+pub fn ref_name_problem(name: &str) -> Option<&'static str> {
+    if name.is_empty() {
+        return None;
+    }
+    if name.chars().any(char::is_whitespace) {
+        return Some("Names cannot contain spaces.");
+    }
+    if name.contains("..") {
+        return Some("Names cannot contain \"..\".");
+    }
+    if name.chars().any(|c| c.is_control() || matches!(c, '~' | '^' | ':' | '?' | '*' | '[' | '\\')) {
+        return Some("Names cannot contain ~ ^ : ? * [ or \\.");
+    }
+    if name.starts_with('-') {
+        return Some("Names cannot start with \"-\".");
+    }
+    if name.starts_with('/') || name.ends_with('/') || name.contains("//") {
+        return Some("Names cannot start or end with \"/\", or contain \"//\".");
+    }
+    if name.split('/').any(|part| part.starts_with('.') || part.ends_with(".lock")) || name.ends_with('.') {
+        return Some("Parts of a name cannot start with \".\" or end with \".lock\", and a name cannot end with \".\".");
+    }
+    if name.contains("@{") {
+        return Some("Names cannot contain \"@{\".");
+    }
+    if name == "HEAD" {
+        return Some("HEAD is reserved for Git's own use.");
+    }
+    None
+}
+
 /// The github.com page for opening a pull request from a local branch, when its upstream is a
 /// branch on a github.com remote. Remote names can contain slashes, so the longest one that
 /// prefixes the upstream is its remote.
@@ -150,6 +183,68 @@ mod tests {
 
     fn signed(status: SignatureStatus, problem: Option<&str>) -> CommitSignature {
         CommitSignature { status, signer: "Riley <riley@example.com>".into(), key: "SHA256:abc".into(), problem: problem.map(String::from) }
+    }
+
+    #[test]
+    fn ref_names_are_checked_as_git_checks_them() {
+        use super::ref_name_problem;
+        for good in ["main", "feature/login", "fix-42", "release/1.2.0", "user/name_with.dots", "ünïcode", "@"] {
+            assert_eq!(ref_name_problem(good), None, "{good}");
+        }
+        for bad in [
+            "my branch",
+            "a..b",
+            "a~1",
+            "a^",
+            "a:b",
+            "a?",
+            "a*",
+            "a[b",
+            "a\\b",
+            "-x",
+            "/x",
+            "x/",
+            "a//b",
+            ".hidden",
+            "a/.b",
+            "x.lock",
+            "x.",
+            "a@{b",
+            "HEAD",
+        ] {
+            assert!(ref_name_problem(bad).is_some(), "{bad} should be refused");
+        }
+        assert_eq!(ref_name_problem(""), None, "an empty name is left to the OK button");
+
+        // Git itself agrees on each, checking the name as a branch is stored. (With --branch, Git
+        // reads "@" as the current branch, so the stored form is the fair comparison.)
+        for name in
+            ["main", "feature/login", "my branch", "a..b", "a~1", "a:b", "x/", "a//b", ".hidden", "x.lock", "x.", "a@{b", "@", "ünïcode"]
+        {
+            let reference = format!("refs/heads/{name}");
+            let git = std::process::Command::new("git").args(["check-ref-format", &reference]).output().expect("run git");
+            assert_eq!(git.status.success(), ref_name_problem(name).is_none(), "{name}: Git and NiceGit disagree");
+        }
+        // Git's format check allows these two, but refuses them as branch names.
+        for name in ["-x", "HEAD"] {
+            let repo = crate::ui_tests::temp_dir();
+            let run = |args: &[&str]| std::process::Command::new("git").args(args).current_dir(repo.path()).output().expect("run git");
+            run(&["init", "-q"]);
+            run(&[
+                "-c",
+                "user.name=T",
+                "-c",
+                "user.email=t@e.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "x",
+            ]);
+            assert!(!run(&["branch", "--", name]).status.success(), "Git refuses the branch name {name}");
+        }
     }
 
     #[test]

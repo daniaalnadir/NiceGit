@@ -217,6 +217,16 @@ impl NiceGitApp {
                     if ui.memory(|m| m.focused().is_none()) {
                         first.request_focus();
                     }
+                    // A branch or tag name is checked as it is typed, so a refused name is
+                    // explained before OK rather than after.
+                    let names_a_ref = matches!(
+                        kind,
+                        InputKind::CreateBranch { .. } | InputKind::CreateBranchFrom(_) | InputKind::RenameBranch(_) | InputKind::CreateTag { .. }
+                    );
+                    let name_problem = names_a_ref.then(|| crate::git_ext::ref_name_problem(value.trim())).flatten();
+                    if let Some(problem) = name_problem {
+                        ui.label(RichText::new(problem).small().color(c.warning));
+                    }
                     let mut show_second = second_label.is_some();
                     if let InputKind::CreateTag { annotated, .. } = kind {
                         ui.add_space(6.0);
@@ -264,7 +274,7 @@ impl NiceGitApp {
                     ui.horizontal(|ui| {
                         // A stash's message is optional: Git names one after the branch when it is empty.
                         let optional = matches!(kind, InputKind::SaveStash);
-                        let ready = (optional || !value.trim().is_empty()) && !tag_needs_message;
+                        let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none();
                         if widgets::primary_button(ui, "OK", ready).clicked() || (enter && ready) {
                             run = true;
                         }
