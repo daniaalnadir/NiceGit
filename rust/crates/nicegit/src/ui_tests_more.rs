@@ -1694,3 +1694,35 @@ fn the_fetch_button_counts_commits_waiting_to_be_pulled() {
     harness.get_by_label("Fetch").hover();
     wait(&mut harness, "the count in the tooltip", |h| shows(h, "1 commit to pull"));
 }
+
+#[test]
+fn the_open_diff_can_be_copied() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| h.query_by_label("Copy this diff").is_some());
+    harness.get_by_label("Copy this diff").click();
+    let mut copied = None;
+    for _ in 0..5 {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+        if copied.is_some() {
+            break;
+        }
+    }
+    let copied = copied.expect("the diff was copied");
+    assert!(copied.starts_with("diff --git a/notes.txt b/notes.txt\n"), "{copied}");
+    assert!(copied.contains("\n-second\n+changed\n"), "{copied}");
+    // What was copied applies as a patch, as Git printed it.
+    git(path, &["checkout", "--", "notes.txt"]);
+    std::fs::write(path.join("copied.patch"), &copied).unwrap();
+    git(path, &["apply", "copied.patch"]);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n");
+}

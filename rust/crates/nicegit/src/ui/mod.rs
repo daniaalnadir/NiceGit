@@ -642,6 +642,17 @@ impl NiceGitApp {
                 self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
             }
         }
+        // The diff as Git printed it, to paste into a message or an issue.
+        let patch = self
+            .repo()
+            .and_then(|r| r.diff.as_ref())
+            .map(|diff| diff.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n"));
+        if let Some(patch) = patch.filter(|patch| !patch.trim().is_empty()) {
+            if widgets::icon_button(ui, icon::COPY, "Copy this diff", true).clicked() {
+                ui.ctx().copy_text(format!("{}\n", patch.trim_end()));
+                self.notify("Copied the diff.", false);
+            }
+        }
     }
 }
 
