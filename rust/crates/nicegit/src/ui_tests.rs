@@ -69,6 +69,7 @@ fn arm_watchdog() {
                     // Written to stderr directly: the test harness captures eprintln output.
                     use std::io::Write;
                     let _ = writeln!(std::io::stderr(), "{name} has been stuck for three minutes, last {last}; stopping the test run");
+                    print_all_thread_stacks();
                     std::process::exit(101);
                 }
                 std::thread::sleep(Duration::from_secs(1));
@@ -76,6 +77,18 @@ fn arm_watchdog() {
         });
         *watchdog.borrow_mut() = Some(Watchdog(done, progress));
     });
+}
+
+/// On Windows, prints every thread's stack with the debugger the CI image ships, so a hang
+/// shows which call blocked.
+fn print_all_thread_stacks() {
+    #[cfg(windows)]
+    {
+        let debugger = r"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe";
+        if Path::new(debugger).exists() {
+            let _ = Command::new(debugger).args(["-p", &std::process::id().to_string(), "-c", ".symfix; .reload; ~*kc 60; qd"]).status();
+        }
+    }
 }
 
 /// Records what the test is doing, for the watchdog to report if it stalls.
