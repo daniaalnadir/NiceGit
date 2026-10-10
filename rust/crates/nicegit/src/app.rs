@@ -521,6 +521,31 @@ impl NiceGitApp {
         }
     }
 
+    /// Closes every repository tab but `keep`, which becomes the active one. Refused while an
+    /// action runs or the editor has unsaved text, as closing a single tab is.
+    pub fn close_other_tabs(&mut self, keep: usize) {
+        if keep >= self.repos.len() || self.busy.is_some() {
+            return;
+        }
+        // Checked before switching, so the refusal names closing rather than switching.
+        if self.has_unsaved_editor() {
+            self.notify("Save or close the file you are editing first.", true);
+            return;
+        }
+        if keep != self.active {
+            self.switch_to(keep);
+            if keep != self.active {
+                return;
+            }
+        }
+        self.save_draft();
+        let kept = self.repos.remove(self.active);
+        self.repos.clear();
+        self.repos.push(kept);
+        self.active = 0;
+        self.watch_active();
+    }
+
     pub fn choose_folder(&mut self) {
         if self.busy.is_some() {
             return;

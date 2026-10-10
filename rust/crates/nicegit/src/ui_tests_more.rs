@@ -2054,3 +2054,104 @@ fn a_branch_name_git_refuses_is_explained() {
     });
     assert_eq!(git(repo.path(), &["branch", "--show-current"]), "main");
 }
+
+/// Whether two paths name the same folder, whatever prefix or symbolic link each is written with.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    std::fs::canonicalize(a).unwrap() == std::fs::canonicalize(b).unwrap()
+}
+
+#[test]
+fn middle_clicking_a_repository_tab_closes_it() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    wait(&mut harness, "the second tab", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    let name = folder_name(first.path());
+    let rect = harness.get_all_by_label(&name).next().unwrap().rect();
+    harness.hover_at(rect.center());
+    harness.step();
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos: rect.center(),
+            button: egui::PointerButton::Middle,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        harness.step();
+    }
+    wait(&mut harness, "the first tab to close", |h| h.state().repos.len() == 1);
+    assert!(same_folder(&harness.state().repos[0].path, second.path()), "the second repository remains");
+}
+
+#[test]
+fn command_w_closes_the_open_window_first_then_the_repository_tab() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    wait(&mut harness, "the second tab", |h| h.state().repos.len() == 2 && h.state().snapshot().is_some());
+    harness.state_mut().open_tool(Box::new(crate::tools::commit_search::CommitSearchWindow::new()));
+    wait(&mut harness, "the search window", |h| !h.state().tools.is_empty());
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::W);
+    wait(&mut harness, "the window to close", |h| h.state().tools.is_empty());
+    assert_eq!(harness.state().repos.len(), 2, "the window closes before the tab");
+
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::W);
+    wait(&mut harness, "the repository tab to close", |h| h.state().repos.len() == 1);
+    assert!(same_folder(&harness.state().repos[0].path, first.path()), "the first repository remains");
+}
+
+#[test]
+fn a_repository_tabs_menu_closes_others_copies_and_reveals_its_path() {
+    let first = repository();
+    let second = repository();
+    let third = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    for repo in [&second, &third] {
+        harness.state_mut().open(repo.path().to_path_buf());
+        wait(&mut harness, "the tab", |h| h.state().snapshot().is_some() && !h.state().repo().unwrap().loading);
+    }
+
+    let second_name = folder_name(second.path());
+    harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
+    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Close other tabs").is_some());
+    settle(&mut harness);
+    harness.get_by_label_contains("Close other tabs").click();
+    wait(&mut harness, "the other tabs to close", |h| h.state().repos.len() == 1);
+    assert!(same_folder(&harness.state().repos[0].path, second.path()), "the chosen repository remains");
+    assert_eq!(harness.state().active, 0);
+
+    crate::ui::changes::REVEALED.with(|revealed| revealed.borrow_mut().clear());
+    harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
+    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Show in file manager").is_some());
+    settle(&mut harness);
+    harness.get_by_label_contains("Show in file manager").click();
+    wait(&mut harness, "the file manager", |_| crate::ui::changes::REVEALED.with(|revealed| !revealed.borrow().is_empty()));
+    let revealed = crate::ui::changes::REVEALED.with(|revealed| revealed.borrow().clone());
+    assert_eq!(revealed.len(), 1, "one folder is shown");
+    assert!(same_folder(&revealed[0], second.path()), "the repository's folder is shown");
+
+    harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
+    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Copy path").is_some());
+    settle(&mut harness);
+    harness.get_by_label_contains("Copy path").click();
+    let mut copied = None;
+    for _ in 0..5 {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+        if copied.is_some() {
+            break;
+        }
+    }
+    let copied = copied.expect("the path was copied");
+    assert!(same_folder(Path::new(&copied), second.path()), "{copied}");
+}
