@@ -107,13 +107,22 @@ pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str) -> egui::Response
     ui.add(egui::TextEdit::singleline(value).hint_text(hint).desired_width(f32::INFINITY))
 }
 
-/// A search field with a magnifying-glass prefix.
+/// How far a search field's text is inset to leave room for its magnifying glass.
+pub const SEARCH_INSET: f32 = 24.0;
+
+/// A search field `width` wide with a magnifying glass inside its left edge, aligned with the text.
+pub fn search_input(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> egui::Response {
+    let margin = egui::Margin { left: SEARCH_INSET as i8, right: 4, top: 2, bottom: 2 };
+    let response = ui.add(egui::TextEdit::singleline(value).hint_text(hint).margin(margin).desired_width(width));
+    let center = egui::pos2(response.rect.left() + SEARCH_INSET / 2.0 + 1.0, response.rect.center().y);
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    ui.painter().text(center, egui::Align2::CENTER_CENTER, icon::MAGNIFYING_GLASS, font, theme::of(ui).muted);
+    response
+}
+
+/// A search field that fills the width, with a magnifying glass inside it.
 pub fn search_field(ui: &mut Ui, value: &mut String, hint: &str) -> egui::Response {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(theme::of(ui).muted));
-        ui.add(egui::TextEdit::singleline(value).hint_text(hint).desired_width(f32::INFINITY))
-    })
-    .inner
+    search_input(ui, value, hint, f32::INFINITY)
 }
 
 /// A short commit ID in monospace.

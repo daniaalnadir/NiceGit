@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.18 - Tidy edges
+
+- Long file headers in a diff stay on one line and end in an ellipsis, rather than wrapping
+  through the file's path.
+- Search fields show their magnifying glass inside the field, lined up with the text, and the
+  diff's find field lines up with the staging hint above it.
+- Settings' warning that side-by-side diffs are not in effect is set at body size.
+
 ## 0.6.17 - One band
 
 - A selected commit's tint spans the whole row, labels and graph included.

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::ops::Range;
 
 use egui::text::{LayoutJob, TextFormat};
-use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle, Ui};
+use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, RichText, ScrollArea, Sense, Stroke, TextStyle, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::diff::{side_by_side, DiffLine, DiffLineKind, SplitRow};
 use nicegit_core::inline::{self, InlineChange};
@@ -98,7 +98,7 @@ impl DiffContent {
                 .iter()
                 .map(|line| {
                     let mut job = layout(&line.text, font, Color32::WHITE, &[]);
-                    job.wrap.max_width = wrap_width_of(line.kind, width, char_width);
+                    wrap_line(&mut job, line.kind, width, char_width);
                     let galley = fonts.layout_job(job);
                     Measured { rows: galley.rows.len().max(1), height: galley.size().y }
                 })
@@ -155,6 +155,18 @@ fn text_offset(kind: DiffLineKind, char_width: f32) -> f32 {
 /// further right, so it has one character less room.
 fn wrap_width_of(kind: DiffLineKind, width: f32, char_width: f32) -> f32 {
     (width - text_offset(kind, char_width)).max(char_width)
+}
+
+/// Sets how a line wraps at `width` for code. File headers (`diff --git`, `index`, `---`, `+++`)
+/// stay on one line and end in an ellipsis when too long, since the file's path is already in
+/// the panel's title; code and hunk headers wrap between words.
+fn wrap_line(job: &mut LayoutJob, kind: DiffLineKind, width: f32, char_width: f32) {
+    job.wrap.max_width = wrap_width_of(kind, width, char_width);
+    if kind == DiffLineKind::Metadata {
+        job.wrap.max_rows = 1;
+        job.wrap.break_anywhere = true;
+        job.wrap.overflow_character = Some('…');
+    }
 }
 
 /// The find bar's state. The caller keeps it between frames.
@@ -427,7 +439,7 @@ impl View<'_> {
         let mut job = layout(&diff_line.text, &self.style.font, text_color, &self.spans(line));
         if wrap {
             // Lines wrap between words where they can, as measured for the row heights.
-            job.wrap.max_width = wrap_width_of(diff_line.kind, self.style.wrap_width, self.style.char_width);
+            wrap_line(&mut job, diff_line.kind, self.style.wrap_width, self.style.char_width);
         }
         let galley = painter.layout_job(job);
         let x = rect.left() + numbers.len() as f32 * self.style.gutter + PADDING + text_offset(diff_line.kind, self.style.char_width);
@@ -529,8 +541,9 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
     let mut scroll_to = None;
     let muted = theme::of(ui).muted;
     ui.horizontal(|ui| {
-        ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(muted));
-        let edit = ui.add(TextEdit::singleline(&mut options.find.query).hint_text("Find in diff").desired_width(180.0));
+        // Inset like the staging hint above it, so the two line up.
+        ui.add_space(14.0);
+        let edit = widgets::search_input(ui, &mut options.find.query, "Find in diff", 180.0);
         edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Find in diff"));
         // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
         if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {
@@ -830,6 +843,28 @@ mod tests {
                 job.wrap.max_width = style.wrap_width;
                 ui.ctx().fonts_mut(|fonts| fonts.layout_job(job)).rows.len()
             });
+        });
+        output.textures_delta.clear();
+    }
+    #[test]
+    fn long_file_headers_stay_on_one_line() {
+        let path = "Sources/Weather/Features/Forecast/".repeat(4) + "ForecastView.swift";
+        let header = format!("diff --git a/{path} b/{path}");
+        let lines = vec![DiffLine { text: header.clone(), kind: DiffLineKind::Metadata, old_number: None, new_number: None }];
+        let content = DiffContent::new("header.swift".to_string(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(700.0, 500.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, &content, false);
+            assert_eq!(style.wrapped_lines(0), 1, "a file header is measured as one row");
+            // The drawn header is one row too, cut short with an ellipsis.
+            let mut job = layout(&header, &style.font, Color32::RED, &[]);
+            wrap_line(&mut job, DiffLineKind::Metadata, style.wrap_width, style.char_width);
+            let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
+            assert_eq!(galley.rows.len(), 1);
+            assert!(galley.elided);
+            assert_eq!(galley.rows[0].glyphs.last().map(|glyph| glyph.chr), Some('…'));
+            assert_eq!(style.unified_row_height(0), style.row_height, "the header takes one ordinary row");
         });
         output.textures_delta.clear();
     }

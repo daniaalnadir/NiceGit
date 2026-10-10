@@ -65,7 +65,9 @@ impl NiceGitApp {
                 } else {
                     (format!("Needs a diff panel at least {minimum} points wide."), theme::of(ui).muted)
                 };
-                ui.label(RichText::new(note).small().color(color));
+                // A warning is set at body size so it reads as clearly as the setting it explains.
+                let note = RichText::new(note).color(color);
+                ui.label(if too_narrow && self.settings.split_diff { note } else { note.small() });
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(
