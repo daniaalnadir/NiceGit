@@ -1967,3 +1967,36 @@ fn committing_away_from_a_branch_warns_and_offers_a_branch_first() {
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n", "the change is kept");
     wait(&mut harness, "the warning gone", |h| !shows(h, "You are not on a branch"));
 }
+
+#[test]
+fn a_pull_blocked_by_uncommitted_changes_offers_to_stash_them() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "notes.txt", b"first\nsecond\nfrom elsewhere\n", "Edit the notes elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nmine\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.state_mut().pull();
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "would overwrite uncommitted changes") && h.query_by_label("Stash changes…").is_some()
+    });
+    harness.get_by_label("Stash changes…").click();
+    wait(&mut harness, "the stash dialog", |h| h.state().dialog.is_some());
+    // The message is optional, so OK works with the field left empty.
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash", |_| !git(path, &["stash", "list"]).is_empty());
+
+    harness.state_mut().pull();
+    idle(&mut harness);
+    wait(&mut harness, "the pull", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap().contains("from elsewhere"));
+}

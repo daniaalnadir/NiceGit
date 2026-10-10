@@ -262,7 +262,9 @@ impl NiceGitApp {
                     ui.add_space(16.0);
                     let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     ui.horizontal(|ui| {
-                        let ready = !value.trim().is_empty() && !tag_needs_message;
+                        // A stash's message is optional: Git names one after the branch when it is empty.
+                        let optional = matches!(kind, InputKind::SaveStash);
+                        let ready = (optional || !value.trim().is_empty()) && !tag_needs_message;
                         if widgets::primary_button(ui, "OK", ready).clicked() || (enter && ready) {
                             run = true;
                         }

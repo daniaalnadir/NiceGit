@@ -67,6 +67,13 @@ pub enum NoticeAction {
     Integrate,
     /// Open Repository Settings, where the commit identity is set.
     SetIdentity,
+    /// Open the stash dialog, to set uncommitted changes aside.
+    Stash,
+}
+
+/// Whether Git stopped because uncommitted changes would be overwritten.
+pub fn blocked_by_local_changes(error: &str) -> bool {
+    error.contains("would be overwritten by") || error.contains("Please commit your changes or stash them")
 }
 
 /// Whether Git refused to commit because it does not know who is committing.
@@ -689,6 +696,15 @@ impl NiceGitApp {
                                     text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if blocked_by_local_changes(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: format!("{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again."),
+                                    is_error: true,
+                                    action: Some(NoticeAction::Stash),
                                     detail: Some(error.to_string()),
                                 });
                             }

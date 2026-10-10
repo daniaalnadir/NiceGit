@@ -16,6 +16,10 @@
   explains it too.
 - Away from any branch, as after checking out a tag, the commit box warns that a commit there
   could be lost and offers Create branch here….
+- A pull, merge, or other change stopped because it would overwrite uncommitted changes is
+  explained, with Stash changes… to set them aside first.
+- Stashing from the toolbar works without a message, as its dialog says; OK used to stay
+  disabled until one was typed.
 
 ## 1.4.0 - Sizes everywhere
 

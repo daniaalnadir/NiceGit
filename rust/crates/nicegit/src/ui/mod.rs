@@ -313,9 +313,12 @@ impl NiceGitApp {
                 let text = RichText::new(notice.text.clone()).color(if notice.is_error { c.danger } else { ui.visuals().text_color() });
                 // The buttons are laid out from the right first, so a long message is shortened
                 // rather than pushing them out of view; the whole message is in its tooltip.
-                let (mut dismiss, mut pull, mut identity) = (false, false, false);
+                let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
+                    if action == Some(crate::app::NoticeAction::Stash) {
+                        stash = ui.add_enabled(self.idle(), egui::Button::new("Stash changes…")).clicked();
+                    }
                     if action == Some(crate::app::NoticeAction::SetIdentity) {
                         identity = ui.button("Set your identity…").clicked();
                     }
@@ -334,8 +337,16 @@ impl NiceGitApp {
                         ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
                     });
                 });
-                if dismiss || pull || identity {
+                if dismiss || pull || identity || stash {
                     self.notice = None;
+                }
+                if stash {
+                    self.dialog = Some(crate::ui::dialogs::Dialog::input(
+                        "Stash changes",
+                        "Message (optional)",
+                        "",
+                        crate::ui::dialogs::InputKind::SaveStash,
+                    ));
                 }
                 if identity {
                     self.open_tool(Box::new(crate::tools::repository_settings::RepositorySettingsWindow::new()));
