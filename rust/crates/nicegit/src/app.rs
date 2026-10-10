@@ -685,6 +685,8 @@ impl NiceGitApp {
                             }
                         }
                     }
+                    // Git's own error, when an action failed in a way the refresh may explain better.
+                    let mut stopped_with: Option<String> = None;
                     if let Some((label, result)) = action {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
@@ -730,6 +732,7 @@ impl NiceGitApp {
                             Err(error) => {
                                 action_failed = true;
                                 self.notify(format!("{label} failed: {error}"), true);
+                                stopped_with = Some(error.to_string());
                             }
                         }
                     }
@@ -740,6 +743,23 @@ impl NiceGitApp {
                     }
                     match *snapshot {
                         Ok(snapshot) => {
+                            // An action that stopped at conflicts left an operation to finish: that
+                            // is a pause for the person, not a failure, so it is described as one.
+                            if let (Some(detail), Some(operation)) = (stopped_with.take(), snapshot.operation) {
+                                let conflicts = snapshot.status.iter().filter(|e| e.kind == nicegit_core::StatusKind::Conflicted).count();
+                                if conflicts > 0 {
+                                    let plural = if conflicts == 1 { "" } else { "s" };
+                                    self.notice = Some(Notice {
+                                        text: format!(
+                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.",
+                                            operation.name()
+                                        ),
+                                        is_error: true,
+                                        action: None,
+                                        detail: Some(detail),
+                                    });
+                                }
+                            }
                             self.apply(index, snapshot);
                             // After fetching for a refused push, the upstream's commits are offered
                             // through the usual merge or rebase choice, with its preview.

@@ -2000,3 +2000,27 @@ fn a_pull_blocked_by_uncommitted_changes_offers_to_stash_them() {
     idle(&mut harness);
     wait(&mut harness, "the pull", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap().contains("from elsewhere"));
 }
+
+#[test]
+fn a_merge_that_stops_at_conflicts_says_what_to_do_next() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    std::fs::write(path.join("notes.txt"), "first\nfrom feature\n").unwrap();
+    git(path, &["commit", "-qam", "Change notes on feature"]);
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(&mut harness, "the merge confirmation", |h| h.state().dialog.is_some());
+    harness.get_by_label("Merge").click();
+    idle(&mut harness);
+    let notice = harness.state().notice.as_ref().map(|n| (n.text.clone(), n.detail.clone())).expect("a message");
+    assert_eq!(
+        notice.0,
+        "The merge stopped at conflicts in 1 file. Resolve them from the banner above the history, then continue, or abort to go back."
+    );
+    assert!(notice.1.is_some_and(|detail| detail.contains("git merge")), "Git's words stay in the tooltip");
+}

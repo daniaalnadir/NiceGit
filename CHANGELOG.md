@@ -20,6 +20,8 @@
   explained, with Stash changes… to set them aside first.
 - Stashing from the toolbar works without a message, as its dialog says; OK used to stay
   disabled until one was typed.
+- A merge, rebase, cherry-pick, or revert that stops at conflicts says so and what to do next,
+  instead of reporting that Git exited with status 1.
 
 ## 1.4.0 - Sizes everywhere
 
