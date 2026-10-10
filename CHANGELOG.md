@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.16 - Quieter history
+
+- Only the selected or hovered commit row is tinted; every row keeps its lane-coloured bar,
+  so the selection stands out.
+- Small warning text in the light theme is darker, for readable contrast.
+- The editor closes from its window's own close button, without a second Close button.
+
 ## 0.6.15 - Settings that explain themselves
 
 - When "Show diffs side by side" is on but the diff panel is too narrow, Settings says so in

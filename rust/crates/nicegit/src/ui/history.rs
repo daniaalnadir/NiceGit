@@ -294,12 +294,14 @@ impl NiceGitApp {
         let message_left = rect.left() + LABEL_COLUMN + graph_width;
         let message_rect = egui::Rect::from_min_max(egui::pos2(message_left - 4.0, rect.top()), rect.max);
         // A band in the line's colour, stronger when selected.
+        // Only the selected or hovered row is tinted, so selection stands out; every row keeps
+        // its lane-coloured bar.
         let alpha = if selected || is_marked {
             58
         } else if response.hovered() {
-            30
+            24
         } else {
-            14
+            0
         };
         painter.rect_filled(message_rect, 0.0, Color32::from_rgba_unmultiplied(lane_color.r(), lane_color.g(), lane_color.b(), alpha));
         painter.rect_filled(egui::Rect::from_min_size(message_rect.min, egui::vec2(3.0, ROW_HEIGHT)), 0.0, lane_color);

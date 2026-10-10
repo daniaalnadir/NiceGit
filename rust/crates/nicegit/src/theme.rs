@@ -157,7 +157,8 @@ pub fn colors(dark: bool) -> Colors {
             modified: Color32::from_rgb(0x2f, 0x6f, 0xd6),
             renamed: Color32::from_rgb(0x8a, 0x4f, 0xc7),
             conflict: Color32::from_rgb(0xc9, 0x74, 0x0a),
-            warning: Color32::from_rgb(0xa8, 0x6b, 0x00),
+            // Dark enough for small warning text on white (about 5.6:1).
+            warning: Color32::from_rgb(0x8a, 0x57, 0x00),
             danger: Color32::from_rgb(0xc8, 0x33, 0x45),
             muted: Color32::from_rgb(0x5b, 0x62, 0x70),
             subtle_bg: Color32::from_rgb(0xf1, 0xf3, 0xf6),

@@ -114,9 +114,6 @@ impl ToolWindow for EditorWindow {
                 if ui.add_enabled(dirty, egui::Button::new("Revert")).on_hover_text("Discard your edits and reload the file").clicked() {
                     self.load();
                 }
-                if ui.button("Close").clicked() && !dirty {
-                    self.close = true;
-                }
             });
         });
         if let Some(error) = &self.error {
