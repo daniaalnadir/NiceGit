@@ -361,8 +361,7 @@ fn restore_this_version_brings_back_the_files_content_at_that_commit() {
     loaded(&mut harness);
 
     harness.get_by_label("Add a second line").click();
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
     harness.get_by_label_contains("Restore this version").click();

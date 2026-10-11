@@ -162,6 +162,23 @@ pub(crate) fn settle(harness: &mut Harness<'static, NiceGitApp>) {
     harness.run_steps(3);
 }
 
+/// Waits until the selected commit's details and file list have loaded, and the file row labelled
+/// `label` has stopped moving. The details load in the background and push the file list down
+/// when they arrive, so a click on the row before then misses it.
+pub(crate) fn wait_for_commit_file(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
+    wait(harness, "the commit's details and files", |h| {
+        h.state().repo().is_some_and(|r| !r.commit_files.is_empty() && r.details.as_ref().is_some_and(|task| task.peek().is_some()))
+    });
+    let last = std::cell::Cell::new(None::<egui::Rect>);
+    let still = std::cell::Cell::new(0u32);
+    wait(harness, &format!("the row \"{label}\" to stop moving"), |h| {
+        let now = h.query_by_label(label).map(|node| node.rect());
+        still.set(if now.is_some() && now == last.get() { still.get() + 1 } else { 0 });
+        last.set(now);
+        still.get() >= 3
+    });
+}
+
 /// Clicks a toolbar button, through the More menu when it did not fit on the toolbar.
 pub(crate) fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
     settle(harness);
@@ -444,8 +461,7 @@ fn restore_a_file_from_the_commit_inspector() {
     loaded(&mut harness);
 
     harness.get_by_label("Add a second line").click();
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
     harness.get_by_label_contains("Restore version before this commit").click();

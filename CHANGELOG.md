@@ -10,6 +10,9 @@
 - Clicking a tab's name now switches to it; before, only the tab's edges responded.
 - Every download includes THIRD_PARTY_LICENSES.txt, the license texts and copyright notices of
   the open-source components built into NiceGit.
+- Command-F keeps the cursor in the diff's find field when line staging finishes loading just
+  after it; before, the field could lose focus.
+- The bisect bar no longer flickers, with its buttons briefly gone, on every refresh.
 
 ## 1.5.0 - Fewer surprises
 
