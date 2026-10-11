@@ -87,6 +87,10 @@ pub struct InteractiveRebaseWindow {
     entries: Vec<Entry>,
     error: Option<String>,
     closing: bool,
+    /// The commit whose message is being edited, set to Reword when the plan loads.
+    reword: Option<String>,
+    /// Whether the reworded commit's message should take keyboard focus on its first frame.
+    focus_pending: bool,
 }
 
 impl InteractiveRebaseWindow {
@@ -103,7 +107,16 @@ impl InteractiveRebaseWindow {
             entries: Vec::new(),
             error: None,
             closing: false,
+            reword: None,
+            focus_pending: false,
         }
+    }
+
+    /// Opens the editor to change one commit's message: the commits after its parent are listed,
+    /// with that commit set to Reword. A root commit rewrites from the root.
+    pub fn reword(commit: &Commit, snapshot: &Snapshot) -> Self {
+        let base = commit.parents.first().cloned().unwrap_or_default();
+        Self { reword: Some(commit.hash.clone()), ..Self::new(base, snapshot) }
     }
 
     /// Takes the loaded plan once it arrives, and starts the editor from it.
@@ -115,7 +128,7 @@ impl InteractiveRebaseWindow {
         match task.get() {
             Some(Ok(plan)) => {
                 // The plan is oldest first; the editor shows newest first.
-                let entries: Vec<Entry> = plan
+                let mut entries: Vec<Entry> = plan
                     .commits
                     .iter()
                     .rev()
@@ -125,6 +138,16 @@ impl InteractiveRebaseWindow {
                         message: plan.messages.get(&commit.hash).cloned().unwrap_or_else(|| commit.subject.clone()),
                     })
                     .collect();
+                // Preset before `original` is taken, so Reset returns to the preset and nothing
+                // counts as changed until the message is edited.
+                if let Some(hash) = &self.reword {
+                    if !preset_reword(&mut entries, hash) {
+                        // The commit is on another branch whose parent is in this one's history.
+                        self.error = Some(format!("This commit is not part of {}'s history.", self.branch));
+                        return;
+                    }
+                    self.focus_pending = true;
+                }
                 self.original = entries.clone();
                 self.entries = entries;
                 self.plan = Some(plan.clone());
@@ -179,6 +202,7 @@ impl InteractiveRebaseWindow {
         index: usize,
         published: &BTreeSet<String>,
         idle: bool,
+        focus: Option<&str>,
         moved: &mut Option<(usize, usize)>,
         ui: &mut egui::Ui,
     ) {
@@ -240,13 +264,21 @@ impl InteractiveRebaseWindow {
                 });
                 if entry.choice == Choice::Reword {
                     ui.add_space(4.0);
-                    ui.add(
+                    let message = ui.add(
                         egui::TextEdit::multiline(&mut entry.message)
                             .font(TextStyle::Monospace)
                             .desired_rows(4)
                             .desired_width(f32::INFINITY)
                             .hint_text("New commit message"),
                     );
+                    message.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, format!("Message for {}", entry.commit.subject))
+                    });
+                    if focus == Some(entry.commit.hash.as_str()) {
+                        message.request_focus();
+                        // An older commit can be far down the list.
+                        message.scroll_to_me(Some(egui::Align::Center));
+                    }
                 }
             })
             .response;
@@ -270,11 +302,15 @@ impl InteractiveRebaseWindow {
 
 impl ToolWindow for InteractiveRebaseWindow {
     fn id(&self) -> String {
-        format!("interactive-rebase:{}", self.base)
+        // An edit of one message is its own window, so it never replaces a rebase from the same base.
+        match &self.reword {
+            Some(hash) => format!("interactive-rebase-reword:{hash}"),
+            None => format!("interactive-rebase:{}", self.base),
+        }
     }
 
     fn title(&self) -> String {
-        "Interactive rebase".to_string()
+        if self.reword.is_some() { "Edit commit message" } else { "Interactive rebase" }.to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -325,11 +361,14 @@ impl ToolWindow for InteractiveRebaseWindow {
             let published = self.plan.as_ref().map(|plan| plan.published_commits.clone()).unwrap_or_default();
             // Leave room below the list for the summary and buttons.
             let list_height = (ui.available_height() - 110.0).max(120.0);
+            let focus = if self.focus_pending { self.reword.clone() } else { None };
             egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(list_height).show(ui, |ui| {
                 for index in 0..self.entries.len() {
-                    Self::row(&mut self.entries, index, &published, idle, &mut moved, ui);
+                    Self::row(&mut self.entries, index, &published, idle, focus.as_deref(), &mut moved, ui);
                 }
             });
+            // The first frame with the list is the only one that focuses the message.
+            self.focus_pending = false;
             if self.published_count() > 0 {
                 ui.label(RichText::new(format!("{}  Already on a remote", icon::NETWORK)).small().color(c.warning));
             }
@@ -432,6 +471,17 @@ fn gap_for_pointer(index: usize, top: f32, bottom: f32, pointer_y: f32) -> usize
     }
 }
 
+/// Sets the entry for `hash` to Reword. Returns false when no entry has that hash.
+fn preset_reword(entries: &mut [Entry], hash: &str) -> bool {
+    match entries.iter_mut().find(|entry| entry.commit.hash == hash) {
+        Some(entry) => {
+            entry.choice = Choice::Reword;
+            true
+        }
+        None => false,
+    }
+}
+
 /// The steps for Git, oldest first. The entries are shown newest first, so they are reversed.
 fn oldest_first_steps(entries: &[Entry]) -> Vec<RebaseStep> {
     entries.iter().rev().map(|entry| RebaseStep { commit: entry.commit.clone(), action: entry.action() }).collect()
@@ -523,6 +573,17 @@ mod tests {
         assert_eq!(hashes_in_order, hashes(&["a", "b", "c"]));
         let actions: Vec<RebaseAction> = oldest_first_steps(&entries).into_iter().map(|step| step.action).collect();
         assert_eq!(actions, vec![RebaseAction::Pick, RebaseAction::Squash, RebaseAction::Pick]);
+    }
+
+    #[test]
+    fn preset_marks_only_the_named_commit_as_reword() {
+        let mut entries = vec![entry("c", Choice::Pick), entry("b", Choice::Pick), entry("a", Choice::Pick)];
+        assert!(preset_reword(&mut entries, "b"));
+        let choices: Vec<Choice> = entries.iter().map(|entry| entry.choice).collect();
+        assert_eq!(choices, vec![Choice::Pick, Choice::Reword, Choice::Pick]);
+        // A commit that is not listed changes nothing.
+        assert!(!preset_reword(&mut entries, "z"));
+        assert_eq!(entries.iter().filter(|entry| entry.choice == Choice::Reword).count(), 1);
     }
 
     #[test]
