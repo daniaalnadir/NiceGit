@@ -285,7 +285,9 @@ are rejected. Finish any existing merge, rebase, cherry-pick, or revert first.
 
 Edit the current HEAD commit message from its graph menu, including the message
 body. Amending changes the commit hash and requires confirmation; staged and
-unstaged file edits are excluded. Editing older messages is not yet supported.
+unstaged file edits are excluded. Older commits on the current branch can be edited from
+their graph menu too: Edit message… opens the interactive rebase window with that commit set
+to Reword, which rewrites it and the commits after it, so their hashes change.
 
 Remote checkout reuses a unique existing local tracking branch, including renamed
 branches, without resetting local commits. Ambiguous tracking branches must be

@@ -847,6 +847,105 @@ fn interactive_rebase_drops_a_commit_through_its_window() {
     assert!(!path.join("mistake.txt").exists());
 }
 
+/// A repository with three commits on main, "first", "second", and "third", each adding a file.
+fn three_commits() -> tempfile::TempDir {
+    let dir = temp_dir();
+    let path = dir.path();
+    git(path, &["init", "-q", "-b", "main"]);
+    for (key, value) in
+        [("user.name", "Test"), ("user.email", "test@example.invalid"), ("commit.gpgsign", "false"), ("core.autocrlf", "false")]
+    {
+        git(path, &["config", key, value]);
+    }
+    commit_file(path, "a.txt", b"a\n", "first");
+    commit_file(path, "b.txt", b"b\n", "second");
+    commit_file(path, "c.txt", b"c\n", "third");
+    dir
+}
+
+/// Opens the message editor for the commit with `subject`, from its graph menu.
+fn open_edit_message(harness: &mut App, subject: &str) {
+    harness.get_by_label(subject).click_secondary();
+    settle(harness);
+    harness.get_by_label_contains("Edit message").click();
+    wait(harness, "the message editor", |h| h.state().tools.iter().any(|t| t.title() == "Edit commit message"));
+}
+
+/// Replaces the text of the reworded commit's message field with `text`.
+fn reword_message(harness: &mut App, subject: &str, text: &str) {
+    let field = format!("Message for {subject}");
+    wait(harness, "the message field", |h| h.query_by_role_and_label(Role::TextInput, &field).is_some());
+    harness.get_by_role_and_label(Role::TextInput, &field).focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, &field).type_text(text);
+    harness.step();
+}
+
+#[test]
+fn edit_message_rewords_an_older_commit() {
+    let repo = three_commits();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    open_edit_message(&mut harness, "second");
+    reword_message(&mut harness, "second", "second, reworded");
+    wait(&mut harness, "the apply button", |h| {
+        h.query_by_role_and_label(Role::Button, "Rewrite commits").is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, "Rewrite commits").click();
+    idle(&mut harness);
+    wait(&mut harness, "the reworded history", |_| git(path, &["log", "--format=%s"]).contains("second, reworded"));
+    assert_eq!(git(path, &["log", "--format=%s"]), "third\nsecond, reworded\nfirst");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn edit_message_rewords_the_root_commit() {
+    let repo = three_commits();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    open_edit_message(&mut harness, "first");
+    reword_message(&mut harness, "first", "first, reworded");
+    wait(&mut harness, "the apply button", |h| {
+        h.query_by_role_and_label(Role::Button, "Rewrite commits").is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, "Rewrite commits").click();
+    idle(&mut harness);
+    wait(&mut harness, "the reworded root", |_| git(path, &["log", "--format=%s"]).contains("first, reworded"));
+    assert_eq!(git(path, &["log", "--format=%s"]), "third\nsecond\nfirst, reworded");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn edit_message_refuses_a_commit_from_another_branch() {
+    let repo = three_commits();
+    let path = repo.path();
+    // A side branch adds a commit on top of main's tip; main then moves on without it.
+    git(path, &["checkout", "-q", "-b", "side"]);
+    commit_file(path, "side.txt", b"side\n", "side work");
+    git(path, &["checkout", "-q", "main"]);
+    commit_file(path, "d.txt", b"d\n", "fourth");
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("side work").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Edit message").click();
+    wait(&mut harness, "the refusal", |h| shows(h, "is not part of main's history"));
+    settle(&mut harness);
+    assert!(
+        harness.query_by_role_and_label(Role::Button, "Rewrite commits").is_some_and(|b| b.accesskit_node().is_disabled()),
+        "there is no enabled apply button"
+    );
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), before, "nothing is rewritten");
+}
+
 #[test]
 fn an_idle_repository_does_not_keep_refreshing_itself() {
     let repo = repository();

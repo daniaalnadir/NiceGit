@@ -576,6 +576,20 @@ impl NiceGitApp {
             ui.close();
             self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::new(commit.hash.clone(), snapshot)));
         }
+        if !is_head {
+            // Older messages are edited in the interactive rebase window, with this commit set to Reword.
+            let merge = commit.parents.len() > 1;
+            let reason = if merge { "Merge commits can't be edited here" } else { "Commit or stash your changes first" };
+            if ui
+                .add_enabled(can_rewrite && !merge, egui::Button::new(format!("{}  Edit message…", icon::PENCIL_SIMPLE)))
+                .on_hover_text("Rewrites this commit and the ones after it")
+                .on_disabled_hover_text(reason)
+                .clicked()
+            {
+                ui.close();
+                self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::reword(commit, snapshot)));
+            }
+        }
         if is_head
             && ui
                 .add_enabled(
