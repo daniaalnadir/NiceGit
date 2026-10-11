@@ -743,7 +743,9 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
     ui.horizontal(|ui| {
         // Inset like the staging hint above it, so the two line up.
         ui.add_space(14.0);
-        let edit = widgets::search_input(ui, &mut options.find.query, "Find in diff", 180.0);
+        // A fixed identity: the staging hint above appears once the review loads, and an
+        // identity taken from the layout would move the field and drop its focus.
+        let edit = widgets::search_input_with_id(ui, "diff-find", &mut options.find.query, "Find in diff", 180.0);
         edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Find in diff"));
         // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
         if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {

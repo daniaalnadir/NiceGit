@@ -294,8 +294,7 @@ fn a_file_diff_takes_the_place_of_the_history() {
     // Escape also goes back, and from a commit's file it returns to that commit.
     let head = git(path, &["rev-parse", "HEAD"]);
     harness.state_mut().select_commit(head.clone());
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_accesskit();
     wait(&mut harness, "the commit's diff", |h| {
         h.state().repo().is_some_and(|r| matches!(r.selection, crate::app::Selection::Commit { file: Some(_), .. })) && !history_shown(h)
@@ -902,6 +901,43 @@ fn command_f_moves_to_find_in_diff() {
     });
 
     // The focused field takes typed text; the one deleted line "second" is the only match.
+    harness.event(egui::Event::Text("second".into()));
+    wait(&mut harness, "the typed text in the find field", |h| h.state().repo().is_some_and(|r| r.diff_options.find.query == "second"));
+    wait(&mut harness, "the match count for the typed text", |h| h.query_by_label("1 of 1").is_some());
+}
+
+/// The review of a file loads in the background, and once it has, the staging hint appears above
+/// the find field. The field keeps its focus through that change, so typed text still lands in it.
+#[test]
+fn find_field_keeps_focus_when_the_review_loads_after_it() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nchanged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("notes.txt").click();
+    wait(&mut harness, "the diff", |h| diff_has_changes(h) == Some(true));
+
+    // The review is still on its way when the find field takes focus.
+    {
+        let state = harness.state_mut().repo_mut().expect("repository");
+        state.review = None;
+        state.line_map = None;
+    }
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::F);
+    wait(&mut harness, "the find field to take focus", |h| {
+        h.get_by_role_and_label(Role::TextInput, "Find in diff").accesskit_node().is_focused()
+    });
+
+    let review = nicegit_core::GitClient::new().file_review("notes.txt", false, path).expect("review");
+    harness.state_mut().repo_mut().expect("repository").review = Some(crate::tools::Task::ready(Ok(review)));
+    wait(&mut harness, "the staging hint", |h| shows(h, "Press + beside a line"));
+    assert!(
+        harness.get_by_role_and_label(Role::TextInput, "Find in diff").accesskit_node().is_focused(),
+        "the find field kept its focus when the staging hint appeared above it"
+    );
+
     harness.event(egui::Event::Text("second".into()));
     wait(&mut harness, "the match count for the typed text", |h| h.query_by_label("1 of 1").is_some());
 }

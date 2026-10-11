@@ -114,10 +114,23 @@ pub const SEARCH_INSET: f32 = 24.0;
 pub fn search_input(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> egui::Response {
     let margin = egui::Margin { left: SEARCH_INSET as i8, right: 4, top: 2, bottom: 2 };
     let response = ui.add(egui::TextEdit::singleline(value).hint_text(hint).margin(margin).desired_width(width));
+    paint_search_glass(ui, &response);
+    response
+}
+
+/// Like `search_input`, but the field's identity is `id_salt`, not its place in the layout. Use
+/// it where the field must keep its focus while the rows above it change.
+pub fn search_input_with_id(ui: &mut Ui, id_salt: &str, value: &mut String, hint: &str, width: f32) -> egui::Response {
+    let margin = egui::Margin { left: SEARCH_INSET as i8, right: 4, top: 2, bottom: 2 };
+    let response = ui.add(egui::TextEdit::singleline(value).id_salt(id_salt).hint_text(hint).margin(margin).desired_width(width));
+    paint_search_glass(ui, &response);
+    response
+}
+
+fn paint_search_glass(ui: &mut Ui, response: &egui::Response) {
     let center = egui::pos2(response.rect.left() + SEARCH_INSET / 2.0 + 1.0, response.rect.center().y);
     let font = egui::TextStyle::Body.resolve(ui.style());
     ui.painter().text(center, egui::Align2::CENTER_CENTER, icon::MAGNIFYING_GLASS, font, theme::of(ui).muted);
-    response
 }
 
 /// A search field that fills the width, with a magnifying glass inside it.

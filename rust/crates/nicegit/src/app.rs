@@ -931,11 +931,16 @@ impl NiceGitApp {
             }
         }
         self.repos[index].snapshot = Some(snapshot);
-        // Bisect state and submodules are read alongside, without delaying the snapshot.
+        // Bisect state and submodules are read alongside, without delaying the snapshot. The bar
+        // keeps the last state until the new read arrives, so it does not vanish (and take its
+        // buttons with it) on every refresh.
         let context = self.worker.context.clone();
         let path = self.repos[index].path.clone();
         let bisect_path = path.clone();
-        self.repos[index].bisect = Some(Task::spawn(&context, move || GitClient::new().bisect_status(&bisect_path).ok().flatten()));
+        let previous_bisect = self.repos[index].bisect.take().and_then(|mut task| task.get().cloned().flatten());
+        self.repos[index].bisect = Some(Task::spawn_with(&context, previous_bisect.map(Some), move || {
+            GitClient::new().bisect_status(&bisect_path).ok().flatten()
+        }));
         let untracked: Vec<String> = self.repos[index]
             .snapshot
             .iter()

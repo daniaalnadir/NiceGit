@@ -188,6 +188,34 @@ fn bisect_skip_marks_a_commit_untestable_and_git_records_it() {
     wait(&mut harness, "the window to count the skip", |h| shows(h, "1 skipped so far"));
 }
 
+/// Every refresh reads the bisect again. The bar keeps the state it had until the new read
+/// arrives, so its Skip button does not vanish under a click.
+#[test]
+fn bisect_bar_keeps_its_buttons_across_refreshes() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "bug.txt", "one\n", "Step one");
+    commit_file(path, "bug.txt", "two\n", "Step two");
+    commit_file(path, "bug.txt", "three\n", "Step three");
+    git(path, &["bisect", "start", "HEAD", "HEAD~3"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the bisect bar", |h| h.query_by_role_and_label(Role::Button, "Skip").is_some());
+
+    for refresh in 0..5 {
+        harness.state_mut().load(false);
+        for frame in 0..30 {
+            harness.step();
+            assert!(
+                harness.query_by_role_and_label(Role::Button, "Skip").is_some(),
+                "the Skip button stayed through refresh {refresh}, frame {frame}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        idle(&mut harness);
+    }
+}
+
 #[test]
 fn interactive_rebase_warns_about_commits_already_on_a_remote() {
     let repo = repository();
@@ -254,8 +282,7 @@ fn blame_ignore_whitespace_gives_the_line_back_to_its_earlier_commit() {
     loaded(&mut harness);
 
     harness.get_by_label("Pad the second line").click();
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
     harness.get_by_label_contains("Blame at this commit").click();
@@ -281,8 +308,7 @@ fn clicking_a_blame_line_selects_its_commit_and_shows_its_change() {
     loaded(&mut harness);
 
     harness.get_by_label("Add a second line").click();
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
     harness.get_by_label_contains("Blame at this commit").click();
@@ -327,8 +353,7 @@ fn file_history_restores_an_earlier_version_after_confirmation() {
     loaded(&mut harness);
 
     harness.get_by_label("Add a second line").click();
-    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
-    settle(&mut harness);
+    wait_for_commit_file(&mut harness, "notes.txt");
     harness.get_by_label("notes.txt").click_secondary();
     settle(&mut harness);
     harness.get_by_label_contains("File history").click();
