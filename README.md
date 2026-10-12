@@ -24,13 +24,17 @@ Git itself. Built with Rust, and released under the [MIT License](LICENSE).
   or a commit with your working files, side by side or in one column.
 - Search every branch's history by message, author, code change, or commit ID
   (Shift-Command-F), or search file contents at any commit (Option-Command-F).
+- Show every branch, only local branches, or just the current branch and its upstream, and
+  choose how much context diffs show, up to the whole file.
 
 **Make changes**
 - Stage and unstage whole files or individual lines, edit working files in place, and
   keep a separate commit draft for each checkout.
 - Hover a change in a diff to stage, unstage, or discard just that change, and step
   through every changed file without leaving the diff.
-- Interactive rebase: drag to reorder, and pick, reword, squash, fix up, or drop commits.
+- Interactive rebase: drag to reorder, and pick, reword, edit, squash, fix up, or drop
+  commits. Edit the message of any commit on the branch, or fold staged changes into an
+  older commit with Fix up.
 - Merge, rebase, cherry-pick one or many commits, revert, amend, reset, and resolve
   conflicts, with a preview of which files will conflict before you start.
 - Find the commit that introduced a bug with bisect, guided from the graph.
@@ -41,12 +45,16 @@ Git itself. Built with Rust, and released under the [MIT License](LICENSE).
 - Recover commits left behind by a reset or rebase from **Repository › Recover Lost Work**.
 - Every destructive action checks that the branch, commit, or remote you saw is still the
   one it will change, and refuses if it is not.
+- Force push with a lease after rewriting pushed commits: the confirmation lists what the
+  remote would lose, and the push is refused if someone else pushed since your last fetch.
 
 **Manage repositories**
 - Local and remote branches, tags, stashes (including selected files), linked worktrees,
   submodules, remotes, GitFlow, and Git LFS tracking.
 - Branch clean-up for merged and inactive branches, identity profiles for work and
   personal email addresses, and commit signature status.
+- Browse a stash's files and restore one, delete branches and tags from a remote, push a
+  new tag as you create it, and save changes or a commit as a patch or ZIP archive.
 
 **Work quickly**
 - A command palette for actions, branches, and repositories (Shift-Command-P).
@@ -56,8 +64,11 @@ Git itself. Built with Rust, and released under the [MIT License](LICENSE).
 - Every keyboard shortcut in one list (Command-/).
 - See each changed file's added and removed lines, filter a long list of changes, commit
   and push in one step, and drag a folder onto the window to open it.
+- Start messages from your commit.template, and add Signed-off-by and Co-authored-by lines
+  from a menu.
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
-- Pull requests and issues from github.com through your existing GitHub CLI login.
+- Pull requests and issues, Open on GitHub, and cloning from your repository list, for
+  github.com and GitHub Enterprise hosts, through your existing GitHub CLI login.
 
 The [feature guide](docs/FEATURES.md) describes each feature's behaviour and safeguards.
 
@@ -104,9 +115,10 @@ Install [GitHub CLI](https://cli.github.com) and sign in:
 gh auth login
 ```
 
-Then choose a remote under **Pull Requests** or **Issues** in the sidebar. Only
-github.com is supported. NiceGit reuses the CLI's login and stores no token of its own;
-ordinary Git operations use your existing Git credentials.
+Then choose a remote under **Pull Requests** or **Issues** in the sidebar. For GitHub
+Enterprise Server, list your hosts under **Settings › GitHub Enterprise** and sign in with
+`gh auth login --hostname <host>`. NiceGit reuses the CLI's login and stores no token of
+its own; ordinary Git operations use your existing Git credentials.
 
 ## Development
 
@@ -135,7 +147,7 @@ records hard-won rules about Git edge cases that changes must respect.
 
 ## Limitations
 
-- Pull requests and issues support github.com only, not GitHub Enterprise, GitLab, or
+- Pull requests and issues support github.com and GitHub Enterprise Server, not GitLab or
   Bitbucket. Pushing and pulling work with any Git remote.
 - Undo covers the most recent undoable action, not a full history of every operation.
 - There are no automatic updates; download new versions from the Releases page.
