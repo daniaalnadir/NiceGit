@@ -719,6 +719,20 @@ impl NiceGitApp {
             ui.close();
             self.export_patch(commit);
         }
+        if ui.button(format!("{}  Save as ZIP…", icon::FILE_ZIP)).clicked() {
+            ui.close();
+            self.export_zip(commit);
+        }
+    }
+
+    fn export_zip(&mut self, commit: &Commit) {
+        let Some(repo) = self.repo() else { return };
+        let repo_path = repo.path.clone();
+        let prefix = tools::archive::archive_prefix(&repo_path, &commit.short_hash);
+        let name = format!("{prefix}.zip");
+        if let Some(file) = crate::file_dialog::save_file("Save as ZIP", &name) {
+            self.open_tool(Box::new(tools::archive::SaveZipWindow::new(repo_path, commit.hash.clone(), prefix, file)));
+        }
     }
 
     fn export_patch(&mut self, commit: &Commit) {

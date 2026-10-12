@@ -32,6 +32,7 @@
   before, they vanished until the reload finished.
 - GitHub Enterprise: list your hosts in Settings and their remotes get pull requests, issues,
   and Open on GitHub like github.com.
+- Save as ZIP… exports a commit's files as a ZIP archive from its right-click menu.
 
 ## 1.5.0 - Fewer surprises
 
