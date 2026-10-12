@@ -55,6 +55,8 @@
   step back with Back.
 - Create pull requests from the branch menu or command palette: NiceGit fills in the title,
   base, and commit list, and creates it through the GitHub CLI.
+- Resolve conflicts faster: take the current or incoming version of a file from its right-click
+  menu, or of every conflicted file at once.
 
 ## 1.5.0 - Fewer surprises
 

@@ -150,6 +150,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Edit UTF-8 text conflicts in-app, with marker checks and external-edit protection.
 - Compare base, current, and incoming conflict versions alongside the editable result.
 - Resolve whole-file conflicts by keeping either side or deleting the file, including binary files.
+- Take either side of a conflicted file from its right-click menu in the Changes panel, or of
+  every conflicted file at once from the Resolve all menu beside Continue and Abort.
 
 ## Run
 

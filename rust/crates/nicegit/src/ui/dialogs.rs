@@ -55,6 +55,13 @@ pub enum Pending {
         head: Option<String>,
     },
     Abort(Operation),
+    /// Taking one side of every listed conflicted file. The paths are those shown when the
+    /// confirmation opened; `side_name` is the side's name as the menus show it, in lower case.
+    ResolveConflictsSide {
+        paths: Vec<String>,
+        incoming: bool,
+        side_name: String,
+    },
     UndoCommit {
         branch: String,
         head: String,
@@ -240,8 +247,41 @@ impl Pending {
                 | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
                 | Pending::ForcePush { .. }
+                | Pending::ResolveConflictsSide { .. }
         )
     }
+}
+
+/// The most conflicted files the confirmation lists by name.
+const LISTED_CONFLICTS: usize = 15;
+
+/// The confirmation for taking one side of every conflicted file in `paths`.
+pub fn resolve_conflicts_confirmation(paths: &[String], side: &str) -> (String, String, String) {
+    let title = format!("Take the {side} version for all conflicts?");
+    // A side that deleted a file takes the deletion, so the file is removed rather than replaced.
+    let mut message = format!(
+        "Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead."
+    );
+    for path in paths.iter().take(LISTED_CONFLICTS) {
+        message.push_str("\n• ");
+        message.push_str(path);
+    }
+    if paths.len() > LISTED_CONFLICTS {
+        message.push_str(&format!("\n…and {} more", paths.len() - LISTED_CONFLICTS));
+    }
+    (title, message, format!("Take {side} versions"))
+}
+
+/// The notice for a bulk resolution: how many files took the side, and which could not be
+/// resolved, so the person can open them in the conflict editor.
+fn resolve_conflicts_notice(report: &nicegit_core::conflict::ResolveReport, side: &str) -> String {
+    let resolved = report.resolved.len();
+    let mut text = format!("Resolved {resolved} {} with the {side} version.", if resolved == 1 { "file" } else { "files" });
+    if !report.failed.is_empty() {
+        let names: Vec<&str> = report.failed.iter().map(|(path, _)| path.as_str()).collect();
+        text.push_str(&format!(" {} could not be resolved: {} (open them in the conflict editor).", report.failed.len(), names.join(", ")));
+    }
+    text
 }
 
 impl NiceGitApp {
@@ -635,6 +675,16 @@ impl NiceGitApp {
             }
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
                 client.abort_operation(operation, path).map(|_| Some(format!("Aborted the {}.", operation.name())))
+            }),
+            Pending::ResolveConflictsSide { paths, incoming, side_name } => self.act("Resolve conflicts", move |client, repo| {
+                let report = client.resolve_conflicts_side(&paths, incoming, repo)?;
+                let text = resolve_conflicts_notice(&report, &side_name);
+                // Nothing resolved is an error. The app shows the message itself, without a prefix.
+                if report.resolved.is_empty() && !report.failed.is_empty() {
+                    Err(GitError::failed("resolve conflicts", text))
+                } else {
+                    Ok(Some(text))
+                }
             }),
             Pending::PushBranch { branch, remote, addresses } => {
                 let name = branch.name.clone();

@@ -454,6 +454,37 @@ impl NiceGitApp {
                         dialogs::Pending::Abort(operation),
                     );
                 }
+                if !conflicts.is_empty() {
+                    let (current, incoming) = crate::tools::conflict::side_names(Some(operation));
+                    // An open conflict editor may hold an unsaved result that would be discarded.
+                    let editing = self.tools.iter().any(|tool| tool.id().starts_with("conflict:"));
+                    let enabled = idle && !self.has_unsaved_editor() && !editing;
+                    ui.add_enabled_ui(enabled, |ui| {
+                        ui.menu_button("Resolve all…", |ui| {
+                            for (side, from_incoming) in [(current, false), (incoming, true)] {
+                                let side = side.to_lowercase();
+                                if ui
+                                    .button(format!("Take {side} for all"))
+                                    .on_hover_text("Take one side of every conflicted file")
+                                    .clicked()
+                                {
+                                    ui.close();
+                                    let (title, message, button) = dialogs::resolve_conflicts_confirmation(&conflicts, &side);
+                                    self.confirm(
+                                        title,
+                                        message,
+                                        button,
+                                        dialogs::Pending::ResolveConflictsSide {
+                                            paths: conflicts.clone(),
+                                            incoming: from_incoming,
+                                            side_name: side,
+                                        },
+                                    );
+                                }
+                            }
+                        });
+                    });
+                }
             });
         });
     }

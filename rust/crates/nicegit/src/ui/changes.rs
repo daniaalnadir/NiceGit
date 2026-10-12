@@ -431,6 +431,27 @@ impl NiceGitApp {
             ui.close();
             self.open_tool(Box::new(tools::conflict::ConflictWindow::new(entry.path.clone())));
         }
+        // Taking one side of the file, while an operation has stopped with conflicts.
+        if entry.kind == StatusKind::Conflicted && snapshot.operation.is_some() {
+            let (current, incoming) = tools::conflict::side_names(snapshot.operation);
+            // An open conflict editor for this file may hold an unsaved result that taking a
+            // side would discard, so the editor must be closed first.
+            let editing = self.tools.iter().any(|tool| tool.id() == format!("conflict:{}", entry.path));
+            let enabled = idle && !self.has_unsaved_editor() && !editing;
+            for (side, from_incoming) in [(current, false), (incoming, true)] {
+                let side = side.to_lowercase();
+                let item = ui
+                    .add_enabled(enabled, egui::Button::new(format!("{}  Take {side} version", icon::CHECK)))
+                    .on_disabled_hover_text(if editing { "Close this file's conflict editor first" } else { "Not available right now" });
+                if item.clicked() {
+                    ui.close();
+                    let label = format!("Take {side} version");
+                    let notice = format!("Took the {side} version of {}.", entry.path);
+                    let path = entry.path.clone();
+                    self.act(&label, move |client, repo| client.resolve_conflict_side(&path, from_incoming, repo).map(|()| Some(notice)));
+                }
+            }
+        }
         if staged {
             if ui.add_enabled(idle, egui::Button::new(format!("{}  Unstage", icon::MINUS_CIRCLE))).clicked() {
                 ui.close();

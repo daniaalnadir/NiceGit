@@ -859,6 +859,16 @@ impl NiceGitApp {
                                 };
                                 self.notice = Some(Notice { text, is_error: true, action: None, detail: Some(error.to_string()) });
                             }
+                            // A bulk resolution that resolved no file reports the files it could not, as its
+                            // whole notice rather than as a failed command.
+                            Err(error) if label == "Resolve conflicts" => {
+                                action_failed = true;
+                                let text = match &error {
+                                    GitError::CommandFailed { message, .. } => message.clone(),
+                                    other => other.to_string(),
+                                };
+                                self.notice = Some(Notice { text, is_error: true, action: None, detail: Some(error.to_string()) });
+                            }
                             Err(error) if label == "Force push" && lease_was_refused(&error.to_string()) => {
                                 action_failed = true;
                                 self.notice = Some(Notice {
