@@ -260,8 +260,10 @@ github.com remotes, you choose which one. Opening does not check that the commit
 has been pushed.
 
 Create lightweight or annotated local tags from a commit or branch menu. Annotated
-tags require a message and use the repository's Git identity. Tags are unsigned;
-signing and publishing tags are not yet available in the interface.
+tags require a message and use the repository's Git identity. A tag can be pushed to a
+chosen remote as it is created, with Push to remote in the New tag dialog, or later from
+its sidebar menu, and it can be deleted from a remote there. Tags are unsigned; signing
+tags is not yet available in the interface.
 
 Commit menus support revert with confirmation, merge-parent selection, and
 conflict Continue/Abort. Revert requires a clean working tree and retains the

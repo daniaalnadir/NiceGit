@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use nicegit_core::graph::{layout, layout_with_working_tree, GraphRow};
 use nicegit_core::models::short;
 use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
-use nicegit_core::{Branch, GitClient, Snapshot, Stash, StatusEntry};
+use nicegit_core::{Branch, GitClient, GitError, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
@@ -735,6 +735,16 @@ impl NiceGitApp {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
                             Ok(None) => {}
+                            // The tag was created before its push failed, so the notice must say so
+                            // rather than be mapped to a generic remote explanation.
+                            Err(error) if label == "Create tag" && error.to_string().contains("but could not push it to") => {
+                                action_failed = true;
+                                let text = match &error {
+                                    GitError::CommandFailed { message, .. } => message.clone(),
+                                    other => other.to_string(),
+                                };
+                                self.notice = Some(Notice { text, is_error: true, action: None, detail: Some(error.to_string()) });
+                            }
                             Err(error) if matches!(label.as_str(), "Push" | "Commit and push") && push_needs_pull(&error.to_string()) => {
                                 action_failed = true;
                                 let committed = if label == "Commit and push" { "Your commit was made, but the " } else { "The " };

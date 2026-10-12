@@ -2463,3 +2463,113 @@ fn a_repository_tabs_menu_closes_others_copies_and_reveals_its_path() {
     let copied = copied.expect("the path was copied");
     assert!(same_folder(Path::new(&copied), second.path()), "{copied}");
 }
+
+// MARK: Pushing a new tag
+
+/// Opens the New tag dialog from HEAD's graph menu, naming the tag `name`.
+fn new_tag_on_head(harness: &mut App, name: &str) {
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(harness);
+    harness.get_by_label_contains("Create tag here").click();
+    wait(harness, "the tag dialog", |h| h.query_by_role_and_label(Role::TextInput, "Tag name").is_some());
+    type_into(harness, "Tag name", name);
+}
+
+#[test]
+fn create_tag_and_push_it() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let bare = remote.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    harness.get_by_label("Push to remote").click();
+    settle(&mut harness);
+    harness.get_by_label("Create and push").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the tag on the remote", |_| git(bare, &["tag", "--list"]).contains("v9.9.9"));
+    assert!(git(path, &["tag", "--list"]).contains("v9.9.9"), "the local tag exists");
+}
+
+#[test]
+fn create_annotated_tag_and_push_it() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let bare = remote.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    harness.get_by_label("Annotated, with a message").click();
+    settle(&mut harness);
+    type_into(&mut harness, "Tag message", "First release");
+    harness.get_by_label("Push to remote").click();
+    settle(&mut harness);
+    harness.get_by_label("Create and push").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the tag on the remote", |_| git(bare, &["tag", "--list"]).contains("v9.9.9"));
+    assert_eq!(git(path, &["cat-file", "-t", "refs/tags/v9.9.9"]), "tag", "the local tag is annotated");
+    assert_eq!(
+        git(bare, &["rev-parse", "refs/tags/v9.9.9"]),
+        git(path, &["rev-parse", "refs/tags/v9.9.9"]),
+        "the remote's tag is the same tag object as the local one"
+    );
+}
+
+#[test]
+fn create_tag_without_push_stays_local() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+
+    assert!(git(path, &["tag", "--list"]).contains("v9.9.9"), "the local tag exists");
+    assert!(git(remote.path(), &["tag", "--list"]).is_empty(), "the remote has no tag");
+}
+
+#[test]
+fn create_tag_reports_a_failed_push() {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    harness.get_by_label("Push to remote").click();
+    settle(&mut harness);
+    // The push address changes after the dialog opened, so the captured address no longer matches.
+    git(path, &["remote", "set-url", "--push", "origin", "/nonexistent"]);
+    harness.get_by_label("Create and push").click();
+    idle(&mut harness);
+
+    assert!(git(path, &["tag", "--list"]).contains("v9.9.9"), "the tag stays created");
+    wait(&mut harness, "the failed push notice", |h| {
+        h.query_all_by_label_contains("Created tag v9.9.9, but could not push it").next().is_some()
+    });
+}
+
+#[test]
+fn no_push_option_without_remotes() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    settle(&mut harness);
+    assert!(harness.query_by_label("Push to remote").is_none(), "a repository without remotes offers no push");
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    assert!(git(path, &["tag", "--list"]).contains("v9.9.9"), "the tag is still created");
+}
