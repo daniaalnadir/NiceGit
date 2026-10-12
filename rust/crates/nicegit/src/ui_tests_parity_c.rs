@@ -327,3 +327,60 @@ fn save_a_commit_as_zip() {
     assert!(bytes.starts_with(b"PK"), "the archive is a ZIP");
     wait(&mut harness, "the save notice", |h| shows(h, "Saved saved.zip"));
 }
+
+/// Commits a change to `file` with `message`.
+fn commit_file(dir: &Path, file: &str, contents: &str, message: &str) {
+    std::fs::write(dir.join(file), contents).unwrap();
+    git(dir, &["add", "--", file]);
+    git(dir, &["commit", "-q", "-m", message]);
+}
+
+/// The operation Git has in progress, as the last snapshot read it.
+fn operation(harness: &App) -> Option<nicegit_core::Operation> {
+    harness.state().snapshot().and_then(|s| s.operation)
+}
+
+#[test]
+fn rebase_edit_stops_and_continue_folds_in_staged_changes() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "keep.txt", "keep\n", "Keep this commit");
+    commit_file(path, "middle.txt", "edit this\n", "Edit this commit");
+    commit_file(path, "also.txt", "also\n", "Keep this one too");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Interactive rebase from here").click();
+    let action = "Action for Edit this commit";
+    wait(&mut harness, "the rebase plan", |h| h.query_by_role_and_label(Role::ComboBox, action).is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::ComboBox, action).click();
+    settle(&mut harness);
+    harness.get_all_by_label("Edit").last().expect("the Edit choice").click();
+    settle(&mut harness);
+    harness.get_by_label("Rewrite commits").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rebase to stop at the edit", |h| operation(h) == Some(nicegit_core::Operation::Rebase));
+    wait(&mut harness, "the notice naming the stopped commit", |h| shows(h, "Stopped at"));
+    settle(&mut harness);
+    assert!(shows(&harness, "stopped to edit"), "the operation bar says the rebase stopped to edit a commit");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Edit this commit", "HEAD is the edited commit");
+
+    // The change is staged while the rebase waits, then Continue folds it into the edited commit.
+    std::fs::write(path.join("middle.txt"), "edit this\nand this\n").unwrap();
+    git(path, &["add", "--", "middle.txt"]);
+    harness.state_mut().load(false);
+    wait(&mut harness, "the staged change", |h| h.state().snapshot().is_some_and(|s| s.staged_count() > 0));
+    idle(&mut harness);
+    harness.get_by_label("Continue").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rebase to finish", |h| operation(h).is_none());
+
+    let rebase_directory = git(path, &["rev-parse", "--git-path", "rebase-merge"]);
+    assert!(!path.join(&rebase_directory).exists(), "no rebase is in progress");
+    assert_eq!(git(path, &["show", "HEAD~1:middle.txt"]), "edit this\nand this", "the staged change is in the edited commit");
+    let log = git(path, &["log", "--format=%s"]);
+    assert!(log.starts_with("Keep this one too\nEdit this commit\nKeep this commit\nAdd a second line"), "{log}");
+}

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::diff::DiffRequest;
 use crate::models::*;
 use crate::parsers::*;
+use crate::rebase::edit_stop_in;
 use crate::runner::{self, RunOptions};
 
 const CHANGED_SINCE_SELECTED: &str = "This file changed since it was selected. Refresh and review it again.";
@@ -312,7 +313,9 @@ impl GitClient {
                 snapshot.behind = Some(behind);
             }
         }
-        snapshot.operation = operation_in(Path::new(&runner::strip_line_terminator(outputs[6].clone())));
+        let git_directory = PathBuf::from(runner::strip_line_terminator(outputs[6].clone()));
+        snapshot.operation = operation_in(&git_directory);
+        snapshot.rebase_stopped_for_edit = edit_stop_in(&git_directory, &snapshot.status);
         Ok(snapshot)
     }
 
@@ -861,6 +864,17 @@ impl GitClient {
     }
 
     pub fn continue_operation(&self, operation: Operation, directory: &Path) -> Result<()> {
+        // Git refuses to continue a rebase while any tracked file has unstaged changes, but it
+        // reports that on stdout with a misleading message about conflicts, which the app does
+        // not read. Check first, so the refusal says what to do.
+        if operation == Operation::Rebase
+            && self
+                .load_status(directory)?
+                .iter()
+                .any(|entry| !matches!(entry.kind, StatusKind::Untracked | StatusKind::Conflicted) && entry.is_unstaged())
+        {
+            return Err(GitError::failed("rebase", "cannot rebase: You have unstaged changes. Stage or discard them, then continue."));
+        }
         self.run(&[operation.name(), "--continue"], directory).map(drop)
     }
 

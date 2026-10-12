@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use egui::{Id, RichText, Stroke, TextStyle};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::Commit;
-use nicegit_core::rebase::{RebaseAction, RebasePlan, RebaseStep};
+use nicegit_core::rebase::{RebaseAction, RebaseOutcome, RebasePlan, RebaseStep};
 use nicegit_core::Snapshot;
 
 use super::{query, widgets, Ctx, Task, ToolWindow};
@@ -20,18 +20,20 @@ use crate::theme;
 enum Choice {
     Pick,
     Reword,
+    Edit,
     Squash,
     Fixup,
     Drop,
 }
 
 impl Choice {
-    const ALL: [Choice; 5] = [Choice::Pick, Choice::Reword, Choice::Squash, Choice::Fixup, Choice::Drop];
+    const ALL: [Choice; 6] = [Choice::Pick, Choice::Reword, Choice::Edit, Choice::Squash, Choice::Fixup, Choice::Drop];
 
     fn title(self) -> &'static str {
         match self {
             Choice::Pick => "Pick",
             Choice::Reword => "Reword",
+            Choice::Edit => "Edit",
             Choice::Squash => "Squash",
             Choice::Fixup => "Fixup",
             Choice::Drop => "Drop",
@@ -42,6 +44,7 @@ impl Choice {
         match self {
             Choice::Pick => "Keep this commit as it is",
             Choice::Reword => "Keep this commit with a new message",
+            Choice::Edit => "Stop after this commit so you can change its files",
             Choice::Squash => "Combine into the nearest kept commit below, keeping both messages",
             Choice::Fixup => "Combine into the nearest kept commit below, discarding this message",
             Choice::Drop => "Remove this commit and its changes",
@@ -62,6 +65,7 @@ impl Entry {
         match self.choice {
             Choice::Pick => RebaseAction::Pick,
             Choice::Reword => RebaseAction::Reword(self.message.clone()),
+            Choice::Edit => RebaseAction::Edit,
             Choice::Squash => RebaseAction::Squash,
             Choice::Fixup => RebaseAction::Fixup,
             Choice::Drop => RebaseAction::Drop,
@@ -176,7 +180,7 @@ impl InteractiveRebaseWindow {
     }
 
     fn summary(&self) -> String {
-        let kept = self.entries.iter().filter(|entry| matches!(entry.choice, Choice::Pick | Choice::Reword)).count();
+        let kept = self.entries.iter().filter(|entry| matches!(entry.choice, Choice::Pick | Choice::Reword | Choice::Edit)).count();
         let dropped = self.entries.iter().filter(|entry| entry.choice == Choice::Drop).count();
         let commits = if kept == 1 { "commit" } else { "commits" };
         if dropped > 0 {
@@ -414,13 +418,23 @@ impl ToolWindow for InteractiveRebaseWindow {
                 let steps = self.steps();
                 let branch = self.branch.clone();
                 let rewritten = steps.len();
+                // Git stops at the oldest Edit first, so its subject is the one the notice names.
+                let stop_subject = steps.iter().find(|step| step.action == RebaseAction::Edit).map(|step| step.commit.subject.clone());
                 cx.act_recording(
                     format!("Rewrite commits on {branch}"),
                     "Interactive rebase",
                     nicegit_core::undo::UndoMode::Keep,
-                    move |client, repo| {
-                        client.interactive_rebase(&steps, &plan, &branch, &head, repo)?;
-                        Ok(Some(format!("Rewrote {rewritten} commits on {branch}.")))
+                    move |client, repo| match client.interactive_rebase(&steps, &plan, &branch, &head, repo)? {
+                        RebaseOutcome::Finished => Ok(Some(format!("Rewrote {rewritten} commits on {branch}."))),
+                        RebaseOutcome::Stopped => {
+                            let stopped_at = match stop_subject {
+                                Some(subject) => format!("Stopped at “{subject}”"),
+                                None => "Stopped".to_string(),
+                            };
+                            Ok(Some(format!(
+                                "{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase."
+                            )))
+                        }
                     },
                 );
                 self.closing = true;
@@ -603,5 +617,15 @@ mod tests {
         // "b" would fold into the only commit below it, which is dropped, so nothing is kept to combine into.
         let entries = vec![entry("b", Choice::Squash), entry("a", Choice::Drop)];
         assert!(oldest_kept_combines(&entries));
+    }
+
+    #[test]
+    fn edit_is_a_kept_commit_that_maps_to_an_edit_step() {
+        assert_eq!(entry("a", Choice::Edit).action(), RebaseAction::Edit);
+        // The edited commit is kept, so it is the oldest kept commit here and combines into nothing.
+        let entries = vec![entry("b", Choice::Squash), entry("a", Choice::Edit)];
+        assert!(!oldest_kept_combines(&entries));
+        let steps: Vec<RebaseAction> = oldest_first_steps(&entries).into_iter().map(|step| step.action).collect();
+        assert_eq!(steps, vec![RebaseAction::Edit, RebaseAction::Squash]);
     }
 }

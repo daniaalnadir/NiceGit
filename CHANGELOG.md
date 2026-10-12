@@ -41,6 +41,8 @@
   setting also applies to file history, blame, and compare.
 - Choose how many unchanged lines diffs show around each change, up to the whole file.
 - Save staged or unstaged changes, or one changed file, as a patch from the Changes panel.
+- Interactive rebase can stop at a commit (Edit) so you can change its files; Continue folds
+  the staged changes in.
 
 ## 1.5.0 - Fewer surprises
 
