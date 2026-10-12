@@ -46,6 +46,13 @@ pub enum Pending {
         branch: String,
         head: Option<String>,
     },
+    /// Folding the staged changes into an older commit. The subject names it in the result.
+    FixupInto {
+        target: String,
+        subject: String,
+        branch: String,
+        head: Option<String>,
+    },
     Abort(Operation),
     UndoCommit {
         branch: String,
@@ -482,6 +489,16 @@ impl NiceGitApp {
             Pending::Revert { commit, branch, head } => self.act_recording("Revert", "Revert", move |client, path| {
                 crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some("Reverted the commit.".into()))
             }),
+            Pending::FixupInto { target, subject, branch, head } => {
+                let Some(head) = head else { return };
+                // Soft mode: Undo moves the branch back to the old commits and keeps the folded
+                // changes staged, which is what they were before the fix up. A rebase that stops
+                // for a conflict is not recorded, since the rebase is still in progress.
+                self.act_recording_mode("Fix up", "Fix up", nicegit_core::undo::UndoMode::Soft, move |client, path| {
+                    client.fixup_into(&target, &branch, &head, path)?;
+                    Ok(Some(format!("Folded the staged changes into “{subject}”.")))
+                })
+            }
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
                 client.abort_operation(operation, path).map(|_| Some(format!("Aborted the {}.", operation.name())))
             }),

@@ -291,6 +291,10 @@ body. Amending changes the commit hash and requires confirmation; staged and
 unstaged file edits are excluded. Older commits on the current branch can be edited from
 their graph menu too: Edit message… opens the interactive rebase window with that commit set
 to Reword, which rewrites it and the commits after it, so their hashes change.
+Fix up with staged changes… in the same menu folds what you have staged into an older
+commit. It needs staged changes and no unstaged ones (untracked files may stay). The
+commits from that one through HEAD are rewritten, so their hashes change, and Undo restores
+them with the folded changes staged again.
 
 Remote checkout reuses a unique existing local tracking branch, including renamed
 branches, without resetting local commits. Ambiguous tracking branches must be

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use egui::{Color32, FontId, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::{Branch, Commit, Snapshot};
+use nicegit_core::{Branch, Commit, Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::graph_view::{self, Node};
@@ -588,6 +588,49 @@ impl NiceGitApp {
             {
                 ui.close();
                 self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::reword(commit, snapshot)));
+            }
+        }
+        if !is_head {
+            // Staged changes are what gets folded in, so a clean tree is not required. Unstaged edits
+            // block it, since the rebase rewrites working files; untracked files do not.
+            let merge = commit.parents.len() > 1;
+            let has_staged = snapshot.status.iter().any(StatusEntry::is_staged);
+            let has_unstaged = snapshot.status.iter().any(|entry| entry.kind != StatusKind::Untracked && entry.is_unstaged());
+            let enabled = idle && on_branch && snapshot.operation.is_none() && !merge && has_staged && !has_unstaged;
+            let reason = if merge {
+                Some("Merge commits can't be fixed up here")
+            } else if !has_staged {
+                Some("Stage the changes to fold into this commit first")
+            } else if has_unstaged {
+                Some("Stash or discard unstaged changes first")
+            } else if !on_branch {
+                Some("Check out a branch first")
+            } else if snapshot.operation.is_some() {
+                Some("Finish the current Git operation first")
+            } else {
+                None
+            };
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Fix up with staged changes…", icon::WRENCH)));
+            let button = match reason {
+                Some(reason) => button.on_disabled_hover_text(reason),
+                None => button.on_hover_text("Folds the staged changes into this commit and replays the commits after it"),
+            };
+            if button.clicked() {
+                ui.close();
+                self.confirm(
+                    format!("Fix up “{}”?", commit.subject),
+                    format!(
+                        "The staged changes become part of {}, and the commits after it on {} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.",
+                        commit.short_hash, snapshot.current_branch
+                    ),
+                    "Fix up",
+                    Pending::FixupInto {
+                        target: commit.hash.clone(),
+                        subject: commit.subject.clone(),
+                        branch: snapshot.current_branch.clone(),
+                        head: snapshot.head_hash.clone(),
+                    },
+                );
             }
         }
         if is_head

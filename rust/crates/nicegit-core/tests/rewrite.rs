@@ -352,6 +352,188 @@ fn interactive_rebase_from_root_rewrites_whole_history() {
 
 // MARK: Rebase, cherry-pick, and revert
 
+// MARK: Fix up with staged changes
+
+/// Commits `a.txt`, `b.txt`, and `c.txt` on `main`, oldest first, returning their hashes.
+fn fixup_history(repo: &Repo) -> (String, String, String) {
+    let a = repo.commit("a.txt", "1\n", "Add a");
+    let b = repo.commit("b.txt", "b\n", "Add b");
+    let c = repo.commit("c.txt", "c\n", "Add c");
+    (a, b, c)
+}
+
+/// Stages a change to `a.txt` that adds a second line.
+fn stage_fix_to_a(repo: &Repo) {
+    repo.write("a.txt", "1\n2\n");
+    repo.git(&["add", "--", "a.txt"]);
+}
+
+/// Folds the staged changes into `target`, with HEAD as the checkout's expected head.
+fn fix_up(repo: &Repo, target: &str) -> Result<(), GitError> {
+    let head = repo.head();
+    client().fixup_into(target, "main", &head, repo.path())
+}
+
+/// Hashes of the whole history, oldest first.
+fn all_hashes(directory: &Path) -> Vec<String> {
+    git(directory, &["rev-list", "--reverse", "HEAD"]).lines().map(str::to_string).collect()
+}
+
+#[test]
+fn fixup_into_folds_staged_changes_into_an_earlier_commit() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+
+    fix_up(&repo, &a).expect("fix up");
+
+    assert_eq!(subjects_after(repo.path(), &base), ["Add a", "Add b", "Add c"], "still three commits after the base");
+    let new_a = commits_after(repo.path(), &base)[0].clone();
+    assert_ne!(new_a, a, "the commit was rewritten");
+    assert_eq!(repo.git(&["show", &format!("{new_a}:a.txt")]), "1\n2\n", "the change is in the earlier commit");
+    let files = files_at(repo.path(), "HEAD");
+    assert!(files.contains(&"b.txt".to_string()) && files.contains(&"c.txt".to_string()), "later commits keep their files");
+    assert_ne!(repo.head(), before, "HEAD moved");
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the working tree is clean");
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+}
+
+#[test]
+fn fixup_into_the_root_commit() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    stage_fix_to_a(&repo);
+
+    fix_up(&repo, &a).expect("fix up the root");
+
+    assert_eq!(all_subjects(repo.path()), ["Add a", "Add b", "Add c"]);
+    let root = git(repo.path(), &["rev-list", "--max-parents=0", "HEAD"]).trim().to_string();
+    assert_eq!(repo.git(&["show", &format!("{root}:a.txt")]), "1\n2\n", "the root holds the change");
+    let files = files_at(repo.path(), "HEAD");
+    assert!(files.contains(&"b.txt".to_string()) && files.contains(&"c.txt".to_string()));
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the working tree is clean");
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+}
+
+#[test]
+fn fixup_into_refuses_unstaged_changes() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+    repo.write("b.txt", "edited but not staged\n");
+
+    let message = refusal(fix_up(&repo, &a));
+    assert!(message.contains("Stash or discard the unstaged changes"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "a.txt\n", "the staged change is still staged");
+}
+
+#[test]
+fn fixup_into_refuses_without_staged_changes() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    // Only an untracked file: it does not count as a staged change.
+    repo.write("scratch.txt", "not tracked\n");
+
+    let message = refusal(fix_up(&repo, &a));
+    assert!(message.contains("Stage the changes to fold into this commit first"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+}
+
+#[test]
+fn fixup_into_refuses_head() {
+    let repo = Repo::new();
+    let (_, _, c) = fixup_history(&repo);
+    let before = repo.head();
+    repo.write("c.txt", "c\n2\n");
+    repo.git(&["add", "--", "c.txt"]);
+
+    let message = refusal(fix_up(&repo, &c));
+    assert!(message.contains("Use Amend to change the latest commit"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+}
+
+#[test]
+fn fixup_into_refuses_a_stale_head() {
+    let repo = Repo::new();
+    let (a, b, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+
+    // The expected head is an earlier commit, as if the checkout had moved since the dialog.
+    let message = refusal(client().fixup_into(&a, "main", &b, repo.path()));
+    assert!(message.contains("changed since this action"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "a.txt\n", "the staged change is still staged");
+}
+
+#[test]
+fn fixup_into_with_untracked_files_keeps_them() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    stage_fix_to_a(&repo);
+    repo.write("scratch.txt", "not tracked\n");
+
+    fix_up(&repo, &a).expect("fix up");
+
+    assert_eq!(repo.read("scratch.txt"), "not tracked\n", "the untracked file is untouched");
+    assert_eq!(repo.git(&["status", "--porcelain"]), "?? scratch.txt\n", "only the untracked file remains");
+    let new_a = all_hashes(repo.path())[0].clone();
+    assert_eq!(repo.git(&["show", &format!("{new_a}:a.txt")]), "1\n2\n");
+}
+
+#[test]
+fn fixup_into_stops_for_a_conflict() {
+    // Commit "Extend a" changes a.txt on top of "Add a". The staged fix changes the same first
+    // line, but its context is the later version, so replaying it right after "Add a" conflicts.
+    let repo = Repo::new();
+    let a = repo.commit("a.txt", "1\n", "Add a");
+    repo.commit("a.txt", "1\n2\n", "Extend a");
+    repo.commit("c.txt", "c\n", "Add c");
+    repo.write("a.txt", "one\n2\n");
+    repo.git(&["add", "--", "a.txt"]);
+
+    // A rebase that stops for a conflict stays in progress, so the error says how to finish it and
+    // no undo step is recorded: the app offers Continue and Abort for the stopped rebase.
+    let message = refusal(fix_up(&repo, &a));
+    assert!(message.contains("The rebase stopped"), "{message}");
+    assert!(message.contains("Aborting it leaves the staged changes"), "{message}");
+    assert_eq!(client().checkout_state(repo.path()).expect("state").operation, Some(Operation::Rebase));
+
+    // Aborting returns to the state the rebase began in, which already has the fixup commit on top.
+    // The fix stays as a "fixup! Add a" commit rather than being folded back into "Add a".
+    client().abort_operation(Operation::Rebase, repo.path()).expect("abort the rebase");
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "fixup! Add a", "the fixup commit is at HEAD");
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none());
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+/// When Git refuses to start the rebase, no operation is left in progress and HEAD is still the
+/// fixup commit, so the fixup commit is taken back and its changes are staged again.
+#[cfg(unix)]
+#[test]
+fn fixup_into_is_taken_back_when_git_refuses_the_rebase() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+    // A pre-rebase hook that exits with an error stops Git before it begins the rebase.
+    let hook = repo.path().join(".git").join("hooks").join("pre-rebase");
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write hook");
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("make hook executable");
+
+    refusal(fix_up(&repo, &a));
+    assert_eq!(repo.head(), before, "HEAD is back on the commit it was before the fixup");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "a.txt\n", "the change is staged again");
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+}
+
 #[test]
 fn rebase_onto_branch_replays_the_current_branch() {
     let repo = Repo::new();
