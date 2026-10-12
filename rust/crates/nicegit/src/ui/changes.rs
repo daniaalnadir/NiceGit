@@ -5,7 +5,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::line_counts::LineCount;
 use nicegit_core::{Snapshot, StatusEntry, StatusKind};
 
-use crate::app::{NiceGitApp, Selection};
+use crate::app::{NiceGitApp, Repo, Selection};
 use crate::settings::FileView;
 use crate::theme;
 use crate::tools::{self, widgets};
@@ -443,6 +443,7 @@ impl NiceGitApp {
         let can_amend = snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none();
         let head_published = self.head_published();
         let repo = &mut self.repos[self.active];
+        let path = repo.path.clone();
         egui::Frame::new()
             .fill(ui.visuals().extreme_bg_color)
             .stroke(egui::Stroke::new(1.0, c.border))
@@ -454,7 +455,7 @@ impl NiceGitApp {
                         egui::TextEdit::singleline(&mut repo.draft.summary)
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
-                            .desired_width((ui.available_width() - 92.0).max(40.0)),
+                            .desired_width((ui.available_width() - 124.0).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
                     // Characters used out of the 72-character guideline, e.g. "0/72".
@@ -472,11 +473,11 @@ impl NiceGitApp {
                             recent.push(&commit.subject);
                         }
                     }
+                    // Without a frame at rest, like the panel's other icon buttons.
+                    let visuals = &mut ui.visuals_mut().widgets.inactive;
+                    visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
+                    visuals.bg_stroke = egui::Stroke::NONE;
                     if !recent.is_empty() {
-                        // Without a frame at rest, like the panel's other icon buttons.
-                        let visuals = &mut ui.visuals_mut().widgets.inactive;
-                        visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
-                        visuals.bg_stroke = egui::Stroke::NONE;
                         let menu = ui.menu_button(RichText::new(icon::CLOCK_COUNTER_CLOCKWISE).color(c.muted), |ui| {
                             ui.label(RichText::new("Use a recent summary").small().color(c.muted));
                             for subject in &recent {
@@ -490,6 +491,22 @@ impl NiceGitApp {
                             .on_hover_text("Recent commit summaries")
                             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Recent commit summaries"));
                     }
+                    // The menu is read only while open: its identity is cached until it closes.
+                    let (menu, open) = egui::containers::menu::MenuButton::new(RichText::new(icon::USERS).color(c.muted))
+                        .config(
+                            egui::containers::menu::MenuConfig::new()
+                                .close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside),
+                        )
+                        .ui(ui, |ui| {
+                            let (name, email) =
+                                repo.trailer_identity.get_or_insert_with(|| nicegit_core::GitClient::new().identity(&path)).clone();
+                            add_trailers_menu(ui, repo, snapshot, &name, &email);
+                        });
+                    if open.is_none() {
+                        repo.trailer_identity = None;
+                    }
+                    menu.on_hover_text("Add trailers")
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add trailers"));
                 });
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
@@ -607,6 +624,85 @@ impl NiceGitApp {
         shifted.head_hash = Some(tip.to_string());
         Self::branch_is_merged(&fake, &shifted)
     }
+}
+
+/// The Add trailers menu: Signed-off-by from the Git identity, and Co-authored-by for recent
+/// authors. Each row toggles its line in the description, so the text shows what will be
+/// committed. The menu stays open while several rows are toggled.
+fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &str, email: &str) {
+    let c = theme::of(ui);
+    let (name, email) = (name.trim(), email.trim());
+    let identity_set = !name.is_empty() && !email.is_empty();
+    ui.label(RichText::new("Trailers").small().color(c.muted));
+    let signed_off = format!("Signed-off-by: {name} <{email}>");
+    let on = identity_set && repo.draft.has_trailer(&signed_off);
+    let label = signed_off.clone();
+    let response = ui
+        .add_enabled(identity_set, egui::Button::new(trailer_row(on, &format!("{name} <{email}>"))).truncate())
+        .on_disabled_hover_text("Set your Git name and email first");
+    response.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, identity_set, label.clone()));
+    if response.clicked() {
+        repo.draft.toggle_trailer(&signed_off);
+    }
+
+    ui.separator();
+    ui.label(RichText::new("Co-authored-by").small().color(c.muted));
+    // Recent distinct authors, most recent first, leaving out the current user and bots.
+    let current = email.to_lowercase();
+    let mut seen = std::collections::HashSet::new();
+    let mut authors: Vec<(String, String)> = Vec::new();
+    for commit in &snapshot.commits {
+        if authors.len() == 20 {
+            break;
+        }
+        let (author, address) = (commit.author_name.trim(), commit.author_email.trim());
+        if author.is_empty() || address.is_empty() {
+            continue;
+        }
+        let key = address.to_lowercase();
+        if !seen.insert(key.clone()) || key == current || is_bot(author, &key) {
+            continue;
+        }
+        authors.push((author.to_string(), address.to_string()));
+    }
+    if authors.is_empty() {
+        ui.label(RichText::new("No other authors in the loaded history").small().color(c.muted));
+        return;
+    }
+    if authors.len() > 8 {
+        ui.add(egui::TextEdit::singleline(&mut repo.trailer_filter).hint_text("Filter authors").desired_width(220.0))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter authors"));
+    }
+    let needle = repo.trailer_filter.trim().to_lowercase();
+    let shown: Vec<&(String, String)> = authors
+        .iter()
+        .filter(|(author, address)| needle.is_empty() || format!("{author} <{address}>").to_lowercase().contains(&needle))
+        .collect();
+    if shown.is_empty() {
+        ui.label(RichText::new("No authors match").small().color(c.muted));
+    }
+    for (author, address) in shown {
+        let text = format!("{author} <{address}>");
+        let trailer = format!("Co-authored-by: {text}");
+        let on = repo.draft.has_trailer(&trailer);
+        let label = trailer.clone();
+        let response = ui.add(egui::Button::new(trailer_row(on, &text)).truncate());
+        response.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.clone()));
+        if response.clicked() {
+            repo.draft.toggle_trailer(&trailer);
+        }
+    }
+}
+
+/// A menu row's text, led by a check when the row's trailer is in the description.
+fn trailer_row(on: bool, text: &str) -> String {
+    format!("{}  {text}", if on { icon::CHECK } else { "   " })
+}
+
+/// Bot accounts that should not be offered as co-authors: GitHub's bot noreply addresses and
+/// the GitHub Actions identity. `email` is lower-cased.
+fn is_bot(name: &str, email: &str) -> bool {
+    (email.contains("noreply@github.com") && name.contains("[bot]")) || email.contains("github-actions")
 }
 
 /// A size in whole megabytes, as file sizes are usually given.

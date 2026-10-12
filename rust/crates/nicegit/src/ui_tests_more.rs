@@ -2573,3 +2573,73 @@ fn no_push_option_without_remotes() {
     idle(&mut harness);
     assert!(git(path, &["tag", "--list"]).contains("v9.9.9"), "the tag is still created");
 }
+
+/// The test repository with a commit by Ana, and a new file staged for committing.
+fn repository_with_a_co_author() -> tempfile::TempDir {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["-c", "user.name=Ana", "-c", "user.email=ana@example.com", "commit", "-q", "--allow-empty", "-m", "Review the graph"]);
+    std::fs::write(path.join("new.txt"), "new\n").unwrap();
+    git(path, &["add", "--", "new.txt"]);
+    repo
+}
+
+#[test]
+fn trailers_menu_adds_a_co_author() {
+    let repo = repository_with_a_co_author();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Add a new file");
+
+    harness.get_by_label("Add trailers").click();
+    wait(&mut harness, "the co-author row", |h| h.query_all_by_label("Co-authored-by: Ana <ana@example.com>").next().is_some());
+    harness.get_all_by_label("Co-authored-by: Ana <ana@example.com>").last().expect("the co-author row").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().draft.description, "Co-authored-by: Ana <ana@example.com>");
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Add a new file");
+    let message = git(path, &["log", "-1", "--format=%B"]);
+    assert!(message.ends_with("Co-authored-by: Ana <ana@example.com>"), "{message}");
+    let trailers = git(path, &["log", "-1", "--format=%(trailers:key=Co-authored-by)"]);
+    assert!(trailers.contains("Co-authored-by: Ana <ana@example.com>"), "{trailers}");
+}
+
+#[test]
+fn trailers_menu_toggles_sign_off() {
+    let repo = repository_with_a_co_author();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Add a new file");
+
+    harness.get_by_label("Add trailers").click();
+    let row = "Signed-off-by: Test <test@example.invalid>";
+    wait(&mut harness, "the sign-off row", |h| h.query_all_by_label(row).next().is_some());
+    harness.get_all_by_label(row).last().expect("the sign-off row").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().draft.description, row);
+
+    // The menu stays open, so the same row takes the line back out.
+    harness.get_all_by_label(row).last().expect("the sign-off row").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().draft.description, "");
+}
+
+#[test]
+fn trailers_menu_leaves_out_the_current_user() {
+    let repo = repository_with_a_co_author();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Add a new file");
+
+    harness.get_by_label("Add trailers").click();
+    wait(&mut harness, "the co-author rows", |h| h.query_all_by_label("Co-authored-by: Ana <ana@example.com>").next().is_some());
+    // Test made the repository's own commits, so Test is never offered as a co-author.
+    assert!(harness.query_all_by_label("Co-authored-by: Test <test@example.invalid>").next().is_none());
+    assert!(harness.query_all_by_label("Signed-off-by: Test <test@example.invalid>").next().is_some());
+}

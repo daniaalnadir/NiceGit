@@ -48,6 +48,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   version before the commit, then review and commit the staged result.
 - Amend the last commit with staged changes from the commit panel, with a warning when it
   is already on a remote.
+- Add trailers from the commit box's menu: Signed-off-by from your Git identity, and
+  Co-authored-by from recent authors (the current user and bots left out). The menu edits
+  the description text, so the exact lines show before you commit.
 - Show diffs side by side (old left, new right, long lines wrapped) or in one column; the
   choice is remembered.
 - See what a merge or rebase would do before confirming it: already up to date, a
