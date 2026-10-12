@@ -419,7 +419,9 @@ impl NiceGitApp {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(icon::WARNING).size(16.0).color(c.warning));
-                let text = if conflicts.is_empty() {
+                let text = if snapshot.rebase_stopped_for_edit {
+                    "Rebase stopped to edit a commit: stage your changes, then Continue.".to_string()
+                } else if conflicts.is_empty() {
                     format!("A {} is in progress. Continue when ready, or abort to return to where you started.", operation.name())
                 } else {
                     format!("A {} stopped with {} conflicted file(s). Resolve each one, then continue.", operation.name(), conflicts.len())

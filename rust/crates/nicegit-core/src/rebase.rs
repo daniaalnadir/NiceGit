@@ -24,11 +24,23 @@ pub enum RebaseAction {
     Pick,
     /// Keep the commit with a new message.
     Reword(String),
+    /// Keep the commit with its message, and stop right after it is applied so its files can be
+    /// changed. Continuing the rebase amends the staged changes into it.
+    Edit,
     /// Fold into the kept commit applied before it, adding this commit's message to that one.
     Squash,
     /// Fold into the kept commit applied before it, discarding this commit's message.
     Fixup,
     Drop,
+}
+
+/// How an interactive rebase ended when Git exited successfully.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RebaseOutcome {
+    /// Every step was applied and no operation is in progress.
+    Finished,
+    /// The rebase stopped at an `edit` commit and is still in progress, awaiting Continue or Abort.
+    Stopped,
 }
 
 /// One commit and what to do with it. Steps are given oldest first, as Git applies them.
@@ -106,8 +118,9 @@ impl GitClient {
 
     /// Rewrites the current branch from `plan` using `steps`, oldest first. The steps must cover
     /// exactly the planned commits, and may be reordered. Messages for rewords and squashes are
-    /// stored as Git objects, applied by `exec` lines, so a rebase that stops for a conflict can
-    /// still finish with them.
+    /// stored as Git objects, applied by `exec` lines, so a rebase that stops for a conflict or an
+    /// edit can still finish with them. Returns `Stopped` when Git exits successfully but the
+    /// rebase is still in progress, as an `edit` stop does.
     pub fn interactive_rebase(
         &self,
         steps: &[RebaseStep],
@@ -115,7 +128,7 @@ impl GitClient {
         expected_branch: &str,
         expected_head: &str,
         directory: &Path,
-    ) -> Result<()> {
+    ) -> Result<RebaseOutcome> {
         let state = self.require_checkout(expected_branch, Some(expected_head), REBASE_COMMAND, directory)?;
         if state.operation.is_some() {
             return Err(GitError::failed(REBASE_COMMAND, "Finish or abort the current Git operation first."));
@@ -146,7 +159,7 @@ impl GitClient {
             let hash = step.commit.hash.as_str();
             let original = plan.messages.get(hash).cloned().unwrap_or_else(|| step.commit.subject.clone());
             match &step.action {
-                RebaseAction::Pick | RebaseAction::Reword(_) => {
+                RebaseAction::Pick | RebaseAction::Reword(_) | RebaseAction::Edit => {
                     let kept = match &step.action {
                         RebaseAction::Reword(message) => {
                             if message.trim().is_empty() {
@@ -156,8 +169,9 @@ impl GitClient {
                         }
                         _ => Group { message: original, changed: false },
                     };
+                    let verb = if step.action == RebaseAction::Edit { "edit" } else { "pick" };
                     self.finish_group(&mut todo, group.replace(kept), &scratch, directory)?;
-                    todo.push(format!("pick {hash}"));
+                    todo.push(format!("{verb} {hash}"));
                 }
                 RebaseAction::Squash => {
                     todo.push(format!("fixup {hash}"));
@@ -205,7 +219,19 @@ impl GitClient {
             }
             return Err(error);
         }
-        Ok(())
+        // An `edit` stop exits successfully, leaving the rebase in progress.
+        if self.current_operation(directory)? == Some(Operation::Rebase) {
+            return Ok(RebaseOutcome::Stopped);
+        }
+        Ok(RebaseOutcome::Finished)
+    }
+
+    /// Whether a rebase is stopped at an `edit` commit, ready for the changes to be staged and
+    /// Continue. Git records the commit's amend marker there, and a conflict would stop it instead.
+    pub fn rebase_stopped_for_edit(&self, directory: &Path) -> bool {
+        let Ok(git_directory) = self.git_directory(directory) else { return false };
+        let Ok(entries) = self.load_status(directory) else { return false };
+        edit_stop_in(&git_directory, &entries)
     }
 
     /// Folds the staged changes into `target`, an earlier commit on the current branch: they are
@@ -262,7 +288,8 @@ impl GitClient {
         }
         let steps = fixup_steps(&new_plan.commits, &target, &fixup);
 
-        if let Err(error) = self.interactive_rebase(&steps, &new_plan, expected_branch, &new_head, directory) {
+        let rewritten = self.interactive_rebase(&steps, &new_plan, expected_branch, &new_head, directory).and_then(fixup_finished);
+        if let Err(error) = rewritten {
             // A rebase that stopped for a conflict stays in progress, and its window offers Continue
             // and Abort. Otherwise nothing was rewritten, so the fixup commit is taken back and its
             // changes are staged again, as they were before this action.
@@ -426,6 +453,24 @@ fn fixup_steps(commits: &[Commit], target: &str, fixup: &Commit) -> Vec<RebaseSt
         }
     }
     steps
+}
+
+/// The result of a fixup rebase. Its steps hold no `edit`, so a stop is unexpected, and it is an
+/// error rather than a success: the rebase is still in progress, and the fixup is not yet folded in.
+fn fixup_finished(outcome: RebaseOutcome) -> Result<()> {
+    match outcome {
+        RebaseOutcome::Finished => Ok(()),
+        RebaseOutcome::Stopped => Err(GitError::failed(REBASE_COMMAND, "The rebase stopped before the fixup was folded in.")),
+    }
+}
+
+/// Whether the Git directory shows a rebase stopped at an `edit` commit, given the checkout's
+/// status. Git writes `rebase-merge/amend` at an edit stop. A conflicted entry means the rebase
+/// stopped for a conflict instead, so it is not waiting for an edit.
+pub(crate) fn edit_stop_in(git_directory: &Path, entries: &[StatusEntry]) -> bool {
+    crate::client::operation_in(git_directory) == Some(Operation::Rebase)
+        && git_directory.join("rebase-merge").join("amend").is_file()
+        && !entries.iter().any(|entry| entry.kind == StatusKind::Conflicted)
 }
 
 /// Quotes text for the shell that runs the sequence editor.

@@ -96,6 +96,12 @@ pub fn blocked_by_local_changes(error: &str) -> bool {
     error.contains("would be overwritten by") || error.contains("Please commit your changes or stash them")
 }
 
+/// Whether Git refused to continue an operation because unstaged changes remain. Continuing a
+/// rebase stopped at an edit needs its changes staged, so unstaged ones block it.
+pub fn blocked_by_unstaged_changes(error: &str) -> bool {
+    error.contains("You have unstaged changes")
+}
+
 /// Whether Git refused to commit because it does not know who is committing.
 pub fn needs_identity(error: &str) -> bool {
     ["Please tell me who you are", "empty ident name", "unable to auto-detect email address"].iter().any(|sign| error.contains(sign))
@@ -814,6 +820,15 @@ impl NiceGitApp {
                                     ),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            Err(error) if label == "Continue" && blocked_by_unstaged_changes(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: "Stage or discard your unstaged changes before continuing.".into(),
+                                    is_error: true,
+                                    action: None,
                                     detail: Some(error.to_string()),
                                 });
                             }

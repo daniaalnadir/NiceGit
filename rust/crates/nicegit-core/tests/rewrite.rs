@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 use nicegit_core::client::GitClient;
 use nicegit_core::merge_preview::MergeOutcome;
 use nicegit_core::models::{Branch, GitError, Operation, ResetMode, Snapshot, StatusEntry};
-use nicegit_core::rebase::{Expectation, RebaseAction, RebasePlan, RebaseStep};
+use nicegit_core::rebase::{Expectation, RebaseAction, RebaseOutcome, RebasePlan, RebaseStep};
 use nicegit_core::undo::{branch_move_step, BranchDeletion, UndoMode, UndoStep};
 use tempfile::TempDir;
 
@@ -191,6 +191,12 @@ fn step(plan: &RebasePlan, index: usize, action: RebaseAction) -> RebaseStep {
 /// Applies `steps` to the current branch `main`, shown at HEAD.
 fn rewrite(repo: &Repo, steps: &[RebaseStep], plan: &RebasePlan) -> Result<(), GitError> {
     let head = repo.head();
+    client().interactive_rebase(steps, plan, "main", &head, repo.path()).map(drop)
+}
+
+/// Applies `steps` like `rewrite`, returning the outcome, for steps that may stop at an edit.
+fn rewrite_outcome(repo: &Repo, steps: &[RebaseStep], plan: &RebasePlan) -> Result<RebaseOutcome, GitError> {
+    let head = repo.head();
     client().interactive_rebase(steps, plan, "main", &head, repo.path())
 }
 
@@ -348,6 +354,92 @@ fn interactive_rebase_from_root_rewrites_whole_history() {
     ];
     rewrite(&repo, &steps, &plan).expect("rewrite from root");
     assert_eq!(all_subjects(repo.path()), ["Root reworded", "Add one"]);
+}
+
+// MARK: Edit stops
+
+/// Plans "Add one", "Add two", and "Add three" after `base`, keeping "Add one", stopping at
+/// "Add two" for an edit, and keeping "Add three", which is then applied after Continue.
+fn edit_two_steps(plan: &RebasePlan) -> [RebaseStep; 3] {
+    [step(plan, 0, RebaseAction::Pick), step(plan, 1, RebaseAction::Edit), step(plan, 2, RebaseAction::Pick)]
+}
+
+#[test]
+fn edit_stops_after_the_commit_and_continue_amends_it() {
+    let repo = Repo::new();
+    let (base, _, _, _) = linear_history(&repo);
+    let plan = plan_after(repo.path(), &base);
+
+    assert_eq!(rewrite_outcome(&repo, &edit_two_steps(&plan), &plan).expect("start"), RebaseOutcome::Stopped);
+    assert!(client().rebase_stopped_for_edit(repo.path()), "the rebase waits at the edit");
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "Add two", "HEAD is the edited commit");
+    assert_eq!(client().checkout_state(repo.path()).expect("state").operation, Some(Operation::Rebase));
+
+    repo.write("two.txt", "two\nedited\n");
+    repo.git(&["add", "--", "two.txt"]);
+    client().continue_operation(Operation::Rebase, repo.path()).expect("continue");
+
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+    assert!(!client().rebase_stopped_for_edit(repo.path()));
+    assert_eq!(subjects_after(repo.path(), &base), ["Add one", "Add two", "Add three"], "the message is kept");
+    let edited = commits_after(repo.path(), &base)[1].clone();
+    assert_eq!(repo.git(&["show", &format!("{edited}:two.txt")]), "two\nedited\n", "the staged change is in the edited commit");
+    assert!(files_at(repo.path(), "HEAD").contains(&"three.txt".to_string()), "the commit after the edit is replayed on top");
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn edit_then_abort_restores_the_branch() {
+    let repo = Repo::new();
+    let (base, _, _, _) = linear_history(&repo);
+    let before = repo.head();
+    let plan = plan_after(repo.path(), &base);
+
+    assert_eq!(rewrite_outcome(&repo, &edit_two_steps(&plan), &plan).expect("start"), RebaseOutcome::Stopped);
+    repo.write("two.txt", "two\nedited\n");
+    repo.git(&["add", "--", "two.txt"]);
+    client().abort_operation(Operation::Rebase, repo.path()).expect("abort");
+
+    assert_eq!(repo.head(), before, "HEAD returns to the original commit");
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+    assert!(!client().rebase_stopped_for_edit(repo.path()));
+    assert_eq!(repo.read("two.txt"), "two\n", "the edited file is back to its committed contents");
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the staged edit is discarded with the rebase");
+}
+
+#[test]
+fn edit_followed_by_squash_keeps_the_combined_message() {
+    let repo = Repo::new();
+    let (base, _, _, _) = linear_history(&repo);
+    let plan = plan_after(repo.path(), &base);
+    let steps = [step(&plan, 0, RebaseAction::Pick), step(&plan, 1, RebaseAction::Edit), step(&plan, 2, RebaseAction::Squash)];
+
+    assert_eq!(rewrite_outcome(&repo, &steps, &plan).expect("start"), RebaseOutcome::Stopped);
+    client().continue_operation(Operation::Rebase, repo.path()).expect("continue with no changes");
+
+    assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
+    assert_eq!(subjects_after(repo.path(), &base), ["Add one", "Add two"], "the squashed commit is folded in");
+    let folded = commits_after(repo.path(), &base)[1].clone();
+    assert_eq!(full_message(repo.path(), &folded).trim_end(), "Add two\n\nAdd three", "the messages are combined as Squash does");
+    let files = files_at(repo.path(), &folded);
+    assert!(files.contains(&"two.txt".to_string()) && files.contains(&"three.txt".to_string()), "{files:?}");
+}
+
+#[test]
+fn continue_with_unstaged_changes_is_refused() {
+    let repo = Repo::new();
+    let (base, _, _, _) = linear_history(&repo);
+    let plan = plan_after(repo.path(), &base);
+    assert_eq!(rewrite_outcome(&repo, &edit_two_steps(&plan), &plan).expect("start"), RebaseOutcome::Stopped);
+    let stopped_at = repo.head();
+
+    // An edit left unstaged is not part of the commit, so Git refuses to continue.
+    repo.write("two.txt", "two\nunstaged\n");
+    let message = refusal(client().continue_operation(Operation::Rebase, repo.path()));
+    assert!(message.contains("unstaged changes"), "{message}");
+    assert_eq!(repo.head(), stopped_at, "the stop is unchanged");
+    assert_eq!(client().checkout_state(repo.path()).expect("state").operation, Some(Operation::Rebase), "the rebase is still in progress");
+    assert!(client().rebase_stopped_for_edit(repo.path()), "the rebase still waits at the edit");
 }
 
 // MARK: Rebase, cherry-pick, and revert

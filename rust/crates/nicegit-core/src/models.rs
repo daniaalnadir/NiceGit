@@ -208,6 +208,9 @@ pub struct Snapshot {
     pub remote_push_addresses: BTreeMap<String, Vec<String>>,
     pub stashes: Vec<Stash>,
     pub operation: Option<Operation>,
+    /// Whether the operation is a rebase stopped at an `edit` commit, waiting for changes to be
+    /// staged before Continue.
+    pub rebase_stopped_for_edit: bool,
     pub has_more_commits: bool,
     pub tags: Vec<String>,
     pub tag_tips: BTreeMap<String, String>,

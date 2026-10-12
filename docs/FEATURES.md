@@ -112,7 +112,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Search every branch's history by message, author, or code change (Shift-Command-F),
   including commits not yet loaded in the graph, or paste a commit ID.
 - Interactive rebase from a commit's context menu: drag to reorder, and pick, reword,
-  squash, fix up, or drop each commit, with a warning for commits already on a remote.
+  edit, squash, fix up, or drop each commit, with a warning for commits already on a remote.
+  Edit stops the rebase after that commit so you can change its files; Continue folds in
+  what you have staged.
 - Compare any commit with the working files, or two commits with each other (mark one,
   then compare from another), with a changed-file list and per-file diffs.
 - Blame a file (working version or at a commit), with author, age tinting, an
