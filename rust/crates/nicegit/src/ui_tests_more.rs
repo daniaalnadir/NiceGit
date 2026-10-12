@@ -1044,6 +1044,81 @@ fn edit_message_refuses_a_commit_from_another_branch() {
     assert_eq!(git(path, &["rev-parse", "HEAD"]), before, "nothing is rewritten");
 }
 
+/// Stages a change to `a.txt`, the file of the first commit in `three_commits`, adding a line.
+fn stage_fix_to_first_commit(path: &Path) {
+    std::fs::write(path.join("a.txt"), "a\nfixed\n").unwrap();
+    git(path, &["add", "--", "a.txt"]);
+}
+
+/// Right-clicks the commit with `subject` and chooses Fix up, then confirms it.
+fn fix_up_commit(harness: &mut App, subject: &str) {
+    harness.get_by_label(subject).click_secondary();
+    settle(harness);
+    harness.get_by_label_contains("Fix up with staged changes").click();
+    wait(harness, "the fix up confirmation", |h| shows(h, &format!("Fix up “{subject}”?")));
+    settle(harness);
+    harness.get_by_role_and_label(Role::Button, "Fix up").click();
+}
+
+#[test]
+fn fix_up_folds_staged_changes_into_an_older_commit() {
+    let repo = three_commits();
+    let path = repo.path();
+    stage_fix_to_first_commit(path);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    fix_up_commit(&mut harness, "first");
+    idle(&mut harness);
+    wait(&mut harness, "the rewritten history", |_| git(path, &["rev-parse", "HEAD"]) != before);
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "3", "no commit was added");
+    assert_eq!(git(path, &["log", "--format=%s"]), "third\nsecond\nfirst", "the subjects are unchanged");
+    assert_eq!(git(path, &["show", "HEAD~2:a.txt"]), "a\nfixed", "the oldest commit holds the change");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn fix_up_is_disabled_with_unstaged_changes() {
+    let repo = three_commits();
+    let path = repo.path();
+    stage_fix_to_first_commit(path);
+    std::fs::write(path.join("c.txt"), "c\nnot staged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("first").click_secondary();
+    settle(&mut harness);
+    let item = harness.get_by_label_contains("Fix up with staged changes");
+    assert!(item.accesskit_node().is_disabled(), "the item is disabled while unstaged changes remain");
+    item.click();
+    settle(&mut harness);
+    assert!(harness.state().dialog.is_none(), "a disabled item opens no confirmation");
+    assert_eq!(git(path, &["log", "--format=%s"]), "third\nsecond\nfirst", "nothing was rewritten");
+}
+
+#[test]
+fn undo_after_fix_up_restores_the_staged_changes() {
+    let repo = three_commits();
+    let path = repo.path();
+    stage_fix_to_first_commit(path);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    fix_up_commit(&mut harness, "first");
+    idle(&mut harness);
+    wait(&mut harness, "the rewritten history", |_| git(path, &["rev-parse", "HEAD"]) != before);
+
+    toolbar_button(&mut harness, "Undo");
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    harness.get_all_by_label("Undo").last().expect("confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the original commits", |_| git(path, &["rev-parse", "HEAD"]) == before);
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "a.txt", "the folded change is staged again");
+}
+
 #[test]
 fn an_idle_repository_does_not_keep_refreshing_itself() {
     let repo = repository();

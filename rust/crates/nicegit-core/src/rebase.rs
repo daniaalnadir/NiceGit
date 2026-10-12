@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::client::GitClient;
-use crate::models::{Branch, Commit, GitError, Operation, Result, StatusKind};
+use crate::models::{Branch, Commit, GitError, Operation, Result, StatusEntry, StatusKind};
 use crate::parsers::parse_log;
 use crate::runner::{self, RunOptions};
 
@@ -208,6 +208,87 @@ impl GitClient {
         Ok(())
     }
 
+    /// Folds the staged changes into `target`, an earlier commit on the current branch: they are
+    /// committed as a fixup commit, which an interactive rebase then combines into `target`. Only
+    /// staged changes are allowed (untracked files may remain); unstaged edits must be stashed or
+    /// discarded first, since the rebase rewrites working files.
+    pub fn fixup_into(&self, target: &str, expected_branch: &str, expected_head: &str, directory: &Path) -> Result<()> {
+        let state = self.require_checkout(expected_branch, Some(expected_head), REBASE_COMMAND, directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed(REBASE_COMMAND, "Finish or abort the current Git operation first."));
+        }
+        let target = self.resolve_commit(target, directory)?;
+        if target == expected_head {
+            return Err(GitError::failed(REBASE_COMMAND, "Use Amend to change the latest commit."));
+        }
+
+        let entries = self.load_status(directory)?;
+        if entries.iter().any(|entry| entry.kind == StatusKind::Conflicted) {
+            return Err(GitError::failed(REBASE_COMMAND, "Resolve the conflicted files first."));
+        }
+        if entries.iter().any(|entry| entry.kind != StatusKind::Untracked && entry.is_unstaged()) {
+            return Err(GitError::failed(
+                REBASE_COMMAND,
+                "Stash or discard the unstaged changes first; only staged changes can be folded into an earlier commit.",
+            ));
+        }
+        if !entries.iter().any(StatusEntry::is_staged) {
+            return Err(GitError::failed(REBASE_COMMAND, "Stage the changes to fold into this commit first."));
+        }
+
+        // Read the parent list rather than `rev-parse <target>^`: that fails for a root commit,
+        // which cannot be told apart from a real failure. A root commit has no base.
+        let parents = self.run_trimmed(&["show", "--no-patch", "--format=%P", &target, "--"], directory)?;
+        let base = parents.split_whitespace().next().map(str::to_string);
+        let plan = self.interactive_rebase_plan(base.as_deref(), directory)?;
+        if !plan.commits.iter().any(|commit| commit.hash == target) {
+            return Err(GitError::failed(REBASE_COMMAND, "This commit is not part of the current branch's history."));
+        }
+
+        // Hooks are skipped: the fixup commit is temporary, and its message is discarded when the
+        // rebase folds it into the target, so a hook that checks messages would only get in the way.
+        self.run(&["commit", "--quiet", "--no-verify", &format!("--fixup={target}")], directory)?;
+
+        let new_plan = self.interactive_rebase_plan(base.as_deref(), directory)?;
+        let new_head = self.run_trimmed(&["rev-parse", "--verify", "HEAD"], directory)?;
+        let fixup = new_plan
+            .commits
+            .last()
+            .filter(|commit| commit.hash == new_head)
+            .cloned()
+            .ok_or_else(|| GitError::failed(REBASE_COMMAND, "The fixup commit is not at HEAD. Refresh and start again."))?;
+        if !new_plan.commits.iter().any(|commit| commit.hash == target) {
+            return Err(GitError::failed(REBASE_COMMAND, "The commits to rewrite changed. Refresh and start again."));
+        }
+        let steps = fixup_steps(&new_plan.commits, &target, &fixup);
+
+        if let Err(error) = self.interactive_rebase(&steps, &new_plan, expected_branch, &new_head, directory) {
+            // A rebase that stopped for a conflict stays in progress, and its window offers Continue
+            // and Abort. Otherwise nothing was rewritten, so the fixup commit is taken back and its
+            // changes are staged again, as they were before this action.
+            let state = self.checkout_state(directory).ok();
+            if state.as_ref().is_some_and(|state| state.operation.is_some()) {
+                // Say what Abort leaves behind: the rebase began after the fixup commit was made.
+                const AFTER_ABORT: &str = "Resolve the conflicts and continue the rebase. Aborting it leaves the staged changes as a separate “fixup!” commit on top, which Undo this commit takes back.";
+                return Err(match error {
+                    GitError::CommandFailed { command, message } => GitError::failed(command, format!("{message} {AFTER_ABORT}")),
+                    other => other,
+                });
+            }
+            let rewound = state.is_some_and(|state| state.head_hash.as_deref() == Some(new_head.as_str()));
+            if rewound {
+                if let Err(reset_error) = self.run(&["reset", "--soft", expected_head, "--"], directory) {
+                    return Err(GitError::failed(
+                        REBASE_COMMAND,
+                        format!("{error} The fixup commit could not be removed from HEAD: {reset_error}"),
+                    ));
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Ends a group of kept commits: stores its message and amends the commit with it, when the
     /// message was changed by a reword or a squash.
     fn finish_group(&self, todo: &mut Vec<String>, group: Option<Group>, scratch: &Scratch, directory: &Path) -> Result<()> {
@@ -333,6 +414,20 @@ impl GitClient {
     }
 }
 
+/// The steps that fold `fixup` into `target`. `commits` lists the rebase plan oldest first, and
+/// its last commit is `fixup`, which is applied straight after `target` and combined into it.
+/// Every other commit is picked in its original order.
+fn fixup_steps(commits: &[Commit], target: &str, fixup: &Commit) -> Vec<RebaseStep> {
+    let mut steps = Vec::with_capacity(commits.len());
+    for commit in commits.iter().filter(|commit| commit.hash != fixup.hash) {
+        steps.push(RebaseStep { commit: commit.clone(), action: RebaseAction::Pick });
+        if commit.hash == target {
+            steps.push(RebaseStep { commit: fixup.clone(), action: RebaseAction::Fixup });
+        }
+    }
+    steps
+}
+
 /// Quotes text for the shell that runs the sequence editor.
 fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
@@ -385,5 +480,62 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn commit(hash: &str, subject: &str) -> Commit {
+        Commit {
+            hash: hash.to_string(),
+            short_hash: hash.chars().take(7).collect(),
+            parents: Vec::new(),
+            refs: Vec::new(),
+            subject: subject.to_string(),
+            author_name: String::new(),
+            author_email: String::new(),
+            relative_date: String::new(),
+            commit_time: None,
+        }
+    }
+
+    fn summary(steps: &[RebaseStep]) -> Vec<(String, RebaseAction)> {
+        steps.iter().map(|step| (step.commit.subject.clone(), step.action.clone())).collect()
+    }
+
+    #[test]
+    fn fixup_steps_apply_the_fixup_straight_after_its_target() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("c", "C"), commit("f", "fixup! B")];
+        let steps = fixup_steps(&commits, "b", &commits[3]);
+        assert_eq!(
+            summary(&steps),
+            [
+                ("A".to_string(), RebaseAction::Pick),
+                ("B".to_string(), RebaseAction::Pick),
+                ("fixup! B".to_string(), RebaseAction::Fixup),
+                ("C".to_string(), RebaseAction::Pick),
+            ]
+        );
+    }
+
+    #[test]
+    fn fixup_steps_handle_the_oldest_commit_as_target() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("f", "fixup! A")];
+        let steps = fixup_steps(&commits, "a", &commits[2]);
+        assert_eq!(
+            summary(&steps),
+            [("A".to_string(), RebaseAction::Pick), ("fixup! A".to_string(), RebaseAction::Fixup), ("B".to_string(), RebaseAction::Pick),]
+        );
+    }
+
+    #[test]
+    fn fixup_steps_cover_each_planned_commit_once() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("f", "fixup! A")];
+        let steps = fixup_steps(&commits, "a", &commits[2]);
+        let mut hashes: Vec<&str> = steps.iter().map(|step| step.commit.hash.as_str()).collect();
+        hashes.sort_unstable();
+        assert_eq!(hashes, ["a", "b", "f"]);
     }
 }
