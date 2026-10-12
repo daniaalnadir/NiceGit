@@ -8,6 +8,7 @@ use nicegit_core::{Branch, GitError, Operation, Snapshot, Stash, StatusEntry};
 use crate::app::NiceGitApp;
 use crate::theme;
 use crate::tools::widgets;
+use crate::ui::clone_picker::{ClonePicker, Picked};
 
 pub enum Pending {
     Discard(StatusEntry),
@@ -245,10 +246,17 @@ impl Pending {
 
 impl NiceGitApp {
     pub fn dialogs(&mut self, ctx: &egui::Context) {
-        let Some(mut dialog) = self.dialog.take() else { return };
+        let Some(mut dialog) = self.dialog.take() else {
+            // The GitHub picker belongs to the Clone dialog, so it closes with it.
+            self.clone_picker = None;
+            return;
+        };
         let mut close = false;
         let mut run = false;
         let mut integrate: Option<bool> = None;
+        // The Clone dialog's "From GitHub…" button asks for the picker, which is drawn over the dialog.
+        let mut open_picker = false;
+        let picker_open = self.clone_picker.is_some();
         let published = self.head_published();
         let mut snapshot_commits: Vec<(String, String)> = Vec::new();
         if let Some(snapshot) = self.snapshot() {
@@ -285,7 +293,25 @@ impl NiceGitApp {
                     ui.heading(title.as_str());
                     ui.add_space(8.0);
                     ui.label(RichText::new(label.as_str()).color(c.muted));
-                    let first = widgets::text_field(ui, value, "");
+                    // The Clone dialog's address field has a "From GitHub…" button beside it.
+                    let first = if matches!(kind, InputKind::Clone) {
+                        ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let pick = ui
+                                    .button(format!("{}  From GitHub…", icon::GITHUB_LOGO))
+                                    .on_hover_text("Choose one of your GitHub repositories");
+                                pick.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose a GitHub repository"));
+                                if pick.clicked() {
+                                    open_picker = true;
+                                }
+                                widgets::text_field(ui, value, "")
+                            })
+                            .inner
+                        })
+                        .inner
+                    } else {
+                        widgets::text_field(ui, value, "")
+                    };
                     let first_label = label.clone();
                     first.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &first_label));
                     if ui.memory(|m| m.focused().is_none()) {
@@ -368,7 +394,8 @@ impl NiceGitApp {
                         });
                     }
                     ui.add_space(16.0);
-                    let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                    // While the GitHub picker is open, Enter belongs to it, not to this dialog.
+                    let enter = !picker_open && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     ui.horizontal(|ui| {
                         // A stash's message is optional: Git names one after the branch when it is empty.
                         let optional = matches!(kind, InputKind::SaveStash);
@@ -473,8 +500,23 @@ impl NiceGitApp {
                 }
             }
         });
-        if modal.should_close() {
+        if modal.should_close() && !picker_open {
             close = true;
+        }
+        if open_picker {
+            self.clone_picker = Some(ClonePicker::new(&self.settings.github_enterprise_hosts));
+        }
+        if let Some(picker) = self.clone_picker.as_mut() {
+            match picker.show(ctx) {
+                Some(Picked::Url(url)) => {
+                    if let Dialog::Input { value, .. } = &mut dialog {
+                        *value = url;
+                    }
+                    self.clone_picker = None;
+                }
+                Some(Picked::Close) => self.clone_picker = None,
+                None => {}
+            }
         }
         if let (Some(rebase), Dialog::Integrate { source }) = (integrate, &dialog) {
             let source = source.clone();

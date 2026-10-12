@@ -45,6 +45,8 @@
   the staged changes in.
 - Delete a branch from its remote from the branch's right-click menu; it is refused if the
   branch moved since you last fetched.
+- The Clone dialog can list your GitHub repositories through the GitHub CLI, so you can pick
+  one instead of pasting its URL.
 
 ## 1.5.0 - Fewer surprises
 

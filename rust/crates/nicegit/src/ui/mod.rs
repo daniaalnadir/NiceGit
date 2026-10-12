@@ -2,6 +2,7 @@
 //! and the changes panel or commit inspector on the right.
 
 pub mod changes;
+pub mod clone_picker;
 pub mod dialogs;
 pub mod github_section;
 pub mod history;
