@@ -84,17 +84,46 @@ pub struct SignatureSummary {
     pub help: String,
 }
 
+/// The `owner/repo` slug of a remote's first fetch address, when that address is on github.com.
+fn github_slug(snapshot: &nicegit_core::Snapshot, remote: &str) -> Option<String> {
+    let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
+    nicegit_core::github::GitHubRepository::parse(address).ok().map(|repository| repository.slug())
+}
+
+/// Remotes on github.com, each with its `owner/repo` slug.
+fn github_remotes(snapshot: &nicegit_core::Snapshot) -> Vec<(String, String)> {
+    snapshot.remotes.iter().filter_map(|remote| Some((remote.clone(), github_slug(snapshot, remote)?))).collect()
+}
+
 /// Remotes on github.com, with the web address of `commit` on each.
 pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str) -> Vec<(String, String)> {
-    snapshot
-        .remotes
-        .iter()
-        .filter_map(|remote| {
-            let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
-            let repository = nicegit_core::github::GitHubRepository::parse(address).ok()?;
-            Some((remote.clone(), format!("https://github.com/{}/commit/{commit}", repository.slug())))
-        })
-        .collect()
+    github_remotes(snapshot).into_iter().map(|(remote, slug)| (remote, format!("https://github.com/{slug}/commit/{commit}"))).collect()
+}
+
+/// Remotes on github.com, with the web address of `path` as it was in `commit` on each.
+pub fn github_file_links(snapshot: &nicegit_core::Snapshot, commit: &str, path: &str) -> Vec<(String, String)> {
+    let path = encode_path(path);
+    github_remotes(snapshot).into_iter().map(|(remote, slug)| (remote, format!("https://github.com/{slug}/blob/{commit}/{path}"))).collect()
+}
+
+/// Splits a branch path such as `origin/feature/x` into its remote and the branch on it. Remote
+/// names can contain slashes, so the longest configured remote that prefixes the path wins.
+fn split_remote<'a>(snapshot: &nicegit_core::Snapshot, path: &'a str) -> Option<(&'a str, &'a str)> {
+    let remote = snapshot.remotes.iter().filter(|remote| path.starts_with(&format!("{remote}/"))).max_by_key(|remote| remote.len())?;
+    Some((&path[..remote.len()], &path[remote.len() + 1..]))
+}
+
+/// The github.com page for a branch. A remote-tracking branch links to itself on its remote; a
+/// local branch links to its upstream when that is a branch on a github.com remote.
+pub fn github_branch_link(snapshot: &nicegit_core::Snapshot, branch: &nicegit_core::Branch) -> Option<String> {
+    let path = if branch.is_remote {
+        branch.name.strip_prefix("remotes/").unwrap_or(&branch.name)
+    } else {
+        branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?
+    };
+    let (remote, remote_branch) = split_remote(snapshot, path)?;
+    let slug = github_slug(snapshot, remote)?;
+    Some(format!("https://github.com/{slug}/tree/{}", encode_path(remote_branch)))
 }
 
 /// Why Git would refuse `name` as a branch or tag name, following `git check-ref-format`, so a
@@ -139,11 +168,9 @@ pub fn github_pull_request_link(snapshot: &nicegit_core::Snapshot, branch: &nice
     }
     // The upstream is a full ref; only a remote-tracking branch has a remote to compare on.
     let upstream = branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?;
-    let remote = snapshot.remotes.iter().filter(|remote| upstream.starts_with(&format!("{remote}/"))).max_by_key(|remote| remote.len())?;
-    let remote_branch = &upstream[remote.len() + 1..];
-    let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
-    let repository = nicegit_core::github::GitHubRepository::parse(address).ok()?;
-    Some(format!("https://github.com/{}/compare/{}?expand=1", repository.slug(), encode_path(remote_branch)))
+    let (remote, remote_branch) = split_remote(snapshot, upstream)?;
+    let slug = github_slug(snapshot, remote)?;
+    Some(format!("https://github.com/{slug}/compare/{}?expand=1", encode_path(remote_branch)))
 }
 
 /// Percent-encodes a branch name for a URL path, keeping its slashes.
@@ -173,6 +200,35 @@ pub fn github_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, co
             }
         }
     });
+}
+
+/// Hover text for an item that opens a commit's page, which exists only once the commit is pushed.
+pub const PUSHED_COMMIT_NOTE: &str = "\nThe commit must be on GitHub for this page to exist.";
+
+/// An item that opens a github.com page. With one github.com remote it is a plain button; with
+/// several, a submenu lists each remote. Nothing is shown without one. `note` is added to each
+/// item's hover text under its address.
+pub fn github_open_menu(ui: &mut egui::Ui, label: &str, links: Vec<(String, String)>, note: &str) {
+    let text = format!("{}  {label}", egui_phosphor::regular::ARROW_SQUARE_OUT);
+    match links.as_slice() {
+        [] => {}
+        [(_, url)] => {
+            if ui.button(text).on_hover_text(format!("{url}{note}")).clicked() {
+                ui.close();
+                crate::ui::changes::open_url(url);
+            }
+        }
+        _ => {
+            ui.menu_button(text, |ui| {
+                for (remote, url) in &links {
+                    if ui.button(remote.as_str()).on_hover_text(format!("{url}{note}")).clicked() {
+                        ui.close();
+                        crate::ui::changes::open_url(url);
+                    }
+                }
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +332,125 @@ mod tests {
         assert_eq!(link(Some("refs/remotes/mirror/topic")), None, "not on github.com");
         assert_eq!(link(Some("refs/heads/main")), None, "a local upstream has no remote");
         assert_eq!(link(None), None, "an unpublished branch has nothing to compare");
+    }
+
+    /// A snapshot whose remotes have these fetch addresses, in the order given.
+    fn with_remotes(addresses: &[(&str, &str)]) -> nicegit_core::Snapshot {
+        let mut snapshot =
+            nicegit_core::Snapshot { remotes: addresses.iter().map(|(name, _)| name.to_string()).collect(), ..Default::default() };
+        for (name, address) in addresses {
+            snapshot.remote_fetch_addresses.insert(name.to_string(), vec![address.to_string()]);
+        }
+        snapshot
+    }
+
+    fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+        list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+    }
+
+    fn remote_branch_named(name: &str) -> nicegit_core::Branch {
+        nicegit_core::Branch {
+            name: format!("remotes/{name}"),
+            is_current: false,
+            is_remote: true,
+            tip: "abc".into(),
+            subject: String::new(),
+            upstream: None,
+        }
+    }
+
+    fn local_branch_with_upstream(upstream: Option<&str>) -> nicegit_core::Branch {
+        nicegit_core::Branch {
+            name: "local".into(),
+            is_current: false,
+            is_remote: false,
+            tip: "abc".into(),
+            subject: String::new(),
+            upstream: upstream.map(String::from),
+        }
+    }
+
+    #[test]
+    fn github_commit_links_accept_scp_and_https_addresses() {
+        let expected = pairs(&[("origin", "https://github.com/owner/repo/commit/abc123")]);
+        let scp = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+        let https = with_remotes(&[("origin", "https://github.com/owner/repo")]);
+        assert_eq!(super::github_commit_links(&scp, "abc123"), expected);
+        assert_eq!(super::github_commit_links(&https, "abc123"), expected);
+    }
+
+    #[test]
+    fn github_links_skip_remotes_that_are_not_on_github() {
+        let snapshot = with_remotes(&[("mirror", "https://example.com/owner/repo.git")]);
+        assert!(super::github_commit_links(&snapshot, "abc123").is_empty());
+        assert!(super::github_file_links(&snapshot, "abc123", "a.txt").is_empty());
+        assert_eq!(super::github_branch_link(&snapshot, &remote_branch_named("mirror/main")), None);
+    }
+
+    #[test]
+    fn github_commit_links_list_each_github_remote() {
+        let snapshot = with_remotes(&[
+            ("origin", "git@github.com:owner/repo.git"),
+            ("mirror", "https://example.com/owner/repo.git"),
+            ("fork", "https://github.com/me/repo"),
+        ]);
+        assert_eq!(
+            super::github_commit_links(&snapshot, "abc123"),
+            pairs(&[("origin", "https://github.com/owner/repo/commit/abc123"), ("fork", "https://github.com/me/repo/commit/abc123"),])
+        );
+    }
+
+    #[test]
+    fn github_branch_links_use_the_remote_branch_on_its_remote() {
+        let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+        assert_eq!(
+            super::github_branch_link(&snapshot, &remote_branch_named("origin/feature/x")).as_deref(),
+            Some("https://github.com/owner/repo/tree/feature/x")
+        );
+    }
+
+    #[test]
+    fn github_branch_links_pick_the_longest_remote_name() {
+        let snapshot = with_remotes(&[("team", "https://github.com/one/app"), ("team/fork", "https://github.com/two/app")]);
+        assert_eq!(
+            super::github_branch_link(&snapshot, &remote_branch_named("team/fork/topic")).as_deref(),
+            Some("https://github.com/two/app/tree/topic")
+        );
+        assert_eq!(
+            super::github_branch_link(&snapshot, &remote_branch_named("team/topic")).as_deref(),
+            Some("https://github.com/one/app/tree/topic")
+        );
+    }
+
+    #[test]
+    fn github_branch_link_encodes_the_upstream_branch() {
+        let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+        let branch = local_branch_with_upstream(Some("refs/remotes/origin/my#branch"));
+        assert_eq!(super::github_branch_link(&snapshot, &branch).as_deref(), Some("https://github.com/owner/repo/tree/my%23branch"));
+    }
+
+    #[test]
+    fn github_branch_link_needs_a_github_upstream() {
+        let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+        assert_eq!(super::github_branch_link(&snapshot, &local_branch_with_upstream(None)), None, "no upstream");
+        assert_eq!(
+            super::github_branch_link(&snapshot, &local_branch_with_upstream(Some("refs/heads/main"))),
+            None,
+            "a local upstream has no remote"
+        );
+    }
+
+    #[test]
+    fn github_file_links_encode_the_path_and_keep_its_slashes() {
+        let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+        assert_eq!(
+            super::github_file_links(&snapshot, "abc123", "dir/a b#c.txt"),
+            pairs(&[("origin", "https://github.com/owner/repo/blob/abc123/dir/a%20b%23c.txt")])
+        );
+        assert_eq!(
+            super::github_file_links(&snapshot, "abc123", "ü?.txt"),
+            pairs(&[("origin", "https://github.com/owner/repo/blob/abc123/%C3%BC%3F.txt")])
+        );
     }
 
     #[test]

@@ -15,6 +15,7 @@
 - The bisect bar no longer flickers, with its buttons briefly gone, on every refresh.
 - Edit message… now works on older commits too: it opens the interactive rebase window with
   that commit set to Reword.
+- Open a commit, branch, or a commit's file on GitHub from its right-click menu.
 
 ## 1.5.0 - Fewer surprises
 

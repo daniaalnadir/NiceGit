@@ -383,6 +383,104 @@ fn copy_a_github_commit_link_from_the_graph() {
     assert_eq!(copied.as_deref(), Some(expected.as_str()));
 }
 
+/// The web addresses the interface has asked the browser to open, since they were last cleared.
+fn opened_urls() -> Vec<String> {
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone())
+}
+
+fn clear_opened_urls() {
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+}
+
+#[test]
+fn open_commit_on_github() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    let hash = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open on GitHub").click();
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec![format!("https://github.com/owner/repo/commit/{hash}")]);
+}
+
+#[test]
+fn open_file_on_github_from_the_inspector() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    let hash = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.get_by_label("Add a second line").click();
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    settle(&mut harness);
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open file on GitHub").click();
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec![format!("https://github.com/owner/repo/blob/{hash}/notes.txt")]);
+}
+
+#[test]
+fn no_file_on_github_for_a_file_deleted_in_its_commit() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    git(path, &["rm", "-q", "notes.txt"]);
+    git(path, &["commit", "-q", "-m", "Delete the notes"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Delete the notes").click();
+    wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
+    settle(&mut harness);
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    assert!(has_label(&harness, "File history"), "the file's menu is open");
+    assert!(!shows(&harness, "Open file on GitHub"), "a deleted file does not exist in the commit");
+}
+
+#[test]
+fn github_item_is_left_out_without_a_github_remote() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "mirror", "https://example.com/owner/repo.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    assert!(has_label(&harness, "Copy commit ID"), "the commit's menu is open");
+    assert!(!shows(&harness, "Open on GitHub"), "a remote off github.com gives no link");
+}
+
+#[test]
+fn open_branch_on_github() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+    git(path, &["config", "branch.feature.remote", "origin"]);
+    git(path, &["config", "branch.feature.merge", "refs/heads/feature"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open branch on GitHub").click();
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec!["https://github.com/owner/repo/tree/feature".to_string()]);
+}
+
 #[test]
 fn save_a_commit_as_a_patch_and_apply_it_again() {
     let repo = repository();

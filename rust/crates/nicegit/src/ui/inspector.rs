@@ -180,6 +180,15 @@ impl NiceGitApp {
             ui.close();
             self.open_tool(Box::new(tools::blame::BlameWindow::new(path.to_string(), Some(hash.to_string()))));
         }
+        // A file deleted in this commit does not exist at it, so there is no page to open.
+        if !status.starts_with('D') {
+            crate::git_ext::github_open_menu(
+                ui,
+                "Open file on GitHub",
+                crate::git_ext::github_file_links(&snapshot, hash, path),
+                crate::git_ext::PUSHED_COMMIT_NOTE,
+            );
+        }
         ui.separator();
         for (before, text) in [(false, "Restore this version"), (true, "Restore version before this commit")] {
             if ui

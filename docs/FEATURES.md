@@ -254,7 +254,10 @@ merge/rebase, safe local rename/delete, and copying the
 branch name or full commit SHA. They do not yet reproduce every GitKraken action.
 The Copy GitHub commit link submenu uses an explicitly selected remote and a full
 commit hash. Only github.com remotes are supported; creating a link neither
-publishes the commit nor verifies that it already exists on the remote.
+publishes the commit nor verifies that it already exists on the remote. Commits, branches,
+and the files in a commit can also be opened on github.com from their menus; with several
+github.com remotes, you choose which one. Opening does not check that the commit or branch
+has been pushed.
 
 Create lightweight or annotated local tags from a commit or branch menu. Annotated
 tags require a message and use the repository's Git identity. Tags are unsigned;

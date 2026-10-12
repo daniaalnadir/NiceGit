@@ -471,6 +471,13 @@ impl NiceGitApp {
                 crate::ui::changes::open_url(&link);
             }
         }
+        if let Some(link) = crate::git_ext::github_branch_link(snapshot, branch) {
+            let button = ui.button(format!("{}  Open branch on GitHub", icon::ARROW_SQUARE_OUT)).on_hover_text(&link);
+            if button.clicked() {
+                ui.close();
+                crate::ui::changes::open_url(&link);
+            }
+        }
         if branch.is_current {
             if ui
                 .add_enabled(

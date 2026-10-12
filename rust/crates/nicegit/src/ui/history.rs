@@ -666,6 +666,12 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(commit.hash.clone());
         }
+        crate::git_ext::github_open_menu(
+            ui,
+            "Open on GitHub",
+            crate::git_ext::github_commit_links(snapshot, &commit.hash),
+            crate::git_ext::PUSHED_COMMIT_NOTE,
+        );
         crate::git_ext::github_link_menu(ui, snapshot, &commit.hash);
         if ui.button(format!("{}  Copy subject", icon::COPY)).clicked() {
             ui.close();
