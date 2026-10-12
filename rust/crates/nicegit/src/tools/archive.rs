@@ -11,6 +11,12 @@ use super::{query, Ctx, Task, ToolWindow};
 /// The top folder name of a commit's archive, which also names the default file: the
 /// repository's folder name and the commit's short hash, cleaned to one safe path component.
 pub fn archive_prefix(repo: &Path, short_hash: &str) -> String {
+    format!("{}-{short_hash}", folder_stem(repo))
+}
+
+/// The repository's folder name, reduced to characters that are safe in a file name, so it can
+/// name an archive or a patch.
+pub fn folder_stem(repo: &Path) -> String {
     let folder = repo.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
     let safe: String = folder.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' }).collect();
     let mut safe = safe.trim_start_matches(['-', '.']).to_string();
@@ -21,7 +27,7 @@ pub fn archive_prefix(repo: &Path, short_hash: &str) -> String {
     if safe.is_empty() {
         safe = "repository".into();
     }
-    format!("{safe}-{short_hash}")
+    safe
 }
 
 /// Writes `commit` to `destination` as a ZIP inside the folder `prefix`, then reports the result.

@@ -187,6 +187,16 @@ impl NiceGitApp {
                                 Pending::DiscardAll(discardable),
                             );
                         }
+                        // Saves every unstaged change, untracked files included, for the person to keep or share.
+                        let save_tip = if filtering {
+                            "Save unstaged changes as a patch, including untracked files and those hidden by the filter"
+                        } else {
+                            "Save unstaged changes as a patch, including untracked files"
+                        };
+                        if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_unstaged.is_empty()).clicked() {
+                            let name = self.section_patch_name(false);
+                            self.save_working_patch(false, None, true, &name);
+                        }
                     });
                 });
                 ui.add_space(4.0);
@@ -217,6 +227,15 @@ impl NiceGitApp {
                         };
                         if unstage_all.clicked() {
                             self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None));
+                        }
+                        let save_tip = if filtering {
+                            "Save staged changes as a patch, including files hidden by the filter"
+                        } else {
+                            "Save staged changes as a patch"
+                        };
+                        if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_staged.is_empty()).clicked() {
+                            let name = self.section_patch_name(true);
+                            self.save_working_patch(true, None, false, &name);
                         }
                     });
                 });
@@ -356,6 +375,30 @@ impl NiceGitApp {
         self.confirm("Discard changes?", what, "Discard", Pending::Discard(entry));
     }
 
+    /// The default file name for a section's patch, such as `repo-staged.patch`.
+    fn section_patch_name(&self, staged: bool) -> String {
+        let folder = self.repo().map(|repo| tools::archive::folder_stem(&repo.path)).unwrap_or_else(|| "repository".into());
+        format!("{folder}-{}.patch", if staged { "staged" } else { "unstaged" })
+    }
+
+    /// Asks where to save the staged or unstaged changes, or only those to `paths`, and writes the
+    /// patch there. The patch is made when the person has chosen a file.
+    fn save_working_patch(&mut self, staged: bool, paths: Option<Vec<String>>, include_untracked: bool, default_name: &str) {
+        let Some(repo) = self.repo() else { return };
+        let directory = repo.path.clone();
+        let Some(file) = crate::file_dialog::save_file("Save as patch", default_name) else { return };
+        match nicegit_core::GitClient::new().working_changes_patch(staged, paths.as_deref(), include_untracked, &directory) {
+            Ok(patch) => match std::fs::write(&file, patch) {
+                Ok(()) => {
+                    let name = file.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+                    self.notify(format!("Saved {name}."), false);
+                }
+                Err(error) => self.notify(error.to_string(), true),
+            },
+            Err(error) => self.notify(error.to_string(), true),
+        }
+    }
+
     fn change_menu(&mut self, ui: &mut Ui, entry: &StatusEntry, staged: bool, idle: bool, snapshot: &Snapshot) {
         ui.set_min_width(230.0);
         let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
@@ -393,6 +436,20 @@ impl NiceGitApp {
                     .save_stash_paths(std::slice::from_ref(&path_text), &format!("Changes to {path_text}"), path)
                     .map(|_| Some(format!("Stashed {path_text}.")))
             });
+        }
+        // Only this file, on the side the row shows. A conflicted file has no patch that applies.
+        if ui
+            .add_enabled(idle && entry.kind != StatusKind::Conflicted, egui::Button::new(format!("{}  Save as patch…", icon::FLOPPY_DISK)))
+            .clicked()
+        {
+            ui.close();
+            // A renamed file's patch needs its source path too, or it would only add the new name.
+            let mut paths = vec![entry.path.clone()];
+            if staged && entry.kind == StatusKind::Renamed {
+                paths.extend(entry.original_path.clone());
+            }
+            let name = format!("{}.patch", entry.file_name());
+            self.save_working_patch(staged, Some(paths), true, &name);
         }
         if entry.kind == StatusKind::Untracked {
             ui.menu_button(format!("{}  Ignore", icon::EYE_SLASH), |ui| {

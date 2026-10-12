@@ -310,6 +310,13 @@ Download ZIP does. Submodule contents are not included, and files marked
 `export-ignore` in `.gitattributes` are left out. The archive does not change the
 repository.
 
+The Changes panel saves uncommitted work as a `.patch` file: the staged or unstaged
+changes from a section's icon button, or one changed file from its right-click menu.
+The unstaged export includes untracked files, and a section's button covers every file
+in it, including files hidden by the filter. An unstaged patch is made against the index,
+so it applies to a checkout of HEAD when nothing is staged; Apply Patch or `git apply` can
+apply it.
+
 Use Repository > Apply Patch to choose a patch file and confirm the destination
 checkout. Git checks the captured patch before applying it; resulting changes
 remain unstaged and uncommitted. Invalid patches and paths outside the repository

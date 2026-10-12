@@ -464,6 +464,129 @@ fn export_refuses_merge_commit() {
     assert!(error_text(result).contains("Merge commits cannot be exported"));
 }
 
+/// Clones the committed HEAD of `repo` into a new folder, applies `patch` there with
+/// `git apply --check` first, and returns the clone. The returned folder holds the clone and must
+/// outlive it.
+fn apply_to_clean_clone(repo: &Repo, patch: &str) -> (TempDir, std::path::PathBuf) {
+    let workspace = tempfile::tempdir().expect("create temp dir");
+    // Line endings stay as committed, so the files compare byte for byte on Windows too, where
+    // Git is often set to convert them on checkout.
+    git(workspace.path(), &["clone", "--quiet", "-c", "core.autocrlf=false", &path_string(repo.path()), "clone"]);
+    let clone = workspace.path().join("clone");
+    let patch_file = workspace.path().join("saved.patch");
+    fs::write(&patch_file, patch).expect("write patch");
+    let patch_path = path_string(&patch_file);
+    git(&clone, &["apply", "--check", &patch_path]);
+    git(&clone, &["apply", &patch_path]);
+    (workspace, clone)
+}
+
+#[test]
+fn working_changes_patch_of_unstaged_changes_applies_elsewhere() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    // A tracked binary file, changed, and an untracked text file and binary file.
+    fs::write(repo.path().join("data.bin"), [0u8, 1, 2]).expect("write binary");
+    repo.git(&["add", "--", "data.bin"]);
+    repo.git(&["commit", "--quiet", "-m", "Add binary"]);
+    fs::write(repo.path().join("data.bin"), [0u8, 9, 8, 7, 0]).expect("write binary");
+    repo.write("new.txt", "fresh\n");
+    fs::write(repo.path().join("image.bin"), [0u8, 200, 0, 1, 2, 3]).expect("write binary");
+
+    let patch = client().working_changes_patch(false, None, true, repo.path()).expect("save patch");
+
+    assert!(patch.contains("diff --git a/a.txt b/a.txt"));
+    assert!(patch.contains("diff --git a/new.txt b/new.txt"));
+    assert!(patch.contains("GIT binary patch"), "binary changes are included");
+    let (_workspace, clone) = apply_to_clean_clone(&repo, &patch);
+    assert_eq!(fs::read_to_string(clone.join("a.txt")).expect("read a"), "two\n");
+    assert_eq!(fs::read_to_string(clone.join("new.txt")).expect("read new"), "fresh\n");
+    assert_eq!(fs::read(clone.join("data.bin")).expect("read data"), [0u8, 9, 8, 7, 0]);
+    assert_eq!(fs::read(clone.join("image.bin")).expect("read image"), [0u8, 200, 0, 1, 2, 3]);
+    // Saving changes nothing in the repository.
+    assert_eq!(repo.read("a.txt"), "two\n");
+    assert!(repo.path().join("new.txt").exists());
+}
+
+#[test]
+fn working_changes_patch_without_untracked_leaves_new_files_out() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    repo.write("new.txt", "fresh\n");
+
+    let patch = client().working_changes_patch(false, None, false, repo.path()).expect("save patch");
+
+    assert!(patch.contains("diff --git a/a.txt b/a.txt"));
+    assert!(!patch.contains("new.txt"));
+}
+
+#[test]
+fn working_changes_patch_of_staged_changes_only() {
+    let repo = Repo::new();
+    repo.commit("staged.txt", "one\n", "First");
+    repo.commit("other.txt", "two\n", "Second");
+    repo.write("staged.txt", "one\nstaged\n");
+    repo.git(&["add", "--", "staged.txt"]);
+    repo.write("other.txt", "two\nunstaged\n");
+    repo.write("loose.txt", "untracked\n");
+
+    let patch = client().working_changes_patch(true, None, true, repo.path()).expect("save patch");
+
+    assert!(patch.contains("diff --git a/staged.txt b/staged.txt"));
+    assert!(!patch.contains("other.txt"), "unstaged changes are not in the staged patch");
+    assert!(!patch.contains("loose.txt"), "untracked files are not in the staged patch");
+    apply_to_clean_clone(&repo, &patch);
+}
+
+// Windows does not allow `*` in file names.
+#[cfg(not(windows))]
+#[test]
+fn working_changes_patch_for_one_file_with_glob_characters() {
+    let repo = Repo::new();
+    repo.commit("a*.txt", "star\n", "First");
+    repo.commit("ab.txt", "bee\n", "Second");
+    repo.write("a*.txt", "star changed\n");
+    repo.write("ab.txt", "bee changed\n");
+
+    let paths = ["a*.txt".to_string()];
+    let patch = client().working_changes_patch(false, Some(&paths), true, repo.path()).expect("save patch");
+
+    assert!(patch.contains("diff --git a/a*.txt b/a*.txt"));
+    assert!(!patch.contains("ab.txt"), "the glob does not select other files");
+}
+
+#[test]
+fn working_changes_patch_with_nothing_to_save_is_an_error() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let nothing: &[String] = &[];
+
+    let unstaged = client().working_changes_patch(false, None, true, repo.path());
+    assert!(error_text(unstaged).contains("There are no changes to save."));
+    let staged = client().working_changes_patch(true, None, true, repo.path());
+    assert!(error_text(staged).contains("There are no changes to save."));
+    let empty_list = client().working_changes_patch(false, Some(nothing), true, repo.path());
+    assert!(error_text(empty_list).contains("There are no changes to save."));
+}
+
+#[cfg(unix)]
+#[test]
+fn working_changes_patch_quotes_unusual_paths() {
+    let repo = Repo::new();
+    repo.commit("tab\tname.txt", "one\n", "First");
+    repo.commit("quote\"name.txt", "one\n", "Second");
+    repo.write("tab\tname.txt", "two\n");
+    repo.write("quote\"name.txt", "two\n");
+
+    let patch = client().working_changes_patch(false, None, true, repo.path()).expect("save patch");
+
+    assert!(patch.contains("\"a/tab\\tname.txt\""), "the tab is written as a C-style escape: {patch}");
+    assert!(patch.contains("\"a/quote\\\"name.txt\""), "the quote is written as a C-style escape: {patch}");
+    apply_to_clean_clone(&repo, &patch);
+}
+
 /// The names of the entries in `directory`, sorted.
 fn entry_names(directory: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(directory)
