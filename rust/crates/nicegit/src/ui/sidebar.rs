@@ -562,6 +562,43 @@ impl NiceGitApp {
             ui.close();
             self.dialog = Some(Dialog::new_tag(branch.tip.clone(), snapshot));
         }
+        // Git lists remote HEAD aliases with a symbolic ref, and the branch listing leaves them out,
+        // so every remote-tracking branch here is a real branch on its remote.
+        if let Some(remote) = branch.remote_name(&snapshot.remotes) {
+            let display = branch.display_name();
+            let name = display.strip_prefix(&format!("{remote}/")).unwrap_or(&display).to_string();
+            ui.separator();
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete {display}…", icon::CLOUD_X))).clicked() {
+                ui.close();
+                let tracking_ref = format!("refs/{}", branch.name);
+                let trackers: Vec<&str> = snapshot
+                    .branches
+                    .iter()
+                    .filter(|local| !local.is_remote && local.upstream.as_deref() == Some(tracking_ref.as_str()))
+                    .map(|local| local.name.as_str())
+                    .collect();
+                let mut message = format!(
+                    "The branch is removed from {remote} for everyone who uses it, while it still points to {}. Local branches are not changed.",
+                    short(&branch.tip)
+                );
+                match trackers.as_slice() {
+                    [] => {}
+                    [only] => message.push_str(&format!(" {only} tracks it; its upstream will be gone.")),
+                    many => message.push_str(&format!(" {} track it; their upstreams will be gone.", many.join(", "))),
+                }
+                self.confirm(
+                    format!("Delete {display}?"),
+                    message,
+                    "Delete from remote",
+                    Pending::DeleteRemoteBranch {
+                        remote: remote.to_string(),
+                        branch: name,
+                        tip: branch.tip.clone(),
+                        addresses: snapshot.remote_push_addresses.clone(),
+                    },
+                );
+            }
+        }
         if !branch.is_remote && !branch.is_detached() {
             if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Create worktree…", icon::FOLDERS))).clicked() {
                 ui.close();

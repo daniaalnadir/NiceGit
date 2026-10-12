@@ -268,8 +268,9 @@ Branch context menus provide checkout, fetch, current-branch pull/push, selected
 push to an explicit same-named remote branch with confirmation, an upstream
 selector with current-tracking indicators and removal,
 worktree creation, branch creation at the selected tip without switching checkouts,
-merge/rebase, safe local rename/delete, and copying the
-branch name or full commit SHA. They do not yet reproduce every GitKraken action.
+merge/rebase, safe local rename/delete, deleting a remote branch from its remote
+(checked against the tip shown and the remote's address, and refused if the remote moved
+since your last fetch), and copying the branch name or full commit SHA. They do not yet reproduce every GitKraken action.
 The Copy GitHub commit link submenu uses an explicitly selected remote and a full
 commit hash. Only GitHub remotes are supported (github.com, and the Enterprise hosts listed
 in Settings); creating a link neither publishes the commit nor verifies that it already

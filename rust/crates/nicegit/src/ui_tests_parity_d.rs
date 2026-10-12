@@ -245,6 +245,34 @@ fn push_a_tag_to_a_remote_then_delete_it_there() {
     assert!(git(path, &["tag", "--list"]).contains("v1.0"), "the local tag is kept");
 }
 
+#[test]
+fn delete_a_branch_from_its_remote() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = crate::ui_tests_more::publish_to_bare(path);
+    git(path, &["push", "-q", "origin", "feature"]);
+    // Without its local copy, the sidebar shows one row named feature, under origin.
+    git(path, &["branch", "-d", "feature"]);
+    let remote_has_feature = || !git(remote.path(), &["for-each-ref", "--format=%(refname)", "refs/heads/feature"]).is_empty();
+    assert!(remote_has_feature(), "the remote has feature before the delete");
+
+    let mut harness = open(path);
+    loaded(&mut harness);
+    open_header(&mut harness, "  origin");
+    wait(&mut harness, "the remote branch in the sidebar", |h| h.query_by_label("feature").is_some());
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Delete origin/feature").click();
+    wait(&mut harness, "the remote branch delete confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    harness.get_by_label("Delete from remote").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the branch to leave the remote", |_| !remote_has_feature());
+    assert!(git(path, &["branch", "--remotes", "--list", "origin/feature"]).is_empty(), "the remote-tracking branch is gone too");
+}
+
 /// Presses and releases the primary button at `at`, as one click.
 fn click_at(harness: &mut Harness<'static, NiceGitApp>, at: egui::Pos2) {
     for pressed in [true, false] {

@@ -339,6 +339,120 @@ fn delete_remote_tag_refuses_when_remote_tag_moved() {
     assert_eq!(git(remote.path(), &["rev-parse", "refs/tags/v1"]).trim(), second);
 }
 
+// MARK: Branches on remotes
+
+/// Whether `reference` resolves in `directory`.
+fn ref_exists(directory: &Path, reference: &str) -> bool {
+    git_output(directory, &["rev-parse", "--verify", "--quiet", reference]).status.success()
+}
+
+/// Pushes the repository's HEAD to `feature` on `origin`, returning the tip the remote-tracking
+/// branch now shows.
+fn publish_feature(repo: &Repo) -> String {
+    repo.git(&["push", "--quiet", "origin", "HEAD:refs/heads/feature"]);
+    repo.git(&["rev-parse", "refs/remotes/origin/feature"]).trim().to_string()
+}
+
+/// Another client pushes a new commit to `feature` on `remote`, returning its tip.
+fn move_remote_feature(remote: &Path) -> String {
+    let other = tempfile::tempdir().expect("create other clone");
+    git(other.path(), &["clone", "--quiet", &path_string(remote), "clone"]);
+    let clone = other.path().join("clone");
+    configure(&clone);
+    git(&clone, &["checkout", "--quiet", "-b", "feature", "origin/feature"]);
+    fs::write(clone.join("b.txt"), "from elsewhere\n").expect("write file");
+    git(&clone, &["add", "--", "b.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Work from elsewhere"]);
+    let moved = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
+    git(&clone, &["push", "--quiet", "origin", "feature"]);
+    moved
+}
+
+#[test]
+fn delete_remote_branch_removes_it_from_the_remote() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let tip = publish_feature(&repo);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+
+    client().delete_remote_branch("origin", "feature", &tip, &expected, repo.path()).expect("delete remote branch");
+
+    assert!(!ref_exists(remote.path(), "refs/heads/feature"), "the remote branch is gone");
+    assert!(!ref_exists(repo.path(), "refs/remotes/origin/feature"), "the remote-tracking branch is gone");
+}
+
+#[test]
+fn delete_remote_branch_is_refused_when_the_remote_moved() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let tip = publish_feature(&repo);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    // This repository has not fetched the new commit, so its remote-tracking branch still matches.
+    let moved = move_remote_feature(remote.path());
+
+    let message = error_text(client().delete_remote_branch("origin", "feature", &tip, &expected, repo.path()));
+    assert!(message.contains("changed since you last fetched"), "{message}");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/feature"]).trim(), moved);
+}
+
+#[test]
+fn delete_remote_branch_is_refused_for_a_stale_selection() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let tip = publish_feature(&repo);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    let moved = move_remote_feature(remote.path());
+    // Fetching moves the local remote-tracking branch after the branch was selected.
+    repo.git(&["fetch", "--quiet", "origin"]);
+
+    let message = error_text(client().delete_remote_branch("origin", "feature", &tip, &expected, repo.path()));
+    assert!(message.contains("changed since it was selected"), "{message}");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/feature"]).trim(), moved, "nothing was pushed");
+}
+
+#[test]
+fn delete_remote_branch_rejects_a_changed_push_address() {
+    let remote = bare_remote();
+    let elsewhere = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let tip = publish_feature(&repo);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    repo.git(&["remote", "set-url", "--push", "origin", &path_string(elsewhere.path())]);
+
+    let message = error_text(client().delete_remote_branch("origin", "feature", &tip, &expected, repo.path()));
+    assert!(message.contains("remote address changed"), "{message}");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/feature"]).trim(), tip);
+    assert!(!ref_exists(elsewhere.path(), "refs/heads/feature"), "the new address receives nothing");
+}
+
+#[test]
+fn delete_remote_branch_pushes_nothing_else() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let tip = publish_feature(&repo);
+    repo.git(&["tag", "-a", "v1", "-m", "Release", &first]);
+    // Settings that would push every ref, and tags, if the delete did not override them.
+    repo.git(&["config", "remote.origin.mirror", "true"]);
+    repo.git(&["config", "push.followTags", "true"]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+
+    client().delete_remote_branch("origin", "feature", &tip, &expected, repo.path()).expect("delete remote branch");
+
+    assert!(!ref_exists(remote.path(), "refs/heads/feature"));
+    assert!(!ref_exists(remote.path(), "refs/tags/v1"), "no tag is pushed");
+    assert!(ref_exists(repo.path(), "refs/tags/v1"), "the local tag is kept");
+}
+
 // MARK: Upstream
 
 #[test]

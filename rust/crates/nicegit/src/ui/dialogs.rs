@@ -100,6 +100,14 @@ pub enum Pending {
         remote: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
+    /// Deleting `branch` (named without its remote) from `remote`. `tip` is the remote-tracking
+    /// tip shown when the branch was selected.
+    DeleteRemoteBranch {
+        remote: String,
+        branch: String,
+        tip: String,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
     PopStash(Stash),
 }
 
@@ -226,6 +234,7 @@ impl Pending {
                 | Pending::DiscardAll(_)
                 | Pending::DeleteBranch { .. }
                 | Pending::DeleteTag { .. }
+                | Pending::DeleteRemoteBranch { .. }
                 | Pending::DropStash(_)
                 | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
@@ -625,6 +634,12 @@ impl NiceGitApp {
             Pending::DeleteRemoteTag { tag, tip, remote, addresses } => self.act("Delete remote tag", move |client, path| {
                 let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
                 client.delete_remote_tag(&tag, &remote, &tip, expected, path).map(|_| Some(format!("Deleted {tag} from {remote}.")))
+            }),
+            Pending::DeleteRemoteBranch { remote, branch, tip, addresses } => self.act("Delete remote branch", move |client, path| {
+                let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
+                client
+                    .delete_remote_branch(&remote, &branch, &tip, expected, path)
+                    .map(|_| Some(format!("Deleted {branch} from {remote}.")))
             }),
             Pending::PopStash(stash) => self.act("Pop stash", move |client, path| {
                 client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))

@@ -43,6 +43,8 @@
 - Save staged or unstaged changes, or one changed file, as a patch from the Changes panel.
 - Interactive rebase can stop at a commit (Edit) so you can change its files; Continue folds
   the staged changes in.
+- Delete a branch from its remote from the branch's right-click menu; it is refused if the
+  branch moved since you last fetched.
 
 ## 1.5.0 - Fewer surprises
 

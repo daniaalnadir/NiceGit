@@ -213,6 +213,51 @@ impl GitClient {
             .map(drop)
     }
 
+    /// Deletes `branch` (its name on the remote, without the remote) from `remote`, but only while
+    /// the remote-tracking branch still points to `expected_tip`, the tip shown when it was
+    /// selected, and the remote's push addresses are the ones shown. Only that branch is pushed.
+    pub fn delete_remote_branch(
+        &self,
+        remote: &str,
+        branch: &str,
+        expected_tip: &str,
+        expected_push_addresses: &[String],
+        directory: &Path,
+    ) -> Result<()> {
+        const COMMAND: &str = "delete remote branch";
+        let reference = format!("refs/heads/{branch}");
+        if self.run(&["check-ref-format", &reference], directory).is_err() {
+            return Err(GitError::failed(COMMAND, "That is not a valid branch name."));
+        }
+        let hex = matches!(expected_tip.len(), 40 | 64) && expected_tip.bytes().all(|byte| byte.is_ascii_hexdigit());
+        if !hex {
+            return Err(GitError::failed(COMMAND, "The branch's commit ID is not valid. Refresh and review it again."));
+        }
+        let tracking = format!("refs/remotes/{remote}/{branch}");
+        let current = self.try_trimmed(&["rev-parse", "--verify", "--end-of-options", &tracking], directory);
+        if current.as_deref() != Some(expected_tip) {
+            return Err(GitError::failed(COMMAND, "This branch changed since it was selected. Refresh and review it again."));
+        }
+        self.require_remote_addresses(&expected_addresses_for(remote, expected_push_addresses), remote, true, COMMAND, directory)?;
+        let mirror = format!("remote.{remote}.mirror=false");
+        let lease = format!("--force-with-lease={reference}:{expected_tip}");
+        let deletion = format!(":{reference}");
+        let pushed =
+            self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", &lease, "--", remote, &deletion], directory);
+        pushed.map_err(|error| match error {
+            GitError::CommandFailed { message, .. } if message.contains("stale info") => GitError::failed(
+                COMMAND,
+                format!("The branch on {remote} changed since you last fetched, so it was not deleted. Fetch and review it again."),
+            ),
+            other => other,
+        })?;
+        // Git normally removes the remote-tracking branch as part of the push; remove it if not.
+        if self.try_trimmed(&["rev-parse", "--verify", "--quiet", "--end-of-options", &tracking], directory).is_some() {
+            self.run(&["update-ref", "-d", &tracking, expected_tip], directory).map(drop)?;
+        }
+        Ok(())
+    }
+
     // MARK: Upstream
 
     /// Sets a branch's upstream to a remote-tracking branch such as `origin/main`, or clears it
