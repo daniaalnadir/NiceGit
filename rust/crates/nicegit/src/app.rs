@@ -370,6 +370,8 @@ pub struct NiceGitApp {
     watched_change: Option<Instant>,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
+    /// The "From GitHub…" list over the Clone dialog, while it is open.
+    pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
     recorded: RecordSlot,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
@@ -411,6 +413,7 @@ impl NiceGitApp {
             watched_change: None,
             applied_appearance: None,
             pending_clone: None,
+            clone_picker: None,
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
             terminal: None,

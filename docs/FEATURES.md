@@ -28,6 +28,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Initialize repositories and configure a repository-local commit identity.
 - Add remotes through Repository Settings.
 - Clone repositories from a remote URL or local path.
+- Pick one of your GitHub repositories when cloning, through the GitHub CLI (`gh`), including GitHub Enterprise hosts listed in Settings.
 - Run Git operations in the background with a busy indicator.
 - View local and remote branches.
 - Browse linked worktree folders and branches, and open another checkout from the sidebar.

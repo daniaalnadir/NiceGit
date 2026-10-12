@@ -461,3 +461,26 @@ fn save_unstaged_changes_as_a_patch() {
     git(&copy, &["apply", "--check", &saved.display().to_string()]);
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nthird\n", "saving leaves the change in place");
 }
+
+#[test]
+fn the_clone_dialog_opens_the_github_repository_picker() {
+    let source = repository();
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(source.path()), "Clone repository");
+    wait(&mut harness, "the clone dialog", |h| h.state().dialog.is_some());
+    harness.get_by_label("Choose a GitHub repository").click();
+    wait(&mut harness, "the repository picker", |h| h.state().clone_picker.is_some());
+    // The picker shows a list, or why gh cannot list one. CI may have no gh sign-in, so the states
+    // are not checked beyond the picker's controls and that its read has finished.
+    wait(&mut harness, "the picker's answer", |h| !shows(h, "Loading your repositories"));
+    assert!(shows(&harness, "Filter repositories"), "the picker has a filter");
+    assert!(shows(&harness, "Use SSH"), "the picker offers the SSH address");
+
+    // Escape closes the picker alone; the Clone dialog stays open for its address.
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the picker to close", |h| h.state().clone_picker.is_none());
+    assert!(harness.state().dialog.is_some(), "the Clone dialog stays open");
+    assert!(shows(&harness, "Repository URL or local path"), "the address field is still there");
+}

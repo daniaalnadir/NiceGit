@@ -154,13 +154,7 @@ impl GitHubRepository {
             return Err(GitError::failed("GitHub", "The GitHub remote must identify an owner and repository."));
         }
         let name = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
-        let valid = |part: &str| {
-            !part.is_empty()
-                && part != "."
-                && part != ".."
-                && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
-        };
-        if !valid(parts[0]) || !valid(name) {
+        if !valid_name_part(parts[0]) || !valid_name_part(name) {
             return Err(GitError::failed("GitHub", "The GitHub repository address is invalid."));
         }
         Ok(GitHubRepository { host, owner: parts[0].to_string(), name: name.to_string() })
@@ -219,6 +213,22 @@ impl GitHubItem {
     }
 }
 
+/// A repository in the signed-in user's list, as `gh repo list` reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitHubRepoListing {
+    /// `owner/name`, as GitHub spells it.
+    pub name_with_owner: String,
+    /// Trimmed, without control characters, and at most 500 characters.
+    pub description: String,
+    /// The HTTPS address, `https://<host>/<name_with_owner>`.
+    pub url: String,
+    /// The SSH address of the same repository, or empty when `gh` gave none that names it.
+    pub ssh_url: String,
+    pub is_private: bool,
+    pub is_fork: bool,
+    pub updated_at: String,
+}
+
 /// Whether `gh` can be used for the repository.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GhStatus {
@@ -245,7 +255,7 @@ impl GitClient {
         if gh_executable().is_none() {
             return GhStatus::NotInstalled;
         }
-        match run_gh(&["auth", "status", "--hostname", host], directory, &Cancel::default()) {
+        match run_gh(&["auth", "status", "--hostname", host], directory, &Cancel::default(), None) {
             Ok(_) => GhStatus::SignedIn,
             Err(message) => GhStatus::SignedOut(message),
         }
@@ -286,10 +296,103 @@ impl GitClient {
             &[kind.subcommand(), "list", "--repo", &repo, "--state", state.as_str(), "--limit", &limit, "--json", fields],
             directory,
             cancel,
+            None,
         )
         .map_err(|message| GitError::failed("GitHub", message))?;
         decode_items(&output, repository, kind)
     }
+
+    /// Lists the signed-in user's repositories on `host` (github.com, or an Enterprise host listed
+    /// in Settings) through `gh repo list`. `limit` is clamped to 1 to 1000. No repository exists
+    /// yet, so `directory` only sets where `gh` runs.
+    pub fn github_repositories(&self, host: &str, limit: usize, cancel: &Cancel, directory: &Path) -> Result<Vec<GitHubRepoListing>> {
+        let limit = limit.clamp(1, 1000).to_string();
+        let fields = "nameWithOwner,description,url,sshUrl,isPrivate,isFork,updatedAt";
+        let output = run_gh(&["repo", "list", "--limit", &limit, "--json", fields], directory, cancel, Some(host))
+            .map_err(|message| GitError::failed("GitHub", message))?;
+        decode_repositories(&output, host)
+    }
+}
+
+/// The longest repository description kept, in characters.
+const DESCRIPTION_LIMIT: usize = 500;
+
+/// Decodes `gh repo list --json` output for `host`, which must be github.com or a valid
+/// Enterprise host. The listing is refused unless it is an array of objects with the expected
+/// fields. An entry is skipped when its name is not `owner/name` or its HTTPS address is not that
+/// repository's own page on `host`. An SSH address that does not name the same repository on
+/// `host` is dropped, leaving the entry with no SSH address.
+pub fn decode_repositories(json: &str, host: &str) -> Result<Vec<GitHubRepoListing>> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned unexpected repositories.");
+    let host = gh_host_variable(host).ok_or_else(unexpected)?;
+    let value = parse_json(json).map_err(|_| unexpected())?;
+    let Json::Array(entries) = value else { return Err(unexpected()) };
+    let mut repositories = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        let Json::Object(_) = entry else { return Err(unexpected()) };
+        let name_with_owner = entry.get("nameWithOwner").and_then(Json::as_str).ok_or_else(unexpected)?;
+        let url = entry.get("url").and_then(Json::as_str).ok_or_else(unexpected)?;
+        let ssh = optional_text(entry, "sshUrl").ok_or_else(unexpected)?;
+        let description = optional_text(entry, "description").ok_or_else(unexpected)?;
+        let is_private = entry.get("isPrivate").and_then(Json::as_bool).ok_or_else(unexpected)?;
+        let is_fork = entry.get("isFork").and_then(Json::as_bool).ok_or_else(unexpected)?;
+        let updated_at = entry.get("updatedAt").and_then(Json::as_str).ok_or_else(unexpected)?;
+
+        let Some((owner, name)) = name_with_owner.split_once('/') else { continue };
+        if !valid_name_part(owner) || !valid_name_part(name) {
+            continue;
+        }
+        let expected = format!("https://{host}/{name_with_owner}");
+        if !url.eq_ignore_ascii_case(&expected) {
+            continue;
+        }
+        let ssh_url = match GitHubRepository::parse_with_hosts(ssh, std::slice::from_ref(&host)) {
+            Ok(address) if address.host == host && address.owner.eq_ignore_ascii_case(owner) && address.name.eq_ignore_ascii_case(name) => {
+                ssh.trim().to_string()
+            }
+            _ => String::new(),
+        };
+        repositories.push(GitHubRepoListing {
+            name_with_owner: name_with_owner.to_string(),
+            description: clean_description(description),
+            url: url.to_string(),
+            ssh_url,
+            is_private,
+            is_fork,
+            updated_at: updated_at.to_string(),
+        });
+    }
+    Ok(repositories)
+}
+
+/// The text of an optional JSON field: absent or `null` is empty, and any other type is refused.
+fn optional_text<'a>(entry: &'a Json, key: &str) -> Option<&'a str> {
+    match entry.get(key) {
+        None | Some(Json::Null) => Some(""),
+        Some(value) => value.as_str(),
+    }
+}
+
+/// A description without control characters, trimmed, and at most [`DESCRIPTION_LIMIT`] characters.
+fn clean_description(text: &str) -> String {
+    // Control characters, line breaks among them, become spaces, so words they separated stay
+    // apart; runs of whitespace then collapse to one space.
+    let spaced: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let words = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    words.chars().take(DESCRIPTION_LIMIT).collect::<String>().trim().to_string()
+}
+
+/// Whether one half of a repository name is valid: ASCII letters, digits, hyphens, underscores,
+/// and dots, and not `.` or `..`.
+fn valid_name_part(part: &str) -> bool {
+    !part.is_empty() && part != "." && part != ".." && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
+/// The `GH_HOST` value for a call that names `host`: github.com, or an Enterprise host that
+/// passes [`valid_enterprise_host`], in lower case. Any other host yields `None`, and the call is refused.
+fn gh_host_variable(host: &str) -> Option<String> {
+    let host = host.to_ascii_lowercase();
+    (host == "github.com" || valid_enterprise_host(&host)).then_some(host)
 }
 
 /// Decodes `gh --json` output for one kind of item, refusing links that do not point at the
@@ -368,20 +471,34 @@ impl Cancel {
 }
 
 /// Runs `gh` and returns its standard output. On failure the error is the text to show.
-/// Prompts are disabled, and the request is abandoned after a timeout.
-fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel) -> std::result::Result<String, String> {
+/// `host`, when given, is set as `GH_HOST` for this call only; it must be github.com or a valid
+/// Enterprise host. Prompts are disabled, and the request is abandoned after a timeout.
+fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel, host: Option<&str>) -> std::result::Result<String, String> {
+    let host = match host {
+        Some(host) => Some(gh_host_variable(host).ok_or_else(|| "The GitHub host is not supported.".to_string())?),
+        None => None,
+    };
     let executable = gh_executable().ok_or_else(|| NOT_INSTALLED.to_string())?;
-    run_program(&executable, arguments, directory, cancel)
+    run_program(&executable, arguments, directory, cancel, host.as_deref())
 }
 
 /// Runs a program to completion, its timeout, or cancellation, returning its standard output.
-fn run_program(executable: &Path, arguments: &[&str], directory: &Path, cancel: &Cancel) -> std::result::Result<String, String> {
+fn run_program(
+    executable: &Path,
+    arguments: &[&str],
+    directory: &Path,
+    cancel: &Cancel,
+    gh_host: Option<&str>,
+) -> std::result::Result<String, String> {
     let mut command = Command::new(executable);
     command.args(arguments).current_dir(directory).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     command.env("PATH", runner::search_path());
-    // Variables that would point gh at another repository or host.
+    // Variables that would point gh at another repository or host. A host is set only when asked for.
     command.env_remove("GH_REPO");
     command.env_remove("GH_HOST");
+    if let Some(host) = gh_host {
+        command.env("GH_HOST", host);
+    }
     command.env("GH_PROMPT_DISABLED", "1");
     command.env("GH_NO_UPDATE_NOTIFIER", "1");
     command.env("NO_COLOR", "1");
@@ -688,9 +805,142 @@ mod tests {
             canceller.cancel();
         });
         let started = Instant::now();
-        let result = run_program(Path::new("/bin/sleep"), &["30"], Path::new("/"), &cancel);
+        let result = run_program(Path::new("/bin/sleep"), &["30"], Path::new("/"), &cancel, None);
         assert_eq!(result, Err(CANCELLED.to_string()));
         assert!(started.elapsed() < Duration::from_secs(5), "stopped after {:?}", started.elapsed());
+    }
+
+    /// One repository entry as `gh repo list` reports it, for `host`.
+    fn listing_entry(host: &str, name_with_owner: &str, ssh: &str, description: &str) -> String {
+        format!(
+            r#"{{"nameWithOwner": "{name_with_owner}", "description": "{description}", "url": "https://{host}/{name_with_owner}", "sshUrl": "{ssh}", "isPrivate": false, "isFork": false, "updatedAt": "2026-01-02T03:04:05Z"}}"#
+        )
+    }
+
+    #[test]
+    fn decode_repositories_reads_a_listing() {
+        let json = r#"[
+            {"nameWithOwner": "acme/app", "description": "A tool", "url": "https://git.example.com/acme/app", "sshUrl": "git@git.example.com:acme/app.git", "isPrivate": true, "isFork": false, "updatedAt": "2026-01-02T03:04:05Z"},
+            {"nameWithOwner": "acme/fork", "description": "", "url": "https://git.example.com/acme/fork", "sshUrl": "", "isPrivate": false, "isFork": true, "updatedAt": "2026-02-03T00:00:00Z"}
+        ]"#;
+        let repositories = decode_repositories(json, "git.example.com").unwrap();
+        assert_eq!(
+            repositories[0],
+            GitHubRepoListing {
+                name_with_owner: "acme/app".into(),
+                description: "A tool".into(),
+                url: "https://git.example.com/acme/app".into(),
+                ssh_url: "git@git.example.com:acme/app.git".into(),
+                is_private: true,
+                is_fork: false,
+                updated_at: "2026-01-02T03:04:05Z".into(),
+            }
+        );
+        assert!(repositories[1].is_fork);
+        assert!(repositories[1].ssh_url.is_empty(), "an empty SSH address stays empty");
+        let public = r#"[{"nameWithOwner": "acme/app", "description": null, "url": "https://github.com/acme/app", "sshUrl": null, "isPrivate": false, "isFork": false, "updatedAt": "2026-01-02T03:04:05Z"}]"#;
+        let listed = decode_repositories(public, "github.com").unwrap();
+        assert_eq!(listed[0].url, "https://github.com/acme/app");
+        assert!(listed[0].description.is_empty() && listed[0].ssh_url.is_empty(), "null optional fields are empty");
+        assert!(decode_repositories("[]", "github.com").unwrap().is_empty(), "an empty listing is valid");
+    }
+
+    #[test]
+    fn decode_repositories_skips_entries_for_other_hosts() {
+        let json = format!(
+            "[{}, {}, {}, {}, {}]",
+            // A hostile entry whose address points at another host.
+            r#"{"nameWithOwner": "acme/evil", "description": "", "url": "https://attacker.example/acme/evil", "sshUrl": "", "isPrivate": false, "isFork": false, "updatedAt": "x"}"#,
+            // github.com address for an Enterprise listing.
+            r#"{"nameWithOwner": "acme/public", "description": "", "url": "https://github.com/acme/public", "sshUrl": "", "isPrivate": false, "isFork": false, "updatedAt": "x"}"#,
+            // Address names another repository than nameWithOwner.
+            r#"{"nameWithOwner": "acme/one", "description": "", "url": "https://git.example.com/acme/two", "sshUrl": "", "isPrivate": false, "isFork": false, "updatedAt": "x"}"#,
+            // A name that is not owner/name.
+            r#"{"nameWithOwner": "acme/app/extra", "description": "", "url": "https://git.example.com/acme/app/extra", "sshUrl": "", "isPrivate": false, "isFork": false, "updatedAt": "x"}"#,
+            listing_entry("git.example.com", "acme/kept", "", ""),
+        );
+        let repositories = decode_repositories(&json, "git.example.com").unwrap();
+        assert_eq!(repositories.len(), 1, "only the entry on the listed host is kept");
+        assert_eq!(repositories[0].name_with_owner, "acme/kept");
+
+        let mixed_case = r#"[{"nameWithOwner": "Acme/App", "description": "", "url": "HTTPS://GIT.example.com/acme/app", "sshUrl": "", "isPrivate": false, "isFork": false, "updatedAt": "x"}]"#;
+        assert_eq!(decode_repositories(mixed_case, "git.example.com").unwrap().len(), 1, "the address is compared without case");
+    }
+
+    #[test]
+    fn decode_repositories_checks_the_ssh_address() {
+        let host = "git.example.com";
+        let cases = [
+            ("git@git.example.com:acme/app.git", "git@git.example.com:acme/app.git"),
+            ("ssh://git@git.example.com/acme/app", "ssh://git@git.example.com/acme/app"),
+            // Another host, another owner or name, or a port: the SSH address is dropped.
+            ("git@github.com:acme/app.git", ""),
+            ("git@git.example.com:other/app.git", ""),
+            ("git@git.example.com:acme/other.git", ""),
+            ("ssh://git@git.example.com:2222/acme/app", ""),
+            ("git@attacker.example:acme/app.git", ""),
+            ("not an address", ""),
+        ];
+        for (ssh, expected) in cases {
+            let json = format!("[{}]", listing_entry(host, "acme/app", ssh, ""));
+            let repositories = decode_repositories(&json, host).unwrap();
+            assert_eq!(repositories.len(), 1, "{ssh}: the entry itself is kept");
+            assert_eq!(repositories[0].ssh_url, expected, "{ssh}");
+            assert_eq!(repositories[0].url, "https://git.example.com/acme/app", "the HTTPS address is kept");
+        }
+    }
+
+    #[test]
+    fn decode_repositories_refuses_non_arrays() {
+        for json in [
+            r#"{"nameWithOwner": "acme/app"}"#,
+            r#""acme/app""#,
+            "[1]",
+            "[null]",
+            "[]x",
+            "not json",
+            r#"[{"nameWithOwner": 5, "url": "https://git.example.com/acme/app", "isPrivate": false, "isFork": false, "updatedAt": "x"}]"#,
+            r#"[{"nameWithOwner": "acme/app", "url": "https://git.example.com/acme/app", "isFork": false, "updatedAt": "x"}]"#,
+        ] {
+            assert!(decode_repositories(json, "git.example.com").is_err(), "{json} should be refused");
+        }
+        assert!(decode_repositories("[]", "bad host").is_err(), "an unsupported host is refused");
+    }
+
+    #[test]
+    fn decode_repositories_trims_and_cleans_descriptions() {
+        // The descriptions are JSON text, so their control characters are escaped.
+        let cases = [
+            ("  Build\\u0007 tools  ", "Build tools"),
+            ("\\u0000Tabs\\tand\\u001bescapes  ", "Tabs and escapes"),
+            ("Two\\nlines", "Two lines"),
+            ("   ", ""),
+        ];
+        for (description, expected) in cases {
+            let json = format!("[{}]", listing_entry("git.example.com", "acme/app", "", description));
+            assert_eq!(decode_repositories(&json, "git.example.com").unwrap()[0].description, expected, "{description:?}");
+        }
+
+        let long = "é".repeat(600);
+        let json = format!("[{}]", listing_entry("git.example.com", "acme/app", "", &long));
+        let kept = decode_repositories(&json, "git.example.com").unwrap()[0].description.clone();
+        assert_eq!(kept.chars().count(), DESCRIPTION_LIMIT, "counted in characters, not bytes");
+        assert!(kept.chars().all(|c| c == 'é'));
+
+        let spaced = format!("{}{}", "a".repeat(499), " bb");
+        let json = format!("[{}]", listing_entry("git.example.com", "acme/app", "", &spaced));
+        let kept = decode_repositories(&json, "git.example.com").unwrap()[0].description.clone();
+        assert_eq!(kept, "a".repeat(499), "the cut is trimmed again, so no trailing space is kept");
+    }
+
+    #[test]
+    fn the_gh_host_is_set_only_to_github_com_or_a_valid_enterprise_host() {
+        assert_eq!(gh_host_variable("github.com").as_deref(), Some("github.com"));
+        assert_eq!(gh_host_variable("GitHub.com").as_deref(), Some("github.com"));
+        assert_eq!(gh_host_variable("Git.Example.com").as_deref(), Some("git.example.com"));
+        for refused in ["", "example.com:8443", "https://git.example.com", " git.example.com", "nodot", "git.example.com/x", "-x.com"] {
+            assert_eq!(gh_host_variable(refused), None, "{refused:?} must not become GH_HOST");
+        }
     }
 
     #[test]
