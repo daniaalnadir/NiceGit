@@ -329,7 +329,7 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         ui.horizontal(|ui| {
             if let Some(notice) = &self.notice {
-                let action = notice.action;
+                let action = notice.action.clone();
                 let detail = notice.detail.clone();
                 let color = if notice.is_error { c.danger } else { c.accent };
                 let glyph = if notice.is_error { icon::WARNING_CIRCLE } else { icon::CHECK_CIRCLE };
@@ -338,6 +338,7 @@ impl NiceGitApp {
                 // The buttons are laid out from the right first, so a long message is shortened
                 // rather than pushing them out of view; the whole message is in its tooltip.
                 let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
+                let mut open_link: Option<String> = None;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
                     if action == Some(crate::app::NoticeAction::Stash) {
@@ -352,6 +353,11 @@ impl NiceGitApp {
                             .on_hover_text("Fetch, then choose whether to merge the remote's commits or rebase onto them")
                             .clicked();
                     }
+                    if let Some(crate::app::NoticeAction::OpenUrl(url)) = &action {
+                        if ui.button("Open").on_hover_text(url.as_str()).clicked() {
+                            open_link = Some(url.clone());
+                        }
+                    }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         // The full message, and Git's own words when the message explains them.
                         let full = match &detail {
@@ -361,7 +367,11 @@ impl NiceGitApp {
                         ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
                     });
                 });
-                if dismiss || pull || identity || stash {
+                let opened = open_link.is_some();
+                if let Some(url) = &open_link {
+                    crate::ui::changes::open_url(url);
+                }
+                if dismiss || pull || identity || stash || opened {
                     self.notice = None;
                 }
                 if stash {

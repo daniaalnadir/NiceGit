@@ -81,7 +81,7 @@ pub fn remote_problem(error: &str) -> Option<&'static str> {
 }
 
 /// What a message's button does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NoticeAction {
     /// Fetch, then offer to merge the upstream's commits or rebase onto them.
     Integrate,
@@ -89,6 +89,8 @@ pub enum NoticeAction {
     SetIdentity,
     /// Open the stash dialog, to set uncommitted changes aside.
     Stash,
+    /// Open this web address in the browser. Only `https://` addresses open.
+    OpenUrl(String),
 }
 
 /// Whether Git stopped because uncommitted changes would be overwritten.

@@ -856,3 +856,30 @@ fn filter_clears_when_the_branch_changes() {
     wait(&mut harness, "the new branch to clear the filter", |h| change_filter(h).is_empty());
     assert!(shows(&harness, "Unstaged files (6)"), "the other branch lists every file");
 }
+
+#[test]
+fn a_notice_opens_its_link_only_when_its_open_button_is_clicked() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+
+    let url = "https://example.com/pull/1";
+    harness.state_mut().notice = Some(crate::app::Notice {
+        text: "Created pull request #1.".into(),
+        is_error: false,
+        action: Some(crate::app::NoticeAction::OpenUrl(url.into())),
+        detail: None,
+    });
+    wait(&mut harness, "the notice's Open button", |h| h.query_by_label("Open").is_some());
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert!(opened.is_empty(), "the link does not open before the button is clicked");
+
+    harness.get_by_label("Open").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec![url.to_string()]);
+    assert!(harness.state().notice.is_none(), "opening the link dismisses the notice");
+}
