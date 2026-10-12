@@ -39,6 +39,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - See the working tree connected to its actual HEAD in the graph, even when another branch has newer commits.
 - Browse changed files as an expandable folder tree or a flat path list.
 - Load older history and search loaded commits by message, author, hash, or reference.
+- Choose which branches the graph shows from the "Branches shown" menu in the history header:
+  all branches (the default), local branches only, or the current branch and its upstream. A
+  note above the graph says what is shown, with a link back to all branches. Searching all
+  history still covers every branch.
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.

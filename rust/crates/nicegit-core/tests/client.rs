@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
-use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StashFile, StatusEntry, StatusKind};
+use nicegit_core::models::{Branch, GitError, HistoryScope, Operation, Snapshot, StashFile, StatusEntry, StatusKind};
 use tempfile::TempDir;
 
 // MARK: Helpers
@@ -1133,4 +1133,109 @@ fn pop_that_conflicts_keeps_the_stash() {
 
     assert!(result.is_err(), "the pop conflicts");
     assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is kept to try again");
+}
+
+// MARK: History scope
+
+/// The commit hashes in a snapshot's history, newest first.
+fn history_hashes(snapshot: &Snapshot) -> Vec<String> {
+    snapshot.commits.iter().map(|commit| commit.hash.clone()).collect()
+}
+
+#[test]
+fn local_scope_leaves_out_remote_only_commits() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    // A branch that exists only on the remote: pushed, its local copy deleted, then fetched.
+    repo.git(&["checkout", "-q", "-b", "other"]);
+    let other = repo.commit("other.txt", "other\n", "Remote only");
+    repo.git(&["push", "-q", "origin", "other"]);
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["branch", "-q", "-D", "other"]);
+    client().fetch(repo.path()).expect("fetch");
+
+    let all = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::All).expect("all");
+    let local = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Local).expect("local");
+
+    assert!(history_hashes(&all).contains(&other), "all branches show the remote's branch");
+    assert!(!history_hashes(&local).contains(&other), "local branches leave out the remote-only commit");
+    assert!(history_hashes(&local).contains(&first), "local branches keep main's history");
+}
+
+#[test]
+fn current_scope_shows_head_and_its_upstream_only() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    repo.git(&["checkout", "-q", "-b", "feature"]);
+    let feature = repo.commit("feature.txt", "feature\n", "Feature only");
+    repo.git(&["checkout", "-q", "main"]);
+
+    // Another clone pushes to main, so the upstream is one commit ahead of the local branch.
+    let workspace = tempfile::tempdir().expect("create workspace");
+    git(workspace.path(), &["clone", "--quiet", &path_string(remote.path()), "clone"]);
+    let clone = workspace.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("remote.txt"), "from the other clone\n").expect("write file");
+    git(&clone, &["add", "--", "remote.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Remote work"]);
+    git(&clone, &["push", "--quiet", "origin", "main"]);
+    let upstream = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
+    client().fetch(repo.path()).expect("fetch");
+
+    let all = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::All).expect("all");
+    assert!(history_hashes(&all).contains(&feature), "all branches show the feature branch");
+
+    let current = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Current).expect("current");
+    assert_eq!(history_hashes(&current), vec![upstream, first], "HEAD and its upstream, and nothing else");
+    assert!(!history_hashes(&current).contains(&feature));
+}
+
+#[test]
+fn current_scope_without_upstream_shows_head_history() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    let second = repo.commit("a.txt", "two\n", "Second");
+    repo.git(&["checkout", "-q", "-b", "feature"]);
+    let feature = repo.commit("feature.txt", "feature\n", "Feature only");
+    repo.git(&["checkout", "-q", "main"]);
+
+    let current = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Current).expect("current");
+    assert_eq!(history_hashes(&current), vec![second, first]);
+    assert!(!history_hashes(&current).contains(&feature));
+    assert_eq!(current.upstream, None);
+}
+
+#[test]
+fn local_scope_keeps_a_detached_head() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["checkout", "-q", "-b", "side"]);
+    repo.commit("side.txt", "side one\n", "Side one");
+    // Only the tag reaches this commit once the branch is gone; HEAD is detached on it.
+    let tagged = repo.commit("side.txt", "side two\n", "Side two");
+    repo.git(&["tag", "keep"]);
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["branch", "-q", "-D", "side"]);
+    repo.git(&["checkout", "-q", "--detach", "keep"]);
+
+    let local = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Local).expect("local");
+    assert_eq!(local.head_hash.as_deref(), Some(tagged.as_str()));
+    assert!(local.current_branch.starts_with("Detached HEAD"), "{}", local.current_branch);
+    assert!(history_hashes(&local).contains(&tagged), "the detached HEAD's commit stays visible");
+}
+
+#[test]
+fn history_scopes_load_a_repository_without_commits() {
+    let repo = Repo::new();
+    for scope in [HistoryScope::All, HistoryScope::Local, HistoryScope::Current] {
+        let snapshot = client().load_snapshot_scoped(repo.path(), 100, scope).unwrap_or_else(|error| panic!("{scope:?}: {error}"));
+        assert!(snapshot.commits.is_empty(), "{scope:?}");
+        assert_eq!(snapshot.head_hash, None, "{scope:?}");
+    }
 }

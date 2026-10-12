@@ -35,6 +35,8 @@
 - Save as ZIP… exports a commit's files as a ZIP archive from its right-click menu.
 - An empty commit box starts from your commit.template, without its comment lines; like Git,
   it must be edited before it can be committed.
+- Choose whether the commit graph shows all branches, only local branches, or just the current
+  branch and its upstream.
 
 ## 1.5.0 - Fewer surprises
 

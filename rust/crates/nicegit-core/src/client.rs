@@ -191,30 +191,62 @@ impl GitClient {
 
     // MARK: Snapshot
 
+    /// The revisions the history log walks for `scope`, before the log's own options.
+    ///
+    /// Git's default, HEAD, fails on a repository without commits, so HEAD is named only once
+    /// it resolves. An upstream is named by its object ID, never by its name.
+    fn history_revisions(&self, scope: HistoryScope, root: &Path) -> Vec<String> {
+        match scope {
+            HistoryScope::All => vec!["--exclude=refs/stash".to_string(), "--all".to_string()],
+            HistoryScope::Local => {
+                let mut revisions = vec!["--branches".to_string()];
+                if self.head(root).is_some() {
+                    revisions.push("HEAD".to_string());
+                }
+                revisions
+            }
+            HistoryScope::Current => {
+                let mut revisions = Vec::new();
+                if self.head(root).is_some() {
+                    revisions.push("HEAD".to_string());
+                }
+                if let Some(upstream) = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "@{upstream}"], root) {
+                    if is_object_id(&upstream) {
+                        revisions.push(upstream);
+                    }
+                }
+                if revisions.is_empty() {
+                    // Without commits there is nothing to show. A pattern that names no ref
+                    // (a space cannot appear in a ref name) keeps Git from falling back to HEAD.
+                    revisions.push("--branches= ".to_string());
+                }
+                revisions
+            }
+        }
+    }
+
     /// Reads the repository's state. Independent reads run at the same time, so a refresh takes
     /// about as long as its slowest command.
     pub fn load_snapshot(&self, selected: &Path, history_limit: usize) -> Result<Snapshot> {
+        self.load_snapshot_scoped(selected, history_limit, HistoryScope::All)
+    }
+
+    /// Like `load_snapshot`, but the history covers only the branches `scope` names.
+    pub fn load_snapshot_scoped(&self, selected: &Path, history_limit: usize, scope: HistoryScope) -> Result<Snapshot> {
         let root = self.repository_root(selected)?;
         let limit = history_limit.max(1);
         let log_format = format!("--pretty=format:{LOG_FORMAT}");
         let branch_format = format!("--format={BRANCH_FORMAT}");
         let stash_format = format!("--format={STASH_FORMAT}");
         let count = (limit + 1).to_string();
+        let revisions = self.history_revisions(scope, &root);
+        let mut log = vec!["log"];
+        log.extend(revisions.iter().map(String::as_str));
+        log.extend(["--topo-order", "--decorate=short", "--date=relative", "-n", count.as_str(), log_format.as_str(), "--"]);
         let commands: Vec<Vec<String>> = [
             vec!["status", "--porcelain=v1", "-z", "--untracked-files=all"],
             vec!["branch", "--all", &branch_format],
-            vec![
-                "log",
-                "--exclude=refs/stash",
-                "--all",
-                "--topo-order",
-                "--decorate=short",
-                "--date=relative",
-                "-n",
-                &count,
-                &log_format,
-                "--",
-            ],
+            log,
             vec!["remote", "-v"],
             vec!["worktree", "list", "--porcelain", "-z"],
             vec!["for-each-ref", "--sort=-version:refname", "--format=%(refname:strip=2)%09%(objectname)", "refs/tags"],

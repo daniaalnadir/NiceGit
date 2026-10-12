@@ -27,6 +27,29 @@ pub enum SyncAction {
     Pull,
 }
 
+/// Which branches the commit graph shows. Mirrors `nicegit_core::HistoryScope`, which has no
+/// serialisation of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum HistoryScope {
+    /// Every branch, tag, and remote-tracking branch.
+    #[default]
+    All,
+    /// Local branches, and HEAD even when it is detached.
+    Local,
+    /// HEAD and its upstream.
+    Current,
+}
+
+impl From<HistoryScope> for nicegit_core::HistoryScope {
+    fn from(scope: HistoryScope) -> Self {
+        match scope {
+            HistoryScope::All => nicegit_core::HistoryScope::All,
+            HistoryScope::Local => nicegit_core::HistoryScope::Local,
+            HistoryScope::Current => nicegit_core::HistoryScope::Current,
+        }
+    }
+}
+
 /// A commit message being written, kept per checkout (repository and branch).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Draft {
@@ -168,6 +191,9 @@ pub struct Settings {
     /// github.com remotes. Stored lower-cased, without repeats.
     #[serde(default)]
     pub github_enterprise_hosts: Vec<String>,
+    /// Which branches the commit graph shows, in every repository.
+    #[serde(default)]
+    pub history_scope: HistoryScope,
 }
 
 impl Default for Settings {
@@ -190,6 +216,7 @@ impl Default for Settings {
             recent: Vec::new(),
             drafts: BTreeMap::new(),
             github_enterprise_hosts: Vec::new(),
+            history_scope: HistoryScope::All,
         }
     }
 }

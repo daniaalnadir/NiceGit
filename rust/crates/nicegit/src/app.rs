@@ -605,7 +605,8 @@ impl NiceGitApp {
         repo.loading = true;
         repo.last_load = Instant::now();
         let limit = repo.history_limit;
-        self.worker.load(self.generation, repo.path.clone(), deliberate, limit);
+        let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
+        self.worker.load(self.generation, repo.path.clone(), deliberate, limit, scope);
     }
 
     /// Fetches the open repository from its remotes every few minutes, as Settings chooses, so
@@ -657,7 +658,8 @@ impl NiceGitApp {
             self.notice = None;
         }
         let limit = repo.history_limit;
-        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, action);
+        let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
+        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, action);
     }
 
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a

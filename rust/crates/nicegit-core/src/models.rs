@@ -183,6 +183,18 @@ impl ResetMode {
     }
 }
 
+/// Which branches the commit graph's history covers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HistoryScope {
+    /// Every branch, tag, and remote-tracking branch.
+    #[default]
+    All,
+    /// Local branches, and HEAD even when it is detached.
+    Local,
+    /// HEAD and its upstream, if it has one.
+    Current,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Snapshot {
     pub root_path: String,
