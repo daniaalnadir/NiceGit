@@ -346,6 +346,47 @@ fn change_for_commit_is_shown(harness: &App, hash: &str) -> bool {
 }
 
 #[test]
+fn blame_before_this_change_steps_back_and_back_returns() {
+    let repo = repository();
+    let path = repo.path();
+    let start = git(path, &["rev-list", "--max-parents=0", "HEAD"]);
+    // "Start the notes" wrote the first line; this commit reformats it.
+    commit_file(path, "notes.txt", "First line.\nsecond\n", "Tidy the first line");
+    let tidy = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Tidy the first line").click();
+    wait_for_commit_file(&mut harness, "notes.txt");
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Blame at this commit").click();
+    let tidy_line = format!("{} · Test · First line.", &tidy[..7]);
+    let start_line = format!("{} · Test · first", &start[..7]);
+    wait(&mut harness, "the blame lines", |h| shows(h, &tidy_line));
+    settle(&mut harness);
+    assert!(harness.get_by_label("Back to the newer blame").accesskit_node().is_disabled(), "there is no earlier view yet");
+
+    // The parent is looked up when the menu opens, so the item is enabled once it has arrived.
+    harness.get_by_label(&tidy_line).click_secondary();
+    wait(&mut harness, "the enabled blame-before item", |h| {
+        h.query_all_by_label_contains("Blame before this change").next().is_some_and(|item| !item.accesskit_node().is_disabled())
+    });
+    harness.get_by_label_contains("Blame before this change").click();
+    wait(&mut harness, "the blame before the change", |h| shows(h, &start_line));
+    settle(&mut harness);
+    assert!(!shows(&harness, &tidy_line), "the line is blamed on the commit before its change");
+    // The view blames the parent, "Add a second line", where the first line still read "first".
+    wait(&mut harness, "the header to name the revision's commit", |h| shows(h, "(Add a second line)"));
+
+    harness.get_by_label("Back to the newer blame").click();
+    wait(&mut harness, "the newer blame", |h| shows(h, &tidy_line));
+    settle(&mut harness);
+    assert!(!shows(&harness, &start_line), "Back returns to the newer blame");
+    assert!(harness.get_by_label("Back to the newer blame").accesskit_node().is_disabled(), "the stack is used up");
+}
+
+#[test]
 fn file_history_restores_an_earlier_version_after_confirmation() {
     let repo = repository();
     let path = repo.path();

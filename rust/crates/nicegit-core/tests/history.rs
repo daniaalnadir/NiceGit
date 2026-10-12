@@ -210,6 +210,91 @@ fn blame_refuses_binary_files() {
     assert!(message.contains("binary"), "unexpected message: {message}");
 }
 
+#[test]
+fn first_parent_of_a_root_commit_is_none() {
+    let repo = Repo::new();
+    repo.write("notes.txt", "one\n");
+    let root = repo.commit_as("Ann", "ann@example.com", "Root");
+
+    assert_eq!(client().first_parent(&root, repo.path()).expect("parent of the root"), None);
+}
+
+#[test]
+fn first_parent_resolves_a_commit() {
+    let repo = Repo::new();
+    repo.write("notes.txt", "one\n");
+    let first = repo.commit_as("Ann", "ann@example.com", "First");
+    repo.write("notes.txt", "two\n");
+    let second = repo.commit_as("Bob", "bob@example.com", "Second");
+
+    assert_eq!(client().first_parent(&second, repo.path()).expect("parent"), Some(first.clone()));
+    assert_eq!(client().first_parent("HEAD", repo.path()).expect("parent of HEAD"), Some(first));
+    assert!(client().first_parent("no-such-revision", repo.path()).is_err());
+}
+
+#[test]
+fn blame_before_a_change_names_the_earlier_commit() {
+    let repo = Repo::new();
+    repo.write("notes.txt", "first line\nsecond\n");
+    let added = repo.commit_as("Ann", "ann@example.com", "Add notes");
+    repo.write("notes.txt", "First line.\nsecond\n");
+    let reformatted = repo.commit_as("Bob", "bob@example.com", "Tidy the first line");
+
+    let at_head = client().blame("notes.txt", None, false, repo.path()).expect("blame at HEAD");
+    assert_eq!(at_head[0].commit.hash, reformatted);
+    let parent = client().first_parent(&at_head[0].commit.hash, repo.path()).expect("parent").expect("a parent");
+    let before = client().blame("notes.txt", Some(&parent), false, repo.path()).expect("blame before the change");
+    assert_eq!(before[0].commit.hash, added);
+    assert_eq!(before[0].commit.author_name, "Ann");
+    assert_eq!(before[0].content, "first line");
+}
+
+#[test]
+fn blame_before_a_rename_uses_the_old_path() {
+    let repo = Repo::new();
+    repo.write("old.txt", "alpha\nbeta\n");
+    let added = repo.commit_as("Ann", "ann@example.com", "Add old.txt");
+    repo.git(&["mv", "old.txt", "new.txt"]);
+    let renamed = repo.commit_as("Bob", "bob@example.com", "Rename to new.txt");
+    repo.write("new.txt", "ALPHA\nbeta\n");
+    let changed = repo.commit_as("Cy", "cy@example.com", "Change alpha");
+
+    // The line's commit is the change after the rename, so its path is the new name.
+    let at_head = client().blame("new.txt", None, false, repo.path()).expect("blame at HEAD");
+    assert_eq!(at_head[0].commit.hash, changed);
+    assert_eq!(at_head[0].commit.path, "new.txt");
+    let parent = client().first_parent(&at_head[0].commit.hash, repo.path()).expect("parent").expect("a parent");
+    assert_eq!(parent, renamed);
+
+    let before = client().blame(&at_head[0].commit.path, Some(&parent), false, repo.path()).expect("blame before the change");
+    assert_eq!(before[0].commit.hash, added, "the line was written under the old name");
+    assert_eq!(before[0].commit.path, "old.txt");
+}
+
+#[test]
+fn blame_names_the_previous_version_even_across_a_rename_in_the_same_commit() {
+    let repo = Repo::new();
+    // Enough unchanged lines that Git still sees the edited file as a rename.
+    let rest: String = (2..=10).map(|n| format!("line {n}\n")).collect();
+    repo.write("old.txt", &format!("alpha\n{rest}"));
+    let added = repo.commit_as("Ann", "ann@example.com", "Add old.txt");
+    // One commit renames the file and changes the line, so the new name is not in its parent.
+    repo.git(&["mv", "old.txt", "new.txt"]);
+    repo.write("new.txt", &format!("ALPHA\n{rest}"));
+    let both = repo.commit_as("Bob", "bob@example.com", "Rename and change alpha");
+
+    let at_head = client().blame("new.txt", None, false, repo.path()).expect("blame at HEAD");
+    assert_eq!(at_head[0].commit.hash, both);
+    let (revision, path) = at_head[0].commit.previous.clone().expect("Git names the earlier version");
+    assert_eq!(revision, added);
+    assert_eq!(path, "old.txt", "the earlier version is under the old name");
+    let before = client().blame(&path, Some(&revision), false, repo.path()).expect("blame before the change");
+    assert_eq!(before[0].commit.hash, added);
+
+    // The commit that added the file has no earlier version of it.
+    assert_eq!(before[0].commit.previous, None);
+}
+
 // MARK: File history and versions
 
 #[test]

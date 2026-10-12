@@ -120,7 +120,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Compare any commit with the working files, or two commits with each other (mark one,
   then compare from another), with a changed-file list and per-file diffs.
 - Blame a file (working version or at a commit), with author, age tinting, an
-  ignore-whitespace option, and each line's commit change one click away.
+  ignore-whitespace option, and each line's commit change one click away. A line's
+  right-click menu blames the file before that line's change ("Blame before this change"),
+  and Back returns to the newer blame.
 - Rename or remove remotes and edit their fetch URL in Repository Settings.
 - Push a tag to a remote, or delete it from a remote, from the tag's context menu.
 - Ignore untracked files from the Changes panel: the exact path or its extension in

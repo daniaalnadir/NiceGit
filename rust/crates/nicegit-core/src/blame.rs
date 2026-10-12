@@ -18,6 +18,11 @@ pub struct BlameCommit {
     pub summary: String,
     /// The path this commit's version of the lines used, which differs after a rename.
     pub path: String,
+    /// The version these lines came from before this commit, as Git's `previous` header names
+    /// it: the parent commit and the file's path there, which differs when this commit renamed
+    /// the file. `None` when the commit has no earlier version of the file, such as a root
+    /// commit or the commit that added the file.
+    pub previous: Option<(String, String)>,
 }
 
 impl BlameCommit {
@@ -74,6 +79,10 @@ pub fn parse_blame(output: &[u8]) -> Vec<BlameLine> {
             author_time: info.get("author-time").and_then(|time| time.parse().ok()),
             summary: info.get("summary").cloned().unwrap_or_default(),
             path: unquote(info.get("filename").map(String::as_str).unwrap_or_default()),
+            previous: info.get("previous").and_then(|value| {
+                let (hash, path) = value.split_once(' ')?;
+                (hash.len() >= 40).then(|| (hash.to_string(), unquote(path)))
+            }),
         });
         let content = String::from_utf8_lossy(&content[1..]).into_owned();
         result.push(BlameLine { number, content, commit: commit.clone() });
@@ -149,6 +158,15 @@ impl GitClient {
             return Err(GitError::failed("blame", "This file is binary, so it has no lines to blame."));
         }
         Ok(parse_blame(&output))
+    }
+
+    /// The first parent of `revision`, or `None` for a root commit.
+    pub fn first_parent(&self, revision: &str, directory: &Path) -> Result<Option<String>> {
+        let commit = self.resolve_commit(revision, directory)?;
+        // With --quiet, a missing parent exits with status 1 and prints nothing.
+        let parent = self.run_accepting(&["rev-parse", "--verify", "--quiet", &format!("{commit}^")], directory, &[0, 1])?;
+        let parent = parent.trim();
+        Ok((!parent.is_empty()).then(|| parent.to_string()))
     }
 }
 
