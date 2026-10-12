@@ -285,6 +285,19 @@ exists on the remote. Commits, branches, and the files in a commit can also be o
 GitHub from their menus; with several GitHub remotes, you choose which one. Opening does not check that the commit or branch
 has been pushed.
 
+Create pull request… in a branch's menu, or the command palette's Create pull request on GitHub
+entry, opens a dialog for a local branch whose upstream is on a GitHub remote. NiceGit creates the
+pull request through your GitHub CLI login, so it works for github.com and the Enterprise hosts
+listed in Settings. The dialog reads the repository's default branch and fills in the base,
+which you can change. The title is the subject of the branch's only commit ahead of the base, or
+the branch name in words. The body lists the commit subjects when there are two to twenty of them.
+You can edit all three, and choose a draft pull request. A warning appears when the branch has
+commits its upstream does not have, since the pull request will not include them. Until the
+pull request is created, nothing on GitHub changes. When it is created, NiceGit shows its number
+and opens it in your browser. If gh is missing or signed out, the dialog says how to fix that.
+Open in browser instead is the fallback: it opens GitHub's compare page, as before, and creates
+nothing.
+
 Force push… in the current branch's menu replaces the remote branch with yours, for example
 after you rewrite commits that were already pushed. The confirmation lists the remote commits
 it will remove. The push uses a lease: it is refused, and nothing changes, if the remote

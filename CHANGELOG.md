@@ -53,6 +53,8 @@
   most recent one.
 - In Blame, right-click a line to blame the file as it was before that line's change, and
   step back with Back.
+- Create pull requests from the branch menu or command palette: NiceGit fills in the title,
+  base, and commit list, and creates it through the GitHub CLI.
 
 ## 1.5.0 - Fewer surprises
 

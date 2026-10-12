@@ -8,12 +8,15 @@ use std::time::{Duration, Instant};
 
 use crate::client::GitClient;
 use crate::models::{GitError, Result};
+use crate::rebase::Scratch;
 use crate::runner;
 
 const NOT_INSTALLED: &str = "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.";
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Longest `gh` error shown to the user.
 const MESSAGE_LIMIT: usize = 2000;
+/// The operation name used in errors and temporary file names for pull requests.
+const PULL_REQUEST_COMMAND: &str = "create pull request";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemKind {
@@ -312,6 +315,133 @@ impl GitClient {
             .map_err(|message| GitError::failed("GitHub", message))?;
         decode_repositories(&output, host)
     }
+
+    /// The default branch of `repository`, as GitHub reports it through `gh repo view`. The name
+    /// is checked as a branch name before it is returned.
+    pub fn default_branch(&self, repository: &GitHubRepository, directory: &Path) -> Result<String> {
+        let repo = repository.gh_repo();
+        let output = run_gh(
+            &["repo", "view", &repo, "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"],
+            directory,
+            &Cancel::default(),
+            Some(repository.host.as_str()),
+        )
+        .map_err(|message| GitError::failed("GitHub", message))?;
+        let name = output.trim();
+        // An empty repository has no default branch, and jq then prints `null`.
+        if name == "null" || name.is_empty() {
+            return Err(GitError::failed("GitHub", "GitHub did not report a default branch for this repository."));
+        }
+        self.check_branch_name(name, directory)?;
+        Ok(name.to_string())
+    }
+
+    /// Creates a pull request from `head` into `base` on `repository` through `gh pr create`, and
+    /// returns the new pull request's address. The title is one line and must not be empty; the
+    /// body goes to a temporary file, so its text never reaches the command line. Both branch names
+    /// are checked before `gh` runs.
+    // The signature is the one the app calls with; each value is a separate argument on purpose.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_pull_request(
+        &self,
+        repository: &GitHubRepository,
+        head: &str,
+        base: &str,
+        title: &str,
+        body: &str,
+        draft: bool,
+        directory: &Path,
+    ) -> Result<String> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(GitError::failed("GitHub", "Enter a title for the pull request."));
+        }
+        if title.chars().any(char::is_control) {
+            return Err(GitError::failed("GitHub", "The title must be one line."));
+        }
+        if head == base {
+            return Err(GitError::failed("GitHub", "The base branch must be different from the branch."));
+        }
+        self.check_branch_name(head, directory)?;
+        self.check_branch_name(base, directory)?;
+
+        let scratch = Scratch::new(PULL_REQUEST_COMMAND)?;
+        let body_file = scratch.write(PULL_REQUEST_COMMAND, "body.md", body.as_bytes())?;
+        let body_path = body_file.to_string_lossy().into_owned();
+        let arguments = pull_request_arguments(repository, head, base, title, &body_path, draft);
+        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        let output = run_gh(&arguments, directory, &Cancel::default(), Some(repository.host.as_str()))
+            .map_err(|message| GitError::failed("GitHub", message))?;
+        parse_created_url(&output, repository).ok_or_else(|| {
+            let shown: String = output.trim().chars().take(MESSAGE_LIMIT).collect();
+            GitError::failed("GitHub", format!("GitHub did not report the new pull request's address. {shown}"))
+        })
+    }
+
+    /// The subjects of the commits that `head` has beyond `base`, newest first, read from the
+    /// remote-tracking branches of `remote`. Both branch names are checked first.
+    pub fn pull_request_commits(&self, remote: &str, base: &str, head: &str, directory: &Path) -> Result<Vec<String>> {
+        self.check_branch_name(base, directory)?;
+        self.check_branch_name(head, directory)?;
+        let range = format!("refs/remotes/{remote}/{base}..refs/remotes/{remote}/{head}");
+        let output = self.run(&["log", "--format=%s", &range, "--"], directory)?;
+        Ok(output.lines().map(str::to_string).collect())
+    }
+
+    /// Refuses `name` unless it is a usable branch name: not empty, without spaces or control
+    /// characters, not starting with `-`, and accepted by `git check-ref-format --branch`. That
+    /// check also expands `@{-n}`, so such names are refused before it runs.
+    fn check_branch_name(&self, name: &str, directory: &Path) -> Result<()> {
+        let plain = !name.is_empty()
+            && !name.starts_with('-')
+            && !name.contains("@{")
+            && !name.chars().any(|c| c.is_whitespace() || c.is_control());
+        if !plain || self.run(&["check-ref-format", "--branch", name], directory).is_err() {
+            return Err(GitError::failed("GitHub", "The branch name is not valid."));
+        }
+        Ok(())
+    }
+}
+
+/// The `gh pr create` arguments for a pull request from `head` into `base` on `repository`. Each
+/// value is its own argument, and the title takes the `--title=value` form, so a title that starts
+/// with `-` is never read as a flag. The body is read from `body_file`, which is not in the arguments.
+pub fn pull_request_arguments(
+    repository: &GitHubRepository,
+    head: &str,
+    base: &str,
+    title: &str,
+    body_file: &str,
+    draft: bool,
+) -> Vec<String> {
+    let mut arguments = vec![
+        "pr".to_string(),
+        "create".to_string(),
+        "--repo".to_string(),
+        repository.gh_repo(),
+        "--head".to_string(),
+        head.to_string(),
+        "--base".to_string(),
+        base.to_string(),
+        format!("--title={title}"),
+        "--body-file".to_string(),
+        body_file.to_string(),
+    ];
+    if draft {
+        arguments.push("--draft".to_string());
+    }
+    arguments
+}
+
+/// The address of the pull request that `gh pr create` printed, which is the last non-empty line
+/// of its output. It must be `<web base>/<owner>/<name>/pull/<number>` for `repository`, compared
+/// without regard to case. Any other line is refused.
+pub fn parse_created_url(output: &str, repository: &GitHubRepository) -> Option<String> {
+    let line = output.lines().map(str::trim).rfind(|line| !line.is_empty())?;
+    let prefix = format!("{}/{}/pull/", repository.web_base(), repository.slug());
+    let (start, number) = line.split_at_checked(prefix.len())?;
+    let digits = !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit());
+    (start.eq_ignore_ascii_case(&prefix) && digits).then(|| line.to_string())
 }
 
 /// The longest repository description kept, in characters.
@@ -1085,5 +1215,100 @@ mod tests {
     fn valid_enterprise_host_refuses_a_label_longer_than_63_characters() {
         let label = format!("{}.example.com", "a".repeat(64));
         assert!(!valid_enterprise_host(&label));
+    }
+
+    #[test]
+    fn pull_request_arguments_put_values_in_their_own_arguments() {
+        let repository = repository("github.com", "acme", "app");
+        let arguments = pull_request_arguments(&repository, "feature", "main", "-n flag-like title", "/tmp/body.md", true);
+        assert_eq!(
+            arguments,
+            [
+                "pr",
+                "create",
+                "--repo",
+                "github.com/acme/app",
+                "--head",
+                "feature",
+                "--base",
+                "main",
+                "--title=-n flag-like title",
+                "--body-file",
+                "/tmp/body.md",
+                "--draft",
+            ]
+        );
+        let plain = pull_request_arguments(&repository, "feature", "main", "Title", "/tmp/body.md", false);
+        assert!(!plain.iter().any(|argument| argument == "--draft"), "draft is off unless asked for");
+        assert_eq!(plain.last().map(String::as_str), Some("/tmp/body.md"));
+    }
+
+    #[test]
+    fn pull_request_arguments_keep_a_multi_line_body_out_of_the_command_line() {
+        let repository = repository("git.example.com", "acme", "app");
+        let body = "- first change\n- second change\n\n--title=injected";
+        // The caller writes the body to a file; the arguments name only that file.
+        let arguments = pull_request_arguments(&repository, "feature", "main", "Title", "/tmp/nicegit/body.md", false);
+        assert!(arguments.iter().all(|argument| !argument.contains("first change") && !argument.contains("injected")), "{body}");
+        assert!(arguments.contains(&"--repo".to_string()) && arguments.contains(&"git.example.com/acme/app".to_string()));
+    }
+
+    #[test]
+    fn parse_created_url_accepts_the_repositorys_pull_url() {
+        let github = repository("github.com", "acme", "app");
+        assert_eq!(
+            parse_created_url("https://github.com/acme/app/pull/12\n", &github).as_deref(),
+            Some("https://github.com/acme/app/pull/12")
+        );
+        assert_eq!(
+            parse_created_url("Creating pull request for feature into main\n\nhttps://github.com/Acme/App/pull/12\n", &github).as_deref(),
+            Some("https://github.com/Acme/App/pull/12"),
+            "the last line counts, and case is ignored"
+        );
+
+        let enterprise = GitHubRepository::parse_with_hosts("https://git.example.com/acme/app", &hosts(&["git.example.com"])).unwrap();
+        assert_eq!(
+            parse_created_url("https://git.example.com/acme/app/pull/3", &enterprise).as_deref(),
+            Some("https://git.example.com/acme/app/pull/3")
+        );
+    }
+
+    #[test]
+    fn parse_created_url_refuses_other_hosts_and_paths() {
+        let github = repository("github.com", "acme", "app");
+        let enterprise = GitHubRepository::parse_with_hosts("https://git.example.com/acme/app", &hosts(&["git.example.com"])).unwrap();
+        let refused = [
+            (&github, "https://git.example.com/acme/app/pull/12"),
+            (&github, "https://github.com/other/app/pull/12"),
+            (&github, "https://github.com/acme/other/pull/12"),
+            (&github, "http://github.com/acme/app/pull/12"),
+            (&github, "https://github.com/acme/app/issues/12"),
+            (&github, "https://github.com/acme/app/pulls/12"),
+            (&github, "https://github.com/acme/app/pull/"),
+            (&github, "https://github.com/acme/app/pull/12/files"),
+            (&github, "https://github.com/acme/app/pull/12?x=1"),
+            (&github, "https://github.com/acme/app/pull/12 trailing"),
+            (&github, "https://github.com/acme/app/pull/abc"),
+            (&github, "https://github.com/acme/app/pull/12\nnot the last line"),
+            (&github, "no address printed"),
+            (&github, ""),
+            (&enterprise, "https://github.com/acme/app/pull/12"),
+        ];
+        for (repository, output) in refused {
+            assert_eq!(parse_created_url(output, repository), None, "{output:?} must be refused");
+        }
+    }
+
+    #[test]
+    fn create_pull_request_refuses_an_empty_title_and_same_branch() {
+        let client = GitClient::new();
+        let repository = repository("github.com", "acme", "app");
+        let directory = Path::new(".");
+        for title in ["", "   ", "two\nlines"] {
+            let error = client.create_pull_request(&repository, "feature", "main", title, "body", false, directory).unwrap_err();
+            assert!(error.to_string().contains("title"), "{title:?}: {error}");
+        }
+        let error = client.create_pull_request(&repository, "main", "main", "Title", "", false, directory).unwrap_err();
+        assert!(error.to_string().contains("must be different"), "{error}");
     }
 }

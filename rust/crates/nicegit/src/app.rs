@@ -433,6 +433,8 @@ pub struct NiceGitApp {
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
     /// The "From GitHub…" list over the Clone dialog, while it is open.
     pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
+    /// The Create pull request dialog, while it is open.
+    pub pull_request: Option<crate::ui::pull_request::PullRequestDialog>,
     recorded: RecordSlot,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
@@ -475,6 +477,7 @@ impl NiceGitApp {
             applied_appearance: None,
             pending_clone: None,
             clone_picker: None,
+            pull_request: None,
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
             terminal: None,
@@ -1967,6 +1970,7 @@ impl eframe::App for NiceGitApp {
         self.layout(ui);
         self.tool_windows(&ctx);
         self.dialogs(&ctx);
+        self.pull_request_window(&ctx);
         self.palette_window(&ctx);
         self.settings_window(&ctx);
         self.shortcuts_window(&ctx);

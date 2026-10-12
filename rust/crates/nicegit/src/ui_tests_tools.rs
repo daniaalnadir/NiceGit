@@ -484,3 +484,41 @@ fn the_clone_dialog_opens_the_github_repository_picker() {
     assert!(harness.state().dialog.is_some(), "the Clone dialog stays open");
     assert!(shows(&harness, "Repository URL or local path"), "the address field is still there");
 }
+
+#[test]
+fn create_a_pull_request_from_the_branch_menu_and_open_it_in_the_browser() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+    git(path, &["config", "branch.feature.remote", "origin"]);
+    git(path, &["config", "branch.feature.merge", "refs/heads/feature"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Create pull request on GitHub").click();
+    wait(&mut harness, "the pull request dialog", |h| h.state().pull_request.is_some());
+    settle(&mut harness);
+
+    // The title comes from the branch name: the base is still unknown, so no commits are read.
+    // Nothing here depends on gh, which may be missing or signed out on the machine running it.
+    let title = harness.get_by_role_and_label(Role::TextInput, "Title").accesskit_node().value();
+    assert_eq!(title.as_deref(), Some("Feature"));
+
+    // The base lookup may finish at any moment and add a message above the buttons, so the
+    // click waits for the dialog to settle and for the button to stop moving.
+    wait(&mut harness, "the base lookup", |h| h.state().pull_request.as_ref().is_some_and(|d| d.settled()));
+    let last = std::cell::Cell::new(None);
+    wait(&mut harness, "the buttons to settle", |h| {
+        let rect = h.get_by_label_contains("Open in browser instead").rect();
+        last.replace(Some(rect)) == Some(rect)
+    });
+    harness.get_by_label_contains("Open in browser instead").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec!["https://github.com/owner/repo/compare/feature?expand=1".to_string()]);
+    assert!(harness.state().pull_request.is_none(), "the dialog closes once the browser opens");
+}
