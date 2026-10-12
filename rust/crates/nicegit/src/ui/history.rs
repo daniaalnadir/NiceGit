@@ -6,6 +6,7 @@ use nicegit_core::{Branch, Commit, Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::graph_view::{self, Node};
+use crate::settings::HistoryScope;
 use crate::theme;
 use crate::tools::{self, widgets};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
@@ -75,6 +76,15 @@ fn labels(commit: &Commit, snapshot: &Snapshot) -> Vec<Label> {
     out
 }
 
+/// The name of a history scope, as the header's menu shows it.
+fn scope_title(scope: HistoryScope) -> &'static str {
+    match scope {
+        HistoryScope::All => "All branches",
+        HistoryScope::Local => "Local branches",
+        HistoryScope::Current => "Current branch",
+    }
+}
+
 fn label_icons(kind: LabelKind) -> &'static str {
     match kind {
         LabelKind::Head => icon::CHECK,
@@ -99,14 +109,48 @@ impl NiceGitApp {
         let marked = repo.marked.clone();
         let total_commits = snapshot.commits.len();
 
+        // A scope change is applied after the frame, once nothing borrows the repository.
+        let mut scope_change: Option<HistoryScope> = None;
+        let idle = self.idle();
+        let shown = self.settings.history_scope;
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 10, bottom: 6 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Commit history").size(16.0).strong());
+                ui.add_space(8.0);
+                let mut scope = shown;
+                ui.add_enabled_ui(idle, |ui| {
+                    let response = egui::ComboBox::from_id_salt("history-scope")
+                        .width(130.0)
+                        .selected_text(scope_title(scope))
+                        .show_ui(ui, |ui| {
+                            for choice in [HistoryScope::All, HistoryScope::Local, HistoryScope::Current] {
+                                ui.selectable_value(&mut scope, choice, scope_title(choice));
+                            }
+                        })
+                        .response;
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, idle, "Branches shown"));
+                    response.on_hover_text("Which branches the graph includes");
+                });
+                if scope != shown {
+                    scope_change = Some(scope);
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let more = if snapshot.has_more_commits { "+" } else { "" };
                     ui.label(RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted));
                 });
             });
+            if shown != HistoryScope::All {
+                ui.horizontal(|ui| {
+                    let what = match shown {
+                        HistoryScope::Current => "Showing the current branch and its upstream.",
+                        _ => "Showing local branches.",
+                    };
+                    ui.label(RichText::new(what).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new("Show all branches")).clicked() {
+                        scope_change = Some(HistoryScope::All);
+                    }
+                });
+            }
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let search_width = 170.0;
@@ -169,6 +213,11 @@ impl NiceGitApp {
                 });
             }
         });
+        if let Some(scope) = scope_change {
+            // Like Command-R, a deliberate reload, so the graph shows the new branches at once.
+            self.settings.history_scope = scope;
+            self.load(true);
+        }
 
         // Column headers, which resize the columns and choose which are shown.
         let graph_width = graph_view::width_for(self.repo().map(|r| r.lanes).unwrap_or(1)).clamp(44.0, 240.0);

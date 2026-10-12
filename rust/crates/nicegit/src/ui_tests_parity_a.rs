@@ -15,6 +15,7 @@ use egui_phosphor::regular as icon;
 
 use crate::app::NiceGitApp;
 use crate::ui_tests::*;
+use crate::ui_tests_more::publish_to_bare;
 
 type App = Harness<'static, NiceGitApp>;
 
@@ -396,4 +397,30 @@ fn clicking_a_tag_selects_the_commit_it_points_to() {
 /// shows its subject once; the inspector's heading is the second copy.
 fn inspector_shows(harness: &App, subject: &str) -> bool {
     harness.query_all(By::new().label(subject)).count() >= 2
+}
+
+#[test]
+fn history_scope_hides_other_branches() {
+    let repo = repository();
+    let path = repo.path();
+    // The branch's own commit is on `feature` only; HEAD (main) has an upstream, as usual.
+    let _remote = publish_to_bare(path);
+    git(path, &["checkout", "-q", "feature"]);
+    std::fs::write(path.join("feature.txt"), "feature\n").unwrap();
+    git(path, &["add", "feature.txt"]);
+    git(path, &["commit", "-q", "-m", "Feature only work"]);
+    git(path, &["checkout", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the feature commit in the graph", |h| h.query_by_label("Feature only work").is_some());
+
+    harness.get_by_role_and_label(Role::ComboBox, "Branches shown").click();
+    settle(&mut harness);
+    harness.get_by_label("Current branch").click();
+    wait(&mut harness, "the current branch's history", |h| h.query_by_label("Feature only work").is_none());
+    assert!(has_label(&harness, "Showing the current branch and its upstream."), "the note says what is shown");
+
+    harness.get_by_label("Show all branches").click();
+    wait(&mut harness, "all branches back in the graph", |h| h.query_by_label("Feature only work").is_some());
+    assert!(!has_label(&harness, "Showing the current branch"), "the note goes once every branch is shown");
 }

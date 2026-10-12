@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use nicegit_core::diff::{parse_diff, DiffLine};
-use nicegit_core::{GitClient, GitError, Snapshot, Stash, StashFile};
+use nicegit_core::{GitClient, GitError, HistoryScope, Snapshot, Stash, StashFile};
 
 /// What a background action reports when it finishes.
 pub type ActionResult = Result<Option<String>, GitError>;
@@ -57,10 +57,10 @@ impl Worker {
         });
     }
 
-    pub fn load(&self, generation: u64, path: PathBuf, deliberate: bool, history_limit: usize) {
+    pub fn load(&self, generation: u64, path: PathBuf, deliberate: bool, history_limit: usize, scope: HistoryScope) {
         self.spawn(move || {
             let client = if deliberate { GitClient::deliberate() } else { GitClient::new() };
-            let snapshot = client.load_snapshot(&path, history_limit);
+            let snapshot = client.load_snapshot_scoped(&path, history_limit, scope);
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
     }
@@ -72,12 +72,13 @@ impl Worker {
         path: PathBuf,
         label: String,
         history_limit: usize,
+        scope: HistoryScope,
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
         self.spawn(move || {
             let client = GitClient::new();
             let result = action(&client, &path);
-            let snapshot = client.load_snapshot(&path, history_limit);
+            let snapshot = client.load_snapshot_scoped(&path, history_limit, scope);
             Message::Loaded { generation, path, action: Some((label, result)), snapshot: Box::new(snapshot) }
         });
     }
