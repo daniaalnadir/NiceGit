@@ -208,7 +208,7 @@ impl NiceGitApp {
             }
             list.push(command("End bisect", "Return to the original checkout", icon::BUG, idle, Run::EndBisect));
         }
-        if let Some(step) = self.repo().and_then(|r| r.undo.as_ref()) {
+        if let Some(step) = self.repo().and_then(|r| r.undo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
             list.push(command(
                 &format!("Undo {}", step.title.to_lowercase()),
@@ -218,7 +218,7 @@ impl NiceGitApp {
                 Run::Undo,
             ));
         }
-        if let Some(step) = self.repo().and_then(|r| r.redo.as_ref()) {
+        if let Some(step) = self.repo().and_then(|r| r.redo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
             list.push(command(&format!("Redo {}", step.title.to_lowercase()), "", icon::ARROW_CLOCKWISE, idle && applies, Run::Redo));
         }

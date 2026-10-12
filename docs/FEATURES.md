@@ -68,9 +68,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   such as edits in another app or commits and fetches in a terminal (Settings to turn off).
 - Resize the repositories column and the branches sidebar by dragging their dividers;
   double-click a divider to restore its default width. Widths are remembered.
-- Undo or redo the last NiceGit action that moved the current branch (commit, amend, reset,
-  merge, rebase, cherry-pick, revert, or pull) or deleted branches, from the toolbar or
-  the command palette.
+- Undo steps back through the last 20 NiceGit actions that moved the current branch (commit,
+  amend, reset, merge, rebase, cherry-pick, revert, or pull) or deleted branches, and Redo
+  steps forward again, from the toolbar or the command palette. The arrow beside Undo lists
+  the steps it will take back.
 - Clean up branches (Repository > Clean Up Branches): delete local branches merged into the
   current branch, and optionally unmerged ones with no recent commits, as one undoable step.
 - Search file contents (Option-Command-F, or "Search files in this commit" in the graph):
@@ -167,8 +168,11 @@ cargo test --workspace
 
 ## Behavior and Limitations
 
-The toolbar's Undo and Redo cover the actions listed under Current Features. For a commit,
-Undo uses soft reset and preserves the index and working files; Redo restores that commit.
+The toolbar's Undo and Redo cover the actions listed under Current Features and step through
+the last 20 of them in turn. A new action ends the redo steps, and a change made outside
+NiceGit stops the chain: the next Undo is refused, and the older steps are dropped. For a
+commit, Undo uses soft reset and preserves the index and working files; Redo restores that
+commit.
 Both confirm before changing local history and reject a changed branch or HEAD. This is
 not a general undo stack for all Git operations, and it does not persist across restarts.
 

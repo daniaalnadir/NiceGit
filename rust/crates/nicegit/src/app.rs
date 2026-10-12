@@ -168,11 +168,34 @@ pub const BACKGROUND_FETCH: &str = "Fetching in the background";
 /// How long after a repository opens its first background fetch waits.
 const FIRST_FETCH_DELAY: Duration = Duration::from_secs(30);
 
+/// The most recorded actions Undo steps back through; older ones are dropped.
+pub const MAX_UNDO_STEPS: usize = 20;
+
+/// Added to a failed undo's notice when older undo steps were dropped with it.
+const CLEARED_UNDO_NOTE: &str = "Older undo steps were cleared because the repository changed.";
+/// Added to a failed redo's notice when older redo steps were dropped with it.
+const CLEARED_REDO_NOTE: &str = "Older redo steps were cleared because the repository changed.";
+
 /// What a finished action recorded for undo, handed from the background thread.
 pub enum Recorded {
+    /// An ordinary action: it can be undone, and ends any chain of redo steps.
     Step(HistoryEntry),
+    /// The inverse of an undo, which Redo can apply.
     Redo(HistoryEntry),
+    /// The inverse of a redo, which Undo can apply. The rest of the redo steps stay.
+    Undo(HistoryEntry),
+    /// A step that could not be applied, from Undo (`redo` false) or Redo (`redo` true).
+    HistoryFailed {
+        redo: bool,
+    },
     Discard(DiscardUndo),
+}
+
+/// Pushes onto a history stack, dropping the oldest entries past the cap.
+fn push_capped(stack: &mut Vec<HistoryEntry>, entry: HistoryEntry) {
+    stack.push(entry);
+    let excess = stack.len().saturating_sub(MAX_UNDO_STEPS);
+    stack.drain(..excess);
 }
 
 pub type RecordSlot = Arc<Mutex<Option<Recorded>>>;
@@ -226,8 +249,10 @@ pub struct Repo {
     pub trailer_filter: String,
     /// The Git name and email, read while the Add trailers menu is open and cleared when it closes.
     pub trailer_identity: Option<(String, String)>,
-    pub undo: Option<HistoryEntry>,
-    pub redo: Option<HistoryEntry>,
+    /// Recorded actions Undo steps back through, newest last (at most `MAX_UNDO_STEPS`).
+    pub undo: Vec<HistoryEntry>,
+    /// Undone actions Redo steps forward through, newest last.
+    pub redo: Vec<HistoryEntry>,
     /// A discard that can be reversed while the file is unchanged since.
     /// The last discards that can be reversed, newest last (at most 20).
     pub discard_undo: Vec<DiscardUndo>,
@@ -262,6 +287,42 @@ impl Repo {
     /// or saved as a draft until it is edited, as Git refuses an unedited template.
     pub fn draft_is_untouched_template(&self) -> bool {
         self.draft_from_template.as_ref() == Some(&self.draft)
+    }
+
+    /// Records an action Undo can reverse. It ends any chain of redo steps, as they no longer
+    /// follow from the repository's state.
+    pub fn record_step(&mut self, entry: HistoryEntry) {
+        self.redo.clear();
+        push_capped(&mut self.undo, entry);
+    }
+
+    /// Records the inverse of an undo, for Redo to apply.
+    pub fn push_redo(&mut self, entry: HistoryEntry) {
+        push_capped(&mut self.redo, entry);
+    }
+
+    /// Records the inverse of a redo, for Undo to apply. Redo steps not yet applied stay.
+    pub fn push_undo_keep_redo(&mut self, entry: HistoryEntry) {
+        push_capped(&mut self.undo, entry);
+    }
+
+    /// Takes the newest step Undo would apply.
+    pub fn pop_undo(&mut self) -> Option<HistoryEntry> {
+        self.undo.pop()
+    }
+
+    /// Takes the newest step Redo would apply.
+    pub fn pop_redo(&mut self) -> Option<HistoryEntry> {
+        self.redo.pop()
+    }
+
+    /// Drops the rest of the stack a step failed on. Its older steps assume the state the failed
+    /// step would have produced, so they cannot apply in order. Returns whether any were dropped.
+    pub fn clear_on_failure(&mut self, redo: bool) -> bool {
+        let stack = if redo { &mut self.redo } else { &mut self.undo };
+        let cleared = !stack.is_empty();
+        stack.clear();
+        cleared
     }
 
     pub fn new(path: PathBuf) -> Self {
@@ -300,8 +361,8 @@ impl Repo {
             branch_filter: String::new(),
             trailer_filter: String::new(),
             trailer_identity: None,
-            undo: None,
-            redo: None,
+            undo: Vec::new(),
+            redo: Vec::new(),
             discard_undo: Vec::new(),
             scroll_to_selection: false,
             bisect: None,
@@ -737,9 +798,7 @@ impl NiceGitApp {
                     let Some(index) = self.repos.iter().position(|r| r.path == path && r.generation == generation) else { continue };
                     self.repos[index].loading = false;
                     let mut action_failed = false;
-                    if action.is_some() {
-                        self.take_record(index);
-                    }
+                    let history_note = if action.is_some() { self.take_record(index) } else { None };
                     if let Some((label, result)) = &action {
                         // Fetching, by hand, in the background, or as part of Pull, resets the timer.
                         if matches!(label.as_str(), BACKGROUND_FETCH | "Fetch" | "Pull") {
@@ -913,6 +972,10 @@ impl NiceGitApp {
                             }
                         }
                     }
+                    // Said after whatever the failed step said, so it is seen without hovering.
+                    if let (Some(note), Some(notice)) = (history_note, self.notice.as_mut()) {
+                        notice.text = format!("{} {note}", notice.text.trim_end());
+                    }
                 }
                 Message::Diff { generation, title, result } => {
                     let Some(repo) = self.repos.iter_mut().find(|r| r.diff_generation == generation) else { continue };
@@ -951,16 +1014,20 @@ impl NiceGitApp {
         self.notify(text.to_string(), false);
     }
 
-    /// Takes whatever the finished action recorded for undo.
-    fn take_record(&mut self, index: usize) {
+    /// Takes whatever the finished action recorded for undo. Returns the note for the notice when
+    /// a failed step dropped older steps with it.
+    fn take_record(&mut self, index: usize) -> Option<&'static str> {
         let record = self.recorded.lock().unwrap_or_else(|p| p.into_inner()).take();
         let repo = &mut self.repos[index];
         match record {
-            Some(Recorded::Step(entry)) => {
-                repo.undo = Some(entry);
-                repo.redo = None;
+            Some(Recorded::Step(entry)) => repo.record_step(entry),
+            Some(Recorded::Redo(entry)) => repo.push_redo(entry),
+            Some(Recorded::Undo(entry)) => repo.push_undo_keep_redo(entry),
+            Some(Recorded::HistoryFailed { redo }) => {
+                if repo.clear_on_failure(redo) {
+                    return Some(if redo { CLEARED_REDO_NOTE } else { CLEARED_UNDO_NOTE });
+                }
             }
-            Some(Recorded::Redo(entry)) => repo.redo = Some(entry),
             Some(Recorded::Discard(undo)) => {
                 repo.discard_undo.retain(|older| older.path != undo.path);
                 repo.discard_undo.push(undo);
@@ -969,6 +1036,7 @@ impl NiceGitApp {
             }
             None => {}
         }
+        None
     }
 
     fn apply(&mut self, index: usize, snapshot: Snapshot) {
@@ -1582,26 +1650,50 @@ impl NiceGitApp {
         self.act("Fetch", |client, path| client.fetch(path).map(|_| Some("Fetched from all remotes.".into())));
     }
 
-    /// Undoes the last recorded action; what it returns becomes the redo.
+    /// Undoes the newest recorded step; its inverse becomes the newest redo step.
     pub fn undo(&mut self) {
-        let Some(entry) = self.repo_mut().and_then(|r| r.undo.take()) else { return };
-        self.apply_history(entry, false);
+        self.step_history(false);
     }
 
+    /// Redoes the newest undone step; its inverse becomes the newest undo step.
     pub fn redo(&mut self) {
-        let Some(entry) = self.repo_mut().and_then(|r| r.redo.take()) else { return };
-        self.apply_history(entry, true);
+        self.step_history(true);
+    }
+
+    /// Takes the newest step from the undo or redo stack and applies it. The step leaves its stack
+    /// only once its action starts, so a refused action leaves both stacks as they were.
+    fn step_history(&mut self, redo: bool) {
+        if self.busy.is_some() {
+            return;
+        }
+        if self.has_unsaved_editor() {
+            self.notify("Save or close the file you are editing before changing the repository.", true);
+            return;
+        }
+        let Some(repo) = self.repo_mut() else { return };
+        let entry = if redo { repo.pop_redo() } else { repo.pop_undo() };
+        let Some(entry) = entry else { return };
+        self.apply_history(entry, redo);
     }
 
     fn apply_history(&mut self, entry: HistoryEntry, redo: bool) {
         let slot = self.recorded.clone();
         let verb = if redo { "Redo" } else { "Undo" };
         let label = format!("{verb} {}", entry.title.to_lowercase());
-        self.act(&label, move |client, path| {
-            let inverse = HistoryEntry { title: entry.title.clone(), step: client.undo_step(&entry.step, path)? };
-            // Undoing offers the inverse as a redo; redoing offers it as an undo again.
-            *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(if redo { Recorded::Step(inverse) } else { Recorded::Redo(inverse) });
-            Ok(Some(format!("{verb}: {}.", entry.title.to_lowercase())))
+        self.act(&label, move |client, path| match client.undo_step(&entry.step, path) {
+            Ok(step) => {
+                let inverse = HistoryEntry { title: entry.title.clone(), step };
+                // Undoing offers the inverse as a redo; redoing offers it as an undo, and the redo steps not yet
+                // applied stay.
+                let record = if redo { Recorded::Undo(inverse) } else { Recorded::Redo(inverse) };
+                *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(record);
+                Ok(Some(format!("{verb}: {}.", entry.title.to_lowercase())))
+            }
+            Err(error) => {
+                // Older steps in this stack assume the state this one would have produced.
+                *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::HistoryFailed { redo });
+                Err(error)
+            }
         });
     }
 
@@ -1696,8 +1788,7 @@ impl NiceGitApp {
             Request::ActRecording { label, title, mode, action } => self.act_recording_mode(&label, &title, mode, action),
             Request::RecordUndo { title, step } => {
                 if let Some(repo) = self.repo_mut() {
-                    repo.undo = Some(HistoryEntry { title, step });
-                    repo.redo = None;
+                    repo.record_step(HistoryEntry { title, step });
                 }
             }
             Request::Notice { text, is_error } => self.notify(text, is_error),
@@ -1982,5 +2073,106 @@ mod tests {
             assert!(!changes_visible_state(&event(write, path)), "{path}");
         }
         assert!(changes_visible_state(&event(write, "/repo/.git/refs/heads/main")));
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use std::path::PathBuf;
+
+    use nicegit_core::undo::{UndoMode, UndoStep};
+
+    use super::{HistoryEntry, Repo, MAX_UNDO_STEPS};
+
+    fn step(title: &str) -> HistoryEntry {
+        let step = UndoStep::BranchMove { branch: "main".into(), before: "a".into(), after: "b".into(), mode: UndoMode::Soft };
+        HistoryEntry { title: title.into(), step }
+    }
+
+    fn titles(stack: &[HistoryEntry]) -> Vec<&str> {
+        stack.iter().map(|entry| entry.title.as_str()).collect()
+    }
+
+    #[test]
+    fn undo_steps_past_the_cap_drop_the_oldest() {
+        let mut repo = Repo::new(PathBuf::new());
+        for n in 0..MAX_UNDO_STEPS + 5 {
+            repo.record_step(step(&format!("Step {n}")));
+        }
+        assert_eq!(repo.undo.len(), 20);
+        assert_eq!(repo.undo.first().map(|e| e.title.as_str()), Some("Step 5"));
+        assert_eq!(repo.undo.last().map(|e| e.title.as_str()), Some("Step 24"));
+    }
+
+    #[test]
+    fn history_new_action_clears_redo_steps() {
+        let mut repo = Repo::new(PathBuf::new());
+        repo.record_step(step("A"));
+        repo.record_step(step("B"));
+        let undone = repo.pop_undo().expect("B");
+        repo.push_redo(undone);
+        assert_eq!(titles(&repo.redo), ["B"]);
+
+        repo.record_step(step("C"));
+        assert!(repo.redo.is_empty(), "a new action ends the redo chain");
+        assert_eq!(titles(&repo.undo), ["A", "C"]);
+    }
+
+    #[test]
+    fn history_undo_then_redo_then_undo_again() {
+        let mut repo = Repo::new(PathBuf::new());
+        repo.record_step(step("A"));
+        repo.record_step(step("B"));
+
+        let undone = repo.pop_undo().expect("B");
+        repo.push_redo(undone);
+        assert_eq!(titles(&repo.undo), ["A"]);
+
+        let redone = repo.pop_redo().expect("B again");
+        repo.push_undo_keep_redo(redone);
+        assert_eq!(titles(&repo.undo), ["A", "B"]);
+        assert!(repo.redo.is_empty());
+
+        let undone = repo.pop_undo().expect("B once more");
+        repo.push_redo(undone);
+        assert_eq!(titles(&repo.undo), ["A"]);
+        assert_eq!(titles(&repo.redo), ["B"]);
+    }
+
+    #[test]
+    fn history_redo_keeps_the_remaining_redo_steps() {
+        let mut repo = Repo::new(PathBuf::new());
+        for title in ["A", "B", "C"] {
+            repo.record_step(step(title));
+        }
+        for _ in 0..3 {
+            let undone = repo.pop_undo().expect("a step to undo");
+            repo.push_redo(undone);
+        }
+        assert!(repo.undo.is_empty());
+        // The newest undone step is on top, so Redo starts with the one undone last.
+        assert_eq!(titles(&repo.redo), ["C", "B", "A"]);
+
+        let redone = repo.pop_redo().expect("the newest undone step");
+        repo.push_undo_keep_redo(redone);
+        assert_eq!(titles(&repo.undo), ["A"]);
+        assert_eq!(titles(&repo.redo), ["C", "B"], "the steps not yet redone stay");
+    }
+
+    #[test]
+    fn history_failure_clears_the_rest_of_its_stack() {
+        let mut repo = Repo::new(PathBuf::new());
+        for title in ["A", "B", "C"] {
+            repo.record_step(step(title));
+        }
+        repo.pop_undo();
+        repo.push_redo(step("C'"));
+        assert!(repo.clear_on_failure(false), "older undo steps were dropped");
+        assert!(repo.undo.is_empty());
+        assert_eq!(titles(&repo.redo), ["C'"], "the redo stack is left alone by an undo failure");
+
+        assert!(repo.clear_on_failure(true), "older redo steps were dropped");
+        assert!(repo.redo.is_empty());
+        assert!(!repo.clear_on_failure(true), "an empty stack has nothing to clear");
     }
 }

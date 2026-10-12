@@ -49,6 +49,8 @@
   one instead of pasting its URL.
 - In a narrow Changes panel the section titles and bulk buttons shorten so the file counts
   stay visible, and the diff's line-staging hint wraps instead of being cut off.
+- Undo and Redo step back and forth through the last 20 recorded actions instead of only the
+  most recent one.
 
 ## 1.5.0 - Fewer surprises
 
