@@ -71,27 +71,21 @@ impl NiceGitApp {
         let idle = self.idle();
         let all_unstaged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_unstaged()).cloned().collect());
         let all_staged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_staged()).cloned().collect());
-        // A long list of changes can be narrowed by path; the filter shows once there are many.
-        let filter = self.repo().map(|r| r.change_filter.trim().to_lowercase()).unwrap_or_default();
-        let show_filter = snapshot.status.len() > FILTER_FROM || !filter.is_empty();
-        let matches = |entries: &[StatusEntry]| -> Vec<StatusEntry> {
-            entries
-                .iter()
-                .filter(|e| {
-                    filter.is_empty()
-                        || e.path.to_lowercase().contains(&filter)
-                        || e.original_path.as_ref().is_some_and(|p| p.to_lowercase().contains(&filter))
-                })
-                .cloned()
-                .collect()
-        };
+        // A long list of changes can be narrowed by path. The field shows once there are many, and
+        // stays while the filter holds text or the field has focus, so it never hides itself.
+        let filter = self.repo().map(|r| r.change_filter.clone()).unwrap_or_default();
+        let filtering = !filter.trim().is_empty();
+        let focus_requested = filter_focus_requested(ui.ctx());
+        let show_filter = snapshot.status.len() > FILTER_FROM || filtering || filter_had_focus(ui.ctx()) || focus_requested;
+        let matches =
+            |entries: &[StatusEntry]| -> Vec<StatusEntry> { entries.iter().filter(|e| matches_filter(e, &filter)).cloned().collect() };
         let unstaged = matches(&all_unstaged);
         let staged = matches(&all_staged);
         let shown = |part: &[StatusEntry], whole: &[StatusEntry]| {
-            if part.len() == whole.len() {
-                whole.len().to_string()
-            } else {
+            if filtering {
                 format!("{} of {}", part.len(), whole.len())
+            } else {
+                whole.len().to_string()
             }
         };
 
@@ -107,11 +101,19 @@ impl NiceGitApp {
                 ui.selectable_value(&mut self.settings.file_view, FileView::Path, "Path");
                 ui.selectable_value(&mut self.settings.file_view, FileView::Tree, "Tree");
             });
+            let mut filter_focused = false;
             if show_filter {
                 ui.add_space(6.0);
                 let field = widgets::search_field(ui, &mut self.repos[self.active].change_filter, "Filter changed files");
                 field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter changed files"));
+                if focus_requested {
+                    field.request_focus();
+                }
+                filter_focused = field.has_focus() || focus_requested;
             }
+            // Stamped with the pass it was drawn in, so a panel no longer drawn leaves no stale focus.
+            let pass = ui.ctx().cumulative_pass_nr();
+            ui.ctx().data_mut(|data| data.insert_temp(filter_focus_key(), (pass, filter_focused)));
         });
         ui.separator();
 
@@ -149,19 +151,38 @@ impl NiceGitApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{}  Unstaged files ({})", icon::CARET_DOWN, shown(&unstaged, &all_unstaged))).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if outlined(ui, "Stage All Changes", c.accent, idle && !all_unstaged.is_empty()).clicked() {
+                        // The bulk buttons act on every file in their section, not only the shown ones.
+                        let stage_all = outlined(ui, "Stage All Changes", c.accent, idle && !all_unstaged.is_empty());
+                        let stage_all = if filtering {
+                            stage_all.on_hover_text(format!(
+                                "Stages all {} unstaged files, including those hidden by the filter",
+                                all_unstaged.len()
+                            ))
+                        } else {
+                            stage_all
+                        };
+                        if stage_all.clicked() {
                             self.act("Stage all", |client, path| client.stage_all(path).map(|_| None));
                         }
                         // Keeps the discard icon clear of the Stage All button.
                         ui.add_space(8.0);
                         let discardable: Vec<StatusEntry> = all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
                         let discard_all_enabled = idle && !discardable.is_empty();
-                        let discard_all = widgets::icon_button(ui, icon::TRASH, "Discard all changes…", discard_all_enabled);
+                        let discard_tip = if filtering {
+                            format!("Discards changes to all {} unstaged files, including those hidden by the filter", discardable.len())
+                        } else {
+                            "Discard all changes…".to_string()
+                        };
+                        let discard_all = widgets::icon_button(ui, icon::TRASH, &discard_tip, discard_all_enabled);
                         discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, discard_all_enabled, "Discard all changes…"));
                         if discard_all.clicked() {
+                            let hidden = if filtering { " Files hidden by the filter are included." } else { "" };
                             self.confirm(
                                 "Discard all changes?",
-                                format!("Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.", discardable.len()),
+                                format!(
+                                    "Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}",
+                                    discardable.len()
+                                ),
                                 "Discard all",
                                 Pending::DiscardAll(discardable),
                             );
@@ -170,7 +191,7 @@ impl NiceGitApp {
                 });
                 ui.add_space(4.0);
                 if unstaged.is_empty() && !all_unstaged.is_empty() {
-                    ui.label(RichText::new("   No unstaged files match the filter").small().color(c.muted));
+                    ui.label(RichText::new("   No matching files").small().color(c.muted));
                 } else if unstaged.is_empty() {
                     ui.label(RichText::new("   No unstaged changes").small().color(c.muted));
                 } else if tree {
@@ -185,14 +206,23 @@ impl NiceGitApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{}  Staged files ({})", icon::CARET_DOWN, shown(&staged, &all_staged))).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if outlined(ui, "Unstage All Changes", c.accent, idle && !all_staged.is_empty()).clicked() {
+                        let unstage_all = outlined(ui, "Unstage All Changes", c.accent, idle && !all_staged.is_empty());
+                        let unstage_all = if filtering {
+                            unstage_all.on_hover_text(format!(
+                                "Unstages all {} staged files, including those hidden by the filter",
+                                all_staged.len()
+                            ))
+                        } else {
+                            unstage_all
+                        };
+                        if unstage_all.clicked() {
                             self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None));
                         }
                     });
                 });
                 ui.add_space(4.0);
                 if staged.is_empty() && !all_staged.is_empty() {
-                    ui.label(RichText::new("   No staged files match the filter").small().color(c.muted));
+                    ui.label(RichText::new("   No matching files").small().color(c.muted));
                 } else if staged.is_empty() {
                     ui.label(RichText::new("   Stage files to include them in the next commit").small().color(c.muted));
                 } else if tree {
@@ -208,9 +238,16 @@ impl NiceGitApp {
 
     fn folder_rows(&mut self, ui: &mut Ui, folder: &Folder, staged: bool, idle: bool, snapshot: &Snapshot, depth: usize) {
         let c = theme::of(ui);
+        let filtering = self.repo().is_some_and(|r| !r.change_filter.trim().is_empty());
         for (name, child) in &folder.folders {
-            let id = ui.make_persistent_id(("folder", staged, depth, name));
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+            // While filtering, folders open so their matches show. That uses its own open state, so
+            // the folder's saved state is left as the user set it.
+            let id = ui.make_persistent_id(("folder", staged, depth, name, filtering));
+            let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
+            if filtering {
+                state.set_open(true);
+            }
+            state
                 .show_header(ui, |ui| {
                     ui.label(RichText::new(format!("{}  {name}", icon::FOLDER)).color(c.muted));
                     ui.label(RichText::new(child.count().to_string()).small().color(c.muted));
@@ -711,7 +748,51 @@ fn megabytes(bytes: u64) -> String {
 }
 
 /// The number of changed files above which the Changes panel offers a filter.
-const FILTER_FROM: usize = 10;
+const FILTER_FROM: usize = 5;
+
+/// Whether a changed file matches the Changes panel's filter. Every whitespace-separated term must
+/// appear, ignoring case, in the file's path or, for a rename or copy, in its original path. An
+/// empty filter matches every file.
+pub(crate) fn matches_filter(entry: &StatusEntry, filter: &str) -> bool {
+    let path = entry.path.to_lowercase();
+    let original = entry.original_path.as_deref().map(str::to_lowercase);
+    filter.split_whitespace().all(|term| {
+        let term = term.to_lowercase();
+        path.contains(&term) || original.as_deref().is_some_and(|original| original.contains(&term))
+    })
+}
+
+/// Temporary context data: whether the filter field had focus when the panel was last drawn, and
+/// whether a shortcut asked for it to be focused. Egui drops a field's focus on Escape before the
+/// shortcuts run, so the state from the previous frame is what tells Escape to clear the field.
+fn filter_focus_key() -> egui::Id {
+    egui::Id::new("changes_filter_focused")
+}
+
+fn filter_focus_request_key() -> egui::Id {
+    egui::Id::new("changes_filter_focus_request")
+}
+
+/// Whether the filter field had focus when the Changes panel was drawn in the previous pass. A
+/// panel that was not drawn then, because an inspector took its place, counts as unfocused.
+pub(crate) fn filter_had_focus(ctx: &egui::Context) -> bool {
+    let current = ctx.cumulative_pass_nr();
+    ctx.data(|data| data.get_temp::<(u64, bool)>(filter_focus_key())).is_some_and(|(pass, focused)| focused && pass + 1 >= current)
+}
+
+/// Asks the Changes panel to show the filter field and focus it on the next frame.
+pub(crate) fn request_filter_focus(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.insert_temp(filter_focus_request_key(), true));
+}
+
+/// Takes a pending request to focus the filter field.
+fn filter_focus_requested(ctx: &egui::Context) -> bool {
+    let requested = ctx.data(|data| data.get_temp::<bool>(filter_focus_request_key())).unwrap_or(false);
+    if requested {
+        ctx.data_mut(|data| data.insert_temp(filter_focus_request_key(), false));
+    }
+    requested
+}
 
 /// How many lines a file's change adds and removes, laid out from the right.
 pub(crate) fn line_count(ui: &mut Ui, count: LineCount) {
@@ -833,4 +914,64 @@ pub fn reveal(path: &std::path::Path) {
     let _ = std::process::Command::new("explorer").arg(format!("/select,{}", target.display())).spawn();
     #[cfg(all(not(test), unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(target.parent().unwrap_or(&target)).spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str) -> StatusEntry {
+        StatusEntry { path: path.into(), original_path: None, kind: StatusKind::Modified, index_status: ' ', work_tree_status: 'M' }
+    }
+
+    #[test]
+    fn filter_empty_matches_everything() {
+        assert!(matches_filter(&entry("src/app.rs"), ""));
+        assert!(matches_filter(&entry("src/app.rs"), "   "));
+    }
+
+    #[test]
+    fn filter_is_case_insensitive() {
+        assert!(matches_filter(&entry("docs/Guide.md"), "guide"));
+        assert!(matches_filter(&entry("docs/guide.md"), "GUIDE.MD"));
+        assert!(!matches_filter(&entry("docs/guide.md"), "readme"));
+    }
+
+    #[test]
+    fn filter_needs_every_term() {
+        let file = entry("src/app/test_utils.rs");
+        assert!(matches_filter(&file, "src test"));
+        assert!(matches_filter(&file, "  test   utils  "));
+        assert!(!matches_filter(&file, "src docs"));
+    }
+
+    #[test]
+    fn filter_matches_a_rename_by_its_original_path() {
+        let renamed = StatusEntry {
+            path: "lib/new_name.rs".into(),
+            original_path: Some("src/old_name.rs".into()),
+            kind: StatusKind::Renamed,
+            index_status: 'R',
+            work_tree_status: ' ',
+        };
+        assert!(matches_filter(&renamed, "old_name"));
+        assert!(matches_filter(&renamed, "lib old"), "terms can match the path and the original in turn");
+        assert!(!matches_filter(&renamed, "missing"));
+    }
+
+    #[test]
+    fn filter_matches_paths_with_spaces() {
+        let file = entry("notes/my file.txt");
+        assert!(matches_filter(&file, "my file"));
+        assert!(matches_filter(&file, "file.txt"));
+        assert!(!matches_filter(&file, "other"));
+    }
+
+    #[test]
+    fn filter_matches_unicode_ignoring_case() {
+        let file = entry("café/Ünïcode.txt");
+        assert!(matches_filter(&file, "ünï"));
+        assert!(matches_filter(&file, "ÜNÏCODE"));
+        assert!(matches_filter(&file, "CAFÉ"));
+    }
 }

@@ -905,6 +905,10 @@ impl NiceGitApp {
         self.settings.remember(PathBuf::from(&snapshot.root_path));
         let repo = &mut self.repos[index];
         repo.error = None;
+        // A filter narrows the files of one branch; a different branch starts with the full list.
+        if repo.snapshot.as_ref().is_some_and(|old| old.current_branch != snapshot.current_branch) {
+            repo.change_filter.clear();
+        }
         let dirty = !snapshot.status.is_empty();
         let colors = theme::GRAPH_COLOR_COUNT;
         repo.rows = if dirty {
@@ -950,6 +954,7 @@ impl NiceGitApp {
             repo.draft = self.settings.drafts.get(&key).cloned().unwrap_or_default();
             repo.draft_key = Some(key);
             repo.amend = false;
+            repo.change_filter.clear();
         }
         let reload_change = matches!(repo.selection, Selection::Change { .. }) && keep;
         if index == self.active {
@@ -1065,9 +1070,13 @@ impl NiceGitApp {
         let files: Vec<Selection> = match &repo.selection {
             Selection::Change { .. } => {
                 let status = &repo.snapshot.as_ref()?.status;
+                let filter = repo.change_filter.as_str();
                 let side = |staged: bool| {
-                    let mut entries: Vec<&StatusEntry> =
-                        status.iter().filter(|e| if staged { e.is_staged() } else { e.is_unstaged() }).collect();
+                    let mut entries: Vec<&StatusEntry> = status
+                        .iter()
+                        .filter(|e| if staged { e.is_staged() } else { e.is_unstaged() })
+                        .filter(|e| crate::ui::changes::matches_filter(e, filter))
+                        .collect();
                     entries.sort_by_key(|e| e.path.to_lowercase());
                     entries.into_iter().map(move |e| Selection::Change { entry: e.clone(), staged })
                 };

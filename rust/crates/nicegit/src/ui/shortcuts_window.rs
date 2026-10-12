@@ -19,6 +19,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 (with("Cmd-W"), "Close the open window, or else the repository tab"),
                 (with("Cmd-R"), "Refresh the repository"),
                 (with("Shift-Cmd-F"), "Search the history of every branch"),
+                (with("Shift-Cmd-L"), "Filter the changed files"),
                 (with("Alt-Cmd-F"), "Search file contents"),
                 ("Ctrl-`".to_string(), "Show or hide the terminal"),
                 (with("Cmd-,"), "Settings"),
