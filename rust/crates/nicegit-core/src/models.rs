@@ -128,6 +128,16 @@ pub struct Stash {
     pub message: String,
 }
 
+/// A file a stash saved, with Git's change letter for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StashFile {
+    /// Git's change letter: `M`, `A`, `D`, or `T`. An untracked file is `A`.
+    pub status: String,
+    pub path: String,
+    /// Saved as an untracked file, which the stash keeps under its third parent.
+    pub untracked: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Worktree {
     pub path: String,

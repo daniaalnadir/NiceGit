@@ -106,13 +106,14 @@ pub fn push_needs_pull(error: &str) -> bool {
     ["non-fast-forward", "fetch first", "tip of your current branch is behind"].iter().any(|sign| error.contains(sign))
 }
 
+/// What is selected. A commit or stash's `file` is the one file shown from it, or `None` for all.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Selection {
     None,
     WorkingTree,
     Change { entry: StatusEntry, staged: bool },
     Commit { hash: String, file: Option<String> },
-    Stash { hash: String },
+    Stash { hash: String, file: Option<String> },
 }
 
 /// An action that can be undone, with the words to describe it.
@@ -185,6 +186,8 @@ pub struct Repo {
     /// A commit marked for comparison with another.
     pub compare_base: Option<String>,
     pub commit_files: Vec<(String, String)>,
+    /// The files of the selected stash, with that stash's hash, once listed or when listing failed.
+    pub stash_files: Option<(String, Result<Vec<nicegit_core::StashFile>, String>)>,
     pub details: Option<Task<nicegit_core::Result<nicegit_core::client::CommitDetails>>>,
     pub diff: Option<DiffContent>,
     pub diff_loading: bool,
@@ -252,6 +255,7 @@ impl Repo {
             marked: BTreeSet::new(),
             compare_base: None,
             commit_files: Vec::new(),
+            stash_files: None,
             details: None,
             diff: None,
             diff_loading: false,
@@ -862,6 +866,13 @@ impl NiceGitApp {
                         Err(error) => self.notify(error.to_string(), true),
                     }
                 }
+                Message::StashFiles { path, hash, result } => {
+                    let Some(repo) = self.repos.iter_mut().find(|r| r.path == path) else { continue };
+                    if !matches!(&repo.selection, Selection::Stash { hash: h, .. } if *h == hash) {
+                        continue;
+                    }
+                    repo.stash_files = Some((hash, result.map_err(|error| error.to_string())));
+                }
             }
         }
     }
@@ -923,7 +934,7 @@ impl NiceGitApp {
                 snapshot.status.iter().any(|e| e == entry && (if *staged { e.is_staged() } else { e.is_unstaged() }))
             }
             Selection::Commit { hash, .. } => snapshot.commits.iter().any(|c| &c.hash == hash),
-            Selection::Stash { hash } => snapshot.stashes.iter().any(|s| &s.hash == hash),
+            Selection::Stash { hash, .. } => snapshot.stashes.iter().any(|s| &s.hash == hash),
         };
         repo.marked.retain(|hash| snapshot.commits.iter().any(|c| &c.hash == hash));
         // Each checkout keeps its own commit message draft.
@@ -1013,6 +1024,7 @@ impl NiceGitApp {
         repo.image_textures = None;
         repo.diff_options.selected.clear();
         repo.commit_files.clear();
+        repo.stash_files = None;
         repo.diff_generation = next_id();
         repo.diff_loading = false;
     }
@@ -1064,6 +1076,12 @@ impl NiceGitApp {
             Selection::Commit { hash, file: Some(_) } => {
                 repo.commit_files.iter().map(|(_, path)| Selection::Commit { hash: hash.clone(), file: Some(path.clone()) }).collect()
             }
+            Selection::Stash { hash, file: Some(_) } => match &repo.stash_files {
+                Some((listed, Ok(files))) if listed == hash => {
+                    files.iter().map(|file| Selection::Stash { hash: hash.clone(), file: Some(file.path.clone()) }).collect()
+                }
+                _ => return None,
+            },
             _ => return None,
         };
         let same = |candidate: &Selection| match (candidate, &repo.selection) {
@@ -1089,6 +1107,11 @@ impl NiceGitApp {
         match target {
             Selection::Change { entry, staged } => self.select_change(entry, staged),
             Selection::Commit { hash, file } => self.select_commit_file(hash, file),
+            Selection::Stash { hash, file } => {
+                if let Some(stash) = self.stash_for(&hash) {
+                    self.select_stash_file(stash, file);
+                }
+            }
             _ => {}
         }
     }
@@ -1129,6 +1152,11 @@ impl NiceGitApp {
     pub fn close_diff(&mut self) {
         match self.repo().map(|r| r.selection.clone()) {
             Some(Selection::Commit { hash, file: Some(_) }) => self.select_commit(hash),
+            Some(Selection::Stash { hash, file: Some(_) }) => {
+                if let Some(stash) = self.stash_for(&hash) {
+                    self.select_stash_file(stash, None);
+                }
+            }
             Some(Selection::Change { .. }) => self.select_working_tree(),
             _ => self.clear_selection(),
         }
@@ -1220,14 +1248,55 @@ impl NiceGitApp {
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), ignore_whitespace, &path));
     }
 
+    /// Selects a stash from the sidebar: its whole diff, with its files listed in the inspector.
     pub fn select_stash(&mut self, stash: Stash) {
+        // Listed afresh for each stash chosen here, so a listing that failed is tried again.
+        if let Some(repo) = self.repo_mut() {
+            repo.stash_files = None;
+        }
+        self.select_stash_file(stash, None);
+    }
+
+    /// Shows a stash's whole diff, or one of its files, listing the files if they are not yet known.
+    pub fn select_stash_file(&mut self, stash: Stash, file: Option<String>) {
+        let ignore_whitespace = self.settings.ignore_whitespace;
+        // A file's diff depends on whether it is untracked, so its listed entry is needed.
+        let entry = match &file {
+            None => None,
+            Some(name) => {
+                let listed = self.repo().and_then(|r| match &r.stash_files {
+                    Some((hash, Ok(files))) if *hash == stash.hash => files.iter().find(|f| &f.path == name).cloned(),
+                    _ => None,
+                });
+                let Some(entry) = listed else {
+                    self.notify("That file is not listed for this stash. Select the stash again.", true);
+                    return;
+                };
+                Some(entry)
+            }
+        };
         let Some((generation, path)) = self.start_diff() else { return };
         let repo = self.repo_mut().expect("active repository");
         repo.commit_files.clear();
         repo.details = None;
-        repo.selection = Selection::Stash { hash: stash.hash.clone() };
-        let title = format!("{} · {}", stash.reference, stash.message);
-        self.worker.diff(generation, title, move |client| client.stash_diff(&stash, &path));
+        repo.selection = Selection::Stash { hash: stash.hash.clone(), file: file.clone() };
+        let listing = !matches!(&repo.stash_files, Some((hash, _)) if *hash == stash.hash);
+        if listing {
+            self.worker.stash_files(path.clone(), stash.clone());
+        }
+        let title = match &file {
+            Some(name) => name.clone(),
+            None => format!("{} · {}", stash.reference, stash.message),
+        };
+        self.worker.diff(generation, title, move |client| match entry {
+            Some(entry) => client.stash_file_diff(&stash, &entry, ignore_whitespace, &path),
+            None => client.stash_diff_with(&stash, ignore_whitespace, &path),
+        });
+    }
+
+    /// The stash with this hash, as the latest refresh listed it.
+    fn stash_for(&self, hash: &str) -> Option<Stash> {
+        self.snapshot()?.stashes.iter().find(|stash| stash.hash == hash).cloned()
     }
 
     /// Reloads whatever diff is showing, for example after a diff option changes.
@@ -1236,6 +1305,11 @@ impl NiceGitApp {
         match repo.selection.clone() {
             Selection::Change { entry, staged } => self.select_change(entry, staged),
             Selection::Commit { hash, file } => self.select_commit_file(hash, file),
+            Selection::Stash { hash, file } => {
+                if let Some(stash) = self.stash_for(&hash) {
+                    self.select_stash_file(stash, file);
+                }
+            }
             _ => {}
         }
     }

@@ -1036,6 +1036,58 @@ impl GitClient {
         self.run(&args, directory)
     }
 
+    /// The files a stash saved, sorted by path: its tracked changes against the commit it was
+    /// made on, then its untracked files from the third parent. Renames are not detected, as
+    /// in a commit's file list, so each path is listed once.
+    pub fn stash_files(&self, stash: &Stash, directory: &Path) -> Result<Vec<StashFile>> {
+        let commit = self.resolve_commit(&stash.hash, directory)?;
+        let parent = self.resolve_commit(&format!("{commit}^1"), directory)?;
+        let tracked = self.run(&["diff", "--name-status", "-z", "--no-renames", &parent, &commit, "--"], directory)?;
+        let mut files: Vec<StashFile> =
+            parse_name_status(&tracked).into_iter().map(|(status, path)| StashFile { status, path, untracked: false }).collect();
+        if let Some(untracked) = self.stash_untracked_commit(&commit, directory) {
+            let listing = self.run(&["ls-tree", "-r", "-z", "--full-tree", "--name-only", &untracked], directory)?;
+            files.extend(listing.split('\0').filter(|path| !path.is_empty()).map(|path| StashFile {
+                status: "A".to_string(),
+                path: path.to_string(),
+                untracked: true,
+            }));
+        }
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(files)
+    }
+
+    /// The commit holding a stash's untracked files, when the stash saved any.
+    fn stash_untracked_commit(&self, commit: &str, directory: &Path) -> Option<String> {
+        self.try_trimmed(&["rev-parse", "--verify", "--quiet", &format!("{commit}^3")], directory)
+    }
+
+    /// The patch for one file a stash saved. A tracked file is compared with the commit the
+    /// stash was made on; an untracked file appears entirely as added lines.
+    pub fn stash_file_diff(&self, stash: &Stash, file: &StashFile, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+        let commit = self.resolve_commit(&stash.hash, directory)?;
+        let (before, after) = if file.untracked {
+            let untracked = self
+                .stash_untracked_commit(&commit, directory)
+                .ok_or_else(|| GitError::failed("stash diff", "This stash has no untracked files. Refresh the repository."))?;
+            (self.empty_tree(directory)?, untracked)
+        } else {
+            (self.resolve_commit(&format!("{commit}^1"), directory)?, commit)
+        };
+        let mut arguments = vec!["diff", "--no-ext-diff", "--no-color"];
+        if ignore_whitespace {
+            arguments.push("--ignore-all-space");
+        }
+        // The runner passes literal pathspecs to `diff`, so a glob-like name matches only itself.
+        arguments.extend([before.as_str(), after.as_str(), "--", file.path.as_str()]);
+        self.run(&arguments, directory)
+    }
+
+    /// The object ID of the empty tree in this repository's format. Git writes it from empty input.
+    fn empty_tree(&self, directory: &Path) -> Result<String> {
+        self.run_trimmed(&["mktree"], directory)
+    }
+
     // MARK: Patches
 
     /// Applies a patch file to the working files, checking it applies cleanly first. Both

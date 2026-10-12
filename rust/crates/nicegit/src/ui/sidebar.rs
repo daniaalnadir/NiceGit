@@ -310,7 +310,7 @@ impl NiceGitApp {
                 }
             });
             for stash in &snapshot.stashes {
-                let selected = matches!(self.repo().map(|r| &r.selection), Some(Selection::Stash { hash }) if *hash == stash.hash);
+                let selected = matches!(self.repo().map(|r| &r.selection), Some(Selection::Stash { hash, .. }) if *hash == stash.hash);
                 let response =
                     row(ui, icon::ARCHIVE_BOX, c.muted, RichText::new(&stash.message), None, selected).on_hover_text(&stash.reference);
                 if response.clicked() {

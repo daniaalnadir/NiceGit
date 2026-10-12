@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use crate::client::GitClient;
-use crate::models::{GitError, Result};
+use crate::models::{GitError, Result, Stash};
 
 /// The metadata before the tab of each NUL-terminated record whose path is exactly `path`.
 /// Git lists metadata first and the path after the first tab; the path itself may contain tabs.
@@ -95,6 +95,23 @@ impl GitClient {
             ));
         }
         Ok(())
+    }
+
+    /// Restores one path to its version in a stash: the stash's own tree for a tracked file, or
+    /// its untracked-files commit for an untracked one. The stash must still be listed, with the
+    /// hash that was shown, before anything changes; the other checks are those of `restore`.
+    pub fn restore_from_stash(
+        &self,
+        path: &str,
+        stash: &Stash,
+        untracked: bool,
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        directory: &Path,
+    ) -> Result<()> {
+        let listed = self.require_listed_stash(stash, "restore file", directory)?;
+        let source = if untracked { format!("{}^3", listed.hash) } else { listed.hash };
+        self.restore(path, &source, expected_branch, expected_head, directory)
     }
 }
 

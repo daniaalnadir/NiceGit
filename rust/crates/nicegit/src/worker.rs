@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use nicegit_core::diff::{parse_diff, DiffLine};
-use nicegit_core::{GitClient, GitError, Snapshot};
+use nicegit_core::{GitClient, GitError, Snapshot, Stash, StashFile};
 
 /// What a background action reports when it finishes.
 pub type ActionResult = Result<Option<String>, GitError>;
@@ -25,6 +25,13 @@ pub enum Message {
         generation: u64,
         hash: String,
         result: Result<Vec<(String, String)>, GitError>,
+    },
+    /// A stash's files. Matched by repository and stash rather than generation, so a diff that
+    /// starts meanwhile does not discard the list.
+    StashFiles {
+        path: PathBuf,
+        hash: String,
+        result: Result<Vec<StashFile>, GitError>,
     },
 }
 
@@ -86,6 +93,13 @@ impl Worker {
         self.spawn(move || {
             let result = GitClient::new().commit_files(&hash, &path);
             Message::CommitFiles { generation, hash, result }
+        });
+    }
+
+    pub fn stash_files(&self, path: PathBuf, stash: Stash) {
+        self.spawn(move || {
+            let result = GitClient::new().stash_files(&stash, &path);
+            Message::StashFiles { path, hash: stash.hash, result }
         });
     }
 }

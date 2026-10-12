@@ -21,6 +21,9 @@
 - The New tag dialog can push the tag to a remote as soon as it is created.
 - An Add trailers menu in the commit box adds Signed-off-by and Co-authored-by lines,
   choosing co-authors from recent history.
+- Selecting a stash lists its files in the inspector; click one to see just its changes, or
+  restore it from the stash.
+- Ignore whitespace now applies to stash diffs too.
 
 ## 1.5.0 - Fewer surprises
 

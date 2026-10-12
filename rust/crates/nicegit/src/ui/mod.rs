@@ -206,7 +206,7 @@ impl NiceGitApp {
                 .size_range(260.0..=640.0_f32.min(width * 0.4).max(260.0))
                 .frame(panel)
                 .show(ui, |ui| {
-                    if matches!(self.repo().map(|r| &r.selection), Some(Selection::Commit { .. })) {
+                    if matches!(self.repo().map(|r| &r.selection), Some(Selection::Commit { .. } | Selection::Stash { .. })) {
                         self.inspector(ui);
                     } else {
                         self.changes_panel(ui);

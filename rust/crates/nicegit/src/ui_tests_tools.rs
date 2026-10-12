@@ -332,3 +332,104 @@ fn create_lightweight_and_annotated_tags_from_the_graph() {
     assert_eq!(git(path, &["cat-file", "-t", "refs/tags/v1.0"]), "tag", "v1.0 is annotated");
     assert_eq!(git(path, &["tag", "-l", "--format=%(contents:subject)", "v1.0"]), "First release");
 }
+
+/// How many files the selected stash's listing has, or zero while it loads.
+fn stash_files_listed(harness: &App) -> usize {
+    match harness.state().repo().map(|r| r.stash_files.clone()) {
+        Some(Some((_, Ok(files)))) => files.len(),
+        _ => 0,
+    }
+}
+
+/// Whether the open diff has a line containing `text`.
+fn diff_shows(harness: &App, text: &str) -> bool {
+    harness.state().repo().and_then(|r| r.diff.as_ref()).is_some_and(|diff| diff.lines.iter().any(|line| line.text.contains(text)))
+}
+
+#[test]
+fn selecting_a_stash_lists_its_files() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "other\n", "Add the other file", None);
+    std::fs::write(path.join("other.txt"), "changed other\n").unwrap();
+    std::fs::write(path.join("notes.txt"), "stashed notes\n").unwrap();
+    std::fs::write(path.join("scratch.txt"), "untracked\n").unwrap();
+    git(path, &["stash", "push", "-u", "-q", "-m", "Mixed work"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Mixed work").click();
+    wait(&mut harness, "the stash's files", |h| stash_files_listed(h) == 3);
+    settle(&mut harness);
+    assert!(shows(&harness, "notes.txt") && shows(&harness, "other.txt"), "the tracked files are listed");
+    assert!(shows(&harness, "scratch.txt"), "the untracked file is listed");
+    assert!(shows(&harness, "untracked"), "the untracked file is marked");
+    assert!(
+        harness.state().repo().is_some_and(|r| matches!(&r.selection, Selection::Stash { file: None, .. })),
+        "the whole stash is selected"
+    );
+}
+
+#[test]
+fn clicking_a_stash_file_shows_its_diff() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "other\n", "Add the other file", None);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstashed notes\n").unwrap();
+    std::fs::write(path.join("other.txt"), "other\nstashed other\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Two files"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Two files").click();
+    wait(&mut harness, "the stash's files", |h| stash_files_listed(h) == 2);
+    wait(&mut harness, "the whole stash's diff", |h| diff_shows(h, "stashed notes") && diff_shows(h, "stashed other"));
+    settle(&mut harness);
+
+    harness
+        .query_all(egui_kittest::kittest::By::new().role(egui::accesskit::Role::Button).label("other.txt"))
+        .next()
+        .expect("the file's row")
+        .click();
+    wait(&mut harness, "the other file's diff", |h| diff_shows(h, "stashed other") && !diff_shows(h, "stashed notes"));
+    assert!(
+        harness.state().repo().is_some_and(|r| matches!(&r.selection, Selection::Stash { file: Some(f), .. } if f == "other.txt")),
+        "the file is selected"
+    );
+
+    harness.get_by_label_contains("Show all changes").click();
+    wait(&mut harness, "the whole stash's diff again", |h| diff_shows(h, "stashed notes") && diff_shows(h, "stashed other"));
+}
+
+#[test]
+fn restore_a_file_from_a_stash_through_the_inspector() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "other\n", "Add the other file", None);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstashed notes\n").unwrap();
+    std::fs::write(path.join("other.txt"), "other\nstashed other\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Two files"]);
+    // Other work that the restore must leave alone.
+    std::fs::write(path.join("other.txt"), "other work\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Two files").click();
+    wait(&mut harness, "the stash's files", |h| stash_files_listed(h) == 2);
+    settle(&mut harness);
+    harness
+        .query_all(egui_kittest::kittest::By::new().role(egui::accesskit::Role::Button).label("notes.txt"))
+        .next()
+        .expect("the file's row")
+        .click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Restore this file from the stash").click();
+    wait(&mut harness, "the restore confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Restore").last().expect("confirm button").click();
+    idle(&mut harness);
+
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nstashed notes\n", "the working file is restored");
+    assert_eq!(git(path, &["show", ":notes.txt"]), "first\nsecond\nstashed notes", "the staged version is restored");
+    assert_eq!(std::fs::read_to_string(path.join("other.txt")).unwrap(), "other work\n", "other work is untouched");
+    assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "the stash is kept");
+}

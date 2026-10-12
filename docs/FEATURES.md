@@ -127,7 +127,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Refresh repository state when returning to the app, unless an operation or review dialog is active.
 - Save, apply, pop, and delete stashes, including untracked files. Pop removes the
   saved stash only after applying succeeds; failed applies retain it.
-- Preview a stash's tracked and untracked changes before applying it.
+- Preview a stash's tracked and untracked changes before applying it. Selecting a stash lists
+  its files in the inspector; click one to see just its changes, or restore that file from the
+  stash.
 - Merge or rebase from branch context menus; cherry-pick from commit context menus.
 - Continue or abort interrupted operations after resolving and staging conflicts.
 - Edit UTF-8 text conflicts in-app, with marker checks and external-edit protection.

@@ -280,6 +280,23 @@ pub fn parse_stashes(output: &str) -> Vec<Stash> {
         .collect()
 }
 
+/// Parses `--name-status -z` output into (change letter, path) pairs. Fields are split on NUL
+/// only, since a path can contain a newline, and each pair is a letter followed by one path.
+pub fn parse_name_status(output: &str) -> Vec<(String, String)> {
+    let mut fields = output.split('\0');
+    let mut pairs = Vec::new();
+    while let Some(status) = fields.next() {
+        if status.is_empty() {
+            continue;
+        }
+        let Some(path) = fields.next() else { break };
+        if !path.is_empty() {
+            pairs.push((status.to_string(), path.to_string()));
+        }
+    }
+    pairs
+}
+
 pub fn parse_worktrees(output: &str) -> Vec<Worktree> {
     let mut result = Vec::new();
     let mut current: Option<Worktree> = None;
