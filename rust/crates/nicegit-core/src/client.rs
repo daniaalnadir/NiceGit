@@ -1334,6 +1334,83 @@ impl GitClient {
         Ok(patch)
     }
 
+    /// The staged changes (`staged`) or the unstaged changes to tracked files as a patch that
+    /// `git apply` accepts, with binary changes, for saving uncommitted work. `paths`, when given,
+    /// limits it to those files; a renamed file's source path must be listed with its new path.
+    /// Untracked files are included as new files only for unstaged changes and `include_untracked`.
+    /// Folders, including nested repositories and links to folders, have no file contents to save
+    /// and are skipped. Conflicted files are refused, since their diffs cannot be applied.
+    pub fn working_changes_patch(
+        &self,
+        staged: bool,
+        paths: Option<&[String]>,
+        include_untracked: bool,
+        directory: &Path,
+    ) -> Result<String> {
+        const NOTHING: &str = "There are no changes to save.";
+        // An empty list would otherwise mean every file, so it is refused rather than run.
+        if paths.is_some_and(<[String]>::is_empty) {
+            return Err(GitError::failed("save patch", NOTHING));
+        }
+        let status = self.load_status(directory)?;
+        let selected: Vec<&StatusEntry> = status.iter().filter(|entry| paths.is_none_or(|paths| paths.contains(&entry.path))).collect();
+        if selected.iter().any(|entry| entry.kind == StatusKind::Conflicted) {
+            return Err(GitError::failed("save patch", "Resolve conflicts before saving changes as a patch."));
+        }
+        // The prefixes are explicit, so `diff.noprefix` cannot produce a patch that `git apply` rejects.
+        let mut arguments = vec![
+            "diff",
+            "--binary",
+            "--full-index",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-color",
+            "--no-renames",
+            "--submodule=short",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+        ];
+        if staged {
+            arguments.push("--cached");
+        }
+        if let Some(paths) = paths {
+            arguments.push("--");
+            arguments.extend(paths.iter().map(String::as_str));
+        }
+        let mut patch = self.run(&arguments, directory)?;
+        if include_untracked && !staged {
+            for entry in selected.iter().filter(|entry| entry.kind == StatusKind::Untracked) {
+                // `is_dir` follows links, so a link to a folder is skipped as well.
+                if directory.join(&entry.path).is_dir() {
+                    continue;
+                }
+                // Git exits with 1 when the files differ, which is the normal case here.
+                patch.push_str(&self.run_accepting(
+                    &[
+                        "diff",
+                        "--binary",
+                        "--full-index",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--no-color",
+                        "--src-prefix=a/",
+                        "--dst-prefix=b/",
+                        "--no-index",
+                        "--",
+                        "/dev/null",
+                        &entry.path,
+                    ],
+                    directory,
+                    &[0, 1],
+                )?);
+            }
+        }
+        if patch.is_empty() {
+            return Err(GitError::failed("save patch", NOTHING));
+        }
+        Ok(patch)
+    }
+
     /// Writes the files of `commit` to `destination` as a ZIP archive, inside a top folder named
     /// `prefix`, as `git archive` makes it. Nothing in the repository changes.
     ///

@@ -433,3 +433,31 @@ fn restore_a_file_from_a_stash_through_the_inspector() {
     assert_eq!(std::fs::read_to_string(path.join("other.txt")).unwrap(), "other work\n", "other work is untouched");
     assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "the stash is kept");
 }
+
+#[test]
+fn save_unstaged_changes_as_a_patch() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\n").unwrap();
+    std::fs::write(path.join("new.txt"), "untracked\n").unwrap();
+    let saved_folder = temp_dir();
+    let saved = saved_folder.path().join("saved.patch");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    crate::file_dialog::answer_next(&saved);
+    settle(&mut harness);
+    harness.get_by_label_contains("Save unstaged changes as a patch").click();
+    wait(&mut harness, "the patch file", |_| saved.exists());
+
+    let patch = std::fs::read_to_string(&saved).unwrap();
+    assert!(patch.contains("diff --git"), "the file is a patch");
+    assert!(patch.contains("diff --git a/notes.txt b/notes.txt"), "the tracked change is saved");
+    assert!(patch.contains("diff --git a/new.txt b/new.txt"), "the untracked file is saved too");
+    // A clean checkout of HEAD takes the patch, as it would in another place.
+    let elsewhere = temp_dir();
+    git(elsewhere.path(), &["clone", "-q", &path.display().to_string(), "copy"]);
+    let copy = elsewhere.path().join("copy");
+    git(&copy, &["apply", "--check", &saved.display().to_string()]);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nthird\n", "saving leaves the change in place");
+}
