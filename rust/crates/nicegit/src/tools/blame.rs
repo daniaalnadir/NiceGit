@@ -33,32 +33,77 @@ struct Selected {
     diff: Task<nicegit_core::Result<DiffContent>>,
 }
 
+/// An earlier view to return to: its revision, its path, and the line to scroll to.
+type View = (Option<String>, String, usize);
+
 /// Blame for a file in the working copy, or at a revision.
 pub struct BlameWindow {
     path: String,
     revision: Option<String>,
+    /// The window's identity, fixed when it opens, so stepping through history keeps the window.
+    identity: String,
     ignore_whitespace: bool,
     /// A one-based line to highlight and scroll to, such as a content search match.
     focus_line: Option<usize>,
     /// Scrolls to the focus line on the first frame that shows the lines.
     focus_pending: bool,
+    /// A one-based line to scroll to once a view's lines arrive.
+    scroll_line: Option<usize>,
+    /// The views that "Blame before this change" stepped back from, newest last.
+    history: Vec<View>,
     lines: Option<Task<nicegit_core::Result<Vec<BlameLine>>>>,
+    /// The summary of the revision's commit, shown beside its hash.
+    summary: Option<Task<nicegit_core::Result<String>>>,
     /// Each commit's age tint, from 0 (oldest) to 1 (newest), computed once the lines arrive.
     ages: Option<HashMap<String, f32>>,
     selected: Option<Selected>,
     split: bool,
 }
 
+/// What a line's context menu asked for. The window applies it once the rows are painted.
+enum Choice {
+    /// Blame `path` at `revision`, the commit before the clicked line's change.
+    BlameBefore {
+        revision: String,
+        path: String,
+        line: usize,
+    },
+    /// Blame `path` at HEAD, for a line that is not committed yet.
+    BlameAtHead {
+        path: String,
+        line: usize,
+    },
+    ShowCommit(String),
+    CopyCommit(String),
+}
+
+/// The blamed lines and how they are drawn.
+struct Rows<'a> {
+    lines: &'a [BlameLine],
+    ages: &'a HashMap<String, f32>,
+    selected: Option<&'a str>,
+    highlight: Option<usize>,
+    scroll_row: Option<usize>,
+    /// The path the lines were blamed at, used when a line's own path is empty.
+    path: &'a str,
+    repo: &'a Path,
+}
+
 impl BlameWindow {
     /// Blame for `path` at `revision`, or in the working file when `revision` is `None`.
     pub fn new(path: String, revision: Option<String>) -> Self {
+        let identity = format!("blame\0{}\0{}", path, revision.as_deref().unwrap_or(""));
         Self {
             path,
             revision,
+            identity,
             ignore_whitespace: false,
             focus_line: None,
             focus_pending: false,
+            scroll_line: None,
+            history: Vec::new(),
             lines: None,
+            summary: None,
             ages: None,
             selected: None,
             split: false,
@@ -77,14 +122,50 @@ impl BlameWindow {
         let revision = self.revision.clone();
         let ignore_whitespace = self.ignore_whitespace;
         self.lines = Some(query(ctx, repo, move |git, directory| git.blame(&path, revision.as_deref(), ignore_whitespace, directory)));
+        self.summary = self.revision.clone().map(|revision| {
+            query(ctx, repo, move |git, directory| {
+                Ok(git.commit_message(&revision, directory)?.lines().next().unwrap_or_default().to_string())
+            })
+        });
         self.ages = None;
     }
 
-    fn header(&mut self, ui: &mut Ui, reload: &mut bool) {
+    /// Blames `path` at `revision`, after pushing the current view so Back can return to it.
+    /// `line` is the clicked line; Back scrolls to it, and the new view starts there.
+    fn step_into(&mut self, ctx: &egui::Context, repo: &Path, revision: Option<String>, path: String, line: usize) {
+        let previous_revision = std::mem::replace(&mut self.revision, revision);
+        let previous_path = std::mem::replace(&mut self.path, path);
+        self.history.push((previous_revision, previous_path, line));
+        self.show_view(ctx, repo, line);
+    }
+
+    fn step_back(&mut self, ctx: &egui::Context, repo: &Path) {
+        let Some((revision, path, line)) = self.history.pop() else { return };
+        self.revision = revision;
+        self.path = path;
+        self.show_view(ctx, repo, line);
+    }
+
+    /// Loads the current revision and path, and clears what the replaced view showed.
+    fn show_view(&mut self, ctx: &egui::Context, repo: &Path, line: usize) {
+        self.reload(ctx, repo);
+        self.selected = None;
+        self.focus_line = None;
+        self.focus_pending = false;
+        self.scroll_line = Some(line);
+    }
+
+    fn header(&mut self, ui: &mut Ui, reload: &mut bool, back: &mut bool) {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
+            if widgets::icon_button(ui, icon::ARROW_LEFT, "Back to the newer blame", !self.history.is_empty()).clicked() {
+                *back = true;
+            }
             let scope = match &self.revision {
-                Some(revision) => format!("at {}", short_revision(revision)),
+                Some(revision) => match self.summary.as_mut().and_then(|task| task.get()) {
+                    Some(Ok(summary)) if !summary.is_empty() => format!("at {} ({summary})", short_revision(revision)),
+                    _ => format!("at {}", short_revision(revision)),
+                },
                 None => "working file".to_string(),
             };
             ui.vertical(|ui| {
@@ -104,7 +185,7 @@ impl BlameWindow {
 
 impl ToolWindow for BlameWindow {
     fn id(&self) -> String {
-        format!("blame\0{}\0{}", self.path, self.revision.as_deref().unwrap_or(""))
+        self.identity.clone()
     }
 
     fn title(&self) -> String {
@@ -120,14 +201,17 @@ impl ToolWindow for BlameWindow {
             self.reload(ui.ctx(), cx.repo);
         }
         let mut reload = false;
-        self.header(ui, &mut reload);
-        if reload {
+        let mut back = false;
+        self.header(ui, &mut reload, &mut back);
+        if back {
+            self.step_back(ui.ctx(), cx.repo);
+        } else if reload {
             self.reload(ui.ctx(), cx.repo);
         }
         ui.add_space(6.0);
         ui.separator();
 
-        let Self { path, lines, ages, selected, split, focus_line, focus_pending, .. } = self;
+        let Self { path, lines, ages, selected, split, focus_line, focus_pending, scroll_line, .. } = self;
         // A change to the whitespace or context setting reloads the commit's diff.
         let request = cx.diff_request();
         if let Some(current) = selected.as_mut().filter(|current| current.request != request) {
@@ -153,17 +237,23 @@ impl ToolWindow for BlameWindow {
         let ages = ages.get_or_insert_with(|| age_ranks(lines));
 
         let highlight = *focus_line;
-        let scroll_row = if *focus_pending { highlight.and_then(|line| lines.iter().position(|item| item.number == line)) } else { None };
+        let scroll_row = match scroll_line.take() {
+            Some(line) => Some(line.saturating_sub(1).min(lines.len() - 1)),
+            None if *focus_pending => highlight.and_then(|line| lines.iter().position(|item| item.number == line)),
+            None => None,
+        };
         let selected_hash = selected.as_ref().map(|selection| selection.hash.clone());
+        let rows = Rows { lines, ages, selected: selected_hash.as_deref(), highlight, scroll_row, path: path.as_str(), repo: cx.repo };
         let mut clicked = None;
+        let mut choice = None;
         let mut close = false;
         if let Some(selection) = selected.as_mut() {
             ui.columns(2, |columns| {
-                clicked = blame_rows(&mut columns[0], lines, ages, selected_hash.as_deref(), highlight, scroll_row);
+                clicked = blame_rows(&mut columns[0], &rows, &mut choice);
                 close = diff_pane(&mut columns[1], selection, split);
             });
         } else {
-            clicked = blame_rows(ui, lines, ages, None, highlight, scroll_row);
+            clicked = blame_rows(ui, &rows, &mut choice);
         }
         *focus_pending = false;
         if close {
@@ -185,6 +275,14 @@ impl ToolWindow for BlameWindow {
                     });
                 }
             }
+        }
+
+        match choice {
+            Some(Choice::BlameBefore { revision, path: file, line }) => self.step_into(ui.ctx(), cx.repo, Some(revision), file, line),
+            Some(Choice::BlameAtHead { path: file, line }) => self.step_into(ui.ctx(), cx.repo, Some("HEAD".to_string()), file, line),
+            Some(Choice::ShowCommit(hash)) => cx.select_commit(hash),
+            Some(Choice::CopyCommit(hash)) => ui.ctx().copy_text(hash),
+            None => {}
         }
     }
 
@@ -231,26 +329,19 @@ fn age_ranks(lines: &[BlameLine]) -> HashMap<String, f32> {
 }
 
 /// Paints the blame list, one row per line, and returns the index of a row clicked this frame.
-fn blame_rows(
-    ui: &mut Ui,
-    lines: &[BlameLine],
-    ages: &HashMap<String, f32>,
-    selected: Option<&str>,
-    highlight: Option<usize>,
-    scroll_row: Option<usize>,
-) -> Option<usize> {
+fn blame_rows(ui: &mut Ui, rows: &Rows, choice: &mut Option<Choice>) -> Option<usize> {
     let row_height = ui.text_style_height(&TextStyle::Monospace) + 6.0;
     let mut area = egui::ScrollArea::vertical().auto_shrink([false, false]);
-    if let Some(row) = scroll_row {
+    if let Some(row) = rows.scroll_row {
         // Keep the target a third of the way down, so the lines around it stay in view.
         let offset = (row as f32 * row_height - ui.available_height() / 3.0).max(0.0);
         area = area.vertical_scroll_offset(offset);
     }
     let mut clicked = None;
-    area.show_rows(ui, row_height, lines.len(), |ui, range| {
+    area.show_rows(ui, row_height, rows.lines.len(), |ui, range| {
         for index in range {
-            let focus = highlight == Some(lines[index].number);
-            if paint_row(ui, lines, index, ages, selected, focus, row_height) {
+            let focus = rows.highlight == Some(rows.lines[index].number);
+            if paint_row(ui, rows, index, choice, focus, row_height) {
                 clicked = Some(index);
             }
         }
@@ -258,26 +349,19 @@ fn blame_rows(
     clicked
 }
 
-/// Paints one line with its gutter, and reports whether it was clicked.
-fn paint_row(
-    ui: &mut Ui,
-    lines: &[BlameLine],
-    index: usize,
-    ages: &HashMap<String, f32>,
-    selected: Option<&str>,
-    focus: bool,
-    row_height: f32,
-) -> bool {
+/// Paints one line with its gutter, and reports whether it was clicked. Its context menu writes
+/// the choice it made into `choice`.
+fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>, focus: bool, row_height: f32) -> bool {
     let c = theme::of(ui);
-    let line = &lines[index];
+    let line = &rows.lines[index];
     let commit = &line.commit;
     let uncommitted = commit.is_uncommitted();
     let accent = if uncommitted { c.conflict } else { c.accent };
-    let strength = if uncommitted { 0.9 } else { 0.2 + 0.7 * ages.get(&commit.hash).copied().unwrap_or(0.5) };
+    let strength = if uncommitted { 0.9 } else { 0.2 + 0.7 * rows.ages.get(&commit.hash).copied().unwrap_or(0.5) };
 
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), Sense::click());
     let painter = ui.painter_at(rect);
-    if selected == Some(commit.hash.as_str()) {
+    if rows.selected == Some(commit.hash.as_str()) {
         painter.rect_filled(rect, 0.0, tint(accent, 0.16));
     } else if response.hovered() {
         painter.rect_filled(rect, 0.0, tint(accent, 0.07));
@@ -289,7 +373,7 @@ fn paint_row(
 
     let middle = rect.center().y;
     let text_color = ui.visuals().text_color();
-    let starts_group = index == 0 || lines[index - 1].commit.hash != commit.hash;
+    let starts_group = index == 0 || rows.lines[index - 1].commit.hash != commit.hash;
     if starts_group {
         if index > 0 {
             painter.hline(rect.x_range(), rect.top(), Stroke::new(1.0, c.border));
@@ -331,7 +415,44 @@ fn paint_row(
         format!("{}\n{} <{}> · {}", commit.summary, commit.author_name, commit.author_email, commit.short_hash())
     };
     let cursor = if uncommitted { CursorIcon::Default } else { CursorIcon::PointingHand };
-    response.on_hover_cursor(cursor).on_hover_text(tooltip);
+    let response = response.on_hover_cursor(cursor).on_hover_text(tooltip);
+    let line_number = line.number;
+    response.context_menu(|ui| {
+        if uncommitted {
+            if ui.button("Blame at HEAD").clicked() {
+                *choice = Some(Choice::BlameAtHead { path: rows.path.to_string(), line: line_number });
+                ui.close();
+            }
+            ui.add_enabled(false, egui::Button::new("Show commit in history")).on_disabled_hover_text("Not committed yet");
+            ui.add_enabled(false, egui::Button::new("Copy commit ID")).on_disabled_hover_text("Not committed yet");
+            return;
+        }
+        // Git names the version these lines came from, with the file's path there, which
+        // follows a rename made in this very commit.
+        let before = match &commit.previous {
+            Some((revision, path)) => Ok((revision.clone(), path.clone())),
+            None => Err("This commit has no earlier version of the file".to_string()),
+        };
+        match before {
+            Ok((revision, path)) => {
+                if ui.button("Blame before this change").clicked() {
+                    *choice = Some(Choice::BlameBefore { revision, path, line: line_number });
+                    ui.close();
+                }
+            }
+            Err(reason) => {
+                ui.add_enabled(false, egui::Button::new("Blame before this change")).on_disabled_hover_text(reason);
+            }
+        }
+        if ui.button("Show commit in history").clicked() {
+            *choice = Some(Choice::ShowCommit(commit.hash.clone()));
+            ui.close();
+        }
+        if ui.button("Copy commit ID").clicked() {
+            *choice = Some(Choice::CopyCommit(commit.hash.clone()));
+            ui.close();
+        }
+    });
     clicked
 }
 
@@ -409,6 +530,7 @@ mod tests {
                 author_time: Some(time),
                 summary: String::new(),
                 path: String::new(),
+                previous: None,
             },
         }
     }
