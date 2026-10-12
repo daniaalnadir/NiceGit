@@ -1473,10 +1473,12 @@ fn drag_a_graph_label_onto_the_current_row_to_rebase_onto_it() {
 }
 
 /// Moves the pointer down the diff until a run of changed lines shows `button`, as a person
-/// hovering the change would.
+/// hovering the change would. The sweep starts once the lines are stageable and the layout has
+/// settled, and it reads the find field's position at each step.
 fn hover_change_until(harness: &mut App, button: &str) {
-    let field = harness.get_by_label("Find in diff").rect();
+    wait_for_stageable_lines(harness);
     for step in 0..120 {
+        let field = harness.get_by_label("Find in diff").rect();
         harness.hover_at(egui::pos2(field.center().x + 120.0, field.bottom() + 8.0 + step as f32 * 5.0));
         harness.run_steps(2);
         if harness.query_by_label(button).is_some() {
@@ -1497,7 +1499,7 @@ fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_un
     let mut harness = open(path);
     loaded(&mut harness);
     harness.get_by_label("long.txt").click();
-    wait(&mut harness, "lines to be stageable", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
+    wait_for_stageable_lines(&mut harness);
 
     // Stage the first change alone.
     hover_change_until(&mut harness, "Stage this change");
@@ -1509,7 +1511,6 @@ fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_un
     assert_eq!(std::fs::read_to_string(path.join("long.txt")).unwrap(), edited, "staging leaves the file as it was");
 
     // Discard the other change after confirming, then undo the discard.
-    wait(&mut harness, "lines to be stageable", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
     hover_change_until(&mut harness, "Discard this change");
     harness.get_by_label("Discard this change").click();
     wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
@@ -1521,6 +1522,56 @@ fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_un
     harness.get_by_label_contains("Undo discard").click();
     idle(&mut harness);
     wait(&mut harness, "the change restored", |_| std::fs::read_to_string(path.join("long.txt")).unwrap() == edited);
+}
+
+/// Waits until the open change's lines can be staged: its diff and review have both loaded for
+/// the diff now shown, and the find field has stopped moving, so the layout is settled.
+fn wait_for_stageable_lines(harness: &mut App) {
+    wait(harness, "lines to be stageable", |h| {
+        h.state().repo().is_some_and(|r| r.diff_options.selectable && !r.diff_loading && !r.review_loading)
+    });
+    let last = std::cell::Cell::new(None::<egui::Rect>);
+    let still = std::cell::Cell::new(0u32);
+    wait(harness, "the diff's layout to settle", |h| {
+        let now = h.query_by_label("Find in diff").map(|node| node.rect());
+        still.set(if now.is_some() && now == last.get() { still.get() + 1 } else { 0 });
+        last.set(now);
+        still.get() >= 3
+    });
+}
+
+#[test]
+fn the_change_buttons_stay_while_a_refresh_reloads_the_diff() {
+    let repo = repository();
+    let path = repo.path();
+    let original: String = (1..=30).map(|n| format!("line {n}\n")).collect();
+    commit_file(path, "long.txt", original.as_bytes(), "Add a long file");
+    std::fs::write(path.join("long.txt"), original.replace("line 3\n", "three\n")).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("long.txt").click();
+    wait_for_stageable_lines(&mut harness);
+
+    // A refresh, as the periodic or a watched one does, reloads the change's diff and review.
+    // The lines stay stageable on every frame of that reload, so their buttons never vanish.
+    harness.state_mut().load(false);
+    let start = Instant::now();
+    let mut reloading = false;
+    loop {
+        harness.step();
+        let repo = harness.state_mut().repo_mut().expect("repository");
+        reloading |= repo.diff_loading;
+        if reloading {
+            assert!(repo.diff_options.selectable, "the lines stay stageable while the refresh reloads them");
+            if !repo.diff_loading {
+                break;
+            }
+        }
+        assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for the refresh to reload the diff");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    wait_for_stageable_lines(&mut harness);
+    hover_change_until(&mut harness, "Stage this change");
 }
 
 #[test]

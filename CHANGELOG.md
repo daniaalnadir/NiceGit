@@ -28,6 +28,8 @@
   stages every file.
 - Force push… replaces the remote branch after you rewrite pushed commits, listing what it
   removes and refusing if someone else pushed since your last fetch.
+- A hovered change keeps its Stage and Discard buttons while a refresh reloads the diff;
+  before, they vanished until the reload finished.
 
 ## 1.5.0 - Fewer surprises
 

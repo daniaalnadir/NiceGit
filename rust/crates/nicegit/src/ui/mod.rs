@@ -576,6 +576,13 @@ impl NiceGitApp {
         let repo = &mut self.repos[self.active];
         repo.diff_options.split = split;
         // Lines can be staged one by one once the review has loaded and matches the diff shown.
+        // While a refresh reloads the review, the previous one stays, so the buttons remain.
+        let review_loading = repo.review.as_mut().is_some_and(|task| task.is_loading());
+        if repo.review_loading && !review_loading {
+            // The fresh review has arrived, so the lines are matched to it again.
+            repo.line_map = None;
+        }
+        repo.review_loading = review_loading;
         let review = repo.review.as_mut().and_then(|task| task.get()).and_then(|r| r.as_ref().ok()).cloned();
         // The shown diff has a few lines of context and the review the whole file, so lines are
         // matched between them once both have loaded.
