@@ -536,3 +536,81 @@ fn continue_a_revert_after_resolving_its_conflict_from_the_banner() {
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\n");
     assert!(git(path, &["status", "--porcelain"]).is_empty());
 }
+
+/// Points `commit.template` in `dir` at a file outside the repository holding `contents`. The
+/// returned folder must live as long as the test uses the template.
+fn commit_template_file(dir: &Path, contents: &str) -> tempfile::TempDir {
+    let folder = temp_dir();
+    let file = folder.path().join("message.txt");
+    std::fs::write(&file, contents).unwrap();
+    git(dir, &["config", "commit.template", &file.to_string_lossy()]);
+    folder
+}
+
+/// Opens the repository at `path` with `draft` saved for its checkout, as an earlier session
+/// would have left it. The draft is in place before the app reads the repository.
+fn open_with_saved_draft(path: &Path, draft: crate::settings::Draft) -> App {
+    let key = git(path, &["rev-parse", "--show-toplevel"]);
+    let path = path.to_path_buf();
+    arm_watchdog();
+    Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(move |cc| {
+        let mut app = NiceGitApp::new(cc, None);
+        app.settings.auto_fetch_minutes = 0;
+        app.settings.drafts.insert(key, draft);
+        app.open(path);
+        app
+    })
+}
+
+#[test]
+fn empty_commit_box_starts_from_the_commit_template() {
+    let repo = repository();
+    let _template = commit_template_file(repo.path(), "Fix:\n\nDetails\n");
+    let mut harness = open(repo.path());
+    wait(&mut harness, "the commit template", |h| h.state().repo().is_some_and(|r| r.draft.summary == "Fix:"));
+    let draft = harness.state().repo().expect("repository").draft.clone();
+    assert_eq!(draft.description, "Details");
+    assert!(shows(&harness, "From commit.template"), "the box says where its message came from");
+}
+
+#[test]
+fn commit_template_does_not_replace_a_saved_draft() {
+    let repo = repository();
+    let _template = commit_template_file(repo.path(), "Fix:\n\nDetails\n");
+    // The checkout's saved draft is in settings before the app reads the repository.
+    let saved = crate::settings::Draft { summary: "Half-written".into(), description: "Keep me".into() };
+    let mut harness = open_with_saved_draft(repo.path(), saved);
+    loaded(&mut harness);
+    settle(&mut harness);
+    let repo_state = harness.state().repo().expect("repository");
+    assert_eq!(repo_state.draft.summary, "Half-written");
+    assert_eq!(repo_state.draft.description, "Keep me");
+    assert!(repo_state.template_read.is_none(), "no template is read over a saved draft");
+    assert!(!shows(&harness, "From commit.template"));
+}
+
+#[test]
+fn commit_template_refills_after_a_commit() {
+    let repo = repository();
+    let _template = commit_template_file(repo.path(), "Fix:\n\nDetails\n");
+    std::fs::write(repo.path().join("notes.txt"), "first\nsecond\nthird\n").unwrap();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    wait(&mut harness, "the commit template", |h| h.state().repo().is_some_and(|r| r.draft.summary == "Fix:"));
+
+    harness.get_by_label("Stage All Changes").click();
+    idle(&mut harness);
+    // As Git refuses an unedited template, the untouched template cannot be committed.
+    wait(&mut harness, "the template to be filled in", |h| has_label(h, "Fill in the template to commit"));
+    assert!(!harness.state().can_commit(), "an untouched template is not a commit message");
+    harness.state_mut().repo_mut().expect("repository").draft.summary = "Fix: the notes".into();
+    harness.run_steps(2);
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%B"]), "Fix: the notes\n\nDetails");
+
+    // The box starts from the template again once the commit has been made.
+    wait(&mut harness, "the template for the next commit", |h| h.state().repo().is_some_and(|r| r.draft.summary == "Fix:"));
+    assert_eq!(harness.state().repo().expect("repository").draft.description, "Details");
+}

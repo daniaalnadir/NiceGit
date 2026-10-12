@@ -553,6 +553,9 @@ impl NiceGitApp {
                         .desired_width(f32::INFINITY),
                 )
                 .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit description"));
+                if repo.draft_from_template.as_ref() == Some(&repo.draft) {
+                    ui.label(RichText::new("From commit.template").small().color(c.muted));
+                }
             });
         ui.add_space(6.0);
         let mut amend = repo.amend;
@@ -566,10 +569,14 @@ impl NiceGitApp {
         }
         if amend_changed {
             self.repos[self.active].amend = amend;
-            if amend && self.repos[self.active].draft.is_empty() {
+            // An untouched commit template gives way to the last commit's message, as an empty draft does.
+            let repo = &self.repos[self.active];
+            let replaceable = repo.draft.is_empty() || repo.draft_from_template.as_ref() == Some(&repo.draft);
+            if amend && replaceable {
                 if let (Some(head), Some(repo)) = (snapshot.head_hash.clone(), self.repo()) {
                     if let Ok(message) = nicegit_core::GitClient::new().commit_message(&head, &repo.path) {
                         self.repos[self.active].draft = crate::settings::Draft::from_message(&message);
+                        self.repos[self.active].draft_from_template = None;
                     }
                 }
             }
@@ -578,6 +585,8 @@ impl NiceGitApp {
         let repo = &self.repos[self.active];
         let label = if repo.draft.summary.trim().is_empty() {
             format!("{}  Write a summary to commit", icon::CHECK_CIRCLE)
+        } else if repo.draft_is_untouched_template() {
+            format!("{}  Fill in the template to commit", icon::CHECK_CIRCLE)
         } else if repo.amend {
             format!("{}  Amend last commit", icon::CHECK_CIRCLE)
         } else if staged == 0 {

@@ -243,9 +243,20 @@ pub struct Repo {
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
     pub github: [Option<crate::ui::github_section::GitHubList>; 2],
+    /// The checkout's commit template being read in the background, with that checkout's draft
+    /// key. Its message fills the draft when it arrives, if the draft is still empty.
+    pub template_read: Option<(String, Task<Option<String>>)>,
+    /// The draft last filled from `commit.template`. The commit box labels it while it is unchanged.
+    pub draft_from_template: Option<Draft>,
 }
 
 impl Repo {
+    /// Whether the draft is the commit template exactly as it was filled in. It is not committed
+    /// or saved as a draft until it is edited, as Git refuses an unedited template.
+    pub fn draft_is_untouched_template(&self) -> bool {
+        self.draft_from_template.as_ref() == Some(&self.draft)
+    }
+
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
@@ -295,6 +306,8 @@ impl Repo {
             image_preview: None,
             image_textures: None,
             github: [None, None],
+            template_read: None,
+            draft_from_template: None,
         }
     }
 
@@ -734,7 +747,9 @@ impl NiceGitApp {
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
-                    // A commit that failed gives its message back; one that was made keeps it cleared.
+                    // A commit that failed gives its message back; one that was made keeps it cleared,
+                    // and the box starts from the commit template for the next one.
+                    let mut made_commit = false;
                     if let Some((label, result)) = &action {
                         if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") {
                             let repo = &mut self.repos[index];
@@ -748,7 +763,11 @@ impl NiceGitApp {
                                     repo.draft = sent;
                                 }
                             }
+                            made_commit = committed;
                         }
+                    }
+                    if made_commit {
+                        self.start_template_read(index);
                     }
                     // Git's own error, when an action failed in a way the refresh may explain better.
                     let mut stopped_with: Option<String> = None;
@@ -973,9 +992,10 @@ impl NiceGitApp {
         repo.marked.retain(|hash| snapshot.commits.iter().any(|c| &c.hash == hash));
         // Each checkout keeps its own commit message draft.
         let key = Settings::draft_key(&snapshot.root_path);
+        let mut read_template = false;
         if repo.draft_key.as_deref() != Some(key.as_str()) {
             if let Some(old) = repo.draft_key.take() {
-                if repo.draft.is_empty() {
+                if repo.draft.is_empty() || repo.draft_is_untouched_template() {
                     self.settings.drafts.remove(&old);
                 } else {
                     self.settings.drafts.insert(old, repo.draft.clone());
@@ -983,8 +1003,11 @@ impl NiceGitApp {
             }
             repo.draft = self.settings.drafts.get(&key).cloned().unwrap_or_default();
             repo.draft_key = Some(key);
+            repo.draft_from_template = None;
             repo.amend = false;
             repo.change_filter.clear();
+            // An empty draft starts from the checkout's commit template.
+            read_template = repo.draft.is_empty();
         }
         let reload_change = matches!(repo.selection, Selection::Change { .. }) && keep;
         if index == self.active {
@@ -993,6 +1016,9 @@ impl NiceGitApp {
             }
         }
         self.repos[index].snapshot = Some(snapshot);
+        if read_template {
+            self.start_template_read(index);
+        }
         // Bisect state and submodules are read alongside, without delaying the snapshot. The bar
         // keeps the last state until the new read arrives, so it does not vanish (and take its
         // buttons with it) on every refresh.
@@ -1035,10 +1061,44 @@ impl NiceGitApp {
         self.watch_active();
     }
 
+    /// Reads the checkout's commit template in the background. Its message fills the draft when
+    /// it arrives, if the draft is still empty.
+    fn start_template_read(&mut self, index: usize) {
+        let Some(key) = self.repos[index].draft_key.clone() else { return };
+        let path = self.repos[index].path.clone();
+        let context = self.worker.context.clone();
+        let task = Task::spawn(&context, move || GitClient::new().commit_template(&path).ok().flatten());
+        self.repos[index].template_read = Some((key, task));
+    }
+
+    /// Fills each repository's empty draft with its commit template once the template has been
+    /// read. A read for a checkout the repository has since left is dropped, and so is one for an
+    /// amend, which fills the draft from HEAD instead.
+    fn receive_templates(&mut self) {
+        for repo in &mut self.repos {
+            let Some((key, task)) = repo.template_read.as_mut() else { continue };
+            if task.is_loading() {
+                continue;
+            }
+            let template = task.peek().cloned().flatten();
+            let key = key.clone();
+            repo.template_read = None;
+            if repo.draft_key.as_deref() != Some(key.as_str()) || !repo.draft.is_empty() || repo.amend {
+                continue;
+            }
+            repo.draft_from_template = None;
+            if let Some(template) = template {
+                let draft = Draft::from_message(&template);
+                repo.draft = draft.clone();
+                repo.draft_from_template = Some(draft);
+            }
+        }
+    }
+
     pub fn save_draft(&mut self) {
         let Some(repo) = self.repos.get(self.active) else { return };
         if let Some(key) = repo.draft_key.clone() {
-            if repo.draft.is_empty() {
+            if repo.draft.is_empty() || repo.draft_is_untouched_template() {
                 self.settings.drafts.remove(&key);
             } else {
                 self.settings.drafts.insert(key, repo.draft.clone());
@@ -1415,6 +1475,7 @@ impl NiceGitApp {
         self.idle()
             && !repo.amend
             && !repo.draft.summary.trim().is_empty()
+            && !repo.draft_is_untouched_template()
             && snapshot.staged_count() == 0
             && !snapshot.status.is_empty()
             && !snapshot.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted)
@@ -1466,6 +1527,7 @@ impl NiceGitApp {
         let (Some(snapshot), Some(repo)) = (self.snapshot(), self.repo()) else { return false };
         self.idle()
             && !repo.draft.summary.trim().is_empty()
+            && !repo.draft_is_untouched_template()
             && (snapshot.staged_count() > 0 || repo.amend)
             && !snapshot.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted)
     }
@@ -1777,6 +1839,7 @@ impl eframe::App for NiceGitApp {
         self.keep_zoom(&ctx);
         self.fit_to_monitor(&ctx);
         self.receive();
+        self.receive_templates();
         self.finish_clone();
         self.shortcuts(&ctx);
         self.drop_folders(&ctx);

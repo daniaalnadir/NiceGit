@@ -719,3 +719,60 @@ fn update_submodule_refuses_unregistered_path() {
     let message = error_text(client().update_submodule("not-a-submodule", repo.path()));
     assert!(message.contains("no longer registered"), "{message}");
 }
+
+// MARK: Commit template
+
+/// Writes `contents` to `relative` in the repository and points `commit.template` at it.
+fn set_commit_template(repo: &Repo, relative: &str, contents: &str) {
+    repo.write(relative, contents);
+    repo.git(&["config", "commit.template", relative]);
+}
+
+#[test]
+fn commit_template_reads_the_configured_file_and_drops_comments() {
+    let repo = Repo::new();
+    set_commit_template(&repo, "message.txt", "Summary\n\n# comment\nWhy:\n\n# another\n");
+    assert_eq!(client().commit_template(repo.path()).expect("read template").as_deref(), Some("Summary\n\nWhy:"));
+}
+
+#[test]
+fn commit_template_resolves_a_relative_path_from_the_top_level() {
+    let repo = Repo::new();
+    set_commit_template(&repo, "templates/message.txt", "Fix:\n");
+    fs::create_dir_all(repo.path().join("src/deep")).unwrap();
+    assert_eq!(client().commit_template(&repo.path().join("src/deep")).expect("read template").as_deref(), Some("Fix:"));
+}
+
+#[test]
+fn commit_template_honours_core_comment_char() {
+    let repo = Repo::new();
+    repo.git(&["config", "core.commentChar", ";"]);
+    set_commit_template(&repo, "message.txt", "; dropped\nSummary\n# kept\n");
+    assert_eq!(client().commit_template(repo.path()).expect("read template").as_deref(), Some("Summary\n# kept"));
+}
+
+#[test]
+fn commit_template_missing_or_unset_is_none() {
+    let repo = Repo::new();
+    assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
+    repo.git(&["config", "commit.template", "no-such-file.txt"]);
+    assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
+    // A folder is not a template.
+    fs::create_dir_all(repo.path().join("folder")).unwrap();
+    repo.git(&["config", "commit.template", "folder"]);
+    assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
+}
+
+#[test]
+fn commit_template_only_comments_is_none() {
+    let repo = Repo::new();
+    set_commit_template(&repo, "message.txt", "# a\n# b\n\n");
+    assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
+}
+
+#[test]
+fn commit_template_ignores_a_huge_file() {
+    let repo = Repo::new();
+    set_commit_template(&repo, "message.txt", &format!("{}\n", "a".repeat(64 * 1024)));
+    assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
+}

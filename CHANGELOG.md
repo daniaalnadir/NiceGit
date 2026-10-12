@@ -33,6 +33,8 @@
 - GitHub Enterprise: list your hosts in Settings and their remotes get pull requests, issues,
   and Open on GitHub like github.com.
 - Save as ZIP… exports a commit's files as a ZIP archive from its right-click menu.
+- An empty commit box starts from your commit.template, without its comment lines; like Git,
+  it must be edited before it can be committed.
 
 ## 1.5.0 - Fewer surprises
 

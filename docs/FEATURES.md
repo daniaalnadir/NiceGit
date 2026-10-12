@@ -52,6 +52,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Add trailers from the commit box's menu: Signed-off-by from your Git identity, and
   Co-authored-by from recent authors (the current user and bots left out). The menu edits
   the description text, so the exact lines show before you commit.
+- An empty commit message starts from the repository's commit.template, with comment
+  lines removed. As with Git, an unedited template cannot be committed.
 - Show diffs side by side (old left, new right, long lines wrapped) or in one column; the
   choice is remembered.
 - See what a merge or rebase would do before confirming it: already up to date, a

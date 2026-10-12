@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::models::*;
@@ -8,6 +9,8 @@ use crate::runner::{self, RunOptions};
 const CHANGED_SINCE_SELECTED: &str = "This file changed since it was selected. Refresh and review it again.";
 const CHECKOUT_CHANGED: &str = "The current checkout changed since this action was selected. Refresh and review it again.";
 const BRANCH_CHANGED: &str = "This branch changed since it was selected. Refresh and review it again.";
+/// The largest `commit.template` file read. A commit message is never this long.
+const COMMIT_TEMPLATE_LIMIT: u64 = 64 * 1024;
 
 /// What a force push would change on the remote, from `GitClient::force_push_preview`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -398,6 +401,64 @@ impl GitClient {
             return Err(GitError::EmptyCommitMessage);
         }
         self.run(&["commit", "--quiet", "-m", message], directory).map(drop)
+    }
+
+    /// The message in the file `commit.template` names, cleaned up as `git commit` cleans a
+    /// message: comment lines go, trailing whitespace is trimmed, and blank lines at either end
+    /// are dropped. `None` when the setting is unset, the file is missing, unreadable, not a
+    /// regular file, or over 64 KB, or nothing is left after the cleanup.
+    pub fn commit_template(&self, directory: &Path) -> Result<Option<String>> {
+        // Read as a path, so a leading `~` expands as Git expands it.
+        let Ok(value) = self.run_accepting(&["config", "--type=path", "--get", "commit.template"], directory, &[0, 1]) else {
+            return Ok(None);
+        };
+        let value = runner::strip_line_terminator(value);
+        if value.is_empty() {
+            return Ok(None);
+        }
+        let mut path = PathBuf::from(&value);
+        if path.is_relative() {
+            // Git resolves a relative template against the top of the working tree.
+            let Ok(root) = self.repository_root(directory) else { return Ok(None) };
+            path = root.join(path);
+        }
+        let Ok(metadata) = std::fs::metadata(&path) else { return Ok(None) };
+        if !metadata.is_file() || metadata.len() > COMMIT_TEMPLATE_LIMIT {
+            return Ok(None);
+        }
+        let Ok(file) = std::fs::File::open(&path) else { return Ok(None) };
+        // Reads one byte past the limit, so a file that grew since it was measured is still refused.
+        let mut bytes = Vec::new();
+        if file.take(COMMIT_TEMPLATE_LIMIT + 1).read_to_end(&mut bytes).is_err() || bytes.len() as u64 > COMMIT_TEMPLATE_LIMIT {
+            return Ok(None);
+        }
+        // Git's comment character is `core.commentChar`; `auto` picks one, which is taken as `#`.
+        let comment = match self.config("core.commentchar", false, directory).ok().flatten() {
+            Some(value) if value != "auto" => {
+                let mut chars = value.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(character), None) => character,
+                    _ => '#',
+                }
+            }
+            _ => '#',
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let mut lines: Vec<&str> = Vec::new();
+        for line in text.lines() {
+            if line.starts_with(comment) {
+                continue;
+            }
+            let line = line.trim_end();
+            // Git's cleanup collapses a run of blank lines into one.
+            if line.is_empty() && lines.last().is_some_and(|last| last.is_empty()) {
+                continue;
+            }
+            lines.push(line);
+        }
+        let Some(first) = lines.iter().position(|line| !line.is_empty()) else { return Ok(None) };
+        let last = lines.iter().rposition(|line| !line.is_empty()).unwrap_or(first);
+        Ok(Some(lines[first..=last].join("\n")))
     }
 
     /// Replaces the last commit with one that also contains the staged changes.
