@@ -612,6 +612,23 @@ fn save_stash_on_clean_tree_reports_error() {
 // MARK: Tags
 
 #[test]
+fn tag_tip_is_the_object_a_push_checks() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    client().create_tag("light", "HEAD", None, repo.path()).expect("lightweight tag");
+    client().create_tag("annotated", "HEAD", Some("Release"), repo.path()).expect("annotated tag");
+
+    // A lightweight tag names the commit itself.
+    assert_eq!(client().tag_tip("light", repo.path()).expect("tip of lightweight tag"), head);
+    // An annotated tag names its tag object, the same object the snapshot and push_tag compare.
+    let annotated = client().tag_tip("annotated", repo.path()).expect("tip of annotated tag");
+    assert_ne!(annotated, head, "an annotated tag's tip is its tag object, not the commit");
+    assert_eq!(annotated, snapshot(repo.path()).tag_tips["annotated"]);
+    assert_eq!(annotated, repo.git(&["rev-parse", "refs/tags/annotated"]).trim());
+    assert!(client().tag_tip("missing", repo.path()).is_err());
+}
+
+#[test]
 fn delete_tag_requires_the_shown_tip() {
     let repo = Repo::new();
     let head = repo.commit("a.txt", "one\n", "First");

@@ -496,12 +496,7 @@ impl NiceGitApp {
         }
         if ui.add_enabled(idle, egui::Button::new(format!("{}  Create tag here…", icon::TAG))).clicked() {
             ui.close();
-            self.dialog = Some(Dialog::with_second(
-                "New tag",
-                "Tag name",
-                "Tag message",
-                InputKind::CreateTag { target: commit.hash.clone(), annotated: false },
-            ));
+            self.dialog = Some(Dialog::new_tag(commit.hash.clone(), snapshot));
         }
         ui.separator();
         let can_rewrite = idle && on_branch && clean;

@@ -1108,6 +1108,12 @@ impl GitClient {
         .map(drop)
     }
 
+    /// The object a local tag points to: the commit for a lightweight tag, or the tag object for
+    /// an annotated one. The name must already have passed `create_tag`'s check.
+    pub fn tag_tip(&self, name: &str, directory: &Path) -> Result<String> {
+        self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &format!("refs/tags/{name}")], directory)
+    }
+
     /// Deletes a tag only while it still points to the object shown when it was selected.
     pub fn delete_tag(&self, name: &str, expected_tip: &str, directory: &Path) -> Result<()> {
         self.run(&["update-ref", "-d", &format!("refs/tags/{name}"), expected_tip], directory)
