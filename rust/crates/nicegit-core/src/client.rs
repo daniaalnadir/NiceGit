@@ -9,6 +9,24 @@ const CHANGED_SINCE_SELECTED: &str = "This file changed since it was selected. R
 const CHECKOUT_CHANGED: &str = "The current checkout changed since this action was selected. Refresh and review it again.";
 const BRANCH_CHANGED: &str = "This branch changed since it was selected. Refresh and review it again.";
 
+/// What a force push would change on the remote, from `GitClient::force_push_preview`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForcePushPreview {
+    /// The remote-tracking branch's tip: the commit the lease expects the remote to still have.
+    pub remote_tip: String,
+    /// Commits on the remote that the branch lacks, newest first, at most 50 of them.
+    pub removed: Vec<Commit>,
+    /// How many commits on the remote the branch lacks, which a force push would remove.
+    pub removed_count: usize,
+    /// How many commits the branch has that the remote lacks.
+    pub added_count: usize,
+}
+
+/// Whether `value` is a full object ID, as Git prints them: 40 hex digits, or 64 for SHA-256.
+fn is_object_id(value: &str) -> bool {
+    matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 /// Runs Git commands for one or more repositories. Every method takes the checkout it acts on,
 /// and every action that changes files or refs first confirms the checkout it was chosen for.
 #[derive(Clone, Debug, Default)]
@@ -841,25 +859,85 @@ impl GitClient {
     /// Pushes only the current branch to its upstream, with an explicit refspec and without
     /// mirroring or following tags, whatever the user's push settings.
     pub fn push(&self, snapshot: &Snapshot, directory: &Path) -> Result<()> {
+        let (remote, upstream, head) = self.push_target(snapshot, "push", directory)?;
+        let mirror = format!("remote.{remote}.mirror=false");
+        let refspec = format!("{head}:{upstream}");
+        self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", &remote, &refspec], directory).map(drop)
+    }
+
+    /// The checks every push runs before it sends anything: the checkout is still the one
+    /// `snapshot` describes, the branch has a remote branch as its upstream, and the upstream and
+    /// the remote's push addresses are as displayed. Returns the remote, the upstream's full ref,
+    /// and HEAD.
+    fn push_target(&self, snapshot: &Snapshot, command: &str, directory: &Path) -> Result<(String, String, String)> {
         let branch = self
             .run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory)
-            .map_err(|_| GitError::failed("push", "Check out a branch before pushing."))?;
+            .map_err(|_| GitError::failed(command, "Check out a branch before pushing."))?;
         let head = self.run_trimmed(&["rev-parse", "--verify", "HEAD"], directory)?;
         if branch != snapshot.current_branch || Some(head.as_str()) != snapshot.head_hash.as_deref() {
-            return Err(GitError::failed("push", "The current branch changed since it was selected. Refresh and review the push again."));
+            return Err(GitError::failed(command, "The current branch changed since it was selected. Refresh and review the push again."));
         }
         let remote = self.config(&format!("branch.{branch}.remote"), false, directory)?.unwrap_or_default();
         let upstream = self.config(&format!("branch.{branch}.merge"), false, directory)?.unwrap_or_default();
         if remote.is_empty() || remote == "." || !upstream.starts_with("refs/heads/") {
-            return Err(GitError::failed("push", "Set a remote branch as the upstream before pushing."));
+            return Err(GitError::failed(command, "Set a remote branch as the upstream before pushing."));
         }
         if let Some(expected) = snapshot.upstream.as_deref() {
-            self.require_upstream(expected, "push", directory)?;
+            self.require_upstream(expected, command, directory)?;
         }
-        self.require_remote_addresses(&snapshot.remote_push_addresses, &remote, true, "push", directory)?;
+        self.require_remote_addresses(&snapshot.remote_push_addresses, &remote, true, command, directory)?;
+        Ok((remote, upstream, head))
+    }
+
+    /// Replaces the upstream branch with the current branch, as a forced push, but only while the
+    /// remote branch still points to `expected_remote_tip` (the remote-tracking ref when the user
+    /// confirmed). Every check of `push` applies; nothing else is pushed.
+    pub fn force_push(&self, snapshot: &Snapshot, expected_remote_tip: &str, directory: &Path) -> Result<()> {
+        const COMMAND: &str = "force push";
+        if !is_object_id(expected_remote_tip) {
+            return Err(GitError::failed(
+                COMMAND,
+                "The remote branch to replace is not identified by a valid object ID. Review the force push again.",
+            ));
+        }
+        if snapshot.upstream.is_none() {
+            return Err(GitError::failed(COMMAND, "Set an upstream branch before force pushing."));
+        }
+        let (remote, upstream, head) = self.push_target(snapshot, COMMAND, directory)?;
         let mirror = format!("remote.{remote}.mirror=false");
+        let lease = format!("--force-with-lease={upstream}:{expected_remote_tip}");
         let refspec = format!("{head}:{upstream}");
-        self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", &remote, &refspec], directory).map(drop)
+        self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", &lease, "--", &remote, &refspec], directory)
+            .map(drop)
+    }
+
+    /// What a force push would do: the remote-tracking branch's tip, which the lease expects on
+    /// the remote, the commits on that tip the branch lacks, and the commits the branch would add.
+    pub fn force_push_preview(&self, snapshot: &Snapshot, directory: &Path) -> Result<ForcePushPreview> {
+        const COMMAND: &str = "force push";
+        self.require_checkout(&snapshot.current_branch, snapshot.head_hash.as_deref(), COMMAND, directory)?;
+        let upstream =
+            snapshot.upstream.as_deref().ok_or_else(|| GitError::failed(COMMAND, "Set an upstream branch before force pushing."))?;
+        let head = snapshot.head_hash.as_deref().ok_or_else(|| GitError::failed(COMMAND, "Make a commit before force pushing."))?;
+        let reference = format!("refs/remotes/{upstream}");
+        let remote_tip = self
+            .try_trimmed(&["rev-parse", "--verify", "--quiet", "--end-of-options", &reference], directory)
+            .filter(|tip| is_object_id(tip))
+            .ok_or_else(|| GitError::failed(COMMAND, "This branch has no remote-tracking branch to compare with. Fetch first."))?;
+        self.require_upstream(upstream, COMMAND, directory)?;
+        let log_format = format!("--pretty=format:{LOG_FORMAT}");
+        let removed =
+            parse_log(&self.run(&["log", "--topo-order", "--max-count=50", &log_format, &remote_tip, "--not", head, "--"], directory)?);
+        let removed_count = self.count_commits(&format!("{head}..{remote_tip}"), directory)?;
+        let added_count = self.count_commits(&format!("{remote_tip}..{head}"), directory)?;
+        Ok(ForcePushPreview { remote_tip, removed, removed_count, added_count })
+    }
+
+    /// The number of commits in `range`, a `A..B` revision range between resolved object IDs.
+    fn count_commits(&self, range: &str, directory: &Path) -> Result<usize> {
+        self.run_trimmed(&["rev-list", "--count", range, "--"], directory)?
+            .parse()
+            .map_err(|_| GitError::failed("force push", "Git returned a commit count in an unexpected format."))
     }
 
     /// Each local branch's distance from its upstream, for showing beside branch names. Read

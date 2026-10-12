@@ -1275,7 +1275,7 @@ fn drag_a_branch_onto_the_current_branch_to_rebase_onto_it() {
 }
 
 /// A bare repository holding `path`'s main branch, which `path` tracks as origin.
-fn publish_to_bare(path: &Path) -> tempfile::TempDir {
+pub(crate) fn publish_to_bare(path: &Path) -> tempfile::TempDir {
     let remote = temp_dir();
     // Clones of it check out main, whatever this machine's default branch name is.
     git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);

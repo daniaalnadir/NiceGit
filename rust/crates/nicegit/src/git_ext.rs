@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use nicegit_core::client::ForcePushPreview;
 use nicegit_core::merge_preview::MergeOutcome;
 use nicegit_core::rebase::Expectation;
 use nicegit_core::signature::SignatureStatus;
@@ -42,6 +43,31 @@ pub fn merge_preview_text(source: &str, rebase: bool, directory: &Path) -> Resul
         }
     };
     Ok(format!("{text}{estimate}{ignored}"))
+}
+
+/// The confirmation text for a force push: the commits on the remote that it removes, up to ten
+/// of them, and that a push refused by the lease loses nothing.
+pub fn force_push_message(preview: &ForcePushPreview, upstream: &str) -> String {
+    const SHOWN: usize = 10;
+    const SAFETY: &str = "If someone else pushed since you last fetched, the push is refused and nothing is lost.";
+    let count = preview.removed_count;
+    if count == 0 {
+        return format!("Your branch already contains everything on {upstream}; a normal Push would also work.\n\n{SAFETY}");
+    }
+    let intro = if count == 1 {
+        format!(
+            "{upstream} will be replaced with your branch. This commit on the remote is not in your branch and will be removed from it:"
+        )
+    } else {
+        format!("{upstream} will be replaced with your branch. These {count} commits on the remote are not in your branch and will be removed from it:")
+    };
+    let mut lines = vec![intro];
+    lines.extend(preview.removed.iter().take(SHOWN).map(|commit| format!("• {} {}", commit.short_hash, commit.subject)));
+    let more = count - preview.removed.len().min(SHOWN);
+    if more > 0 {
+        lines.push(format!("…and {more} more"));
+    }
+    format!("{}\n\n{SAFETY}", lines.join("\n"))
 }
 
 /// A commit's signature as display text, a colour level, and tooltip help.
@@ -228,6 +254,70 @@ pub fn github_open_menu(ui: &mut egui::Ui, label: &str, links: Vec<(String, Stri
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod force_push_message_tests {
+    use nicegit_core::client::ForcePushPreview;
+    use nicegit_core::Commit;
+
+    use super::force_push_message;
+
+    fn commit(index: usize) -> Commit {
+        Commit {
+            hash: format!("{index:040}"),
+            short_hash: format!("c{index:06}"),
+            parents: Vec::new(),
+            refs: Vec::new(),
+            subject: format!("Commit {index}"),
+            author_name: String::new(),
+            author_email: String::new(),
+            relative_date: String::new(),
+            commit_time: None,
+        }
+    }
+
+    fn preview(removed_count: usize, listed: usize) -> ForcePushPreview {
+        ForcePushPreview { remote_tip: "f".repeat(40), removed: (1..=listed).map(commit).collect(), removed_count, added_count: 1 }
+    }
+
+    #[test]
+    fn nothing_removed_says_a_normal_push_would_work() {
+        let text = force_push_message(&preview(0, 0), "origin/main");
+        assert!(text.starts_with("Your branch already contains everything on origin/main; a normal Push would also work."));
+        assert!(text.ends_with("the push is refused and nothing is lost."));
+        assert!(!text.contains('•'));
+    }
+
+    #[test]
+    fn a_single_removed_commit_is_named_in_the_singular() {
+        let text = force_push_message(&preview(1, 1), "origin/main");
+        assert!(text.contains("This commit on the remote is not in your branch"));
+        assert!(text.contains("• c000001 Commit 1"));
+        assert!(!text.contains("more"));
+    }
+
+    #[test]
+    fn up_to_ten_commits_are_listed_without_a_more_line() {
+        let text = force_push_message(&preview(10, 10), "origin/main");
+        assert!(text.contains("These 10 commits on the remote"));
+        assert_eq!(text.matches('•').count(), 10);
+        assert!(!text.contains("more"));
+    }
+
+    #[test]
+    fn further_commits_are_counted_in_a_more_line() {
+        let text = force_push_message(&preview(12, 12), "origin/main");
+        assert_eq!(text.matches('•').count(), 10);
+        assert!(text.contains("…and 2 more"));
+    }
+
+    #[test]
+    fn a_long_list_counts_every_commit_past_the_fifty_loaded() {
+        let text = force_push_message(&preview(60, 50), "origin/main");
+        assert!(text.contains("These 60 commits"));
+        assert!(text.contains("…and 50 more"));
     }
 }
 

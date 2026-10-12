@@ -871,6 +871,127 @@ fn push_refuses_stale_snapshot() {
     assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), pushed);
 }
 
+/// A repository whose `main` has been published and then rewritten locally, so a normal push
+/// would be refused. Returns the repository, the remote, and the remote's tip the user last saw.
+fn rewritten_after_publishing() -> (Repo, TempDir, String) {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    repo.commit("a.txt", "two\n", "Second");
+    client().push(&snapshot(repo.path()), repo.path()).expect("push second commit");
+    repo.git(&["commit", "--quiet", "--amend", "--message", "Second, reworded"]);
+    let seen = repo.git(&["rev-parse", "refs/remotes/origin/main"]).trim().to_string();
+    (repo, remote, seen)
+}
+
+#[test]
+fn force_push_replaces_a_rewritten_branch() {
+    let (repo, remote, seen) = rewritten_after_publishing();
+    let rewritten = repo.head();
+
+    client().force_push(&snapshot(repo.path()), &seen, repo.path()).expect("force push");
+
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), rewritten);
+}
+
+#[test]
+fn force_push_is_refused_when_the_remote_moved() {
+    let (repo, remote, seen) = rewritten_after_publishing();
+    let shown = snapshot(repo.path());
+
+    // Someone else pushes after the user last fetched.
+    let other = tempfile::tempdir().expect("create clone dir");
+    git(other.path(), &["clone", "-q", &path_string(remote.path()), "clone"]);
+    let clone = other.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("b.txt"), "from elsewhere\n").expect("write file");
+    git(&clone, &["add", "--", "b.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Work from elsewhere"]);
+    git(&clone, &["push", "--quiet", "origin", "main"]);
+    let theirs = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
+
+    let error = error_text(client().force_push(&shown, &seen, repo.path()));
+    assert!(error.contains("stale info") || error.contains("rejected"), "the lease refuses: {error}");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), theirs, "the other clone's commit is kept");
+}
+
+#[test]
+fn force_push_pushes_no_tags_or_other_branches() {
+    let (repo, remote, seen) = rewritten_after_publishing();
+    // Settings that would mirror the remote and follow tags, if the push honoured them.
+    repo.git(&["config", "remote.origin.mirror", "true"]);
+    repo.git(&["config", "push.followTags", "true"]);
+    repo.git(&["branch", "other"]);
+    repo.git(&["tag", "-a", "v1", "-m", "Release one"]);
+
+    client().force_push(&snapshot(repo.path()), &seen, repo.path()).expect("force push");
+
+    assert_eq!(git(remote.path(), &["for-each-ref", "--format=%(refname)"]).trim(), "refs/heads/main", "only the branch is pushed");
+    assert!(git(remote.path(), &["tag", "--list"]).trim().is_empty(), "no tags are pushed");
+}
+
+#[test]
+fn force_push_preview_lists_the_commits_that_would_be_removed() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    repo.commit("a.txt", "two\n", "Second");
+    repo.commit("a.txt", "three\n", "Third");
+    client().push(&snapshot(repo.path()), repo.path()).expect("push");
+    // Rewrite both pushed commits as one new commit on top of the first.
+    repo.git(&["reset", "--hard", &first]);
+    repo.commit("b.txt", "rewritten\n", "Rewritten");
+    let tip = git(remote.path(), &["rev-parse", "refs/heads/main"]).trim().to_string();
+
+    let preview = client().force_push_preview(&snapshot(repo.path()), repo.path()).expect("preview");
+
+    assert_eq!(preview.remote_tip, tip);
+    assert_eq!(preview.removed_count, 2);
+    assert_eq!(preview.added_count, 1);
+    let subjects: Vec<&str> = preview.removed.iter().map(|commit| commit.subject.as_str()).collect();
+    assert_eq!(subjects, ["Third", "Second"], "the shared first commit is not listed");
+}
+
+#[test]
+fn force_push_preview_asks_for_a_fetch_when_the_remote_branch_is_missing() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    let shown = snapshot(repo.path());
+    repo.git(&["update-ref", "-d", "refs/remotes/origin/main"]);
+
+    let error = error_text(client().force_push_preview(&shown, repo.path()));
+    assert!(error.contains("Fetch first"), "{error}");
+}
+
+#[test]
+fn force_push_rejects_a_changed_upstream() {
+    let (repo, remote, seen) = rewritten_after_publishing();
+    let shown = snapshot(repo.path());
+    repo.git(&["config", "branch.main.merge", "refs/heads/other"]);
+
+    let error = error_text(client().force_push(&shown, &seen, repo.path()));
+    assert!(error.contains("upstream branch changed"), "{error}");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), seen, "the remote is untouched");
+}
+
+#[test]
+fn force_push_rejects_a_malformed_expected_tip() {
+    let (repo, remote, seen) = rewritten_after_publishing();
+    let shown = snapshot(repo.path());
+    let not_hex = "z".repeat(40);
+    for bad in ["", "main", "origin/main", "HEAD", "abc123", "refs/remotes/origin/main", not_hex.as_str()] {
+        assert!(client().force_push(&shown, bad, repo.path()).is_err(), "{bad:?} is refused");
+    }
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), seen, "the remote is untouched");
+}
+
 #[test]
 fn commit_and_push_sends_the_new_commit_to_the_upstream() {
     let remote = bare_remote();

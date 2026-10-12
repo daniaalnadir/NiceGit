@@ -63,6 +63,16 @@ pub enum Pending {
         remote: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
+    /// Replacing the upstream branch with the current one. Everything shown is captured: the
+    /// branch and HEAD, the upstream, the remote-tracking tip the user reviewed (the lease), and
+    /// the remote's push addresses.
+    ForcePush {
+        branch: String,
+        head: String,
+        upstream: String,
+        expected_remote_tip: String,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
     ApplyPatch {
         file: std::path::PathBuf,
         branch: String,
@@ -219,6 +229,7 @@ impl Pending {
                 | Pending::DropStash(_)
                 | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
+                | Pending::ForcePush { .. }
         )
     }
 }
@@ -578,6 +589,19 @@ impl NiceGitApp {
                 let name = branch.name.clone();
                 self.act("Push branch", move |client, path| {
                     client.push_branch(&branch, &remote, &addresses, path).map(|_| Some(format!("Pushed {name} to {remote}.")))
+                })
+            }
+            Pending::ForcePush { branch, head, upstream, expected_remote_tip, addresses } => {
+                self.act("Force push", move |client, path| {
+                    // The push reads only these fields, so it runs against what was shown.
+                    let snapshot = nicegit_core::Snapshot {
+                        current_branch: branch.clone(),
+                        head_hash: Some(head),
+                        upstream: Some(upstream.clone()),
+                        remote_push_addresses: addresses,
+                        ..Default::default()
+                    };
+                    client.force_push(&snapshot, &expected_remote_tip, path).map(|_| Some(format!("Force pushed {branch} to {upstream}.")))
                 })
             }
             Pending::ApplyPatch { file, branch, head } => self.act("Apply patch", move |client, path| {
