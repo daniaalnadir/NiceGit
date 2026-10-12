@@ -424,3 +424,119 @@ fn history_scope_hides_other_branches() {
     wait(&mut harness, "all branches back in the graph", |h| h.query_by_label("Feature only work").is_some());
     assert!(!has_label(&harness, "Showing the current branch"), "the note goes once every branch is shown");
 }
+
+/// Writes `text` to notes.txt, stages it, and commits it with `summary` through the commit box.
+fn commit_notes(harness: &mut App, path: &Path, text: &str, summary: &str) {
+    std::fs::write(path.join("notes.txt"), text).unwrap();
+    // Reload as a person would, rather than wait on the file watcher.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    wait(harness, "the changed file to be listed", |h| h.state().snapshot().is_some_and(|s| !s.status.is_empty()));
+    idle(harness);
+    harness.get_by_label("Stage All Changes").click();
+    idle(harness);
+    type_into(harness, "Commit summary", summary);
+    wait(harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(harness);
+}
+
+/// Undoes the newest step from the toolbar, confirming it.
+fn undo_once(harness: &mut App) {
+    toolbar_button(harness, "Undo");
+    wait(harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Undo").last().expect("the confirm button").click();
+    idle(harness);
+}
+
+/// Redoes the newest undone step from the toolbar, confirming it.
+fn redo_once(harness: &mut App) {
+    toolbar_button(harness, "Redo");
+    wait(harness, "the redo confirmation", |h| h.state().dialog.is_some());
+    harness.get_all_by_label("Redo").last().expect("the confirm button").click();
+    idle(harness);
+}
+
+#[test]
+fn undo_steps_back_through_several_commits() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_notes(&mut harness, path, "first\nsecond\nthird\n", "Add a third line");
+    commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\n", "Add a fourth line");
+    commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\nfifth\n", "Add a fifth line");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a fifth line");
+
+    undo_once(&mut harness);
+    undo_once(&mut harness);
+    undo_once(&mut harness);
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "back at the start");
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "notes.txt", "the undone changes stay staged");
+    assert!(harness.state().repo().is_some_and(|r| r.undo.is_empty()), "nothing is left to undo");
+
+    redo_once(&mut harness);
+    redo_once(&mut harness);
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a fourth line", "redone to the second commit");
+    assert_eq!(harness.state().repo().map(|r| r.redo.len()), Some(1), "one redo step is left");
+}
+
+#[test]
+fn a_new_action_clears_redo() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_notes(&mut harness, path, "first\nsecond\nthird\n", "Add a third line");
+    undo_once(&mut harness);
+    assert_eq!(harness.state().repo().map(|r| r.redo.len()), Some(1), "the undone commit can be redone");
+
+    commit_notes(&mut harness, path, "first\nsecond\nfourth\n", "Add a fourth line");
+    assert!(harness.state().repo().is_some_and(|r| r.redo.is_empty()), "a new commit ends the redo chain");
+    toolbar_button(&mut harness, "Redo");
+    settle(&mut harness);
+    assert!(harness.state().dialog.is_none(), "Redo is disabled, so it asks for nothing");
+}
+
+#[test]
+fn undo_history_lists_the_steps_it_will_take_back() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_notes(&mut harness, path, "first\nsecond\nthird\n", "Add a third line");
+    commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\n", "Add a fourth line");
+    settle(&mut harness);
+    harness.get_by_label("Undo history options").click();
+    settle(&mut harness);
+    assert!(has_label(&harness, "Undo steps, newest first"), "the list of undo steps opens");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a fourth line", "listing changes nothing");
+}
+
+#[test]
+fn failed_undo_clears_older_steps() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_notes(&mut harness, path, "first\nsecond\nthird\n", "Add a third line");
+    commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\n", "Add a fourth line");
+
+    // Another client commits, so the branch has moved past the second commit.
+    git(path, &["commit", "-q", "--allow-empty", "-m", "Made outside NiceGit"]);
+
+    undo_once(&mut harness);
+    let notice = harness.state().notice.as_ref().map(|n| (n.text.clone(), n.is_error, n.detail.clone())).expect("a notice");
+    assert!(notice.1, "the undo failed");
+    assert!(notice.0.contains("Undo commit failed"), "the notice names the failed undo: {}", notice.0);
+    assert!(
+        notice.0.contains("Older undo steps were cleared because the repository changed."),
+        "the notice says, without hovering, that older steps were cleared: {}",
+        notice.0
+    );
+    assert!(harness.state().repo().is_some_and(|r| r.undo.is_empty()), "Undo is now disabled");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Made outside NiceGit", "nothing was moved");
+}

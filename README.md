@@ -149,7 +149,8 @@ records hard-won rules about Git edge cases that changes must respect.
 
 - Pull requests and issues support github.com and GitHub Enterprise Server, not GitLab or
   Bitbucket. Pushing and pulling work with any Git remote.
-- Undo covers the most recent undoable action, not a full history of every operation.
+- Undo steps back through the last 20 recorded actions in this session; changes made outside
+  NiceGit stop the chain.
 - There are no automatic updates; download new versions from the Releases page.
 - The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
   can run code. Only open repositories you trust.

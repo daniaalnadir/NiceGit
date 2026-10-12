@@ -1,7 +1,7 @@
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 
-use crate::app::NiceGitApp;
+use crate::app::{HistoryEntry, NiceGitApp};
 use crate::settings::SyncAction;
 use crate::theme;
 use crate::tools::{self};
@@ -48,11 +48,13 @@ struct ToolItem {
     menu: bool,
     /// A count drawn on the button's corner, such as commits waiting to be pulled.
     badge: Option<usize>,
+    /// The steps the arrow beside the button lists, newest first, for Undo.
+    history: Option<Vec<String>>,
 }
 
 impl ToolItem {
     fn new(glyph: &'static str, label: &str, tip: String, enabled: bool, action: ToolAction) -> Self {
-        Self { glyph, label: label.to_string(), tip, enabled, action, menu: false, badge: None }
+        Self { glyph, label: label.to_string(), tip, enabled, action, menu: false, badge: None, history: None }
     }
 
     fn with_menu(mut self) -> Self {
@@ -65,9 +67,43 @@ impl ToolItem {
         self
     }
 
+    fn with_history(mut self, titles: Vec<String>) -> Self {
+        self.history = Some(titles);
+        self
+    }
+
     /// The room the button takes in `style`, including its arrow.
     fn width(&self, ui: &Ui, style: ToolStyle) -> f32 {
-        tool_width(ui, &self.label, style) + 2.0 + if self.menu { CARET_WIDTH + 2.0 } else { 0.0 }
+        let caret = self.menu || self.history.is_some();
+        tool_width(ui, &self.label, style) + 2.0 + if caret { CARET_WIDTH + 2.0 } else { 0.0 }
+    }
+}
+
+/// The hover text of Undo or Redo: the newest step's title, and how many steps there are.
+fn history_tip(verb: &str, stack: &[HistoryEntry]) -> String {
+    match stack.last() {
+        None => format!("Nothing to {}", verb.to_lowercase()),
+        Some(step) if stack.len() == 1 => format!("{verb} {}", step.title.to_lowercase()),
+        Some(step) => format!("{verb} {} ({} steps)", step.title.to_lowercase(), stack.len()),
+    }
+}
+
+/// The steps Undo will step back through, newest first, listed without any way to act on them.
+fn history_list(ui: &mut Ui, titles: &[String]) {
+    const SHOWN: usize = 10;
+    let c = theme::of(ui);
+    ui.set_min_width(220.0);
+    if titles.is_empty() {
+        ui.label(RichText::new("Nothing to undo").small().color(c.muted));
+        return;
+    }
+    ui.label(RichText::new("Undo steps, newest first").small().color(c.muted));
+    ui.add_space(4.0);
+    for title in titles.iter().take(SHOWN) {
+        ui.label(title);
+    }
+    if titles.len() > SHOWN {
+        ui.label(RichText::new(format!("and {} more", titles.len() - SHOWN)).small().color(c.muted));
     }
 }
 
@@ -85,9 +121,9 @@ fn badge(ui: &Ui, rect: egui::Rect, count: usize, style: ToolStyle) {
 }
 
 /// The arrow beside a button that opens its menu of choices.
-fn menu_caret(ui: &mut Ui, label: &str) -> egui::Response {
+fn menu_caret(ui: &mut Ui, label: &str, hover: &str) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(CARET_WIDTH, 44.0), egui::Sense::click());
-    let response = response.on_hover_text(format!("Choose what {label} does"));
+    let response = response.on_hover_text(hover);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{label} options")));
     if ui.is_rect_visible(rect) {
         if response.hovered() {
@@ -204,18 +240,13 @@ impl NiceGitApp {
         let idle = self.idle();
         let clean = snapshot.operation.is_none();
         let has_remote = !snapshot.remotes.is_empty();
-        let undo_tip = self
-            .repo()
-            .and_then(|r| r.undo.as_ref())
-            .map(|s| format!("Undo {}", s.title.to_lowercase()))
-            .unwrap_or_else(|| "Nothing to undo".into());
-        let redo_tip = self
-            .repo()
-            .and_then(|r| r.redo.as_ref())
-            .map(|s| format!("Redo {}", s.title.to_lowercase()))
-            .unwrap_or_else(|| "Nothing to redo".into());
-        let can_undo = idle && self.repo().is_some_and(|r| r.undo.as_ref().is_some_and(|s| s.applies_to(&snapshot.current_branch)));
-        let can_redo = idle && self.repo().is_some_and(|r| r.redo.as_ref().is_some_and(|s| s.applies_to(&snapshot.current_branch)));
+        let undo_steps = self.repo().map(|r| r.undo.as_slice()).unwrap_or_default();
+        let redo_steps = self.repo().map(|r| r.redo.as_slice()).unwrap_or_default();
+        let undo_tip = history_tip("Undo", undo_steps);
+        let redo_tip = history_tip("Redo", redo_steps);
+        let undo_titles: Vec<String> = undo_steps.iter().rev().map(|s| s.title.clone()).collect();
+        let can_undo = idle && undo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
+        let can_redo = idle && redo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let mut sync_action = self.settings.sync_action;
         let behind = snapshot.behind.unwrap_or(0);
         let ahead = snapshot.ahead.unwrap_or(0);
@@ -230,7 +261,8 @@ impl NiceGitApp {
         // Groups of buttons, in order; a gap separates groups.
         let groups: Vec<Vec<ToolItem>> = vec![
             vec![
-                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, "Undo", undo_tip.clone(), can_undo, ToolAction::Undo),
+                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, "Undo", undo_tip.clone(), can_undo, ToolAction::Undo)
+                    .with_history(undo_titles),
                 ToolItem::new(icon::ARROW_CLOCKWISE, "Redo", redo_tip.clone(), can_redo, ToolAction::Redo),
             ],
             vec![
@@ -364,8 +396,13 @@ impl NiceGitApp {
                             chosen = Some(item.action);
                         }
                         if item.menu {
-                            let caret = menu_caret(ui, "Fetch and Pull");
+                            let caret = menu_caret(ui, "Fetch and Pull", "Choose what Fetch and Pull does");
                             egui::Popup::menu(&caret).show(|ui| sync_menu(ui, &mut sync_action));
+                        }
+                        // Only when there is something for Undo to step back through.
+                        if let Some(titles) = item.history.as_ref().filter(|titles| !titles.is_empty()) {
+                            let caret = menu_caret(ui, "Undo history", "Show the steps Undo will step back through");
+                            egui::Popup::menu(&caret).show(|ui| history_list(ui, titles));
                         }
                     } else {
                         overflow.push(item);
@@ -500,7 +537,7 @@ impl NiceGitApp {
 
     /// Asks before undoing the last recorded step, from the toolbar or the command palette.
     pub fn confirm_undo(&mut self) {
-        let Some(title) = self.repo().and_then(|r| r.undo.as_ref()).map(|s| s.title.to_lowercase()) else { return };
+        let Some(title) = self.repo().and_then(|r| r.undo.last()).map(|s| s.title.to_lowercase()) else { return };
         self.confirm(
             format!("Undo {title}?"),
             "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
@@ -511,7 +548,7 @@ impl NiceGitApp {
 
     /// Asks before redoing the last undone step, from the toolbar or the command palette.
     pub fn confirm_redo(&mut self) {
-        let Some(title) = self.repo().and_then(|r| r.redo.as_ref()).map(|s| s.title.to_lowercase()) else { return };
+        let Some(title) = self.repo().and_then(|r| r.redo.last()).map(|s| s.title.to_lowercase()) else { return };
         self.confirm(
             format!("Redo {title}?"),
             "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
