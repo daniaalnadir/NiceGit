@@ -62,7 +62,7 @@ thread_local! {
     static WATCHDOG: std::cell::RefCell<Option<Watchdog>> = const { std::cell::RefCell::new(None) };
 }
 
-fn arm_watchdog() {
+pub(crate) fn arm_watchdog() {
     WATCHDOG.with(|watchdog| {
         if watchdog.borrow().is_some() {
             return;
