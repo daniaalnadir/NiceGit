@@ -24,6 +24,8 @@
 - Selecting a stash lists its files in the inspector; click one to see just its changes, or
   restore it from the stash.
 - Ignore whitespace now applies to stash diffs too.
+- Filter the Changes panel's files by path once there are more than a handful; Stage all still
+  stages every file.
 
 ## 1.5.0 - Fewer surprises
 

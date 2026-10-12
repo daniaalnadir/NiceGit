@@ -80,6 +80,17 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::CTRL, Key::Backtick))) {
             self.toggle_terminal(ctx);
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::L))) && self.snapshot().is_some() {
+            changes::request_filter_focus(ctx);
+        }
+        // Escape in the Changes panel's filter clears it, and goes no further: it must not close an
+        // open diff or clear the selection. Egui has already dropped the field's focus, so this
+        // checks whether the field had focus when the panel was drawn in the previous pass.
+        if changes::filter_had_focus(ctx) && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+            if let Some(repo) = self.repo_mut() {
+                repo.change_filter.clear();
+            }
+        }
         // Arrow keys move through the graph when no text field has focus.
         let typing = ctx.memory(|m| m.focused().is_some());
         if !typing && self.dialog.is_none() && self.palette.is_none() {

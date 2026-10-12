@@ -676,3 +676,183 @@ fn right_clicking_the_history_header_chooses_its_columns() {
     assert!(harness.state().settings.history_columns.shown(Column::Graph));
     assert!(harness.query_by_label("Resize the Graph column").is_some());
 }
+
+/// Writes an unstaged file into the repository, creating its folders.
+fn write_changed_file(dir: &Path, file: &str) {
+    let full = dir.join(file);
+    std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+    std::fs::write(full, "changed\n").unwrap();
+}
+
+/// The text in the Changes panel's filter field, as the app holds it.
+fn change_filter(harness: &App) -> String {
+    harness.state().repo().map(|r| r.change_filter.clone()).unwrap_or_default()
+}
+
+#[test]
+fn filter_narrows_the_changed_files() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["alpha-report.txt", "beta-notes.md", "gamma.rs", "delta.rs", "epsilon.txt", "zeta-report.md", "eta.txt", "theta.md"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (8)"));
+
+    type_into(&mut harness, "Filter changed files", "REPORT");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (2 of 8)"));
+    assert!(harness.query_by_label("alpha-report.txt").is_some(), "a match shows");
+    assert!(harness.query_by_label("zeta-report.md").is_some(), "every match shows");
+    assert!(harness.query_by_label("beta-notes.md").is_none(), "other files are hidden");
+    assert!(harness.query_by_label("gamma.rs").is_none(), "other files are hidden");
+}
+
+#[test]
+fn filter_hides_folders_without_matches_in_tree_view() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["alpha/one.txt", "alpha/two.txt", "beta/three.txt", "beta/four.txt", "root.txt", "extra.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (6)"));
+    harness.get_by_label("Tree").click();
+    settle(&mut harness);
+    wait(&mut harness, "the folder tree", |h| shows(h, "alpha") && shows(h, "beta"));
+
+    type_into(&mut harness, "Filter changed files", "three");
+    wait(&mut harness, "the filtered tree", |h| shows(h, "Unstaged files (1 of 6)"));
+    assert!(harness.query_by_label("three.txt").is_some(), "the match shows");
+    assert!(shows(&harness, "beta"), "the folder with the match shows, expanded");
+    assert!(!shows(&harness, "alpha"), "a folder with no matches is hidden");
+
+    // Escape clears the filter, and the folder that had no match comes back.
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the filter to clear", |h| change_filter(h).is_empty());
+    wait(&mut harness, "the full tree", |h| shows(h, "alpha") && shows(h, "Unstaged files (6)"));
+}
+
+#[test]
+fn stage_all_with_a_filter_still_stages_everything() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["apple.txt", "banana.txt", "cherry.txt", "date.txt", "elder.txt", "fig.txt", "grape.txt", "honeydew.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (8)"));
+
+    type_into(&mut harness, "Filter changed files", "apple");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 8)"));
+    harness.get_by_label("Stage All Changes").hover();
+    wait(&mut harness, "the hover text", |h| shows(h, "including those hidden by the filter"));
+
+    harness.get_by_label("Stage All Changes").click();
+    idle(&mut harness);
+    wait(&mut harness, "every file to be staged", |_| git(path, &["diff", "--cached", "--name-only"]).lines().count() == 8);
+    assert!(git(path, &["diff", "--name-only"]).is_empty(), "nothing is left unstaged");
+}
+
+#[test]
+fn filter_field_hidden_with_few_changes() {
+    let repo = repository();
+    let path = repo.path();
+    write_changed_file(path, "alpha.txt");
+    write_changed_file(path, "beta.txt");
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (2)"));
+    assert!(harness.query_by_label("Filter changed files").is_none(), "two changes need no filter");
+}
+
+#[test]
+fn filter_escape_clears_the_filter_and_keeps_the_open_diff() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    for file in ["one.txt", "two.txt", "three.txt", "four.txt", "five.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (6)"));
+    harness.get_by_label("notes.txt").click();
+    wait(
+        &mut harness,
+        "the diff of notes.txt",
+        |h| matches!(h.state().repo().map(|r| &r.selection), Some(crate::app::Selection::Change { entry, .. }) if entry.path == "notes.txt"),
+    );
+
+    type_into(&mut harness, "Filter changed files", "notes");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 6)"));
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the filter to clear", |h| change_filter(h).is_empty());
+    assert!(shows(&harness, "Unstaged files (6)"), "every file is listed again");
+    assert!(
+        matches!(harness.state().repo().map(|r| &r.selection), Some(crate::app::Selection::Change { entry, .. }) if entry.path == "notes.txt"),
+        "Escape in the filter leaves the open diff alone"
+    );
+}
+
+#[test]
+fn escape_after_selecting_a_commit_clears_the_selection_not_the_filter() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["one.txt", "two.txt", "three.txt", "four.txt", "five.txt", "six.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Filter changed files", "two");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 6)"));
+
+    // Selecting a commit shows the inspector in place of the Changes panel, so the field loses focus.
+    harness.get_by_label_contains("Add a second line").click();
+    wait(&mut harness, "the commit to be selected", |h| {
+        matches!(h.state().repo().map(|r| &r.selection), Some(crate::app::Selection::Commit { .. }))
+    });
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the selection to clear", |h| {
+        !matches!(h.state().repo().map(|r| &r.selection), Some(crate::app::Selection::Commit { .. }))
+    });
+    assert_eq!(change_filter(&harness), "two", "the filter keeps its text");
+}
+
+#[test]
+fn filter_shortcut_focuses_the_filter_field() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["one.txt", "two.txt", "three.txt", "four.txt", "five.txt", "six.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (6)"));
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::L);
+    harness.step();
+    harness.event(egui::Event::Text("two".into()));
+    wait(&mut harness, "the typing to reach the filter", |h| change_filter(h) == "two");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 6)"));
+}
+
+#[test]
+fn filter_clears_when_the_branch_changes() {
+    let repo = repository();
+    let path = repo.path();
+    for file in ["one.txt", "two.txt", "three.txt", "four.txt", "five.txt", "six.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Filter changed files", "two");
+    wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 6)"));
+
+    git(path, &["switch", "-q", "-c", "other"]);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    wait(&mut harness, "the new branch to clear the filter", |h| change_filter(h).is_empty());
+    assert!(shows(&harness, "Unstaged files (6)"), "the other branch lists every file");
+}
