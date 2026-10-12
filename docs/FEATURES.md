@@ -245,12 +245,14 @@ launch; closing a tab removes it from the saved session.
 The repository sidebar includes a repository switcher and collapsible Local,
 Remote, Worktrees, Tags, Stashes, Pull Requests, and Issues sections. Counts for
 local Git data come from the repository. Pull Requests and Issues load open items
-on demand from a selected github.com remote using an installed, signed-in GitHub
+on demand from a selected GitHub remote using an installed, signed-in GitHub
 CLI (gh). NiceGit reuses that authentication and does not store a separate token.
 The sections support open/closed/all state selection (plus merged PRs), filtering
 loaded titles/authors/numbers, refresh, cancellation, links to GitHub, and loading up to
 1,000 items in batches of 100. Counts reflect loaded items, not a server-side total.
-GitHub Enterprise and other hosting providers are not yet supported.
+GitHub Enterprise Server hosts can be listed in Settings, and their remotes then work like
+github.com remotes, including gh-based lists that use your `gh auth login --hostname` sign-in.
+Other hosting providers aren't supported.
 
 Branch context menus provide checkout, fetch, current-branch pull/push, selected-branch
 push to an explicit same-named remote branch with confirmation, an upstream
@@ -259,10 +261,10 @@ worktree creation, branch creation at the selected tip without switching checkou
 merge/rebase, safe local rename/delete, and copying the
 branch name or full commit SHA. They do not yet reproduce every GitKraken action.
 The Copy GitHub commit link submenu uses an explicitly selected remote and a full
-commit hash. Only github.com remotes are supported; creating a link neither
-publishes the commit nor verifies that it already exists on the remote. Commits, branches,
-and the files in a commit can also be opened on github.com from their menus; with several
-github.com remotes, you choose which one. Opening does not check that the commit or branch
+commit hash. Only GitHub remotes are supported (github.com, and the Enterprise hosts listed
+in Settings); creating a link neither publishes the commit nor verifies that it already
+exists on the remote. Commits, branches, and the files in a commit can also be opened on
+GitHub from their menus; with several GitHub remotes, you choose which one. Opening does not check that the commit or branch
 has been pushed.
 
 Force push… in the current branch's menu replaces the remote branch with yours, for example

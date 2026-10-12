@@ -279,7 +279,7 @@ impl NiceGitApp {
             crate::git_ext::github_open_menu(
                 ui,
                 "Open file on GitHub",
-                crate::git_ext::github_file_links(&snapshot, hash, path),
+                crate::git_ext::github_file_links(&snapshot, hash, path, &self.settings.github_enterprise_hosts),
                 crate::git_ext::PUSHED_COMMIT_NOTE,
             );
         }

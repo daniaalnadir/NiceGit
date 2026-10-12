@@ -30,6 +30,8 @@
   removes and refusing if someone else pushed since your last fetch.
 - A hovered change keeps its Stage and Discard buttons while a refresh reloads the diff;
   before, they vanished until the reload finished.
+- GitHub Enterprise: list your hosts in Settings and their remotes get pull requests, issues,
+  and Open on GitHub like github.com.
 
 ## 1.5.0 - Fewer surprises
 

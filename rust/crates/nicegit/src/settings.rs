@@ -164,6 +164,10 @@ pub struct Settings {
     pub recent: Vec<PathBuf>,
     /// Commit message drafts, keyed by checkout folder.
     pub drafts: BTreeMap<String, Draft>,
+    /// GitHub Enterprise Server hosts, such as `git.example.com`. Their remotes work like
+    /// github.com remotes. Stored lower-cased, without repeats.
+    #[serde(default)]
+    pub github_enterprise_hosts: Vec<String>,
 }
 
 impl Default for Settings {
@@ -185,8 +189,31 @@ impl Default for Settings {
             active: 0,
             recent: Vec::new(),
             drafts: BTreeMap::new(),
+            github_enterprise_hosts: Vec::new(),
         }
     }
+}
+
+/// Reads the GitHub Enterprise box, which has one hostname per line. Returns the valid hostnames,
+/// trimmed, lower-cased, and without repeats, and the lines that are not valid hostnames. A line
+/// for github.com is left out silently, since github.com is always supported.
+pub fn parse_enterprise_hosts(text: &str) -> (Vec<String>, Vec<String>) {
+    let mut valid: Vec<String> = Vec::new();
+    let mut invalid = Vec::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if line.eq_ignore_ascii_case("github.com") {
+            continue;
+        }
+        if nicegit_core::github::valid_enterprise_host(line) {
+            let host = line.to_ascii_lowercase();
+            if !valid.contains(&host) {
+                valid.push(host);
+            }
+        } else {
+            invalid.push(line.to_string());
+        }
+    }
+    (valid, invalid)
 }
 
 impl Settings {
@@ -205,7 +232,16 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
-    use super::Draft;
+    use super::{parse_enterprise_hosts, Draft};
+
+    #[test]
+    fn enterprise_hosts_are_trimmed_lowercased_and_deduplicated_and_invalid_lines_kept_apart() {
+        let (valid, invalid) =
+            parse_enterprise_hosts("  Git.Example.com \n\ngit.example.com\nnot a host\nhost:8443\ngithub.com\nghe.corp.internal");
+        assert_eq!(valid, vec!["git.example.com", "ghe.corp.internal"]);
+        assert_eq!(invalid, vec!["not a host", "host:8443"]);
+        assert_eq!(parse_enterprise_hosts(""), (Vec::new(), Vec::new()));
+    }
 
     #[test]
     fn drafts_round_trip_summary_and_description() {

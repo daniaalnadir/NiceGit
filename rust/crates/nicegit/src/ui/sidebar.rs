@@ -464,14 +464,14 @@ impl NiceGitApp {
             ui.close();
             self.fetch();
         }
-        if let Some(link) = crate::git_ext::github_pull_request_link(snapshot, branch) {
+        if let Some(link) = crate::git_ext::github_pull_request_link(snapshot, branch, &self.settings.github_enterprise_hosts) {
             let button = ui.button(format!("{}  Create pull request on GitHub", icon::GIT_PULL_REQUEST)).on_hover_text(&link);
             if button.clicked() {
                 ui.close();
                 crate::ui::changes::open_url(&link);
             }
         }
-        if let Some(link) = crate::git_ext::github_branch_link(snapshot, branch) {
+        if let Some(link) = crate::git_ext::github_branch_link(snapshot, branch, &self.settings.github_enterprise_hosts) {
             let button = ui.button(format!("{}  Open branch on GitHub", icon::ARROW_SQUARE_OUT)).on_hover_text(&link);
             if button.clicked() {
                 ui.close();
@@ -628,7 +628,7 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(branch.tip.clone());
         }
-        crate::git_ext::github_link_menu(ui, snapshot, &branch.tip);
+        crate::git_ext::github_link_menu(ui, snapshot, &branch.tip, &self.settings.github_enterprise_hosts);
     }
 
     pub fn request_merge(&mut self, source: Branch) {

@@ -273,3 +273,48 @@ fn double_click_a_branch_in_the_sidebar_to_check_it_out() {
     idle(&mut harness);
     wait(&mut harness, "the checkout", |_| git(path, &["branch", "--show-current"]) == "feature");
 }
+
+#[test]
+fn enterprise_remote_offers_open_on_github_once_listed() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://git.example.com/acme/app.git"]);
+    let hash = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+
+    // Until its host is listed in Settings, the enterprise remote gets no GitHub link.
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    assert!(!shows(&harness, "Open on GitHub"), "an unlisted host gives no link");
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+
+    harness.state_mut().settings.github_enterprise_hosts = vec!["git.example.com".to_string()];
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open on GitHub").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec![format!("https://git.example.com/acme/app/commit/{hash}")]);
+}
+
+#[test]
+fn settings_window_rejects_an_invalid_enterprise_host() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+
+    type_into(&mut harness, "GitHub Enterprise hosts", "Git.Example.com");
+    harness.key_press(Key::Enter);
+    type_into(&mut harness, "GitHub Enterprise hosts", "not a host");
+    settle(&mut harness);
+
+    // The valid hostname is saved, lower-cased; the invalid line stays in the box and is named.
+    assert_eq!(harness.state().settings.github_enterprise_hosts, vec!["git.example.com".to_string()]);
+    assert!(shows(&harness, "Not saved"), "the invalid line gets a warning");
+    assert!(shows(&harness, "not a host"), "the warning names the invalid line");
+}

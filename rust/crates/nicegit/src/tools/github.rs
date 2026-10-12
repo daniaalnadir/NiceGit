@@ -26,6 +26,8 @@ struct ListKey {
 pub struct GitHubWindow {
     /// The remote whose GitHub repository is shown.
     remote: String,
+    /// GitHub Enterprise hosts from Settings, as they were when the window opened.
+    hosts: Vec<String>,
     kind: ItemKind,
     state: ItemState,
     limit: usize,
@@ -39,17 +41,18 @@ pub struct GitHubWindow {
 }
 
 impl GitHubWindow {
-    /// A window for the GitHub repository behind `remote`.
+    /// A window for the GitHub repository behind `remote`, on github.com or one of `hosts`.
     /// Opens on issues rather than pull requests.
-    pub fn issues(remote: String) -> Self {
-        let mut window = Self::new(remote);
+    pub fn issues(remote: String, hosts: Vec<String>) -> Self {
+        let mut window = Self::new(remote, hosts);
         window.kind = ItemKind::Issue;
         window
     }
 
-    pub fn new(remote: String) -> Self {
+    pub fn new(remote: String, hosts: Vec<String>) -> Self {
         Self {
             remote,
+            hosts,
             kind: ItemKind::PullRequest,
             state: ItemState::Open,
             limit: PAGE,
@@ -89,10 +92,18 @@ impl ToolWindow for GitHubWindow {
 
     fn ui(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let ctx = ui.ctx().clone();
+        // The remote's host decides which `gh` sign-in is checked.
+        let host = crate::git_ext::github_repository_for_remote(cx.snapshot, &self.remote, &self.hosts).map(|repository| repository.host);
         if self.check_gh {
             self.check_gh = false;
-            let task = query(&ctx, cx.repo, |client, directory| Ok(client.gh_status(directory)));
-            self.gh.start((), task);
+            if !self.remote.is_empty() {
+                let (remote, hosts) = (self.remote.clone(), self.hosts.clone());
+                let task = query(&ctx, cx.repo, move |client, directory| {
+                    let repository = client.github_repository(&remote, directory, &hosts)?;
+                    Ok(client.gh_status(&repository.host, directory))
+                });
+                self.gh.start((), task);
+            }
         }
         self.gh.settle();
         let signed_in = matches!(self.gh.value(&()), Some(Ok(GhStatus::SignedIn)));
@@ -101,16 +112,16 @@ impl ToolWindow for GitHubWindow {
         // kind, state, page size, or refresh count changes.
         let key = self.key();
         if signed_in && !self.remote.is_empty() && !self.items.shown_or_pending_key(&key) {
-            let remote = self.remote.clone();
+            let (remote, hosts) = (self.remote.clone(), self.hosts.clone());
             let task = query(&ctx, cx.repo, move |client, directory| {
-                let repository = client.github_repository(&remote, directory)?;
+                let repository = client.github_repository(&remote, directory, &hosts)?;
                 client.github_items(&repository, key.kind, key.state, key.limit, directory)
             });
             self.items.start(key, task);
         }
         self.items.settle();
 
-        self.toolbar(ui);
+        self.toolbar(ui, host.as_deref());
         ui.add_space(6.0);
 
         if self.remote.is_empty() {
@@ -132,7 +143,7 @@ impl ToolWindow for GitHubWindow {
             }
             Some(Ok(GhStatus::SignedOut(explanation))) => {
                 let explanation = explanation.clone();
-                self.sign_in_guidance(ui, &explanation);
+                self.sign_in_guidance(ui, &explanation, host.as_deref().unwrap_or("github.com"));
                 return;
             }
             Some(Ok(GhStatus::SignedIn)) => {}
@@ -142,11 +153,11 @@ impl ToolWindow for GitHubWindow {
 }
 
 impl GitHubWindow {
-    fn toolbar(&mut self, ui: &mut Ui) {
+    fn toolbar(&mut self, ui: &mut Ui, host: Option<&str>) {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::GITHUB_LOGO).size(16.0).color(c.muted));
-            ui.label(RichText::new(heading_for_remote(&self.remote)).strong());
+            ui.label(RichText::new(heading_for_remote(&self.remote, host)).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let refresh = ui.add(egui::Button::new(icon::ARROW_CLOCKWISE)).on_hover_text("Read GitHub again");
                 if refresh.clicked() {
@@ -195,8 +206,9 @@ impl GitHubWindow {
         }
     }
 
-    fn sign_in_guidance(&mut self, ui: &mut Ui, explanation: &str) {
-        widgets::callout(ui, "GitHub CLI is not signed in. Run gh auth login in a terminal, then check again.", true);
+    fn sign_in_guidance(&mut self, ui: &mut Ui, explanation: &str, host: &str) {
+        let command = if host == "github.com" { "gh auth login".to_string() } else { format!("gh auth login --hostname {host}") };
+        widgets::callout(ui, &format!("GitHub CLI is not signed in. Run {command} in a terminal, then check again."), true);
         if !explanation.is_empty() {
             ui.add_space(4.0);
             let c = theme::of(ui);
@@ -317,12 +329,13 @@ fn parse_hex(hex: &str) -> Option<Color32> {
     Some(Color32::from_rgb((value >> 16) as u8, (value >> 8) as u8, value as u8))
 }
 
-/// The heading for the window, naming the remote whose GitHub repository is shown.
-fn heading_for_remote(remote: &str) -> String {
-    if remote.is_empty() {
-        "GitHub".to_string()
-    } else {
-        format!("GitHub · {remote}")
+/// The heading for the window, naming the remote whose GitHub repository is shown, and its host
+/// when that is not github.com.
+fn heading_for_remote(remote: &str, host: Option<&str>) -> String {
+    match host {
+        _ if remote.is_empty() => "GitHub".to_string(),
+        Some(host) if host != "github.com" => format!("GitHub · {remote} · {host}"),
+        _ => format!("GitHub · {remote}"),
     }
 }
 
