@@ -13,6 +13,17 @@ use nicegit_core::{GitClient, Operation};
 
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
+/// The names for a conflict's two sides, which the editor and the Changes panel both show. During
+/// a rebase the current side is the branch being rebased onto and the incoming side is the commit
+/// being replayed. Other operations use "Current" and "Incoming".
+pub fn side_names(operation: Option<Operation>) -> (&'static str, &'static str) {
+    if operation == Some(Operation::Rebase) {
+        ("Destination", "Replayed commit")
+    } else {
+        ("Current", "Incoming")
+    }
+}
+
 /// One of the versions shown beside the result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Version {
@@ -116,8 +127,7 @@ impl ToolWindow for ConflictWindow {
         };
 
         let idle = cx.idle;
-        let rebase = cx.snapshot.operation == Some(Operation::Rebase);
-        let (current, incoming) = if rebase { ("Destination", "Replayed commit") } else { ("Current", "Incoming") };
+        let (current, incoming) = side_names(cx.snapshot.operation);
         let markers = has_conflict_markers(&self.result, document.marker_size);
         let dirty = self.result != document.content;
 

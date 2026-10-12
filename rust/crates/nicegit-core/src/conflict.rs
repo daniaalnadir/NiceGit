@@ -83,12 +83,32 @@ impl GitClient {
         self.stage(&document.path, directory)
     }
 
-    /// Resolves a conflict by taking one side of the whole file, then stages it.
+    /// Resolves a conflict by taking one side of the whole file, then stages it. When that side
+    /// has no version of the file, because it deleted the file, taking it deletes the file.
     pub fn resolve_conflict_side(&self, path: &str, incoming: bool, directory: &Path) -> Result<()> {
         self.require_conflict(path, directory)?;
+        // Stage 2 is ours and stage 3 is theirs. `checkout` fails for a side that has no stage.
+        let stage = if incoming { 3 } else { 2 };
+        if !self.conflict_has_stage(path, stage, directory)? {
+            return self.run(&["rm", "--force", "--", path], directory).map(drop);
+        }
         let side = if incoming { "--theirs" } else { "--ours" };
         self.run(&["checkout", side, "--", path], directory)?;
         self.stage(path, directory)
+    }
+
+    /// Resolves several conflicted files by taking one side of each, as `resolve_conflict_side`
+    /// does. A file that cannot be resolved, including one no longer conflicted, is reported and
+    /// the others are still resolved.
+    pub fn resolve_conflicts_side(&self, paths: &[String], incoming: bool, directory: &Path) -> Result<ResolveReport> {
+        let mut report = ResolveReport::default();
+        for path in paths {
+            match self.resolve_conflict_side(path, incoming, directory) {
+                Ok(()) => report.resolved.push(path.clone()),
+                Err(error) => report.failed.push((path.clone(), failure_message(&error))),
+            }
+        }
+        Ok(report)
     }
 
     /// Resolves a conflict by deleting the file.
@@ -107,6 +127,17 @@ impl GitClient {
             return None;
         }
         String::from_utf8(bytes).ok()
+    }
+
+    /// Whether Git kept a version of `path` at `stage`. `ls-files -u -z` writes one record per
+    /// stage as `<mode> <object> <stage>TAB<path>`, each ended by a NUL.
+    fn conflict_has_stage(&self, path: &str, stage: u8, directory: &Path) -> Result<bool> {
+        let output = self.run(&["ls-files", "-u", "-z", "--", path], directory)?;
+        let mut stages = output.split('\0').filter_map(|record| {
+            let (info, _) = record.split_once('\t')?;
+            info.split_whitespace().nth(2)?.parse::<u8>().ok()
+        });
+        Ok(stages.any(|found| found == stage))
     }
 
     fn require_conflict(&self, path: &str, directory: &Path) -> Result<()> {
@@ -156,8 +187,24 @@ impl GitClient {
     }
 }
 
+/// The outcome of resolving several conflicted files: the paths that were resolved, and each
+/// path that was not with the reason.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResolveReport {
+    pub resolved: Vec<String>,
+    pub failed: Vec<(String, String)>,
+}
+
 fn conflict_error(message: &str) -> GitError {
     GitError::failed("resolve conflict", message)
+}
+
+/// The reason a failed resolution gives, without the command prefix that `Display` adds.
+fn failure_message(error: &GitError) -> String {
+    match error {
+        GitError::CommandFailed { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
 }
 
 fn not_text_error() -> GitError {

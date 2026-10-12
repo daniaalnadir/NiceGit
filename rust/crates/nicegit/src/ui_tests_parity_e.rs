@@ -362,6 +362,68 @@ fn delete_file_resolves_a_conflict_by_deleting_the_file() {
     assert!(!has_conflicts(&harness), "no conflict is left");
 }
 
+/// Like `merge_conflict_repository`, and also adds `extra.txt` on both branches, so merging
+/// conflicts on two files.
+fn two_file_conflict_repository() -> tempfile::TempDir {
+    let repo = merge_conflict_repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "extra.txt", "from feature\n", "Add extra on feature");
+    git(path, &["switch", "-q", "main"]);
+    commit_file(path, "extra.txt", "from main\n", "Add extra on main");
+    repo
+}
+
+#[test]
+fn take_incoming_for_all_conflicts() {
+    let repo = two_file_conflict_repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    stop_a_merge_on_a_conflict(&mut harness);
+    wait(&mut harness, "both conflicted files in the banner", |h| shows(h, "  extra.txt"));
+
+    harness.get_by_label_contains("Resolve all").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Take incoming for all").click();
+    wait(&mut harness, "the bulk confirmation", |h| shows(h, "Each file is replaced with its incoming version"));
+    settle(&mut harness);
+    assert!(shows(&harness, "• extra.txt") && shows(&harness, "• notes.txt"), "the confirmation lists both files");
+    assert!(!git(path, &["ls-files", "-u"]).is_empty(), "nothing is resolved before confirming");
+
+    harness.get_by_label("Take incoming versions").click();
+    idle(&mut harness);
+    wait(&mut harness, "the conflicts to be resolved", |h| !has_conflicts(h));
+    idle(&mut harness);
+
+    assert!(git(path, &["ls-files", "-u"]).is_empty(), "no unmerged paths remain");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nfrom feature\n", "notes.txt has feature's text");
+    assert_eq!(std::fs::read_to_string(path.join("extra.txt")).unwrap(), "from feature\n", "extra.txt has feature's text");
+    assert_eq!(operation(&harness), Some(Operation::Merge), "the merge waits to be committed");
+    assert!(shows(&harness, "Resolved 2 files with the incoming version."), "the notice counts both files");
+}
+
+#[test]
+fn take_current_version_from_a_files_menu() {
+    let repo = merge_conflict_repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    stop_a_merge_on_a_conflict(&mut harness);
+
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Take current version").click();
+    idle(&mut harness);
+    wait(&mut harness, "the conflict to be resolved", |h| !has_conflicts(h));
+    idle(&mut harness);
+
+    // Current is main's version, which is ours during the merge.
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\n", "notes.txt has main's text");
+    assert!(git(path, &["ls-files", "-u"]).is_empty(), "no unmerged paths remain");
+    assert!(shows(&harness, "Took the current version of notes.txt."), "the notice names the file");
+}
+
 // MARK: File history from the Changes panel
 
 #[test]

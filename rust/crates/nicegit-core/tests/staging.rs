@@ -590,6 +590,115 @@ fn binary_conflicts_cannot_be_edited_but_take_a_whole_side() {
     assert!(unmerged_paths(&repo).is_empty());
 }
 
+/// Writes `contents` to each of `files` and commits them. Each name is added as a literal
+/// pathspec, so a name with glob characters stages only that file.
+fn commit_files(repo: &Repo, files: &[&str], contents: &str, message: &str) {
+    for file in files {
+        repo.write(file, contents);
+        let literal = format!(":(literal){file}");
+        repo.git(&["add", "--", &literal]);
+    }
+    repo.git(&["commit", "--quiet", "-m", message]);
+}
+
+/// A repository where each of `files` is conflicted between `main` and `side`.
+fn conflicted_files_repo(files: &[&str]) -> Repo {
+    let repo = Repo::new();
+    commit_files(&repo, files, "base\n", "Base");
+    repo.git(&["switch", "-c", "side"]);
+    commit_files(&repo, files, "side\n", "Side change");
+    repo.git(&["switch", "main"]);
+    commit_files(&repo, files, "main\n", "Main change");
+    let merge = git_output(repo.path(), &["merge", "--no-edit", "side"]);
+    assert!(!merge.status.success(), "the merge was expected to conflict");
+    repo
+}
+
+/// A repository where `side` deletes `a.txt` while `main` changes it, so merging conflicts.
+fn modify_delete_repo() -> Repo {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side"]);
+    repo.git(&["rm", "--quiet", "--", "a.txt"]);
+    repo.git(&["commit", "--quiet", "-m", "Delete a.txt"]);
+    repo.git(&["switch", "main"]);
+    repo.commit("a.txt", "main\n", "Main change");
+    let merge = git_output(repo.path(), &["merge", "--no-edit", "side"]);
+    assert!(!merge.status.success(), "the merge was expected to conflict");
+    repo
+}
+
+#[test]
+fn resolve_conflicts_side_takes_incoming_for_every_file() {
+    let repo = conflicted_files_repo(&["a.txt", "b.txt"]);
+    let paths = ["a.txt".to_string(), "b.txt".to_string()];
+    let report = client().resolve_conflicts_side(&paths, true, repo.path()).expect("resolve every file");
+    assert_eq!(report.resolved, vec!["a.txt", "b.txt"]);
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+
+    assert_eq!(repo.read("a.txt"), "side\n");
+    assert_eq!(repo.read("b.txt"), "side\n");
+    assert_eq!(repo.index_text("a.txt"), "side\n");
+    assert_eq!(repo.index_text("b.txt"), "side\n");
+    assert!(unmerged_paths(&repo).is_empty());
+
+    // The merge can be committed once every file is resolved, with both parents.
+    repo.git(&["commit", "--quiet", "--no-edit"]);
+    assert!(!git_output(repo.path(), &["rev-parse", "-q", "--verify", "MERGE_HEAD"]).status.success(), "the merge is finished");
+    assert_eq!(repo.git(&["log", "-1", "--format=%p"]).split_whitespace().count(), 2);
+}
+
+#[test]
+fn resolve_conflict_side_deletes_when_that_side_removed_the_file() {
+    // Theirs deleted the file, so taking incoming removes it and resolves the conflict.
+    let repo = modify_delete_repo();
+    client().resolve_conflict_side("a.txt", true, repo.path()).expect("take incoming, which deleted the file");
+    assert!(!repo.path().join("a.txt").exists());
+    assert!(unmerged_paths(&repo).is_empty());
+    assert_eq!(repo.git(&["ls-files", "--", "a.txt"]), "");
+
+    // Taking current keeps our modified version instead.
+    let repo = modify_delete_repo();
+    client().resolve_conflict_side("a.txt", false, repo.path()).expect("take current, which kept the file");
+    assert_eq!(repo.read("a.txt"), "main\n");
+    assert_eq!(repo.index_text("a.txt"), "main\n");
+    assert!(unmerged_paths(&repo).is_empty());
+}
+
+#[test]
+fn resolve_conflicts_side_reports_files_already_resolved() {
+    let repo = conflicted_files_repo(&["a.txt", "b.txt"]);
+    client().resolve_conflict_side("a.txt", false, repo.path()).expect("resolve a.txt first");
+
+    let paths = ["a.txt".to_string(), "b.txt".to_string()];
+    let report = client().resolve_conflicts_side(&paths, true, repo.path()).expect("resolve the rest");
+    assert_eq!(report.resolved, vec!["b.txt"]);
+    assert_eq!(report.failed.len(), 1, "{:?}", report.failed);
+    assert_eq!(report.failed[0].0, "a.txt");
+    assert!(report.failed[0].1.contains("no longer has an unresolved conflict"), "unexpected reason: {:?}", report.failed);
+
+    // The file resolved earlier keeps the version taken then, and is not touched again.
+    assert_eq!(repo.read("a.txt"), "main\n");
+    assert_eq!(repo.read("b.txt"), "side\n");
+    assert!(unmerged_paths(&repo).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn resolve_conflicts_side_with_glob_like_names() {
+    let repo = conflicted_files_repo(&["a*.txt", "ab.txt"]);
+    let report = client().resolve_conflicts_side(&["a*.txt".to_string()], true, repo.path()).expect("resolve a*.txt");
+    assert_eq!(report.resolved, vec!["a*.txt"]);
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    assert_eq!(repo.read("a*.txt"), "side\n");
+
+    // The pattern matches only the literal name, so ab.txt stays conflicted.
+    let unmerged = unmerged_paths(&repo);
+    assert!(!unmerged.is_empty(), "ab.txt is still conflicted");
+    assert!(unmerged.lines().all(|line| line.ends_with("\tab.txt")), "only ab.txt is unmerged: {unmerged}");
+    assert!(repo.read("ab.txt").contains("<<<<<<<"), "ab.txt keeps its conflict markers");
+}
+
 #[test]
 fn marker_detection_matches_the_configured_length() {
     assert!(has_conflict_markers(">>>>>>> side\n", 7));
