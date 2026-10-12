@@ -57,6 +57,8 @@
   base, and commit list, and creates it through the GitHub CLI.
 - Resolve conflicts faster: take the current or incoming version of a file from its right-click
   menu, or of every conflicted file at once.
+- Clones go into a default folder, remembered from your first clone or set in Settings, so the
+  destination fills itself in.
 
 ## 1.5.0 - Fewer surprises
 

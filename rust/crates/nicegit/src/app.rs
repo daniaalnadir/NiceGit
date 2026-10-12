@@ -1822,6 +1822,10 @@ impl NiceGitApp {
         self.busy = None;
         match result {
             Ok(path) => {
+                // The first clone's parent folder becomes the default; an explicit choice stays.
+                if self.settings.clone_folder.is_none() {
+                    self.settings.clone_folder = path.parent().map(Path::to_path_buf);
+                }
                 self.notify(format!("Cloned into {}.", path.display()), false);
                 self.open(path);
             }

@@ -102,6 +102,29 @@ impl NiceGitApp {
                 })
                 .response
                 .on_hover_text("How often the open repository is fetched in the background, so ahead and behind counts stay current");
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label("Clone into");
+                    match self.settings.clone_folder.as_ref() {
+                        Some(folder) => {
+                            ui.add(egui::Label::new(RichText::new(folder.display().to_string()).monospace()).truncate())
+                                .on_hover_text(folder.display().to_string());
+                        }
+                        None => {
+                            ui.label(RichText::new("Not set").color(c.muted));
+                        }
+                    }
+                    if ui.button("Choose…").on_hover_text("Clones go into this folder by default").clicked() {
+                        if let Some(folder) = crate::file_dialog::pick_folder("Default folder for clones") {
+                            self.settings.clone_folder = Some(folder);
+                        }
+                    }
+                    if ui.add_enabled(self.settings.clone_folder.is_some(), egui::Button::new("Clear")).clicked() {
+                        self.settings.clone_folder = None;
+                    }
+                })
+                .response
+                .on_hover_text("The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.");
                 ui.add_space(10.0);
                 widgets::section(ui, "GitHub Enterprise");
                 let mut draft = ui
