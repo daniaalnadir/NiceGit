@@ -76,6 +76,14 @@ pub enum Pending {
         branch: String,
         head: Option<String>,
     },
+    /// Restoring one file to its version in a stash, captured with the checkout it was shown on.
+    RestoreFromStash {
+        path: String,
+        stash: Stash,
+        untracked: bool,
+        branch: String,
+        head: Option<String>,
+    },
     DeleteRemoteTag {
         tag: String,
         tip: String,
@@ -209,6 +217,7 @@ impl Pending {
                 | Pending::DeleteBranch { .. }
                 | Pending::DeleteTag { .. }
                 | Pending::DropStash(_)
+                | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
         )
     }
@@ -581,6 +590,14 @@ impl NiceGitApp {
                     .restore(&path, &source, &branch, head.as_deref(), repo)
                     .map(|_| Some(format!("Restored {path}. Review and commit the staged change.")))
             }),
+            Pending::RestoreFromStash { path, stash, untracked, branch, head } => {
+                let reference = stash.reference.clone();
+                self.act("Restore file", move |client, repo| {
+                    client
+                        .restore_from_stash(&path, &stash, untracked, &branch, head.as_deref(), repo)
+                        .map(|_| Some(format!("Restored {path} from {reference}.")))
+                })
+            }
             Pending::DeleteRemoteTag { tag, tip, remote, addresses } => self.act("Delete remote tag", move |client, path| {
                 let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
                 client.delete_remote_tag(&tag, &remote, &tip, expected, path).map(|_| Some(format!("Deleted {tag} from {remote}.")))

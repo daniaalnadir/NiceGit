@@ -1,6 +1,8 @@
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::line_counts::LineCount;
 use nicegit_core::models::short;
+use nicegit_core::{Stash, StashFile};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::ui::history::middle_ellipsis;
@@ -11,8 +13,17 @@ use crate::theme;
 use crate::tools::{self, widgets};
 
 impl NiceGitApp {
-    /// The commit inspector: message, metadata, signature, and changed files.
+    /// The inspector for the selected commit or stash, shown in the Changes panel's place.
     pub fn inspector(&mut self, ui: &mut Ui) {
+        match self.repo().map(|r| r.selection.clone()) {
+            Some(Selection::Commit { .. }) => self.commit_inspector(ui),
+            Some(Selection::Stash { .. }) => self.stash_inspector(ui),
+            _ => {}
+        }
+    }
+
+    /// The commit inspector: message, metadata, signature, and changed files.
+    fn commit_inspector(&mut self, ui: &mut Ui) {
         let c = theme::of(ui);
         let Some(Selection::Commit { hash, file }) = self.repo().map(|r| r.selection.clone()) else { return };
         let Some(snapshot) = self.snapshot().cloned() else { return };
@@ -140,25 +151,7 @@ impl NiceGitApp {
                     .unwrap_or_default();
                 for (status, path) in &files {
                     let selected = file.as_deref() == Some(path.as_str());
-                    let color = widgets::change_letter_color(ui, status);
-                    let response = ui
-                        .horizontal(|ui| {
-                            ui.label(RichText::new(status.chars().next().unwrap_or('M').to_string()).monospace().strong().color(color));
-                            // The counts are laid out first, from the right, so a long path is
-                            // shortened rather than pushing them out of view.
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if let Some(count) = counts.get(path) {
-                                    crate::ui::changes::line_count(ui, *count);
-                                }
-                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                    ui.add(egui::Button::selectable(selected, path.as_str()).truncate())
-                                })
-                                .inner
-                            })
-                            .inner
-                        })
-                        .inner
-                        .on_hover_text(path);
+                    let response = changed_file_row(ui, status, path, selected, counts.get(path).copied(), None);
                     if response.clicked() {
                         self.select_commit_file(hash.clone(), Some(path.clone()));
                     }
@@ -166,6 +159,107 @@ impl NiceGitApp {
                 }
             });
         });
+    }
+
+    /// The stash inspector: the stash's message and reference, and the files it saved. Choosing
+    /// a file shows just its changes; restoring one is offered from its menu.
+    fn stash_inspector(&mut self, ui: &mut Ui) {
+        let c = theme::of(ui);
+        let Some(Selection::Stash { hash, file }) = self.repo().map(|r| r.selection.clone()) else { return };
+        let Some(snapshot) = self.snapshot().cloned() else { return };
+        let Some(stash) = snapshot.stashes.iter().find(|s| s.hash == hash).cloned() else { return };
+        // The files are listed for this stash only; a listing for another stash is not shown.
+        let listing = self.repo().and_then(|r| r.stash_files.clone()).filter(|(listed, _)| *listed == hash).map(|(_, result)| result);
+
+        egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button(format!("{}  Changes", icon::ARROW_LEFT)).on_hover_text("Back to the Changes panel (Esc)").clicked() {
+                    self.clear_selection();
+                }
+            });
+        });
+        ui.separator();
+        egui::ScrollArea::vertical().id_salt("inspector").auto_shrink(false).show(ui, |ui| {
+            egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 8, bottom: 12 }).show(ui, |ui| {
+                ui.label(RichText::new(stash.message.as_str()).size(16.0).strong());
+                ui.add_space(10.0);
+                egui::Grid::new("stash_meta").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                    let caption = |ui: &mut Ui, text: &str| {
+                        ui.label(RichText::new(text).small().color(c.muted));
+                    };
+                    caption(ui, "Stash");
+                    ui.label(RichText::new(stash.reference.as_str()).monospace());
+                    ui.end_row();
+                    caption(ui, "Commit");
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(short(&stash.hash)).monospace());
+                        if widgets::icon_button(ui, icon::COPY, "Copy the full stash commit ID", true).clicked() {
+                            ui.ctx().copy_text(stash.hash.clone());
+                        }
+                    });
+                    ui.end_row();
+                });
+                ui.add_space(14.0);
+                ui.horizontal(|ui| match &listing {
+                    Some(Ok(files)) => widgets::section(ui, &format!("Changed files ({})", files.len())),
+                    _ => widgets::section(ui, "Changed files"),
+                });
+                ui.add_space(2.0);
+                if ui.add(egui::Button::selectable(file.is_none(), RichText::new(format!("{}  Show all changes", icon::FILES)))).clicked() {
+                    self.select_stash_file(stash.clone(), None);
+                }
+                match &listing {
+                    None => widgets::loading(ui, "Listing files…"),
+                    Some(Err(error)) => widgets::error(ui, error),
+                    Some(Ok(files)) => {
+                        for entry in files {
+                            let selected = file.as_deref() == Some(entry.path.as_str());
+                            let tag = entry.untracked.then_some("untracked");
+                            let response = changed_file_row(ui, &entry.status, &entry.path, selected, None, tag);
+                            if response.clicked() {
+                                self.select_stash_file(stash.clone(), Some(entry.path.clone()));
+                            }
+                            response.context_menu(|ui| self.stash_file_menu(ui, &stash, entry));
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    fn stash_file_menu(&mut self, ui: &mut Ui, stash: &Stash, file: &StashFile) {
+        let Some(snapshot) = self.snapshot().cloned() else { return };
+        ui.set_min_width(240.0);
+        // A file the stash deletes has no version in it to restore.
+        if !file.status.starts_with('D') {
+            let allowed = self.idle() && snapshot.operation.is_none() && !self.has_unsaved_editor() && snapshot.is_on_branch();
+            if ui
+                .add_enabled(allowed, egui::Button::new(format!("{}  Restore this file from the stash", icon::ARROW_COUNTER_CLOCKWISE)))
+                .clicked()
+            {
+                ui.close();
+                self.confirm(
+                    format!("Restore {}?", file.path),
+                    format!(
+                        "This replaces {} in your working files and in the staged version with its version from {}. Its current changes are lost; other files and the branch are not changed.",
+                        file.path, stash.reference
+                    ),
+                    "Restore",
+                    crate::ui::dialogs::Pending::RestoreFromStash {
+                        path: file.path.clone(),
+                        stash: stash.clone(),
+                        untracked: file.untracked,
+                        branch: snapshot.current_branch.clone(),
+                        head: snapshot.head_hash.clone(),
+                    },
+                );
+            }
+            ui.separator();
+        }
+        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+            ui.close();
+            ui.ctx().copy_text(file.path.clone());
+        }
     }
 
     fn commit_file_menu(&mut self, ui: &mut Ui, hash: &str, path: &str, status: &str) {
@@ -248,6 +342,31 @@ impl NiceGitApp {
         let value = cell.lock().unwrap_or_else(|p| p.into_inner()).clone();
         value.flatten().map(|summary| (summary.text, signature_color(summary.level, &c), summary.help))
     }
+}
+
+/// One changed file in an inspector's list: its change letter, then its path, with an optional
+/// tag and line counts laid out from the right. A long path is shortened, not the counts.
+fn changed_file_row(ui: &mut Ui, status: &str, path: &str, selected: bool, count: Option<LineCount>, tag: Option<&str>) -> egui::Response {
+    let c = theme::of(ui);
+    let color = widgets::change_letter_color(ui, status);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(status.chars().next().unwrap_or('M').to_string()).monospace().strong().color(color));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if let Some(count) = count {
+                crate::ui::changes::line_count(ui, count);
+            }
+            if let Some(tag) = tag {
+                ui.label(RichText::new(tag).small().color(c.muted));
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.add(egui::Button::selectable(selected, path).truncate())
+            })
+            .inner
+        })
+        .inner
+    })
+    .inner
+    .on_hover_text(path)
 }
 
 /// The colour for a signature's level, as the Mac app colours it: green when verified, orange

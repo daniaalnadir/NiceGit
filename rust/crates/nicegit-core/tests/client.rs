@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
-use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StatusEntry, StatusKind};
+use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StashFile, StatusEntry, StatusKind};
 use tempfile::TempDir;
 
 // MARK: Helpers
@@ -607,6 +607,169 @@ fn save_stash_on_clean_tree_reports_error() {
 
     assert!(client().save_stash("nothing", repo.path()).is_err());
     assert!(client().list_stashes(repo.path()).unwrap().is_empty());
+}
+
+/// Stashes the working changes, returning the stash entry.
+fn stash_all(repo: &Repo, message: &str) -> nicegit_core::models::Stash {
+    client().save_stash(message, repo.path()).expect("save stash");
+    client().list_stashes(repo.path()).unwrap()[0].clone()
+}
+
+fn stash_file(repo: &Repo, stash: &nicegit_core::models::Stash, path: &str) -> StashFile {
+    client()
+        .stash_files(stash, repo.path())
+        .expect("list stash files")
+        .into_iter()
+        .find(|file| file.path == path)
+        .unwrap_or_else(|| panic!("the stash has no file {path}"))
+}
+
+#[test]
+fn stash_files_lists_tracked_and_untracked_changes() {
+    let repo = Repo::new();
+    repo.commit("kept.txt", "keep\n", "First");
+    repo.commit("edited.txt", "one\n", "Second");
+    repo.commit("gone.txt", "bye\n", "Third");
+    repo.write("edited.txt", "two\n");
+    fs::remove_file(repo.path().join("gone.txt")).unwrap();
+    repo.write("new.txt", "fresh\n");
+    let mut expected = vec![
+        StashFile { status: "M".into(), path: "edited.txt".into(), untracked: false },
+        StashFile { status: "D".into(), path: "gone.txt".into(), untracked: false },
+        StashFile { status: "A".into(), path: "new.txt".into(), untracked: true },
+    ];
+    // Windows cannot have a newline in a file name, so this case runs elsewhere.
+    #[cfg(not(windows))]
+    {
+        repo.write("line\nbreak.txt", "newline\n");
+        expected.push(StashFile { status: "A".into(), path: "line\nbreak.txt".into(), untracked: true });
+    }
+    expected.sort_by(|a, b| a.path.cmp(&b.path));
+    let stash = stash_all(&repo, "mixed");
+
+    let files = client().stash_files(&stash, repo.path()).expect("list stash files");
+
+    assert_eq!(files, expected);
+}
+
+#[test]
+fn stash_file_diff_shows_one_file() {
+    let repo = Repo::new();
+    repo.commit("one.txt", "a\n", "First");
+    repo.commit("two.txt", "b\n", "Second");
+    repo.write("one.txt", "a changed\n");
+    repo.write("two.txt", "b changed\n");
+    let stash = stash_all(&repo, "two files");
+    let file = stash_file(&repo, &stash, "one.txt");
+
+    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff one file");
+
+    assert!(diff.contains("+a changed"), "the file's change is shown: {diff}");
+    assert!(!diff.contains("two.txt") && !diff.contains("b changed"), "the other file is not: {diff}");
+}
+
+#[test]
+fn stash_file_diff_shows_an_untracked_file() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("scratch.txt", "fresh one\nfresh two\n");
+    let stash = stash_all(&repo, "scratch");
+    let file = stash_file(&repo, &stash, "scratch.txt");
+    assert!(file.untracked);
+
+    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff untracked file");
+
+    assert!(diff.contains("+fresh one") && diff.contains("+fresh two"), "the content is added lines: {diff}");
+    assert!(diff.contains("new file mode"), "the file is shown as new: {diff}");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn stash_file_diff_with_glob_characters() {
+    // `*` is not allowed in Windows file names, so this case only runs elsewhere.
+    let repo = Repo::new();
+    repo.write("a*.txt", "star one\n");
+    repo.write("ab.txt", "ab one\n");
+    repo.git(&["add", "--", ":(literal)a*.txt", "ab.txt"]);
+    repo.git(&["commit", "-q", "-m", "First"]);
+    repo.write("a*.txt", "star two\n");
+    repo.write("ab.txt", "ab two\n");
+    let stash = stash_all(&repo, "both");
+    let file = stash_file(&repo, &stash, "a*.txt");
+
+    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff glob-named file");
+
+    assert!(diff.contains("+star two"), "the glob-named file's change is shown: {diff}");
+    assert!(!diff.contains("ab.txt") && !diff.contains("ab two"), "the file it matches is not: {diff}");
+}
+
+#[test]
+fn stash_diffs_can_ignore_whitespace() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "a\nb\n", "First");
+    repo.write("a.txt", "a  \nb changed\n");
+    let stash = stash_all(&repo, "spaces");
+    let file = stash_file(&repo, &stash, "a.txt");
+
+    let plain = client().stash_diff_with(&stash, false, repo.path()).expect("whole stash");
+    let quiet = client().stash_diff_with(&stash, true, repo.path()).expect("whole stash, ignoring whitespace");
+    let file_quiet = client().stash_file_diff(&stash, &file, true, repo.path()).expect("one file, ignoring whitespace");
+
+    assert!(plain.contains("+a  "), "the whitespace-only change is shown by default: {plain}");
+    assert!(!quiet.contains("+a  ") && quiet.contains("+b changed"), "whitespace-only changes are left out: {quiet}");
+    assert!(!file_quiet.contains("+a  ") && file_quiet.contains("+b changed"), "one file leaves them out too: {file_quiet}");
+}
+
+#[test]
+fn restore_a_file_from_a_stash() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.commit("b.txt", "b one\n", "Second");
+    repo.write("a.txt", "two\n");
+    repo.write("b.txt", "b two\n");
+    let stash = stash_all(&repo, "two files");
+    // Other work the restore must not touch.
+    repo.write("b.txt", "b other work\n");
+    let (branch, head) = (snapshot(repo.path()).current_branch, repo.head());
+
+    client().restore_from_stash("a.txt", &stash, false, &branch, Some(&head), repo.path()).expect("restore a.txt from the stash");
+
+    assert_eq!(repo.read("a.txt"), "two\n", "the working file has the stash version");
+    assert_eq!(repo.git(&["show", ":a.txt"]), "two\n", "the staged version has the stash version");
+    assert_eq!(repo.read("b.txt"), "b other work\n", "other files are untouched");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is kept");
+}
+
+#[test]
+fn restore_an_untracked_file_from_a_stash() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("scratch.txt", "saved\n");
+    let stash = stash_all(&repo, "scratch");
+    assert!(!repo.path().join("scratch.txt").exists(), "stashing removed the untracked file");
+    let (branch, head) = (snapshot(repo.path()).current_branch, repo.head());
+
+    client()
+        .restore_from_stash("scratch.txt", &stash, true, &branch, Some(&head), repo.path())
+        .expect("restore the untracked file from the stash");
+
+    assert_eq!(repo.read("scratch.txt"), "saved\n");
+    assert_eq!(repo.git(&["show", ":scratch.txt"]), "saved\n", "the file is staged with its stash version");
+}
+
+#[test]
+fn restore_from_a_dropped_stash_is_refused() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "gone soon");
+    client().drop_stash(&stash, repo.path()).expect("drop stash");
+    let (branch, head) = (snapshot(repo.path()).current_branch, repo.head());
+
+    let result = client().restore_from_stash("a.txt", &stash, false, &branch, Some(&head), repo.path());
+
+    assert!(error_text(result).contains("no longer exists"));
+    assert_eq!(repo.read("a.txt"), "one\n", "the working file is untouched");
 }
 
 // MARK: Tags
