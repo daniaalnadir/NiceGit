@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use crate::diff::DiffRequest;
 use crate::models::*;
 use crate::parsers::*;
 use crate::runner::{self, RunOptions};
@@ -389,31 +390,26 @@ impl GitClient {
         Ok(())
     }
 
-    /// Like [`Self::diff`], optionally hiding whitespace-only changes.
-    pub fn diff_with(&self, entry: Selected, staged: bool, ignore_whitespace: bool, directory: &Path) -> Result<String> {
-        if !ignore_whitespace || entry.kind == StatusKind::Untracked {
-            return self.diff(entry, staged, directory);
-        }
-        let mut arguments = vec!["diff", "--no-ext-diff", "--no-color", "-w"];
-        if staged {
-            arguments.push("--cached");
-        }
-        arguments.extend(["--", entry.path.as_str()]);
-        if entry.kind == StatusKind::Renamed && staged {
-            arguments.extend(entry.original_path.as_deref());
-        }
-        self.run(&arguments, directory)
+    /// The diff of one file with Git's default context.
+    pub fn diff(&self, entry: Selected, staged: bool, directory: &Path) -> Result<String> {
+        self.diff_with(entry, staged, DiffRequest::default(), directory)
     }
 
-    pub fn diff(&self, entry: Selected, staged: bool, directory: &Path) -> Result<String> {
+    /// The diff of one file, hiding whitespace-only changes and showing the requested context
+    /// when asked. Untracked files are shown whole, as new files, and ignore the whitespace option.
+    pub fn diff_with(&self, entry: Selected, staged: bool, request: DiffRequest, directory: &Path) -> Result<String> {
+        let context = request.context.argument();
         if entry.kind == StatusKind::Untracked {
-            return self.run_accepting(
-                &["diff", "--no-index", "--no-ext-diff", "--no-color", "--", "/dev/null", &entry.path],
-                directory,
-                &[0, 1],
-            );
+            let mut arguments = vec!["diff", "--no-index", "--no-ext-diff", "--no-color"];
+            arguments.extend(context.as_deref());
+            arguments.extend(["--", "/dev/null", entry.path.as_str()]);
+            return self.run_accepting(&arguments, directory, &[0, 1]);
         }
         let mut arguments = vec!["diff", "--no-ext-diff", "--no-color"];
+        if request.ignore_whitespace {
+            arguments.push("-w");
+        }
+        arguments.extend(context.as_deref());
         if staged {
             arguments.push("--cached");
         }
@@ -584,11 +580,13 @@ impl GitClient {
         self.run(&arguments, directory)
     }
 
-    pub fn commit_diff_with(&self, hash: &str, path: Option<&str>, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+    pub fn commit_diff_with(&self, hash: &str, path: Option<&str>, request: DiffRequest, directory: &Path) -> Result<String> {
+        let context = request.context.argument();
         let mut arguments = vec!["show", "--first-parent", "-m", "--format=", "--patch", "--no-ext-diff", "--no-color"];
-        if ignore_whitespace {
+        if request.ignore_whitespace {
             arguments.push("-w");
         }
+        arguments.extend(context.as_deref());
         arguments.extend([hash, "--"]);
         arguments.extend(path);
         self.run(&arguments, directory)
@@ -1210,15 +1208,17 @@ impl GitClient {
     }
 
     pub fn stash_diff(&self, stash: &Stash, directory: &Path) -> Result<String> {
-        self.stash_diff_with(stash, false, directory)
+        self.stash_diff_with(stash, DiffRequest::default(), directory)
     }
 
-    /// A stash's changes, optionally leaving out whitespace-only changes.
-    pub fn stash_diff_with(&self, stash: &Stash, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+    /// A stash's changes, optionally leaving out whitespace-only changes and showing the requested context.
+    pub fn stash_diff_with(&self, stash: &Stash, request: DiffRequest, directory: &Path) -> Result<String> {
+        let context = request.context.argument();
         let mut args = vec!["stash", "show", "--include-untracked", "--patch", "--no-ext-diff", "--no-color"];
-        if ignore_whitespace {
+        if request.ignore_whitespace {
             args.push("--ignore-all-space");
         }
+        args.extend(context.as_deref());
         args.push(&stash.hash);
         self.run(&args, directory)
     }
@@ -1251,7 +1251,8 @@ impl GitClient {
 
     /// The patch for one file a stash saved. A tracked file is compared with the commit the
     /// stash was made on; an untracked file appears entirely as added lines.
-    pub fn stash_file_diff(&self, stash: &Stash, file: &StashFile, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+    pub fn stash_file_diff(&self, stash: &Stash, file: &StashFile, request: DiffRequest, directory: &Path) -> Result<String> {
+        let context = request.context.argument();
         let commit = self.resolve_commit(&stash.hash, directory)?;
         let (before, after) = if file.untracked {
             let untracked = self
@@ -1262,9 +1263,10 @@ impl GitClient {
             (self.resolve_commit(&format!("{commit}^1"), directory)?, commit)
         };
         let mut arguments = vec!["diff", "--no-ext-diff", "--no-color"];
-        if ignore_whitespace {
+        if request.ignore_whitespace {
             arguments.push("--ignore-all-space");
         }
+        arguments.extend(context.as_deref());
         // The runner passes literal pathspecs to `diff`, so a glob-like name matches only itself.
         arguments.extend([before.as_str(), after.as_str(), "--", file.path.as_str()]);
         self.run(&arguments, directory)

@@ -1475,7 +1475,7 @@ fn drag_a_graph_label_onto_the_current_row_to_rebase_onto_it() {
 /// Moves the pointer down the diff until a run of changed lines shows `button`, as a person
 /// hovering the change would. The sweep starts once the lines are stageable and the layout has
 /// settled, and it reads the find field's position at each step.
-fn hover_change_until(harness: &mut App, button: &str) {
+pub(crate) fn hover_change_until(harness: &mut App, button: &str) {
     wait_for_stageable_lines(harness);
     for step in 0..120 {
         let field = harness.get_by_label("Find in diff").rect();
@@ -1526,7 +1526,7 @@ fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_un
 
 /// Waits until the open change's lines can be staged: its diff and review have both loaded for
 /// the diff now shown, and the find field has stopped moving, so the layout is settled.
-fn wait_for_stageable_lines(harness: &mut App) {
+pub(crate) fn wait_for_stageable_lines(harness: &mut App) {
     wait(harness, "lines to be stageable", |h| {
         h.state().repo().is_some_and(|r| r.diff_options.selectable && !r.diff_loading && !r.review_loading)
     });

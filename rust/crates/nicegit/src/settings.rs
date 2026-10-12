@@ -50,6 +50,42 @@ impl From<HistoryScope> for nicegit_core::HistoryScope {
     }
 }
 
+/// How many unchanged lines a diff shows around each change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum DiffContextSetting {
+    /// Three lines, as Git shows by default.
+    #[default]
+    Three,
+    Ten,
+    TwentyFive,
+    WholeFile,
+}
+
+impl DiffContextSetting {
+    pub const ALL: [Self; 4] = [Self::Three, Self::Ten, Self::TwentyFive, Self::WholeFile];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Three => "3 lines",
+            Self::Ten => "10 lines",
+            Self::TwentyFive => "25 lines",
+            Self::WholeFile => "Whole file",
+        }
+    }
+
+    /// The context Git is asked for. Three is spelled out, not left to Git, so the setting means
+    /// exactly three lines whatever the user's `diff.context` says.
+    pub fn context(self) -> nicegit_core::diff::DiffContext {
+        use nicegit_core::diff::DiffContext;
+        match self {
+            Self::Three => DiffContext::Lines(3),
+            Self::Ten => DiffContext::Lines(10),
+            Self::TwentyFive => DiffContext::Lines(25),
+            Self::WholeFile => DiffContext::WholeFile,
+        }
+    }
+}
+
 /// A commit message being written, kept per checkout (repository and branch).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Draft {
@@ -194,6 +230,9 @@ pub struct Settings {
     /// Which branches the commit graph shows, in every repository.
     #[serde(default)]
     pub history_scope: HistoryScope,
+    /// How many unchanged lines each diff shows around its changes.
+    #[serde(default)]
+    pub diff_context: DiffContextSetting,
 }
 
 impl Default for Settings {
@@ -217,6 +256,7 @@ impl Default for Settings {
             drafts: BTreeMap::new(),
             github_enterprise_hosts: Vec::new(),
             history_scope: HistoryScope::All,
+            diff_context: DiffContextSetting::default(),
         }
     }
 }

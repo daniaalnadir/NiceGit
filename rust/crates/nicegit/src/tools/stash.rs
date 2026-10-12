@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use egui::{Color32, Margin, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::diff::parse_diff;
+use nicegit_core::diff::{parse_diff, DiffContext, DiffRequest};
 use nicegit_core::models::{Operation, Stash, StatusEntry, StatusKind};
 use nicegit_core::Snapshot;
 
@@ -122,6 +122,8 @@ pub struct StashWindow {
     ignore_whitespace: bool,
     /// A pop or delete waiting for confirmation.
     pending: Option<(Confirm, Stash)>,
+    /// Unchanged lines the preview shows around each change, following the app setting.
+    diff_context: DiffContext,
 }
 
 impl Default for StashWindow {
@@ -143,6 +145,7 @@ impl StashWindow {
             preview: None,
             ignore_whitespace: false,
             pending: None,
+            diff_context: DiffContext::default(),
         }
     }
 
@@ -170,8 +173,8 @@ impl StashWindow {
             hash: stash.hash.clone(),
             title,
             task: query(ctx, repo, {
-                let ignore_whitespace = self.ignore_whitespace;
-                move |client, directory| client.stash_diff_with(&owned, ignore_whitespace, directory)
+                let request = DiffRequest { ignore_whitespace: self.ignore_whitespace, context: self.diff_context };
+                move |client, directory| client.stash_diff_with(&owned, request, directory)
             }),
         });
     }
@@ -436,9 +439,10 @@ impl ToolWindow for StashWindow {
 
     fn ui(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         self.sync(cx.snapshot);
-        // A change to the whitespace setting reads the shown stash again.
-        if self.ignore_whitespace != cx.ignore_whitespace {
+        // A change to the whitespace or context setting reads the shown stash again.
+        if self.ignore_whitespace != cx.ignore_whitespace || self.diff_context != cx.diff_context {
             self.ignore_whitespace = cx.ignore_whitespace;
+            self.diff_context = cx.diff_context;
             let shown = self.selected_stash.take();
             if let Some(stash) = cx.snapshot.stashes.iter().find(|stash| Some(&stash.hash) == shown.as_ref()) {
                 self.select(stash, ui.ctx(), cx.repo);

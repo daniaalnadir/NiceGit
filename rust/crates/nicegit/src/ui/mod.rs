@@ -18,6 +18,7 @@ use egui::{Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::app::{NiceGitApp, Selection};
+use crate::settings::DiffContextSetting;
 use crate::theme;
 use crate::tools::widgets;
 
@@ -518,7 +519,9 @@ impl NiceGitApp {
             _ => None,
         };
         // A narrow panel puts the view controls on a second row, so the file's name keeps room.
-        let wide = panel_width >= 820.0;
+        // The controls need about 670 points beside History and the file steps, so the header
+        // stays on one row only from 960 points, leaving room for the name.
+        let wide = panel_width >= 960.0;
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let back = ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)");
@@ -565,7 +568,9 @@ impl NiceGitApp {
             if !wide {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // The controls wrap onto another line when a narrow panel cannot fit them all,
+                    // so the last ones added, such as Copy, are never cut off.
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center).with_main_wrap(true), |ui| {
                         self.diff_view_controls(ui, panel_width, editable.clone());
                     });
                 });
@@ -705,6 +710,23 @@ impl NiceGitApp {
         let mut ignore = self.settings.ignore_whitespace;
         if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
             self.settings.ignore_whitespace = ignore;
+            self.reload_diff();
+        }
+        // How many unchanged lines show around each change; a change reads the diff again.
+        let mut context = self.settings.diff_context;
+        egui::ComboBox::from_id_salt("diff-context")
+            .width(110.0)
+            .selected_text(context.label())
+            .show_ui(ui, |ui| {
+                for option in DiffContextSetting::ALL {
+                    ui.selectable_value(&mut context, option, option.label());
+                }
+            })
+            .response
+            .on_hover_text("How many unchanged lines to show around each change")
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Context lines"));
+        if context != self.settings.diff_context {
+            self.settings.diff_context = context;
             self.reload_diff();
         }
         if let Some(path) = editable {
