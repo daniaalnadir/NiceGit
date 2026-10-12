@@ -9,6 +9,7 @@ use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
 
+pub mod archive;
 pub mod bisect;
 pub mod blame;
 pub mod branch_cleanup;

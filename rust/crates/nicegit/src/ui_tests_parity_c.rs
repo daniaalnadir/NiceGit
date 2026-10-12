@@ -306,3 +306,24 @@ fn returning_to_the_app_waits_for_an_open_dialog_to_close() {
     harness.get_by_label("Cancel").click();
     wait(&mut harness, "the refresh once the dialog closes", listed);
 }
+
+#[test]
+fn save_a_commit_as_zip() {
+    let repo = repository();
+    let path = repo.path();
+    let folder = temp_dir();
+    let archive = folder.path().join("saved.zip");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    crate::file_dialog::answer_next(&archive);
+    harness.get_by_label_contains("Save as ZIP").click();
+    wait(&mut harness, "the saved archive", |_| archive.exists());
+    idle(&mut harness);
+
+    let bytes = std::fs::read(&archive).unwrap();
+    assert!(bytes.starts_with(b"PK"), "the archive is a ZIP");
+    wait(&mut harness, "the save notice", |h| shows(h, "Saved saved.zip"));
+}

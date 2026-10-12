@@ -296,6 +296,12 @@ menu. The export includes author/message metadata and binary changes and does no
 change the repository. Merge commits and commits without an exportable patch are
 not supported by this action.
 
+Save as ZIP… from the same menu writes the commit's files as a `.zip` archive, with
+them inside a top folder named after the repository and the short hash, as GitHub's
+Download ZIP does. Submodule contents are not included, and files marked
+`export-ignore` in `.gitattributes` are left out. The archive does not change the
+repository.
+
 Use Repository > Apply Patch to choose a patch file and confirm the destination
 checkout. Git checks the captured patch before applying it; resulting changes
 remain unstaged and uncommitted. Invalid patches and paths outside the repository

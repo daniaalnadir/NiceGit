@@ -27,6 +27,22 @@ fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+/// Refuses an archive folder name that is not a single safe path component. The name becomes
+/// the top folder of the archive, so it must not add directories, climb out of the archive, or
+/// read as an option.
+fn validate_archive_prefix(prefix: &str) -> Result<()> {
+    let safe = !prefix.is_empty()
+        && prefix != "."
+        && !prefix.contains("..")
+        && !prefix.starts_with('-')
+        && !prefix.chars().any(|c| matches!(c, '/' | '\\' | '\0') || c.is_control());
+    if safe {
+        Ok(())
+    } else {
+        Err(GitError::failed("archive", "The archive folder name must be a single name without slashes, \"..\", or a leading dash."))
+    }
+}
+
 /// Runs Git commands for one or more repositories. Every method takes the checkout it acts on,
 /// and every action that changes files or refs first confirms the checkout it was chosen for.
 #[derive(Clone, Debug, Default)]
@@ -1221,6 +1237,36 @@ impl GitClient {
             return Err(GitError::failed("format-patch", "This commit has no exportable patch."));
         }
         Ok(patch)
+    }
+
+    /// Writes the files of `commit` to `destination` as a ZIP archive, inside a top folder named
+    /// `prefix`, as `git archive` makes it. Nothing in the repository changes.
+    ///
+    /// Git's `export-ignore` and `export-subst` attributes apply, as they do for GitHub's
+    /// "Download ZIP". Submodule contents are not included; Git archives only the commit's own
+    /// files. An existing file at `destination` is replaced, so the caller must have confirmed
+    /// that. The archive is written beside `destination` first and renamed over it only when
+    /// complete, so a failed export never leaves a truncated ZIP in place of a good one.
+    pub fn archive_commit(&self, commit: &str, prefix: &str, destination: &Path, directory: &Path) -> Result<()> {
+        validate_archive_prefix(prefix)?;
+        // Git receives the paths as text, so a destination that is not valid UTF-8 cannot be used.
+        let destination = std::path::absolute(destination).map_err(|error| GitError::failed("archive", error.to_string()))?;
+        if destination.to_str().is_none() {
+            return Err(GitError::failed("archive", "Choose a save location whose name is valid UTF-8 text."));
+        }
+        let resolved = self.resolve_commit(commit, directory)?;
+        let mut partial_name = destination.as_os_str().to_owned();
+        partial_name.push(format!(".partial-{}", std::process::id()));
+        let partial = PathBuf::from(partial_name);
+        let output = format!("--output={}", partial.to_string_lossy());
+        let prefix_argument = format!("--prefix={prefix}/");
+        let written = self
+            .run(&["archive", "--format=zip", &prefix_argument, &output, &resolved], directory)
+            .and_then(|_| std::fs::rename(&partial, &destination).map_err(|error| GitError::failed("archive", error.to_string())));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&partial);
+        }
+        written
     }
 
     // MARK: Tags

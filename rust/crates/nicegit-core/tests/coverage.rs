@@ -464,6 +464,89 @@ fn export_refuses_merge_commit() {
     assert!(error_text(result).contains("Merge commits cannot be exported"));
 }
 
+/// The names of the entries in `directory`, sorted.
+fn entry_names(directory: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(directory)
+        .expect("read folder")
+        .map(|entry| entry.expect("read entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn archive_commit_writes_the_commits_files() {
+    let repo = Repo::new();
+    let first = repo.commit("file.txt", "first\n", "First");
+    repo.commit("later.txt", "later\n", "Second");
+    let folder = tempfile::tempdir().expect("create temp dir");
+    let destination = folder.path().join("archive.zip");
+
+    client().archive_commit(&first, "project-abc1234", &destination, repo.path()).expect("archive commit");
+
+    let bytes = fs::read(&destination).expect("read archive");
+    assert!(bytes.starts_with(b"PK\x03\x04"), "the archive is a ZIP");
+    // ZIP stores entry names uncompressed, so they can be found in the raw bytes.
+    assert!(bytes.windows(b"project-abc1234/file.txt".len()).any(|w| w == b"project-abc1234/file.txt"));
+    assert!(!bytes.windows(b"later.txt".len()).any(|w| w == b"later.txt"), "the later commit's file is absent");
+    match Command::new("unzip").arg("-Z1").arg(&destination).output() {
+        Ok(output) => {
+            let listing = String::from_utf8_lossy(&output.stdout).into_owned();
+            assert!(listing.lines().any(|line| line == "project-abc1234/file.txt"), "{listing}");
+            assert!(!listing.contains("later.txt"), "{listing}");
+        }
+        Err(_) => eprintln!("unzip is not on PATH; skipped the entry listing check"),
+    }
+    assert_eq!(entry_names(folder.path()), vec!["archive.zip".to_string()], "no partial file is left behind");
+    assert!(git_output(repo.path(), &["status", "--porcelain"]).stdout.is_empty(), "the repository is unchanged");
+}
+
+#[test]
+fn archive_commit_refuses_a_bad_prefix() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    let folder = tempfile::tempdir().expect("create temp dir");
+    let destination = folder.path().join("bad.zip");
+
+    for prefix in ["../x", "a/b", "a\\b", "-x", "", ".", "a..b"] {
+        let result = client().archive_commit(&head, prefix, &destination, repo.path());
+        assert!(error_text(result).contains("single name"), "prefix {prefix:?} should be refused");
+    }
+
+    assert!(!destination.exists());
+    assert!(entry_names(folder.path()).is_empty());
+}
+
+#[test]
+fn archive_commit_leaves_no_partial_file_on_failure() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let folder = tempfile::tempdir().expect("create temp dir");
+    let destination = folder.path().join("missing.zip");
+
+    let result = client().archive_commit("no-such-commit", "project", &destination, repo.path());
+
+    assert!(result.is_err());
+    assert!(!destination.exists());
+    assert!(entry_names(folder.path()).is_empty(), "no destination or .partial- file exists");
+}
+
+#[test]
+fn archive_commit_removes_partial_file_when_the_rename_fails() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    let folder = tempfile::tempdir().expect("create temp dir");
+    // A folder at the destination makes the final rename fail after Git has written the archive.
+    let destination = folder.path().join("taken");
+    fs::create_dir(&destination).expect("create folder");
+
+    let result = client().archive_commit(&head, "project", &destination, repo.path());
+
+    assert!(result.is_err());
+    assert!(destination.is_dir(), "the folder is untouched");
+    assert_eq!(entry_names(folder.path()), vec!["taken".to_string()], "the partial archive was removed");
+}
+
 #[test]
 fn apply_patch_that_does_not_apply_changes_nothing() {
     let repo = Repo::new();

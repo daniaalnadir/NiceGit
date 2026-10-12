@@ -413,7 +413,7 @@ fn largest_icns_png(bytes: &[u8]) -> Option<image::DynamicImage> {
 }
 
 /// A byte count as a short human-readable size, such as "12.4 KB".
-fn human_size(bytes: usize) -> String {
+pub(crate) fn human_size(bytes: usize) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
         return format!("{bytes} bytes");
