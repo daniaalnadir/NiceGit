@@ -168,6 +168,60 @@ fn push_the_current_branch_with_the_toolbar_button() {
     assert_eq!(git(path, &["rev-parse", "origin/main"]), local, "the remote-tracking branch follows");
 }
 
+/// The message of the open confirmation, if one is open.
+fn confirmation_text(harness: &App) -> Option<String> {
+    match &harness.state().dialog {
+        Some(crate::ui::dialogs::Dialog::Confirm { message, .. }) => Some(message.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+fn force_push_after_amending_a_pushed_commit() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = crate::ui_tests_more::publish_to_bare(path);
+    commit_file(path, "more.txt", "more\n", "Add a file to push");
+    git(path, &["push", "-q", "origin", "main"]);
+    git(path, &["commit", "-q", "--amend", "-m", "Add a file, reworded"]);
+    let local = git(path, &["rev-parse", "HEAD"]);
+    let before = git(remote.path(), &["rev-parse", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_all_by_label("main").next().expect("the main branch row").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Force push").click();
+    wait(&mut harness, "the force push confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    let shown = confirmation_text(&harness).expect("the confirmation text");
+    assert!(shown.contains("Add a file to push"), "the dialog lists the commit the remote would lose: {shown}");
+    assert_eq!(git(remote.path(), &["rev-parse", "main"]), before, "nothing is pushed before confirming");
+
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Force push").click();
+    idle(&mut harness);
+    assert_eq!(git(remote.path(), &["rev-parse", "main"]), local, "the remote's branch now points at the amended commit");
+}
+
+#[test]
+fn refused_push_of_a_diverged_branch_mentions_force_push() {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = crate::ui_tests_more::publish_to_bare(path);
+    commit_file(path, "more.txt", "more\n", "Add a file");
+    git(path, &["push", "-q", "origin", "main"]);
+    // Rewriting the pushed commit leaves the branch ahead of and behind its upstream.
+    git(path, &["commit", "-q", "--amend", "-m", "Add a file, reworded"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    toolbar_button(&mut harness, "Push 1");
+    idle(&mut harness);
+    wait(&mut harness, "the refused push's notice", |h| h.state().notice.as_ref().is_some_and(|n| n.text.contains("push was refused")));
+    let text = harness.state().notice.as_ref().map(|n| n.text.clone()).unwrap_or_default();
+    assert!(text.contains("Force push"), "the notice points to Force push: {text}");
+}
+
 // MARK: Stashes
 
 #[test]

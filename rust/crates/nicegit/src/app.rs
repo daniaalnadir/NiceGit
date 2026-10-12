@@ -106,6 +106,13 @@ pub fn push_needs_pull(error: &str) -> bool {
     ["non-fast-forward", "fetch first", "tip of your current branch is behind"].iter().any(|sign| error.contains(sign))
 }
 
+/// Whether a force push was refused by its lease: the remote branch no longer has the tip the
+/// user last saw, so Git would have replaced commits nobody has reviewed. Git marks exactly this
+/// refusal "stale info"; a server hook's "[remote rejected]" is a different problem.
+pub fn lease_was_refused(error: &str) -> bool {
+    error.contains("(stale info)")
+}
+
 /// What is selected. A commit or stash's `file` is the one file shown from it, or `None` for all.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Selection {
@@ -755,11 +762,30 @@ impl NiceGitApp {
                                 };
                                 self.notice = Some(Notice { text, is_error: true, action: None, detail: Some(error.to_string()) });
                             }
+                            Err(error) if label == "Force push" && lease_was_refused(&error.to_string()) => {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: "The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.".into(),
+                                    is_error: true,
+                                    action: None,
+                                    detail: Some(error.to_string()),
+                                });
+                            }
                             Err(error) if matches!(label.as_str(), "Push" | "Commit and push") && push_needs_pull(&error.to_string()) => {
                                 action_failed = true;
                                 let committed = if label == "Commit and push" { "Your commit was made, but the " } else { "The " };
+                                // The snapshot is still the one from before the push, so its counts show whether the
+                                // branch had commits of its own as well as the remote's.
+                                let diverged = self.repos[index].snapshot.as_ref().is_some_and(|s| s.ahead > Some(0) && s.behind > Some(0));
+                                let rewritten = if label == "Push" && diverged {
+                                    " If you rewrote commits that were already pushed, use Force push… instead."
+                                } else {
+                                    ""
+                                };
                                 self.notice = Some(Notice {
-                                    text: format!("{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again."),
+                                    text: format!(
+                                        "{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.{rewritten}"
+                                    ),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
                                     detail: Some(error.to_string()),
@@ -1777,6 +1803,20 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+#[cfg(test)]
+mod lease_tests {
+    use super::lease_was_refused;
+
+    #[test]
+    fn a_moved_remote_branch_refuses_the_lease_and_a_plain_refusal_does_not() {
+        let stale = " ! [rejected]        main -> main (stale info)\nerror: failed to push some refs to 'origin'";
+        assert!(lease_was_refused(stale));
+        assert!(!lease_was_refused(" ! [remote rejected] main -> main (pre-receive hook declined)"));
+        assert!(!lease_was_refused("fatal: unable to access 'https://x.invalid/': Could not resolve host"));
+        assert!(!lease_was_refused("Git could not run `force push`: Set an upstream branch before force pushing."));
+    }
 }
 
 #[cfg(test)]

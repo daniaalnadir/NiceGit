@@ -493,6 +493,14 @@ impl NiceGitApp {
                 ui.close();
                 self.push();
             }
+            let can_force_push = idle && snapshot.is_on_branch() && snapshot.operation.is_none() && snapshot.upstream.is_some();
+            let force_push = ui
+                .add_enabled(can_force_push, egui::Button::new(format!("{}  Force push…", icon::WARNING)))
+                .on_hover_text("Replaces the remote branch with yours, if no one else has pushed since you last fetched");
+            if force_push.clicked() {
+                ui.close();
+                self.request_force_push();
+            }
         }
         if !branch.is_remote && !branch.is_detached() {
             for remote in &snapshot.remotes {
@@ -642,6 +650,37 @@ impl NiceGitApp {
             preview,
             "Rebase",
             Pending::Rebase { onto, branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
+        );
+    }
+
+    /// Asks before force pushing the current branch. What the remote would lose is read before the
+    /// confirmation opens, so the dialog shows what the push will do.
+    pub fn request_force_push(&mut self) {
+        let (Some(snapshot), Some(repo)) = (self.snapshot().cloned(), self.repo()) else { return };
+        let path = repo.path.clone();
+        let (Some(head), Some(upstream)) = (snapshot.head_hash.clone(), snapshot.upstream.clone()) else {
+            self.notify("Set an upstream branch before force pushing.", true);
+            return;
+        };
+        let preview = match GitClient::new().force_push_preview(&snapshot, &path) {
+            Ok(preview) => preview,
+            Err(error) => {
+                self.notify(error.to_string(), true);
+                return;
+            }
+        };
+        let message = crate::git_ext::force_push_message(&preview, &upstream);
+        self.confirm(
+            format!("Force push {}?", snapshot.current_branch),
+            message,
+            "Force push",
+            Pending::ForcePush {
+                branch: snapshot.current_branch.clone(),
+                head,
+                upstream,
+                expected_remote_tip: preview.remote_tip,
+                addresses: snapshot.remote_push_addresses.clone(),
+            },
         );
     }
 

@@ -265,6 +265,11 @@ and the files in a commit can also be opened on github.com from their menus; wit
 github.com remotes, you choose which one. Opening does not check that the commit or branch
 has been pushed.
 
+Force push… in the current branch's menu replaces the remote branch with yours, for example
+after you rewrite commits that were already pushed. The confirmation lists the remote commits
+it will remove. The push uses a lease: it is refused, and nothing changes, if the remote
+branch moved since your last fetch.
+
 Create lightweight or annotated local tags from a commit or branch menu. Annotated
 tags require a message and use the repository's Git identity. A tag can be pushed to a
 chosen remote as it is created, with Push to remote in the New tag dialog, or later from
