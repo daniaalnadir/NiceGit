@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
+use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::file_history::FileVersion;
 use nicegit_core::models::GitError;
 use nicegit_core::search::{CommitSearchField, ContentMatch};
@@ -256,9 +257,34 @@ fn commit_file_diff_shows_only_that_file_in_that_commit() {
     repo.commit("a.txt", "one\n", "Add a");
     repo.commit("b.txt", "unrelated\n", "Add b");
     let hash = repo.commit("a.txt", "one\ntwo\n", "Extend a");
-    let patch = client().commit_file_diff(&hash, "a.txt", false, repo.path()).expect("file diff");
+    let patch = client().commit_file_diff(&hash, "a.txt", DiffRequest::default(), repo.path()).expect("file diff");
     assert!(patch.contains("+two"));
     assert!(!patch.contains("unrelated"));
+}
+
+/// A 60-line file whose line 30 is `middle`.
+fn long_file(middle: &str) -> String {
+    (1..=60).map(|number| if number == 30 { format!("{middle}\n") } else { format!("line {number}\n") }).collect()
+}
+
+/// The unchanged lines in a patch: every line in a hunk that starts with a space.
+fn context_lines(patch: &str) -> usize {
+    patch.lines().filter(|line| line.starts_with(' ')).count()
+}
+
+#[test]
+fn commit_file_diff_follows_the_context() {
+    let repo = Repo::new();
+    repo.commit("long.txt", &long_file("line 30"), "Add long file");
+    let hash = repo.commit("long.txt", &long_file("changed 30"), "Change line 30");
+    let request = |context: DiffContext| DiffRequest { context, ..Default::default() };
+
+    let ten = client().commit_file_diff(&hash, "long.txt", request(DiffContext::Lines(10)), repo.path()).expect("ten lines");
+    assert_eq!(context_lines(&ten), 20, "ten lines each side: {ten}");
+
+    let whole = client().commit_file_diff(&hash, "long.txt", request(DiffContext::WholeFile), repo.path()).expect("whole file");
+    assert_eq!(context_lines(&whole), 59, "every unchanged line: {whole}");
+    assert!(whole.contains(" line 1\n") && whole.contains(" line 60\n"));
 }
 
 #[test]

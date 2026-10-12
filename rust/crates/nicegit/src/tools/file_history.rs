@@ -6,6 +6,7 @@ use std::path::Path;
 
 use egui::{pos2, vec2, Align, Align2, Color32, CursorIcon, FontId, Id, Layout, Rect, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::diff::DiffRequest;
 use nicegit_core::file_history::FileHistoryEntry;
 use nicegit_core::Snapshot;
 
@@ -37,8 +38,8 @@ struct Selected {
     subject: String,
     path: String,
     deletes_file: bool,
-    /// Whether the diff leaves out whitespace-only changes.
-    ignores_whitespace: bool,
+    /// The diff options the commit's change was loaded with: whitespace and context.
+    request: DiffRequest,
     diff: Task<nicegit_core::Result<DiffContent>>,
 }
 
@@ -83,10 +84,11 @@ impl ToolWindow for FileHistoryWindow {
             self.reload(ui.ctx(), cx.repo);
         }
         let Self { path, entries, shown, selected, split, restore, close } = self;
-        // A change to the whitespace setting reloads the commit's diff.
-        if let Some(current) = selected.as_mut().filter(|current| current.ignores_whitespace != cx.ignore_whitespace) {
-            current.ignores_whitespace = cx.ignore_whitespace;
-            current.diff = commit_diff(ui.ctx(), cx.repo, &current.hash, &current.path, cx.ignore_whitespace);
+        // A change to the whitespace or context setting reloads the commit's diff.
+        let request = cx.diff_request();
+        if let Some(current) = selected.as_mut().filter(|current| current.request != request) {
+            current.request = request;
+            current.diff = commit_diff(ui.ctx(), cx.repo, &current.hash, &current.path, request);
         }
         if let Some(outcome) = entries.as_mut().and_then(|task| task.get()) {
             *shown = Some(outcome.clone());
@@ -97,7 +99,7 @@ impl ToolWindow for FileHistoryWindow {
         if selected.is_none() {
             if let Some(Ok(list)) = outcome {
                 if let Some(first) = list.first() {
-                    *selected = Some(select(ui.ctx(), cx.repo, first, cx.ignore_whitespace));
+                    *selected = Some(select(ui.ctx(), cx.repo, first, request));
                 }
             }
         }
@@ -145,14 +147,14 @@ impl ToolWindow for FileHistoryWindow {
 }
 
 /// Selects a commit and starts loading its change to the file.
-fn select(ctx: &egui::Context, repo: &Path, entry: &FileHistoryEntry, ignore_whitespace: bool) -> Selected {
+fn select(ctx: &egui::Context, repo: &Path, entry: &FileHistoryEntry, request: DiffRequest) -> Selected {
     Selected {
         hash: entry.commit.hash.clone(),
         subject: entry.commit.subject.clone(),
         path: entry.path.clone(),
         deletes_file: entry.deletes_file(),
-        ignores_whitespace: ignore_whitespace,
-        diff: commit_diff(ctx, repo, &entry.commit.hash, &entry.path, ignore_whitespace),
+        request,
+        diff: commit_diff(ctx, repo, &entry.commit.hash, &entry.path, request),
     }
 }
 
@@ -199,7 +201,7 @@ fn list(
                     let badge = Some((letter, widgets::change_letter_color(ui, letter)));
                     let response = result_row(ui, &entry.commit.subject, &detail, badge, moved.as_deref(), is_selected);
                     if response.clicked() && !is_selected {
-                        *selected = Some(select(ui.ctx(), cx.repo, entry, cx.ignore_whitespace));
+                        *selected = Some(select(ui.ctx(), cx.repo, entry, cx.diff_request()));
                     }
                     response.context_menu(|ui| {
                         let restorable = can_restore(cx) && entry.path == path;

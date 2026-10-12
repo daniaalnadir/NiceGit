@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::client::GitClient;
+use crate::diff::DiffRequest;
 use crate::models::{Commit, GitError, Result};
 use crate::parsers::parse_log;
 use crate::runner;
@@ -79,10 +80,12 @@ impl GitClient {
 
     /// The patch for one file's change in a commit, against its first parent. Renames are not
     /// detected, so the file shows as the path named.
-    pub fn commit_file_diff(&self, hash: &str, path: &str, ignore_whitespace: bool, directory: &Path) -> Result<String> {
-        let mut arguments =
-            vec!["show", "--first-parent", "-m", "--format=", "--patch", "--unified=3", "--no-renames", "--no-ext-diff", "--no-color"];
-        if ignore_whitespace {
+    pub fn commit_file_diff(&self, hash: &str, path: &str, request: DiffRequest, directory: &Path) -> Result<String> {
+        let mut arguments = vec!["show", "--first-parent", "-m", "--format=", "--patch"];
+        let context = request.context.argument();
+        arguments.extend(context.as_deref());
+        arguments.extend(["--no-renames", "--no-ext-diff", "--no-color"]);
+        if request.ignore_whitespace {
             arguments.push("-w");
         }
         arguments.extend([hash, "--", path]);

@@ -100,7 +100,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - See whether a commit's GPG or SSH signature is verified, untrusted, bad, or cannot be
   checked on this computer, in the commit inspector.
 - Hide whitespace-only changes in any diff; the choice is remembered.
-- Choose 3, 10, or 25 context lines, or the whole file, for every diff; line staging works with each.
+- Choose 3, 10, or 25 context lines, or the whole file, for every diff; line staging works with
+  each. File history, blame, and compare follow the setting too.
 - Compare changed images side by side with their dimensions and file sizes.
 - Recover lost work from Repository > Recover Lost Work: every position HEAD has had,
   with commits on no branch marked, and a branch can be created at any of them.

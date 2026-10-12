@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
-use nicegit_core::diff::DiffContext;
+use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
@@ -75,6 +75,11 @@ pub struct Ctx<'a> {
 impl<'a> Ctx<'a> {
     pub fn new(repo: &'a Path, snapshot: &'a Snapshot, idle: bool, requests: &'a mut Vec<Request>) -> Self {
         Self { repo, snapshot, idle, ignore_whitespace: false, requests, diff_context: DiffContext::default() }
+    }
+
+    /// The diff options the app settings ask for: whitespace and context.
+    pub fn diff_request(&self) -> DiffRequest {
+        DiffRequest { ignore_whitespace: self.ignore_whitespace, context: self.diff_context }
     }
 
     pub fn act(&mut self, label: impl Into<String>, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {

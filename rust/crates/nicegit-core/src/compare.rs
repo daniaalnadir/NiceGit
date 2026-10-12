@@ -3,6 +3,7 @@
 use std::path::{Component, Path};
 
 use crate::client::GitClient;
+use crate::diff::DiffRequest;
 use crate::models::{GitError, Result};
 use crate::runner;
 
@@ -33,10 +34,13 @@ impl GitClient {
     }
 
     /// The text change to one file between two commits, or from a commit to the working file.
-    pub fn compare_file_diff(&self, from: &str, to: Option<&str>, path: &str, ignore_whitespace: bool, directory: &Path) -> Result<String> {
+    pub fn compare_file_diff(&self, from: &str, to: Option<&str>, path: &str, request: DiffRequest, directory: &Path) -> Result<String> {
         let revisions = self.comparison_revisions(from, to, directory)?;
-        let mut arguments = vec!["diff", "--patch", "--unified=3", "--no-renames", "--no-ext-diff", "--no-color"];
-        if ignore_whitespace {
+        let mut arguments = vec!["diff", "--patch"];
+        let context = request.context.argument();
+        arguments.extend(context.as_deref());
+        arguments.extend(["--no-renames", "--no-ext-diff", "--no-color"]);
+        if request.ignore_whitespace {
             arguments.push("-w");
         }
         arguments.extend(revisions.iter().map(String::as_str));

@@ -37,7 +37,8 @@
   it must be edited before it can be committed.
 - Choose whether the commit graph shows all branches, only local branches, or just the current
   branch and its upstream.
-- Choose how many unchanged lines diffs show around each change, up to the whole file.
+- Choose how many unchanged lines diffs show around each change, up to the whole file. The
+  setting also applies to file history, blame, and compare.
 
 ## 1.5.0 - Fewer surprises
 
