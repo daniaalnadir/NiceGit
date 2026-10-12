@@ -205,14 +205,24 @@ pub fn ref_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// The GitHub page for opening a pull request from a local branch, when its upstream is a branch
-/// on a GitHub remote. Remote names can contain slashes, so the longest one that prefixes the
-/// upstream is its remote.
-pub fn github_pull_request_link(
+/// Where a local branch's pull request goes: the GitHub repository behind its upstream's remote,
+/// and the branch on that remote the pull request comes from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestTarget {
+    pub repository: nicegit_core::github::GitHubRepository,
+    /// The remote the upstream belongs to, such as `origin`.
+    pub remote: String,
+    /// The upstream's branch on that remote, without the remote's name.
+    pub remote_branch: String,
+}
+
+/// The pull request target of a local branch whose upstream is a branch on a GitHub remote.
+/// Remote names can contain slashes, so the longest one that prefixes the upstream is its remote.
+pub fn github_pull_request_target(
     snapshot: &nicegit_core::Snapshot,
     branch: &nicegit_core::Branch,
     enterprise_hosts: &[String],
-) -> Option<String> {
+) -> Option<PullRequestTarget> {
     if branch.is_remote {
         return None;
     }
@@ -220,7 +230,19 @@ pub fn github_pull_request_link(
     let upstream = branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?;
     let (remote, remote_branch) = split_remote(snapshot, upstream)?;
     let repository = github_repository_for_remote(snapshot, remote, enterprise_hosts)?;
-    Some(format!("{}/{}/compare/{}?expand=1", repository.web_base(), repository.slug(), encode_path(remote_branch)))
+    Some(PullRequestTarget { repository, remote: remote.to_string(), remote_branch: remote_branch.to_string() })
+}
+
+/// The GitHub compare page for a local branch whose upstream is on a GitHub remote. It opens the
+/// pull request form in the browser, the fallback to Create pull request. See
+/// [`github_pull_request_target`].
+pub fn github_pull_request_link(
+    snapshot: &nicegit_core::Snapshot,
+    branch: &nicegit_core::Branch,
+    enterprise_hosts: &[String],
+) -> Option<String> {
+    let target = github_pull_request_target(snapshot, branch, enterprise_hosts)?;
+    Some(format!("{}/{}/compare/{}?expand=1", target.repository.web_base(), target.repository.slug(), encode_path(&target.remote_branch)))
 }
 
 /// Percent-encodes a branch name for a URL path, keeping its slashes.

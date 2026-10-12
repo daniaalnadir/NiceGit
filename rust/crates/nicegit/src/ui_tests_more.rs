@@ -1893,6 +1893,10 @@ fn a_pull_request_opens_on_github_for_the_current_branch() {
     harness.event(egui::Event::Text("create pull request".into()));
     harness.step();
     harness.key_press(Key::Enter);
+    // The command opens the Create pull request dialog; its browser button is the fallback.
+    wait(&mut harness, "the pull request dialog", |h| h.state().pull_request.is_some());
+    settle(&mut harness);
+    harness.get_by_label_contains("Open in browser instead").click();
     settle(&mut harness);
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
     assert_eq!(opened, vec!["https://github.com/acme/app/compare/main?expand=1".to_string()]);

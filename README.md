@@ -67,8 +67,9 @@ Git itself. Built with Rust, and released under the [MIT License](LICENSE).
 - Start messages from your commit.template, and add Signed-off-by and Co-authored-by lines
   from a menu.
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
-- Pull requests and issues, Open on GitHub, and cloning from your repository list, for
-  github.com and GitHub Enterprise hosts, through your existing GitHub CLI login.
+- Pull requests and issues, creating pull requests, Open on GitHub, and cloning from your
+  repository list, for github.com and GitHub Enterprise hosts, through your existing GitHub CLI
+  login.
 
 The [feature guide](docs/FEATURES.md) describes each feature's behaviour and safeguards.
 

@@ -9,6 +9,7 @@ pub mod history;
 pub mod history_columns;
 pub mod inspector;
 pub mod palette;
+pub mod pull_request;
 pub mod repositories;
 pub mod settings_window;
 pub mod shortcuts_window;
