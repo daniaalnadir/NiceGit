@@ -148,11 +148,25 @@ impl NiceGitApp {
         let tree = self.settings.file_view == FileView::Tree;
         egui::ScrollArea::vertical().id_salt("changes").auto_shrink(false).max_height(available).show(ui, |ui| {
             egui::Frame::new().inner_margin(egui::Margin { left: 10, right: 10, top: 6, bottom: 6 }).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Unstaged files ({})", icon::CARET_DOWN, shown(&unstaged, &all_unstaged))).strong());
+                // A narrow panel drops "files" from the titles so their counts stay visible; if even
+                // that does not fit, the title is truncated rather than running under the buttons.
+                // The accessible label keeps the full wording.
+                let compact = ui.available_width() < 380.0;
+                let noun = if compact { "" } else { " files" };
+                egui::containers::Sides::new().shrink_left().truncate().show(
+                    ui,
+                    |ui| {
+                        let count = shown(&unstaged, &all_unstaged);
+                        let full = format!("Unstaged files ({count})");
+                        ui.label(RichText::new(format!("{}  Unstaged{noun} ({count})", icon::CARET_DOWN)).strong())
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &full));
+                    },
+                    |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // The bulk buttons act on every file in their section, not only the shown ones.
-                        let stage_all = outlined(ui, "Stage All Changes", c.accent, idle && !all_unstaged.is_empty());
+                        let enabled = idle && !all_unstaged.is_empty();
+                        let stage_all = outlined(ui, if compact { "Stage All" } else { "Stage All Changes" }, c.accent, enabled);
+                        stage_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, "Stage All Changes"));
                         let stage_all = if filtering {
                             stage_all.on_hover_text(format!(
                                 "Stages all {} unstaged files, including those hidden by the filter",
@@ -198,7 +212,8 @@ impl NiceGitApp {
                             self.save_working_patch(false, None, true, &name);
                         }
                     });
-                });
+                    },
+                );
                 ui.add_space(4.0);
                 if unstaged.is_empty() && !all_unstaged.is_empty() {
                     ui.label(RichText::new("   No matching files").small().color(c.muted));
@@ -213,10 +228,19 @@ impl NiceGitApp {
                 }
                 ui.add_space(14.0);
                 ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Staged files ({})", icon::CARET_DOWN, shown(&staged, &all_staged))).strong());
+                egui::containers::Sides::new().shrink_left().truncate().show(
+                    ui,
+                    |ui| {
+                        let count = shown(&staged, &all_staged);
+                        let full = format!("Staged files ({count})");
+                        ui.label(RichText::new(format!("{}  Staged{noun} ({count})", icon::CARET_DOWN)).strong())
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &full));
+                    },
+                    |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let unstage_all = outlined(ui, "Unstage All Changes", c.accent, idle && !all_staged.is_empty());
+                        let enabled = idle && !all_staged.is_empty();
+                        let unstage_all = outlined(ui, if compact { "Unstage All" } else { "Unstage All Changes" }, c.accent, enabled);
+                        unstage_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, "Unstage All Changes"));
                         let unstage_all = if filtering {
                             unstage_all.on_hover_text(format!(
                                 "Unstages all {} staged files, including those hidden by the filter",
@@ -238,7 +262,8 @@ impl NiceGitApp {
                             self.save_working_patch(true, None, false, &name);
                         }
                     });
-                });
+                    },
+                );
                 ui.add_space(4.0);
                 if staged.is_empty() && !all_staged.is_empty() {
                     ui.label(RichText::new("   No matching files").small().color(c.muted));
@@ -736,7 +761,8 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
     let c = theme::of(ui);
     let (name, email) = (name.trim(), email.trim());
     let identity_set = !name.is_empty() && !email.is_empty();
-    ui.label(RichText::new("Trailers").small().color(c.muted));
+    // Headed like the co-author list below, so the row says which line it adds.
+    ui.label(RichText::new("Signed-off-by").small().color(c.muted));
     let signed_off = format!("Signed-off-by: {name} <{email}>");
     let on = identity_set && repo.draft.has_trailer(&signed_off);
     let label = signed_off.clone();
