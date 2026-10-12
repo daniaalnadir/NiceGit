@@ -199,8 +199,11 @@ pub struct Repo {
     pub diff: Option<DiffContent>,
     pub diff_loading: bool,
     pub diff_generation: u64,
-    /// The selected change prepared for staging individual lines.
+    /// The selected change prepared for staging individual lines. On a refresh of the same file
+    /// and side, the previous review stays until its replacement arrives.
     pub review: Option<Task<nicegit_core::Result<nicegit_core::staging::FileReview>>>,
+    /// Whether `review` is still waiting for its replacement.
+    pub review_loading: bool,
     /// Each shown diff line's place in the review's full-file diff, once both have loaded:
     /// `Some(None)` when they do not match, so lines cannot be staged one by one.
     pub line_map: Option<Option<std::sync::Arc<Vec<Option<usize>>>>>,
@@ -268,6 +271,7 @@ impl Repo {
             diff_loading: false,
             diff_generation: 0,
             review: None,
+            review_loading: false,
             line_map: None,
             diff_options: crate::diff_view::DiffOptions::default(),
             draft: Draft::default(),
@@ -1199,6 +1203,14 @@ impl NiceGitApp {
 
     pub fn select_change(&mut self, entry: StatusEntry, staged: bool) {
         let ignore_whitespace = self.settings.ignore_whitespace;
+        // A refresh reloads the same change; its previous review stays until the new one arrives,
+        // so the buttons of its lines do not vanish with each refresh. Staging re-reads the review
+        // and refuses when the file has changed, so a previous review cannot act on newer content.
+        let previous = self
+            .repo_mut()
+            .and_then(|repo| repo.review.take())
+            .and_then(|mut task| task.get().cloned())
+            .filter(|review| matches!(review, Ok(review) if review.path == entry.path && review.staged == staged));
         let Some((generation, path)) = self.start_diff() else { return };
         let repo = self.repo_mut().expect("active repository");
         repo.commit_files.clear();
@@ -1211,7 +1223,7 @@ impl NiceGitApp {
             let (review_path, file) = (path.clone(), entry.path.clone());
             let context = self.worker.context.clone();
             self.repo_mut().expect("active repository").review =
-                Some(Task::spawn(&context, move || GitClient::new().file_review(&file, staged, &review_path)));
+                Some(Task::spawn_with(&context, previous, move || GitClient::new().file_review(&file, staged, &review_path)));
         }
         if crate::tools::compare::is_image(&entry.path) {
             // An image's versions: the index against the working file, or HEAD (under its old

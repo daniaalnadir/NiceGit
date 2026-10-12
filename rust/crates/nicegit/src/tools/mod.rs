@@ -189,6 +189,13 @@ impl<T: Send + 'static> Task<T> {
         self.value.as_ref()
     }
 
+    /// Whether the value is still on its way. A stale value from `spawn_with` does not count as
+    /// arrived, unlike `is_pending`, which only asks whether there is any value.
+    pub fn is_loading(&mut self) -> bool {
+        self.poll();
+        self.receiver.is_some()
+    }
+
     pub fn is_pending(&mut self) -> bool {
         self.poll();
         self.value.is_none()
