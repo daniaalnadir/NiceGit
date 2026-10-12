@@ -7,7 +7,7 @@ use std::path::Path;
 use egui::{Color32, ColorImage, RichText, TextureHandle, TextureOptions, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::compare::ComparedFile;
-use nicegit_core::diff::parse_diff;
+use nicegit_core::diff::{parse_diff, DiffRequest};
 use nicegit_core::{short, GitClient, GitError, Snapshot};
 
 use crate::diff_view::{self, DiffContent};
@@ -27,8 +27,8 @@ pub struct CompareWindow {
     detail: Refreshing<String, Detail>,
     /// The path the detail was last requested for.
     detail_path: Option<String>,
-    /// Whether that detail leaves out whitespace-only changes.
-    detail_ignores_whitespace: bool,
+    /// The diff options that detail was loaded with: whitespace and context.
+    detail_request: DiffRequest,
     /// The textures for the shown image pair, rebuilt when a new detail arrives.
     textures: Option<Textures>,
     selected: Option<String>,
@@ -111,7 +111,7 @@ impl CompareWindow {
             files: Refreshing::new(),
             detail: Refreshing::new(),
             detail_path: None,
-            detail_ignores_whitespace: false,
+            detail_request: DiffRequest::default(),
             textures: None,
             selected: None,
             split: false,
@@ -163,16 +163,16 @@ impl ToolWindow for CompareWindow {
         }
 
         // Request the selected file's detail whenever the selection differs from what was asked.
-        // The whitespace setting changing asks again too.
-        if self.detail_path != self.selected || self.detail_ignores_whitespace != cx.ignore_whitespace {
+        // A change to the whitespace or context setting asks again too.
+        let request = cx.diff_request();
+        if self.detail_path != self.selected || self.detail_request != request {
             if let Some(path) = self.selected.clone() {
                 let from = self.from.clone();
                 let to = self.to.clone();
                 let request_path = path.clone();
-                let ignore_whitespace = cx.ignore_whitespace;
-                self.detail_ignores_whitespace = ignore_whitespace;
+                self.detail_request = request;
                 let task = query(&ctx, cx.repo, move |client, directory| {
-                    load_detail(client, directory, &from, to.as_deref(), &request_path, ignore_whitespace)
+                    load_detail(client, directory, &from, to.as_deref(), &request_path, request)
                 });
                 self.detail.start(path.clone(), task);
                 self.detail_path = Some(path);
@@ -330,14 +330,14 @@ fn load_detail(
     from: &str,
     to: Option<&str>,
     path: &str,
-    ignore_whitespace: bool,
+    request: DiffRequest,
 ) -> nicegit_core::Result<Detail> {
     if is_image(path) {
         let before = client.file_bytes_at(Some(from), path, directory)?;
         let after = client.file_bytes_at(to, path, directory)?;
         return Ok(Detail::Images(ImagePair::read(before, after)));
     }
-    let patch = client.compare_file_diff(from, to, path, ignore_whitespace, directory)?;
+    let patch = client.compare_file_diff(from, to, path, request, directory)?;
     Ok(Detail::Diff(DiffContent::new(path.to_string(), parse_diff(&patch))))
 }
 

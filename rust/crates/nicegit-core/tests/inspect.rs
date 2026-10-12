@@ -9,6 +9,7 @@ use std::process::{Command, Output, Stdio};
 
 use nicegit_core::bisect::BisectMark;
 use nicegit_core::client::GitClient;
+use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::github::{decode_items, GitHubRepository, ItemKind, ItemState};
 use nicegit_core::signature::SignatureStatus;
 use tempfile::TempDir;
@@ -185,7 +186,7 @@ fn compare_two_commits_and_commit_against_working_files() {
     let listed: Vec<(&str, &str)> = files.iter().map(|file| (file.status.as_str(), file.path.as_str())).collect();
     assert_eq!(listed, [("M", "change.txt"), ("D", "gone.txt"), ("A", "new.txt")]);
 
-    let diff = client.compare_file_diff(&first, Some(&second), "change.txt", false, repo.path()).unwrap();
+    let diff = client.compare_file_diff(&first, Some(&second), "change.txt", DiffRequest::default(), repo.path()).unwrap();
     assert!(diff.contains("-one") && diff.contains("+two"), "unexpected diff: {diff}");
 
     // Against the working files, uncommitted edits show and untracked files do not.
@@ -194,8 +195,36 @@ fn compare_two_commits_and_commit_against_working_files() {
     let working = client.compare_files(&second, None, repo.path()).unwrap();
     let listed: Vec<&str> = working.iter().map(|file| file.path.as_str()).collect();
     assert_eq!(listed, ["change.txt"]);
-    let diff = client.compare_file_diff(&second, None, "change.txt", false, repo.path()).unwrap();
+    let diff = client.compare_file_diff(&second, None, "change.txt", DiffRequest::default(), repo.path()).unwrap();
     assert!(diff.contains("-two") && diff.contains("+three"), "unexpected diff: {diff}");
+}
+
+/// A 60-line file whose line 30 is `middle`.
+fn long_file(middle: &str) -> String {
+    (1..=60).map(|number| if number == 30 { format!("{middle}\n") } else { format!("line {number}\n") }).collect()
+}
+
+/// The unchanged lines in a patch: every line in a hunk that starts with a space.
+fn context_lines(patch: &str) -> usize {
+    patch.lines().filter(|line| line.starts_with(' ')).count()
+}
+
+#[test]
+fn compare_file_diff_follows_the_context() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("long.txt", &long_file("line 30"));
+    let first = repo.commit("first");
+    repo.write("long.txt", &long_file("changed 30"));
+    let second = repo.commit("second");
+    let request = |context: DiffContext| DiffRequest { context, ..Default::default() };
+
+    let ten = client.compare_file_diff(&first, Some(&second), "long.txt", request(DiffContext::Lines(10)), repo.path()).unwrap();
+    assert_eq!(context_lines(&ten), 20, "ten lines each side: {ten}");
+
+    let whole = client.compare_file_diff(&first, Some(&second), "long.txt", request(DiffContext::WholeFile), repo.path()).unwrap();
+    assert_eq!(context_lines(&whole), 59, "every unchanged line: {whole}");
+    assert!(whole.contains(" line 1\n") && whole.contains(" line 60\n"));
 }
 
 #[test]

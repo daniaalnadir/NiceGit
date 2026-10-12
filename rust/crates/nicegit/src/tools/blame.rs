@@ -8,7 +8,7 @@ use std::path::Path;
 use egui::{pos2, vec2, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, Sense, Stroke, TextStyle, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::blame::BlameLine;
-use nicegit_core::diff::parse_diff;
+use nicegit_core::diff::{parse_diff, DiffRequest};
 use nicegit_core::Snapshot;
 
 use crate::diff_view::{self, DiffContent};
@@ -28,8 +28,8 @@ struct Selected {
     summary: String,
     /// The file's path in that commit.
     file: String,
-    /// Whether the diff leaves out whitespace-only changes.
-    ignores_whitespace: bool,
+    /// The diff options the commit's change was loaded with: whitespace and context.
+    request: DiffRequest,
     diff: Task<nicegit_core::Result<DiffContent>>,
 }
 
@@ -128,10 +128,11 @@ impl ToolWindow for BlameWindow {
         ui.separator();
 
         let Self { path, lines, ages, selected, split, focus_line, focus_pending, .. } = self;
-        // A change to the whitespace setting reloads the commit's diff.
-        if let Some(current) = selected.as_mut().filter(|current| current.ignores_whitespace != cx.ignore_whitespace) {
-            current.ignores_whitespace = cx.ignore_whitespace;
-            current.diff = commit_diff(ui.ctx(), cx.repo, &current.hash, &current.file, cx.ignore_whitespace);
+        // A change to the whitespace or context setting reloads the commit's diff.
+        let request = cx.diff_request();
+        if let Some(current) = selected.as_mut().filter(|current| current.request != request) {
+            current.request = request;
+            current.diff = commit_diff(ui.ctx(), cx.repo, &current.hash, &current.file, request);
         }
         let Some(task) = lines.as_mut() else { return };
         let Some(result) = task.get() else {
@@ -179,8 +180,8 @@ impl ToolWindow for BlameWindow {
                         hash: commit.hash.clone(),
                         summary: commit.summary.clone(),
                         file: file.to_string(),
-                        ignores_whitespace: cx.ignore_whitespace,
-                        diff: commit_diff(ui.ctx(), cx.repo, &commit.hash, file, cx.ignore_whitespace),
+                        request,
+                        diff: commit_diff(ui.ctx(), cx.repo, &commit.hash, file, request),
                     });
                 }
             }
@@ -201,11 +202,11 @@ pub fn commit_diff(
     repo: &Path,
     hash: &str,
     path: &str,
-    ignore_whitespace: bool,
+    request: DiffRequest,
 ) -> Task<nicegit_core::Result<DiffContent>> {
     let (hash, path) = (hash.to_string(), path.to_string());
     query(ctx, repo, move |git, directory| {
-        let patch = git.commit_file_diff(&hash, &path, ignore_whitespace, directory)?;
+        let patch = git.commit_file_diff(&hash, &path, request, directory)?;
         Ok(DiffContent::new(hash, parse_diff(&patch)))
     })
 }
