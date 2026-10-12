@@ -477,8 +477,9 @@ impl NiceGitApp {
         open(ui, self, icon::DATABASE, "Git LFS…", &|_| Box::new(tools::lfs::LfsWindow::new()));
         let remote = self.snapshot().and_then(|s| s.remotes.iter().find(|r| *r == "origin").or(s.remotes.first()).cloned());
         if let Some(remote) = remote {
+            let hosts = self.settings.github_enterprise_hosts.clone();
             open(ui, self, icon::GITHUB_LOGO, "Pull requests and issues…", &move |_| {
-                Box::new(tools::github::GitHubWindow::new(remote.clone()))
+                Box::new(tools::github::GitHubWindow::new(remote.clone(), hosts.clone()))
             });
         }
         ui.separator();

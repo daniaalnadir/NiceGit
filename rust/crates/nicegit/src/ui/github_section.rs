@@ -1,5 +1,5 @@
-//! Pull requests and issues listed in the sidebar, loaded on demand from a chosen github.com
-//! remote through the signed-in GitHub CLI, as in the Mac app.
+//! Pull requests and issues listed in the sidebar, loaded on demand from a chosen GitHub remote
+//! (github.com or a GitHub Enterprise host) through the signed-in GitHub CLI, as in the Mac app.
 
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
@@ -61,9 +61,10 @@ impl NiceGitApp {
         }
         let cancel = Cancel::default();
         let (path, token, remote_name) = (repo.path.clone(), cancel.clone(), remote.clone());
+        let hosts = self.settings.github_enterprise_hosts.clone();
         let task = Task::spawn(&self.worker.context, move || {
             let client = GitClient::new();
-            let repository = client.github_repository(&remote_name, &path)?;
+            let repository = client.github_repository(&remote_name, &path, &hosts)?;
             client.github_items_cancellable(&repository, kind, ItemState::Open, limit, &token, &path)
         });
         let items = repo.github[slot(kind)].take().filter(|list| list.remote == remote).map(|list| list.items).unwrap_or_default();
@@ -83,9 +84,10 @@ impl NiceGitApp {
         let mut load: Option<(String, usize)> = None;
         let mut cancel = false;
         let mut window: Option<String> = None;
+        let hosts = self.settings.github_enterprise_hosts.clone();
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
-                ui.label(RichText::new("   Add a github.com remote to load these").small().color(c.muted));
+                ui.label(RichText::new("   Add a GitHub remote to load these").small().color(c.muted));
                 return;
             }
             let repo = &mut self.repos[self.active];
@@ -106,7 +108,14 @@ impl NiceGitApp {
             let loading = list.is_loading();
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                ui.label(RichText::new(format!("{}  {}", icon::GITHUB_LOGO, list.remote)).small().color(c.muted));
+                // A GitHub Enterprise remote names its host, so the list says which server it reads.
+                let header = match crate::git_ext::github_repository_for_remote(snapshot, &list.remote, &hosts) {
+                    Some(repository) if repository.host != "github.com" => {
+                        format!("{}  {} · {}", icon::GITHUB_LOGO, list.remote, repository.host)
+                    }
+                    _ => format!("{}  {}", icon::GITHUB_LOGO, list.remote),
+                };
+                ui.label(RichText::new(header).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, "Open with filters and closed items", true);
                     open_window.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Open GitHub window"));
@@ -174,8 +183,8 @@ impl NiceGitApp {
         }
         if let Some(remote) = window {
             let tool = match kind {
-                ItemKind::PullRequest => tools::github::GitHubWindow::new(remote),
-                ItemKind::Issue => tools::github::GitHubWindow::issues(remote),
+                ItemKind::PullRequest => tools::github::GitHubWindow::new(remote, hosts),
+                ItemKind::Issue => tools::github::GitHubWindow::issues(remote, hosts),
             };
             self.open_tool(Box::new(tool));
         }

@@ -1,5 +1,5 @@
-//! GitHub pull requests and issues for a github.com remote, read through the `gh` command-line
-//! tool. NiceGit never stores a token; `gh` keeps its own sign-in.
+//! GitHub pull requests and issues for a GitHub remote (github.com or a GitHub Enterprise Server
+//! host), read through the `gh` command-line tool. NiceGit never stores a token; `gh` keeps its own sign-in.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -75,9 +75,11 @@ impl ItemState {
     }
 }
 
-/// The owner and name of a github.com repository.
+/// The owner and name of a repository on github.com or a GitHub Enterprise Server host.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitHubRepository {
+    /// The lower-cased host, such as `github.com` or `git.example.com`.
+    pub host: String,
     pub owner: String,
     pub name: String,
 }
@@ -87,13 +89,29 @@ impl GitHubRepository {
         format!("{}/{}", self.owner, self.name)
     }
 
-    /// Reads the repository from a remote address. Accepts `https://` and `ssh://` URLs, and
-    /// scp-like `user@github.com:owner/repo.git` addresses. Other hosts, ports, passwords,
-    /// queries, and fragments are refused.
+    /// The address of the repository's web pages, such as `https://git.example.com`.
+    pub fn web_base(&self) -> String {
+        format!("https://{}", self.host)
+    }
+
+    /// The repository as `gh --repo` names it, with its host: `host/owner/name`.
+    pub fn gh_repo(&self) -> String {
+        format!("{}/{}", self.host, self.slug())
+    }
+
+    /// Reads a github.com repository from a remote address. See [`Self::parse_with_hosts`].
     pub fn parse(address: &str) -> Result<Self> {
+        Self::parse_with_hosts(address, &[])
+    }
+
+    /// Reads the repository from a remote address. Accepts `https://` and `ssh://` URLs, and
+    /// scp-like `user@host:owner/repo.git` addresses, where the host is github.com or one of
+    /// `enterprise_hosts` (compared without regard to case). Other hosts, ports, passwords,
+    /// queries, and fragments are refused.
+    pub fn parse_with_hosts(address: &str, enterprise_hosts: &[String]) -> Result<Self> {
         let address = address.trim();
-        let unsupported = || GitError::failed("GitHub", "This remote is not a supported github.com repository.");
-        let path: String = if let Some((scheme, rest)) = address.split_once("://") {
+        let unsupported = || GitError::failed("GitHub", "This remote is not a supported GitHub repository address.");
+        let (host, path) = if let Some((scheme, rest)) = address.split_once("://") {
             if !(scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("ssh")) {
                 return Err(unsupported());
             }
@@ -114,19 +132,22 @@ impl GitHubRepository {
                 }
                 None => authority,
             };
-            if !host.eq_ignore_ascii_case("github.com") {
-                return Err(unsupported());
-            }
-            path.to_string()
+            (host, path)
         } else {
             // scp-like form: [user@]host:path. A local path such as /srv/repo has no host match.
             let Some((host_part, path)) = address.split_once(':') else { return Err(unsupported()) };
             let host = host_part.rsplit_once('@').map(|(_, host)| host).unwrap_or(host_part);
-            if !host.eq_ignore_ascii_case("github.com") {
-                return Err(unsupported());
-            }
-            path.to_string()
+            (host, path)
         };
+        // A port, or any other colon, is refused before the host is compared.
+        if host.is_empty() || host.contains(':') {
+            return Err(unsupported());
+        }
+        let host = host.to_ascii_lowercase();
+        let known = host == "github.com" || enterprise_hosts.iter().any(|listed| listed.eq_ignore_ascii_case(&host));
+        if !known {
+            return Err(GitError::failed("GitHub", "This remote is not on github.com or a GitHub Enterprise host listed in Settings."));
+        }
 
         let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
         if parts.len() != 2 {
@@ -142,8 +163,25 @@ impl GitHubRepository {
         if !valid(parts[0]) || !valid(name) {
             return Err(GitError::failed("GitHub", "The GitHub repository address is invalid."));
         }
-        Ok(GitHubRepository { owner: parts[0].to_string(), name: name.to_string() })
+        Ok(GitHubRepository { host, owner: parts[0].to_string(), name: name.to_string() })
     }
+}
+
+/// Whether `host` can be listed as a GitHub Enterprise host, such as `git.example.com`: a DNS
+/// host name of letters, digits, and hyphens in dot-separated labels, compared in lower case.
+/// A port, scheme, path, or space is refused, and so is github.com, which is always supported.
+pub fn valid_enterprise_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    if host.len() > 253 || host == "github.com" || !host.contains('.') {
+        return false;
+    }
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    })
 }
 
 /// A label on an item, with its colour as six hex digits and no leading `#`.
@@ -191,22 +229,23 @@ pub enum GhStatus {
 }
 
 impl GitClient {
-    /// The github.com repository behind a remote's first fetch address.
-    pub fn github_repository(&self, remote: &str, directory: &Path) -> Result<GitHubRepository> {
+    /// The GitHub repository behind a remote's first fetch address, on github.com or one of
+    /// `enterprise_hosts`.
+    pub fn github_repository(&self, remote: &str, directory: &Path, enterprise_hosts: &[String]) -> Result<GitHubRepository> {
         if remote.is_empty() || remote.starts_with('-') {
             return Err(GitError::failed("GitHub", "Choose a remote first."));
         }
         let output = self.run(&["remote", "get-url", "--all", remote], directory)?;
         let address = output.lines().next().unwrap_or("");
-        GitHubRepository::parse(address)
+        GitHubRepository::parse_with_hosts(address, enterprise_hosts)
     }
 
-    /// Whether `gh` is installed and signed in to github.com.
-    pub fn gh_status(&self, directory: &Path) -> GhStatus {
+    /// Whether `gh` is installed and signed in to `host`.
+    pub fn gh_status(&self, host: &str, directory: &Path) -> GhStatus {
         if gh_executable().is_none() {
             return GhStatus::NotInstalled;
         }
-        match run_gh(&["auth", "status", "--hostname", "github.com"], directory, &Cancel::default()) {
+        match run_gh(&["auth", "status", "--hostname", host], directory, &Cancel::default()) {
             Ok(_) => GhStatus::SignedIn,
             Err(message) => GhStatus::SignedOut(message),
         }
@@ -238,7 +277,7 @@ impl GitClient {
             return Err(GitError::failed("GitHub", "Merged applies to pull requests, not issues."));
         }
         let limit = limit.clamp(1, 1000).to_string();
-        let repo = format!("github.com/{}", repository.slug());
+        let repo = repository.gh_repo();
         let fields = match kind {
             ItemKind::PullRequest => "number,title,url,author,state,isDraft,labels",
             ItemKind::Issue => "number,title,url,author,state,labels",
@@ -259,7 +298,7 @@ pub fn decode_items(json: &str, repository: &GitHubRepository, kind: ItemKind) -
     let unexpected = || GitError::failed("GitHub", "GitHub returned unexpected items.");
     let value = parse_json(json).map_err(|_| unexpected())?;
     let Json::Array(entries) = value else { return Err(unexpected()) };
-    let expected_prefix = format!("https://github.com/{}/{}/", repository.slug(), kind.path_segment()).to_ascii_lowercase();
+    let expected_prefix = format!("{}/{}/{}/", repository.web_base(), repository.slug(), kind.path_segment()).to_ascii_lowercase();
     let mut items = Vec::with_capacity(entries.len());
     for entry in &entries {
         let Json::Object(_) = entry else { return Err(unexpected()) };
@@ -659,5 +698,142 @@ mod tests {
         assert!(parse_json("[1,").is_err());
         assert!(parse_json("[1] x").is_err());
         assert!(parse_json("\"a\nb\"").is_err());
+    }
+
+    fn hosts(list: &[&str]) -> Vec<String> {
+        list.iter().map(|host| host.to_string()).collect()
+    }
+
+    fn repository(host: &str, owner: &str, name: &str) -> GitHubRepository {
+        GitHubRepository { host: host.into(), owner: owner.into(), name: name.into() }
+    }
+
+    #[test]
+    fn enterprise_addresses_parse_in_every_form_when_their_host_is_listed() {
+        let listed = hosts(&["git.example.com"]);
+        let accepted = [
+            "https://git.example.com/acme/app.git",
+            "https://user@git.example.com/acme/app",
+            "ssh://git@git.example.com/acme/app.git",
+            "git@git.example.com:acme/app.git",
+            "git.example.com:acme/app",
+        ];
+        for address in accepted {
+            let parsed = GitHubRepository::parse_with_hosts(address, &listed).unwrap_or_else(|error| panic!("{address}: {error}"));
+            assert_eq!(parsed, repository("git.example.com", "acme", "app"), "{address}");
+        }
+    }
+
+    #[test]
+    fn enterprise_addresses_are_refused_for_an_unlisted_host() {
+        let listed = hosts(&["git.example.com"]);
+        for address in ["https://other.example.com/acme/app", "git@other.example.com:acme/app.git"] {
+            let error = GitHubRepository::parse_with_hosts(address, &listed).unwrap_err().to_string();
+            assert!(
+                error.contains("This remote is not on github.com or a GitHub Enterprise host listed in Settings."),
+                "{address}: {error}"
+            );
+        }
+        assert!(GitHubRepository::parse_with_hosts("https://git.example.com/acme/app", &[]).is_err(), "nothing is listed");
+    }
+
+    #[test]
+    fn a_listed_enterprise_host_with_a_port_is_still_refused() {
+        let listed = hosts(&["git.example.com"]);
+        for address in
+            ["https://git.example.com:8443/acme/app", "ssh://git.example.com:2222/acme/app", "https://git.example.com:443/acme/app"]
+        {
+            assert!(GitHubRepository::parse_with_hosts(address, &listed).is_err(), "{address} should be refused");
+        }
+    }
+
+    #[test]
+    fn github_com_still_parses_with_no_enterprise_hosts() {
+        assert_eq!(GitHubRepository::parse("https://github.com/acme/app.git").unwrap(), repository("github.com", "acme", "app"));
+        assert_eq!(GitHubRepository::parse_with_hosts("git@github.com:acme/app", &[]).unwrap(), repository("github.com", "acme", "app"));
+        assert!(GitHubRepository::parse("https://git.example.com/acme/app").is_err(), "parse accepts github.com only");
+    }
+
+    #[test]
+    fn an_enterprise_host_is_lowercased_and_matched_without_regard_to_case() {
+        let listed = hosts(&["Git.Example.COM"]);
+        let parsed = GitHubRepository::parse_with_hosts("https://GIT.example.com/Acme/App", &listed).unwrap();
+        assert_eq!(parsed.host, "git.example.com");
+        assert_eq!(parsed.owner, "Acme", "owners keep their case");
+        assert_eq!(GitHubRepository::parse_with_hosts("https://GitHub.com/acme/app", &[]).unwrap().host, "github.com");
+    }
+
+    #[test]
+    fn web_base_and_gh_repo_name_the_host() {
+        let enterprise = repository("git.example.com", "acme", "app");
+        assert_eq!(enterprise.web_base(), "https://git.example.com");
+        assert_eq!(enterprise.gh_repo(), "git.example.com/acme/app");
+        assert_eq!(enterprise.slug(), "acme/app");
+        let public = repository("github.com", "acme", "app");
+        assert_eq!(public.web_base(), "https://github.com");
+        assert_eq!(public.gh_repo(), "github.com/acme/app");
+    }
+
+    #[test]
+    fn decode_items_accepts_links_on_the_repositorys_own_enterprise_host() {
+        let listed = hosts(&["git.example.com"]);
+        let repository = GitHubRepository::parse_with_hosts("https://git.example.com/acme/app", &listed).unwrap();
+        let json = r#"[{"number": 7, "title": "Fix", "url": "https://git.example.com/acme/app/pull/7"}]"#;
+        let items = decode_items(json, &repository, ItemKind::PullRequest).unwrap();
+        assert_eq!(items[0].number, 7);
+        let issues = r#"[{"number": 2, "title": "Bug", "url": "https://GIT.example.com/Acme/App/issues/2"}]"#;
+        assert_eq!(decode_items(issues, &repository, ItemKind::Issue).unwrap().len(), 1, "case is ignored, as for github.com");
+    }
+
+    #[test]
+    fn decode_items_refuses_links_on_another_host() {
+        let listed = hosts(&["git.example.com"]);
+        let enterprise = GitHubRepository::parse_with_hosts("https://git.example.com/acme/app", &listed).unwrap();
+        let on_github = r#"[{"number": 7, "title": "Fix", "url": "https://github.com/acme/app/pull/7"}]"#;
+        assert!(decode_items(on_github, &enterprise, ItemKind::PullRequest).is_err(), "github.com link for an enterprise repository");
+
+        let public = GitHubRepository::parse("https://github.com/acme/app").unwrap();
+        let on_enterprise = r#"[{"number": 7, "title": "Fix", "url": "https://git.example.com/acme/app/pull/7"}]"#;
+        assert!(decode_items(on_enterprise, &public, ItemKind::PullRequest).is_err(), "enterprise link for a github.com repository");
+    }
+
+    #[test]
+    fn valid_enterprise_host_accepts_dns_names_and_refuses_the_rest() {
+        for good in ["git.example.com", "ghe-1.corp.internal", "GIT.Example.COM", "a.b", "10.0.0.7"] {
+            assert!(valid_enterprise_host(good), "{good} should be accepted");
+        }
+        for bad in [
+            "-bad.com",
+            "bad-.com",
+            "nodot",
+            "host:8443",
+            "https://x.com",
+            "a b.com",
+            "github.com",
+            "x.com/path",
+            "x..com",
+            "x.com.",
+            "x_y.com",
+            "",
+            " git.example.com",
+        ] {
+            assert!(!valid_enterprise_host(bad), "{bad:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn valid_enterprise_host_refuses_a_host_longer_than_253_characters() {
+        let at_limit = format!("{}.{}.{}.{}", "a".repeat(63), "a".repeat(63), "a".repeat(63), "a".repeat(61));
+        assert_eq!(at_limit.len(), 253);
+        assert!(valid_enterprise_host(&at_limit));
+        let too_long = format!("{}.{}.{}.{}", "a".repeat(63), "a".repeat(63), "a".repeat(63), "a".repeat(62));
+        assert_eq!(too_long.len(), 254);
+        assert!(!valid_enterprise_host(&too_long));
+    }
+
+    #[test]
+    fn valid_enterprise_host_refuses_a_label_longer_than_63_characters() {
+        let label = format!("{}.example.com", "a".repeat(64));
+        assert!(!valid_enterprise_host(&label));
     }
 }

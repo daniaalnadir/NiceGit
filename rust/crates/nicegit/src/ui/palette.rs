@@ -106,7 +106,7 @@ impl NiceGitApp {
         };
         let pull_request = snapshot.and_then(|s| {
             let current = s.branches.iter().find(|b| b.is_current && !b.is_remote)?;
-            crate::git_ext::github_pull_request_link(s, current)
+            crate::git_ext::github_pull_request_link(s, current, &self.settings.github_enterprise_hosts)
         });
         let mut list = vec![
             command("Fetch", "Download from all remotes", icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
@@ -147,7 +147,7 @@ impl NiceGitApp {
             command("Git LFS", "Tracked patterns and large files", icon::DATABASE, has, Run::Tool("lfs")),
             command(
                 "Pull requests and issues",
-                "github.com through the GitHub CLI",
+                "GitHub remotes, through the GitHub CLI",
                 icon::GITHUB_LOGO,
                 has && snapshot.is_some_and(|s| !s.remotes.is_empty()),
                 Run::Tool("github"),
@@ -325,7 +325,10 @@ impl NiceGitApp {
                     "submodules" => Some(Box::new(tools::submodules::SubmodulesWindow::new())),
                     "gitflow" => Some(Box::new(tools::gitflow::GitFlowWindow::new())),
                     "lfs" => Some(Box::new(tools::lfs::LfsWindow::new())),
-                    "github" => remote.map(|r| Box::new(tools::github::GitHubWindow::new(r)) as Box<dyn tools::ToolWindow>),
+                    "github" => remote.map(|r| {
+                        let hosts = self.settings.github_enterprise_hosts.clone();
+                        Box::new(tools::github::GitHubWindow::new(r, hosts)) as Box<dyn tools::ToolWindow>
+                    }),
                     _ => None,
                 };
                 if let Some(tool) = tool {

@@ -6,7 +6,11 @@ use crate::tools::widgets;
 
 impl NiceGitApp {
     pub fn settings_window(&mut self, ctx: &egui::Context) {
+        // The GitHub Enterprise text is a draft: it is kept while the window is open, and read
+        // again from the saved hosts the next time the window opens.
+        let draft_id = egui::Id::new("github_enterprise_draft");
         if !self.show_settings {
+            ctx.data_mut(|data| data.remove::<String>(draft_id));
             return;
         }
         let mut open = true;
@@ -98,6 +102,38 @@ impl NiceGitApp {
                 })
                 .response
                 .on_hover_text("How often the open repository is fetched in the background, so ahead and behind counts stay current");
+                ui.add_space(10.0);
+                widgets::section(ui, "GitHub Enterprise");
+                let mut draft = ui
+                    .ctx()
+                    .data(|data| data.get_temp::<String>(draft_id))
+                    .unwrap_or_else(|| self.settings.github_enterprise_hosts.join("\n"));
+                ui.label(
+                    RichText::new("Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.")
+                        .small()
+                        .color(c.muted),
+                );
+                ui.add_space(4.0);
+                let field = ui.add(
+                    egui::TextEdit::multiline(&mut draft)
+                        .hint_text("One hostname per line, such as github.example.com")
+                        .desired_rows(3)
+                        .desired_width(f32::INFINITY),
+                );
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "GitHub Enterprise hosts"));
+                let (valid, invalid) = crate::settings::parse_enterprise_hosts(&draft);
+                // Only valid hostnames are saved; the rest stay in the box, named below.
+                if valid != self.settings.github_enterprise_hosts {
+                    self.settings.github_enterprise_hosts = valid;
+                }
+                if !invalid.is_empty() {
+                    let text = format!(
+                        "Not saved, as these are not hostnames: {}. Use a name such as github.example.com, without https:// or a port.",
+                        invalid.join(", ")
+                    );
+                    ui.label(RichText::new(text).small().color(c.warning));
+                }
+                ui.ctx().data_mut(|data| data.insert_temp(draft_id, draft));
                 ui.add_space(10.0);
                 widgets::section(ui, "Layout");
                 ui.horizontal(|ui| {
