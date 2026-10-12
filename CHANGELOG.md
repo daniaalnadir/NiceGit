@@ -47,6 +47,8 @@
   branch moved since you last fetched.
 - The Clone dialog can list your GitHub repositories through the GitHub CLI, so you can pick
   one instead of pasting its URL.
+- In a narrow Changes panel the section titles and bulk buttons shorten so the file counts
+  stay visible, and the diff's line-staging hint wraps instead of being cut off.
 
 ## 1.5.0 - Fewer surprises
 

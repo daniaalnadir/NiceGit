@@ -12,6 +12,7 @@ use egui_phosphor::regular as icon;
 use crate::app::NiceGitApp;
 use crate::theme::Appearance;
 use crate::ui_tests::*;
+use crate::ui_tests_more::{publish_to_bare, wait_for_stageable_lines};
 
 type App = Harness<'static, NiceGitApp>;
 
@@ -144,4 +145,283 @@ fn screenshots() {
         wait(&mut wide, "the columns menu", |h| h.query_by_label("Restore column widths").is_some());
         save(&mut wide, &folder, &format!("history-columns-menu-{theme}"));
     }
+}
+
+// MARK: Design review of new interface pieces
+
+fn review_folder() -> Option<PathBuf> {
+    let folder = std::env::var_os("NICEGIT_SCREENSHOTS").map(PathBuf::from)?;
+    std::fs::create_dir_all(&folder).unwrap();
+    Some(folder)
+}
+
+fn commit_file(dir: &Path, file: &str, contents: &str, message: &str) {
+    std::fs::write(dir.join(file), contents).unwrap();
+    git(dir, &["add", "--", file]);
+    git(dir, &["commit", "-q", "-m", message]);
+}
+
+fn commit_as(dir: &Path, name: &str, email: &str, message: &str) {
+    let (name, email) = (format!("user.name={name}"), format!("user.email={email}"));
+    git(dir, &["-c", &name, "-c", &email, "commit", "-q", "--allow-empty", "-m", message]);
+}
+
+fn shows_text(harness: &App, text: &str) -> bool {
+    harness.query_all_by_label_contains(text).next().is_some()
+}
+
+/// Replaces the text in the sidebar's filter field.
+fn filter_references(harness: &mut App, text: &str) {
+    harness.get_by_role_and_label(Role::TextInput, "Filter references").focus();
+    harness.step();
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Filter references").type_text(text);
+    harness.run_steps(3);
+}
+
+#[test]
+#[ignore = "renders design-review screenshots; run on request"]
+fn review_screenshots() {
+    let Some(folder) = review_folder() else {
+        eprintln!("Set NICEGIT_SCREENSHOTS to a folder to render screenshots.");
+        return;
+    };
+    diff_context_shots(&folder);
+    history_scope_shots(&folder);
+    changes_panel_shots(&folder);
+    trailers_shots(&folder);
+    commit_template_shots(&folder);
+    stash_inspector_shots(&folder);
+    rebase_and_reword_shots(&folder);
+    commit_menu_shots(&folder);
+    remote_branch_menu_shots(&folder);
+    new_tag_shots(&folder);
+    force_push_shots(&folder);
+    settings_shots(&folder);
+}
+
+fn diff_context_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let body: String = (1..=40).map(|n| format!("line {n}\n")).collect();
+    std::fs::write(path.join("long.txt"), &body).unwrap();
+    git(path, &["add", "long.txt"]);
+    git(path, &["commit", "-q", "-m", "Add a long file"]);
+    std::fs::write(path.join("long.txt"), body.replace("line 20\n", "twenty\n")).unwrap();
+    for width in [1440.0, 1100.0] {
+        let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(width, 900.0));
+        harness.get_all_by_label("long.txt").next().expect("the changed file").click();
+        wait_for_stageable_lines(&mut harness);
+        save(&mut harness, folder, &format!("diff-header-{width}-dark"));
+        harness.get_by_role_and_label(Role::ComboBox, "Context lines").click();
+        settle(&mut harness);
+        save(&mut harness, folder, &format!("diff-context-menu-{width}-dark"));
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(2);
+    }
+}
+
+fn history_scope_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    git(path, &["checkout", "-q", "feature"]);
+    commit_file(path, "feature.txt", "feature\n", "Feature only work");
+    git(path, &["checkout", "-q", "main"]);
+    for width in [1440.0, 1100.0] {
+        let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(width, 900.0));
+        wait(&mut harness, "the feature commit in the graph", |h| h.query_by_label("Feature only work").is_some());
+        harness.get_by_role_and_label(Role::ComboBox, "Branches shown").click();
+        settle(&mut harness);
+        save(&mut harness, folder, &format!("history-branches-menu-{width}-dark"));
+        harness.get_by_label("Local branches").click();
+        wait(&mut harness, "the local branches note", |h| shows_text(h, "Showing local branches."));
+        save(&mut harness, folder, &format!("history-branches-local-{width}-dark"));
+    }
+}
+
+fn changes_panel_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    for n in 0..8 {
+        std::fs::write(path.join(format!("file{n:02}.txt")), "x\n").unwrap();
+    }
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    git(path, &["add", "--", "file00.txt", "file01.txt", "file02.txt"]);
+    for (appearance, theme) in [(Appearance::Dark, "dark"), (Appearance::Light, "light")] {
+        let mut harness = open_rendering_at(path, appearance, egui::vec2(1440.0, 900.0));
+        wait(&mut harness, "the staged files", |h| shows_text(h, "Staged files (3)"));
+        save(&mut harness, folder, &format!("changes-panel-{theme}"));
+        if theme == "dark" {
+            harness.get_by_label("Filter changed files").click();
+            harness.step();
+            harness.event(egui::Event::Text("file0".into()));
+            wait(&mut harness, "the filtered headers", |h| shows_text(h, "Unstaged files (5 of 6)"));
+            save(&mut harness, folder, "changes-panel-filtered-dark");
+        }
+    }
+}
+
+fn trailers_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    commit_as(path, "Ana", "ana@example.com", "Review the graph");
+    commit_as(path, "Ben", "ben@example.com", "Tidy the sidebar");
+    std::fs::write(path.join("new.txt"), "new\n").unwrap();
+    git(path, &["add", "--", "new.txt"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Add a new file");
+    harness.get_by_label("Add trailers").click();
+    wait(&mut harness, "the co-author rows", |h| shows_text(h, "Co-authored-by: Ana"));
+    settle(&mut harness);
+    save(&mut harness, folder, "add-trailers-menu-dark");
+    harness.key_press(egui::Key::Escape);
+    settle(&mut harness);
+}
+
+fn commit_template_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let template = temp_dir();
+    let file = template.path().join("message.txt");
+    std::fs::write(&file, "Fix:\n\nDetails\n").unwrap();
+    git(path, &["config", "commit.template", &file.to_string_lossy()]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    wait(&mut harness, "the commit template", |h| h.state().repo().is_some_and(|r| r.draft.summary == "Fix:"));
+    wait(&mut harness, "the template label", |h| shows_text(h, "From commit.template"));
+    save(&mut harness, folder, "commit-template-dark");
+}
+
+fn stash_inspector_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    std::fs::write(path.join("fresh.txt"), "fresh\n").unwrap();
+    git(path, &["stash", "push", "-q", "-u", "-m", "Draft work"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_by_label_contains("Draft work").click();
+    wait(&mut harness, "the stash's files", |h| h.query_all_by_label("notes.txt").next().is_some());
+    settle(&mut harness);
+    harness.get_all_by_label("notes.txt").next().expect("the stashed file").click_secondary();
+    wait(&mut harness, "the stash file's menu", |h| shows_text(h, "Restore this file from the stash"));
+    settle(&mut harness);
+    save(&mut harness, folder, "stash-file-menu-dark");
+}
+
+fn rebase_and_reword_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "keep.txt", "keep\n", "Keep this commit");
+    commit_file(path, "change.txt", "change\n", "Change this commit");
+    commit_file(path, "also.txt", "also\n", "Keep this one too");
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Interactive rebase from here").click();
+    let action = "Action for Change this commit";
+    wait(&mut harness, "the rebase plan", |h| h.query_by_role_and_label(Role::ComboBox, action).is_some());
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::ComboBox, action).click();
+    settle(&mut harness);
+    // Each choice explains itself on hover, so the Edit choice's help is shown before picking it.
+    let edit_choice = harness.get_all_by_label("Edit").last().expect("the Edit choice").rect().center();
+    harness.hover_at(edit_choice);
+    wait(&mut harness, "the Edit choice's help", |h| shows_text(h, "Stop after this commit"));
+    save(&mut harness, folder, "rebase-edit-choice-help-dark");
+    harness.get_all_by_label("Edit").last().expect("the Edit choice").click();
+    settle(&mut harness);
+    save(&mut harness, folder, "rebase-window-edit-dark");
+    harness.get_by_label("Cancel").click();
+    wait(&mut harness, "the rebase window to close", |h| h.state().tools.iter().all(|t| t.title() != "Interactive rebase"));
+
+    // The HEAD commit has its own menu; an older commit's Edit message opens the reword window.
+    harness.get_by_label("Keep this commit").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Edit message").click();
+    wait(&mut harness, "the message editor", |h| h.state().tools.iter().any(|t| t.title() == "Edit commit message"));
+    wait(&mut harness, "the reworded commit to load", |h| shows_text(h, "Message for Keep this commit"));
+    settle(&mut harness);
+    save(&mut harness, folder, "edit-message-window-dark");
+}
+
+fn commit_menu_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/daniaalnadir/NiceGit.git"]);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\n").unwrap();
+    git(path, &["add", "--", "notes.txt"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_by_label("Start the notes").click_secondary();
+    wait(&mut harness, "the commit menu", |h| shows_text(h, "Save as ZIP"));
+    settle(&mut harness);
+    save(&mut harness, folder, "commit-menu-older-dark");
+}
+
+fn remote_branch_menu_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    git(path, &["push", "-q", "origin", "feature:review"]);
+    git(path, &["fetch", "-q", "origin"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    filter_references(&mut harness, "review");
+    wait(&mut harness, "the remote branch row", |h| h.query_all_by_label("review").next().is_some());
+    harness.get_all_by_label("review").next().expect("the remote branch row").click_secondary();
+    wait(&mut harness, "the remote branch menu", |h| shows_text(h, "Delete origin/review"));
+    settle(&mut harness);
+    save(&mut harness, folder, "remote-branch-menu-dark");
+}
+
+fn new_tag_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Create tag here").click();
+    wait(&mut harness, "the tag dialog", |h| h.query_by_role_and_label(Role::TextInput, "Tag name").is_some());
+    type_into(&mut harness, "Tag name", "v1.2.0");
+    harness.get_by_label("Push to remote").click();
+    settle(&mut harness);
+    save(&mut harness, folder, "new-tag-push-to-dark");
+}
+
+fn force_push_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    commit_file(path, "more.txt", "more\n", "Add a file to push");
+    git(path, &["push", "-q", "origin", "main"]);
+    git(path, &["commit", "-q", "--amend", "-m", "Add a file, reworded"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_all_by_label("main").next().expect("the main branch row").click_secondary();
+    settle(&mut harness);
+    save(&mut harness, folder, "branch-menu-force-push-dark");
+    harness.get_by_label_contains("Force push").click();
+    wait(&mut harness, "the force push confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    save(&mut harness, folder, "force-push-confirmation-dark");
+}
+
+fn settings_shots(folder: &Path) {
+    let repo = repository();
+    let mut harness = open_rendering_at(repo.path(), Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    type_into(&mut harness, "GitHub Enterprise hosts", "git.example.com");
+    harness.key_press(egui::Key::Enter);
+    type_into(&mut harness, "GitHub Enterprise hosts", "not a host");
+    settle(&mut harness);
+    save(&mut harness, folder, "settings-enterprise-dark");
 }

@@ -652,14 +652,18 @@ impl NiceGitApp {
         } else if selectable {
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                ui.label(
-                    RichText::new(if review.as_ref().is_some_and(|r| r.staged) {
-                        "Press − beside a line to unstage it, or click and drag over lines to choose several."
-                    } else {
-                        "Press + beside a line to stage it, or click and drag over lines to choose several."
-                    })
-                    .small()
-                    .color(c.muted),
+                // Wraps to a second line in a narrow diff panel rather than running past its edge.
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(if review.as_ref().is_some_and(|r| r.staged) {
+                            "Press − beside a line to unstage it, or click and drag over lines to choose several."
+                        } else {
+                            "Press + beside a line to stage it, or click and drag over lines to choose several."
+                        })
+                        .small()
+                        .color(c.muted),
+                    )
+                    .wrap(),
                 );
             });
         }
