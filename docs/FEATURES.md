@@ -294,7 +294,8 @@ the branch name in words. The body lists the commit subjects when there are two 
 You can edit all three, and choose a draft pull request. A warning appears when the branch has
 commits its upstream does not have, since the pull request will not include them. Until the
 pull request is created, nothing on GitHub changes. When it is created, NiceGit shows its number
-and opens it in your browser. If gh is missing or signed out, the dialog says how to fix that.
+in the notice bar, with an Open button that opens it in your browser. If gh is missing or signed
+out, the dialog says how to fix that.
 Open in browser instead is the fallback: it opens GitHub's compare page, as before, and creates
 nothing.
 

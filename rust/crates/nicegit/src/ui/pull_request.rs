@@ -9,7 +9,7 @@ use egui::RichText;
 use nicegit_core::github::{GhStatus, GitHubRepository};
 use nicegit_core::{Branch, GitClient, GitError, Snapshot};
 
-use crate::app::NiceGitApp;
+use crate::app::{NiceGitApp, Notice, NoticeAction};
 use crate::git_ext::{self, PullRequestTarget};
 use crate::theme;
 use crate::tools::{widgets, Task};
@@ -445,8 +445,13 @@ impl NiceGitApp {
             Some(Outcome::Created(url)) => {
                 self.pull_request = None;
                 let number = url.rsplit('/').next().unwrap_or_default().to_string();
-                crate::ui::changes::open_url(&url);
-                self.notify(format!("Created pull request #{number}. It opened in your browser: {url}"), false);
+                // The notice's button opens the pull request, so nothing opens before the person asks.
+                self.notice = Some(Notice {
+                    text: format!("Created pull request #{number}."),
+                    is_error: false,
+                    action: Some(NoticeAction::OpenUrl(url)),
+                    detail: None,
+                });
             }
         }
     }
