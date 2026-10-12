@@ -508,6 +508,14 @@ fn create_a_pull_request_from_the_branch_menu_and_open_it_in_the_browser() {
     let title = harness.get_by_role_and_label(Role::TextInput, "Title").accesskit_node().value();
     assert_eq!(title.as_deref(), Some("Feature"));
 
+    // The base lookup may finish at any moment and add a message above the buttons, so the
+    // click waits for the dialog to settle and for the button to stop moving.
+    wait(&mut harness, "the base lookup", |h| h.state().pull_request.as_ref().is_some_and(|d| d.settled()));
+    let last = std::cell::Cell::new(None);
+    wait(&mut harness, "the buttons to settle", |h| {
+        let rect = h.get_by_label_contains("Open in browser instead").rect();
+        last.replace(Some(rect)) == Some(rect)
+    });
     harness.get_by_label_contains("Open in browser instead").click();
     settle(&mut harness);
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());

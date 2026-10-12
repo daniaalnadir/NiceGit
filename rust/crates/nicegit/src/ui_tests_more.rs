@@ -1895,7 +1895,13 @@ fn a_pull_request_opens_on_github_for_the_current_branch() {
     harness.key_press(Key::Enter);
     // The command opens the Create pull request dialog; its browser button is the fallback.
     wait(&mut harness, "the pull request dialog", |h| h.state().pull_request.is_some());
-    settle(&mut harness);
+    // The base lookup can add a message above the buttons, so wait for it and a still button.
+    wait(&mut harness, "the base lookup", |h| h.state().pull_request.as_ref().is_some_and(|d| d.settled()));
+    let last = std::cell::Cell::new(None);
+    wait(&mut harness, "the buttons to settle", |h| {
+        let rect = h.get_by_label_contains("Open in browser instead").rect();
+        last.replace(Some(rect)) == Some(rect)
+    });
     harness.get_by_label_contains("Open in browser instead").click();
     settle(&mut harness);
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());

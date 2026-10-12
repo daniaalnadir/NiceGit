@@ -84,6 +84,14 @@ pub struct PullRequestDialog {
     error: Option<String>,
 }
 
+impl PullRequestDialog {
+    /// Whether the background reads have finished, so the dialog's layout no longer changes.
+    #[cfg(test)]
+    pub fn settled(&self) -> bool {
+        matches!(self.lookup, Lookup::Done(_)) && self.commits.is_none()
+    }
+}
+
 /// The title for a branch: its last path segment with dashes and underscores as spaces, and the first
 /// letter capitalised, so `feature/fix-login` becomes "Fix login".
 pub fn title_from_branch_name(branch: &str) -> String {
