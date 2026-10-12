@@ -19,6 +19,8 @@
 - Fix up with staged changes… folds what you've staged into an older commit from its
   right-click menu; Undo puts the changes back.
 - The New tag dialog can push the tag to a remote as soon as it is created.
+- An Add trailers menu in the commit box adds Signed-off-by and Co-authored-by lines,
+  choosing co-authors from recent history.
 
 ## 1.5.0 - Fewer surprises
 

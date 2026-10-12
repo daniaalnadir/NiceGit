@@ -57,6 +57,82 @@ impl Draft {
             None => Draft { summary: message.to_string(), description: String::new() },
         }
     }
+
+    /// Whether `trailer` (a whole line such as `Co-authored-by: Ana <ana@example.com>`) is one of
+    /// the description's lines.
+    pub fn has_trailer(&self, trailer: &str) -> bool {
+        self.description.split('\n').any(|line| same_trailer(line, trailer))
+    }
+
+    /// Adds `trailer` (a whole line such as `Co-authored-by: Ana <ana@example.com>`) to the end
+    /// of the description, or removes it when it is already there. Trailers go in a final
+    /// paragraph of their own, after a blank line, as `git interpret-trailers` expects.
+    pub fn toggle_trailer(&mut self, trailer: &str) {
+        let trailer = trailer.trim_end();
+        let text = self.description.trim_end();
+        if self.has_trailer(trailer) {
+            // Work through the paragraphs. A paragraph left empty by the removal takes one
+            // neighbouring blank line with it, so no blank lines are left behind.
+            let lines: Vec<&str> = text.split('\n').collect();
+            let mut out: Vec<&str> = Vec::new();
+            let mut index = 0;
+            while index < lines.len() {
+                if lines[index].trim().is_empty() {
+                    out.push(lines[index]);
+                    index += 1;
+                    continue;
+                }
+                let end = lines[index..].iter().position(|line| line.trim().is_empty()).map_or(lines.len(), |offset| index + offset);
+                let kept: Vec<&str> = lines[index..end].iter().copied().filter(|line| !same_trailer(line, trailer)).collect();
+                if !kept.is_empty() {
+                    out.extend(kept);
+                } else if out.last().is_some_and(|line| line.trim().is_empty()) {
+                    out.pop();
+                } else if end < lines.len() {
+                    // The paragraph opened the text, so the blank line after it goes instead.
+                    index = end + 1;
+                    continue;
+                }
+                index = end;
+            }
+            while out.last().is_some_and(|line| line.trim().is_empty()) {
+                out.pop();
+            }
+            self.description = out.join("\n");
+        } else if text.trim().is_empty() {
+            self.description = trailer.to_string();
+        } else {
+            let mut lines: Vec<&str> = text.split('\n').collect();
+            // A trailer joins a last paragraph that is already all trailers; otherwise it starts
+            // a new paragraph after a blank line.
+            let start = lines.iter().rposition(|line| line.trim().is_empty()).map_or(0, |position| position + 1);
+            let last = &lines[start..];
+            if last.is_empty() || !last.iter().all(|line| is_trailer_line(line)) {
+                lines.push("");
+            }
+            lines.push(trailer);
+            self.description = lines.join("\n");
+        }
+    }
+}
+
+/// Whether `line` is a trailer, as `^[A-Za-z0-9-]+: \S` matches: a key of letters, digits and
+/// hyphens, then a colon, a space and a value.
+fn is_trailer_line(line: &str) -> bool {
+    let line = line.trim_end();
+    let Some((key, value)) = line.split_once(':') else { return false };
+    !key.is_empty()
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && value.strip_prefix(' ').and_then(|value| value.chars().next()).is_some_and(|c| !c.is_whitespace())
+}
+
+/// Whether `line` is `trailer`, ignoring trailing whitespace and the case of the key.
+fn same_trailer(line: &str, trailer: &str) -> bool {
+    let (line, trailer) = (line.trim_end(), trailer.trim_end());
+    match (line.split_once(": "), trailer.split_once(": ")) {
+        (Some((key, value)), Some((wanted_key, wanted_value))) => key.eq_ignore_ascii_case(wanted_key) && value == wanted_value,
+        _ => line == trailer,
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -138,5 +214,79 @@ mod tests {
         assert_eq!(draft.description, "Lines keep their lane.\nSecond line.");
         assert_eq!(draft.message(), "Fix the graph\n\nLines keep their lane.\nSecond line.");
         assert_eq!(Draft::from_message("Only a summary").message(), "Only a summary");
+    }
+
+    const ANA: &str = "Co-authored-by: Ana <ana@example.com>";
+    const DANA: &str = "Signed-off-by: Dana <dana@example.com>";
+
+    fn described(description: &str) -> Draft {
+        Draft { summary: "Fix the graph".into(), description: description.into() }
+    }
+
+    #[test]
+    fn trailers_go_into_an_empty_description_alone() {
+        let mut draft = Draft::default();
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, ANA);
+        assert!(draft.has_trailer(ANA));
+    }
+
+    #[test]
+    fn trailers_follow_prose_after_a_blank_line() {
+        let mut draft = described("Keep the lanes still.\nThen check the tests.");
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, format!("Keep the lanes still.\nThen check the tests.\n\n{ANA}"));
+    }
+
+    #[test]
+    fn trailers_add_a_second_line_to_the_trailer_paragraph() {
+        let mut draft = described(&format!("Keep the lanes still.\n\n{DANA}"));
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, format!("Keep the lanes still.\n\n{DANA}\n{ANA}"));
+    }
+
+    #[test]
+    fn trailers_removing_the_only_one_leaves_the_prose() {
+        let mut draft = described(&format!("Keep the lanes still.\n\n{ANA}\n"));
+        assert!(draft.has_trailer(ANA));
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, "Keep the lanes still.");
+        assert!(!draft.has_trailer(ANA));
+    }
+
+    #[test]
+    fn trailers_removing_one_of_two_keeps_the_other() {
+        let mut draft = described(&format!("Keep the lanes still.\n\n{DANA}\n{ANA}"));
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, format!("Keep the lanes still.\n\n{DANA}"));
+        assert!(draft.has_trailer(DANA));
+        assert!(!draft.has_trailer(ANA));
+    }
+
+    #[test]
+    fn trailers_match_the_key_regardless_of_case() {
+        let draft = described("Keep the lanes still.\n\nco-authored-by: Ana <ana@example.com>");
+        assert!(draft.has_trailer(ANA));
+        // The value is compared exactly, so a changed address is a different trailer.
+        assert!(!draft.has_trailer("Co-authored-by: Ana <ANA@example.com>"));
+        let mut draft = draft;
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, "Keep the lanes still.");
+    }
+
+    #[test]
+    fn trailers_after_prose_that_looks_like_one_still_get_a_blank_line() {
+        let mut draft = described("Fixes: the graph\nLanes stay put.");
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, format!("Fixes: the graph\nLanes stay put.\n\n{ANA}"));
+    }
+
+    #[test]
+    fn trailers_toggled_twice_restore_the_original() {
+        let original = "Keep the lanes still.\n\nNotes: none";
+        let mut draft = described(original);
+        draft.toggle_trailer(ANA);
+        draft.toggle_trailer(ANA);
+        assert_eq!(draft.description, original);
     }
 }

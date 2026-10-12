@@ -202,6 +202,10 @@ pub struct Repo {
     pub amend: bool,
     pub commit_filter: String,
     pub branch_filter: String,
+    /// Text that narrows the Add trailers menu's list of co-authors. Not saved.
+    pub trailer_filter: String,
+    /// The Git name and email, read while the Add trailers menu is open and cleared when it closes.
+    pub trailer_identity: Option<(String, String)>,
     pub undo: Option<HistoryEntry>,
     pub redo: Option<HistoryEntry>,
     /// A discard that can be reversed while the file is unchanged since.
@@ -261,6 +265,8 @@ impl Repo {
             amend: false,
             commit_filter: String::new(),
             branch_filter: String::new(),
+            trailer_filter: String::new(),
+            trailer_identity: None,
             undo: None,
             redo: None,
             discard_undo: Vec::new(),
