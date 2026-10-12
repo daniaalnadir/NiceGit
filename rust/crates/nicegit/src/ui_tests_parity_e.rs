@@ -413,3 +413,38 @@ fn open_a_submodule_as_a_repository_tab_from_its_window() {
     assert_eq!(harness.state().repo().map(|r| r.path.canonicalize().unwrap()), Some(submodule), "the submodule's tab is active");
     assert_eq!(harness.state().snapshot().map(|s| s.name.clone()).as_deref(), Some("library"));
 }
+
+// MARK: Diff context
+
+/// Whether the open diff shows a line with exactly this text.
+fn diff_shows(harness: &App, text: &str) -> bool {
+    harness.state().repo().and_then(|r| r.diff.as_ref()).is_some_and(|diff| diff.lines.iter().any(|line| line.text == text))
+}
+
+#[test]
+fn context_selector_shows_the_whole_file() {
+    let repo = repository();
+    let path = repo.path();
+    let original: String = (1..=40).map(|n| format!("line {n}\n")).collect();
+    commit_file(path, "long.txt", &original, "Add a long file");
+    std::fs::write(path.join("long.txt"), original.replace("line 5\n", "five\n")).unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("long.txt").click();
+    crate::ui_tests_more::wait_for_stageable_lines(&mut harness);
+
+    // Three lines of context are shown by default, so a line far from the change is not.
+    assert!(!diff_shows(&harness, " line 35"), "the default context leaves a distant line out");
+
+    harness.get_by_role_and_label(Role::ComboBox, "Context lines").click();
+    settle(&mut harness);
+    harness.get_all_by_label("Whole file").last().expect("the Whole file choice").click();
+    wait(&mut harness, "the whole file to be shown", |h| diff_shows(h, " line 35"));
+    assert_eq!(harness.state().settings.diff_context, crate::settings::DiffContextSetting::WholeFile);
+
+    // Lines can still be staged with the whole file shown.
+    crate::ui_tests_more::hover_change_until(&mut harness, "Stage this change");
+    harness.get_by_label("Stage this change").click();
+    idle(&mut harness);
+    wait(&mut harness, "the change staged", |_| git(path, &["diff", "--cached"]).contains("-line 5\n+five"));
+}

@@ -8,9 +8,9 @@ use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
 use nicegit_core::conflict::has_conflict_markers;
-use nicegit_core::diff::{parse_diff, DiffLine};
+use nicegit_core::diff::{parse_diff, DiffContext, DiffLine, DiffLineKind, DiffRequest};
 use nicegit_core::inline::{self, InlineChange};
-use nicegit_core::staging::{DiffHunk, FileReview};
+use nicegit_core::staging::{line_map, DiffHunk, FileReview};
 use nicegit_core::GitError;
 use tempfile::TempDir;
 
@@ -409,6 +409,49 @@ fn hunk_grouping_and_inline_highlights_work_on_parsed_patches() {
     let highlights = inline::highlights(&lines);
     assert_eq!(highlights[&2], InlineChange { prefix: "let v = ".into(), changed: "1".into(), suffix: ";".into() });
     assert_eq!(highlights[&3].changed, "2");
+}
+
+#[test]
+fn line_map_matches_a_whole_file_diff() {
+    // Three changes spread across a 60-line file, so each context size shows them differently.
+    let repo = Repo::new();
+    let original: String = (1..=60).map(|n| format!("line {n}\n")).collect();
+    repo.commit("long.txt", &original, "Base");
+    let edited = original.replace("line 3\n", "three\n").replace("line 30\n", "thirty\n").replace("line 58\n", "fifty-eight\n");
+    repo.write("long.txt", &edited);
+
+    let review = client().file_review("long.txt", false, repo.path()).expect("review");
+    let change = client().load_status(repo.path()).expect("status").into_iter().find(|entry| entry.path == "long.txt").expect("entry");
+    let shown_with = |context: DiffContext| {
+        let patch = client().diff_with(&change, false, DiffRequest { context, ..Default::default() }, repo.path()).expect("shown diff");
+        parse_diff(&patch)
+    };
+
+    for context in [DiffContext::Lines(3), DiffContext::Lines(10), DiffContext::Lines(25), DiffContext::WholeFile] {
+        let shown = shown_with(context);
+        let map = line_map(&shown, &review).unwrap_or_else(|| panic!("every shown line has a counterpart with {context:?}"));
+        let changed = shown.iter().zip(&map).filter(|(line, _)| matches!(line.kind, DiffLineKind::Addition | DiffLineKind::Deletion));
+        assert_eq!(changed.count(), 6, "each of the three changes maps both its lines with {context:?}");
+        for (line, mapped) in shown.iter().zip(&map) {
+            if matches!(line.kind, DiffLineKind::Context | DiffLineKind::Addition | DiffLineKind::Deletion) {
+                let position = mapped.unwrap_or_else(|| panic!("{:?} maps with {context:?}", line.text));
+                assert_eq!(review.lines[position].text, line.text);
+            }
+        }
+    }
+
+    // Choosing lines in the ten-line view stages them, as choosing them in the whole file would.
+    let shown = shown_with(DiffContext::Lines(10));
+    let map = line_map(&shown, &review).expect("the ten-line view maps");
+    let chosen: BTreeSet<usize> = shown
+        .iter()
+        .zip(&map)
+        .filter(|(line, _)| line.text == "-line 30" || line.text == "+thirty")
+        .filter_map(|(_, mapped)| *mapped)
+        .collect();
+    assert_eq!(chosen.len(), 2);
+    client().stage_lines(&chosen, &review, repo.path()).expect("stage the chosen lines");
+    assert_eq!(repo.index_text("long.txt"), original.replace("line 30\n", "thirty\n"));
 }
 
 // MARK: Conflicts

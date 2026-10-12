@@ -24,6 +24,39 @@ pub enum SplitRow {
     Pair { left: Option<usize>, right: Option<usize> },
 }
 
+/// Lines of unchanged context shown around each change. Git's default applies to `Default`,
+/// which is Git's own 3 lines or the user's `diff.context` setting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DiffContext {
+    #[default]
+    Default,
+    Lines(u32),
+    /// Every line of the file, as the line-staging review reads it.
+    WholeFile,
+}
+
+/// The context Git prints for `DiffContext::WholeFile`; the same value the line-staging review uses.
+const WHOLE_FILE_CONTEXT: u32 = 1_000_000;
+
+impl DiffContext {
+    /// The Git argument that selects this context, or `None` to leave Git's default in place.
+    pub fn argument(self) -> Option<String> {
+        match self {
+            Self::Default => None,
+            Self::Lines(lines) => Some(format!("--unified={lines}")),
+            Self::WholeFile => Some(format!("--unified={WHOLE_FILE_CONTEXT}")),
+        }
+    }
+}
+
+/// The options that change what a diff of a file, commit, or stash shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiffRequest {
+    /// Leave out whitespace-only changes.
+    pub ignore_whitespace: bool,
+    pub context: DiffContext,
+}
+
 /// Reads `@@ -a,b +c,d @@`, returning (old start, old count, new start, new count).
 fn hunk_header(text: &str) -> Option<(usize, usize, usize, usize)> {
     let rest = text.strip_prefix("@@ -")?;

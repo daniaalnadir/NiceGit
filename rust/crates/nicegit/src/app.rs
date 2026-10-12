@@ -4,6 +4,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use nicegit_core::diff::DiffRequest;
 use nicegit_core::graph::{layout, layout_with_working_tree, GraphRow};
 use nicegit_core::models::short;
 use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
@@ -1263,8 +1264,13 @@ impl NiceGitApp {
         }
     }
 
+    /// The diff options the settings choose: whitespace and context lines.
+    fn diff_request(&self) -> DiffRequest {
+        DiffRequest { ignore_whitespace: self.settings.ignore_whitespace, context: self.settings.diff_context.context() }
+    }
+
     pub fn select_change(&mut self, entry: StatusEntry, staged: bool) {
-        let ignore_whitespace = self.settings.ignore_whitespace;
+        let request = self.diff_request();
         // A refresh reloads the same change; its previous review stays until the new one arrives,
         // so the buttons of its lines do not vanish with each refresh. Staging re-reads the review
         // and refuses when the file has changed, so a previous review cannot act on newer content.
@@ -1280,7 +1286,7 @@ impl NiceGitApp {
         repo.selection = Selection::Change { entry: entry.clone(), staged };
         let title = entry.path.clone();
         // New files can be staged line by line too; an untracked folder has no lines.
-        if !ignore_whitespace && !entry.path.ends_with('/') {
+        if !request.ignore_whitespace && !entry.path.ends_with('/') {
             // A review carries the same lines as the diff, plus what staging single lines needs.
             let (review_path, file) = (path.clone(), entry.path.clone());
             let context = self.worker.context.clone();
@@ -1302,7 +1308,7 @@ impl NiceGitApp {
                 }
             });
         }
-        self.worker.diff(generation, title, move |client| client.diff_with(&entry, staged, ignore_whitespace, &path));
+        self.worker.diff(generation, title, move |client| client.diff_with(&entry, staged, request, &path));
     }
 
     /// Reads both versions of an image whose change is open, in the background, to show them
@@ -1319,7 +1325,7 @@ impl NiceGitApp {
     }
 
     pub fn select_commit(&mut self, hash: String) {
-        let ignore_whitespace = self.settings.ignore_whitespace;
+        let request = self.diff_request();
         let Some((generation, path)) = self.start_diff() else { return };
         let context = self.worker.context.clone();
         let repo = self.repo_mut().expect("active repository");
@@ -1337,11 +1343,11 @@ impl NiceGitApp {
             repo.commit_line_counts = Some((hash.clone(), task));
         }
         let title = format!("Commit {}", short(&hash));
-        self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, ignore_whitespace, &path));
+        self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, request, &path));
     }
 
     pub fn select_commit_file(&mut self, hash: String, file: Option<String>) {
-        let ignore_whitespace = self.settings.ignore_whitespace;
+        let request = self.diff_request();
         let Some((generation, path)) = self.start_diff() else { return };
         let repo = self.repo_mut().expect("active repository");
         repo.selection = Selection::Commit { hash: hash.clone(), file: file.clone() };
@@ -1354,7 +1360,7 @@ impl NiceGitApp {
                 Ok((before, client.file_bytes_at(Some(&commit), &image, &preview_path)?))
             });
         }
-        self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), ignore_whitespace, &path));
+        self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), request, &path));
     }
 
     /// Selects a stash from the sidebar: its whole diff, with its files listed in the inspector.
@@ -1368,7 +1374,7 @@ impl NiceGitApp {
 
     /// Shows a stash's whole diff, or one of its files, listing the files if they are not yet known.
     pub fn select_stash_file(&mut self, stash: Stash, file: Option<String>) {
-        let ignore_whitespace = self.settings.ignore_whitespace;
+        let request = self.diff_request();
         // A file's diff depends on whether it is untracked, so its listed entry is needed.
         let entry = match &file {
             None => None,
@@ -1398,8 +1404,8 @@ impl NiceGitApp {
             None => format!("{} · {}", stash.reference, stash.message),
         };
         self.worker.diff(generation, title, move |client| match entry {
-            Some(entry) => client.stash_file_diff(&stash, &entry, ignore_whitespace, &path),
-            None => client.stash_diff_with(&stash, ignore_whitespace, &path),
+            Some(entry) => client.stash_file_diff(&stash, &entry, request, &path),
+            None => client.stash_diff_with(&stash, request, &path),
         });
     }
 
@@ -1615,7 +1621,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
-        let ignore_whitespace = self.settings.ignore_whitespace;
+        let request = self.diff_request();
         let mut requests = Vec::new();
         let mut closed = Vec::new();
         let mut blocked_close = false;
@@ -1645,7 +1651,8 @@ impl NiceGitApp {
                 .open(&mut open)
                 .show(ctx, |ui| {
                     let mut cx = Ctx::new(&path, &snapshot, idle, &mut requests);
-                    cx.ignore_whitespace = ignore_whitespace;
+                    cx.ignore_whitespace = request.ignore_whitespace;
+                    cx.diff_context = request.context;
                     tool.ui(ui, &mut cx);
                 });
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {

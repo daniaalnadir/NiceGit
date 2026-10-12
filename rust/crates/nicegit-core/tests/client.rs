@@ -5,6 +5,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
+use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::models::{Branch, GitError, HistoryScope, Operation, Snapshot, StashFile, StatusEntry, StatusKind};
 use tempfile::TempDir;
 
@@ -662,7 +663,7 @@ fn stash_file_diff_shows_one_file() {
     let stash = stash_all(&repo, "two files");
     let file = stash_file(&repo, &stash, "one.txt");
 
-    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff one file");
+    let diff = client().stash_file_diff(&stash, &file, DiffRequest::default(), repo.path()).expect("diff one file");
 
     assert!(diff.contains("+a changed"), "the file's change is shown: {diff}");
     assert!(!diff.contains("two.txt") && !diff.contains("b changed"), "the other file is not: {diff}");
@@ -677,7 +678,7 @@ fn stash_file_diff_shows_an_untracked_file() {
     let file = stash_file(&repo, &stash, "scratch.txt");
     assert!(file.untracked);
 
-    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff untracked file");
+    let diff = client().stash_file_diff(&stash, &file, DiffRequest::default(), repo.path()).expect("diff untracked file");
 
     assert!(diff.contains("+fresh one") && diff.contains("+fresh two"), "the content is added lines: {diff}");
     assert!(diff.contains("new file mode"), "the file is shown as new: {diff}");
@@ -697,7 +698,7 @@ fn stash_file_diff_with_glob_characters() {
     let stash = stash_all(&repo, "both");
     let file = stash_file(&repo, &stash, "a*.txt");
 
-    let diff = client().stash_file_diff(&stash, &file, false, repo.path()).expect("diff glob-named file");
+    let diff = client().stash_file_diff(&stash, &file, DiffRequest::default(), repo.path()).expect("diff glob-named file");
 
     assert!(diff.contains("+star two"), "the glob-named file's change is shown: {diff}");
     assert!(!diff.contains("ab.txt") && !diff.contains("ab two"), "the file it matches is not: {diff}");
@@ -711,13 +712,67 @@ fn stash_diffs_can_ignore_whitespace() {
     let stash = stash_all(&repo, "spaces");
     let file = stash_file(&repo, &stash, "a.txt");
 
-    let plain = client().stash_diff_with(&stash, false, repo.path()).expect("whole stash");
-    let quiet = client().stash_diff_with(&stash, true, repo.path()).expect("whole stash, ignoring whitespace");
-    let file_quiet = client().stash_file_diff(&stash, &file, true, repo.path()).expect("one file, ignoring whitespace");
+    let plain = client().stash_diff_with(&stash, DiffRequest::default(), repo.path()).expect("whole stash");
+    let quiet = client()
+        .stash_diff_with(&stash, DiffRequest { ignore_whitespace: true, ..Default::default() }, repo.path())
+        .expect("whole stash, ignoring whitespace");
+    let file_quiet = client()
+        .stash_file_diff(&stash, &file, DiffRequest { ignore_whitespace: true, ..Default::default() }, repo.path())
+        .expect("one file, ignoring whitespace");
 
     assert!(plain.contains("+a  "), "the whitespace-only change is shown by default: {plain}");
     assert!(!quiet.contains("+a  ") && quiet.contains("+b changed"), "whitespace-only changes are left out: {quiet}");
     assert!(!file_quiet.contains("+a  ") && file_quiet.contains("+b changed"), "one file leaves them out too: {file_quiet}");
+}
+
+/// A 60-line file's content, with line 30 changed in the working copy when `changed` is set.
+fn sixty_lines(changed: bool) -> String {
+    (1..=60).map(|n| if changed && n == 30 { "changed 30\n".to_string() } else { format!("line {n}\n") }).collect()
+}
+
+/// How many unchanged lines a patch shows, counted by their leading space.
+fn context_lines(patch: &str) -> usize {
+    patch.lines().filter(|line| line.starts_with(' ')).count()
+}
+
+#[test]
+fn diff_context_lines_widen_the_hunk() {
+    let repo = Repo::new();
+    repo.commit("long.txt", &sixty_lines(false), "Add a long file");
+    repo.write("long.txt", &sixty_lines(true));
+    let change = entry(repo.path(), "long.txt");
+    let diff = |context: DiffContext| {
+        client().diff_with(&change, false, DiffRequest { context, ..Default::default() }, repo.path()).expect("diff the change")
+    };
+
+    assert_eq!(context_lines(&diff(DiffContext::Default)), 6, "Git's default is three lines each side");
+    assert_eq!(context_lines(&diff(DiffContext::Lines(3))), 6);
+    assert_eq!(context_lines(&diff(DiffContext::Lines(10))), 20);
+    assert_eq!(context_lines(&diff(DiffContext::WholeFile)), 59, "every unchanged line of the file");
+}
+
+#[test]
+fn diff_context_applies_to_commits_and_stashes() {
+    let repo = Repo::new();
+    repo.commit("long.txt", &sixty_lines(false), "Add a long file");
+    let changed = repo.commit("long.txt", &sixty_lines(true), "Change line 30");
+    let request = |context: DiffContext| DiffRequest { context, ..Default::default() };
+
+    let commit = |context| client().commit_diff_with(&changed, None, request(context), repo.path()).expect("commit diff");
+    assert_eq!(context_lines(&commit(DiffContext::Lines(10))), 20);
+    assert_eq!(context_lines(&commit(DiffContext::WholeFile)), 59);
+
+    // The commit above already holds the change, so the stash needs its own edit to line 30.
+    repo.write("long.txt", &sixty_lines(true).replace("changed 30\n", "stashed 30\n"));
+    let stash = stash_all(&repo, "line 30");
+    let whole = |context| client().stash_diff_with(&stash, request(context), repo.path()).expect("stash diff");
+    assert_eq!(context_lines(&whole(DiffContext::Lines(10))), 20);
+    assert_eq!(context_lines(&whole(DiffContext::WholeFile)), 59);
+
+    let file = stash_file(&repo, &stash, "long.txt");
+    let one = |context| client().stash_file_diff(&stash, &file, request(context), repo.path()).expect("stash file diff");
+    assert_eq!(context_lines(&one(DiffContext::Lines(10))), 20);
+    assert_eq!(context_lines(&one(DiffContext::WholeFile)), 59);
 }
 
 #[test]
