@@ -382,8 +382,16 @@ impl GitClient {
     }
 
     /// Cherry-picks several commits, oldest first by committer time, as one sequence. Conflicts
-    /// stop the sequence for Continue or Abort, like a single cherry-pick.
-    pub fn cherry_pick(&self, commits: &[String], expected_head: Option<&str>, expected_branch: &str, directory: &Path) -> Result<()> {
+    /// stop the sequence for Continue or Abort, like a single cherry-pick. With `record_origin`,
+    /// each new commit's message names the commit it came from, as `git cherry-pick -x` does.
+    pub fn cherry_pick(
+        &self,
+        commits: &[String],
+        expected_head: Option<&str>,
+        expected_branch: &str,
+        record_origin: bool,
+        directory: &Path,
+    ) -> Result<()> {
         const COMMAND: &str = "cherry-pick";
         let state = self.checkout_state(directory)?;
         if state.head_hash.as_deref() != expected_head || state.current_branch != expected_branch {
@@ -417,6 +425,9 @@ impl GitClient {
         }
         resolved.sort();
         let mut arguments = vec!["cherry-pick"];
+        if record_origin {
+            arguments.push("-x");
+        }
         arguments.extend(resolved.iter().map(|(_, hash)| hash.as_str()));
         self.run(&arguments, directory).map(drop)
     }
