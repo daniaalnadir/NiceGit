@@ -159,6 +159,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   its files in the inspector; click one to see just its changes, or restore that file from the
   stash.
 - Merge or rebase from branch context menus; cherry-pick from commit context menus.
+- The Merge confirmation can always create a merge commit, or squash the branch's changes into
+  the staged changes so you can commit them as one new commit. A squash that would conflict is
+  refused, so you can merge normally and resolve the conflicts.
 - Continue or abort interrupted operations after resolving and staging conflicts.
 - Edit UTF-8 text conflicts in-app, with marker checks and external-edit protection.
 - Compare base, current, and incoming conflict versions alongside the editable result.

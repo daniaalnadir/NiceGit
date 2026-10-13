@@ -4,7 +4,7 @@ use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
 use nicegit_core::parsers::Tracking;
-use nicegit_core::{Branch, GitClient, Snapshot, TagDetails};
+use nicegit_core::{Branch, GitClient, MergeStyle, Snapshot, TagDetails};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::theme;
@@ -743,7 +743,12 @@ impl NiceGitApp {
             format!("Merge {} into {}?", source.display_name(), snapshot.current_branch),
             preview,
             "Merge",
-            Pending::Merge { source, branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
+            Pending::Merge {
+                source,
+                branch: snapshot.current_branch.clone(),
+                head: snapshot.head_hash.clone(),
+                style: MergeStyle::default(),
+            },
         );
     }
 

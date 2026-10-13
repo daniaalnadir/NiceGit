@@ -6,7 +6,9 @@ use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
 use nicegit_core::diff::{DiffContext, DiffRequest};
-use nicegit_core::models::{Branch, GitError, HistoryScope, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind};
+use nicegit_core::models::{
+    Branch, GitError, HistoryScope, MergeStyle, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind,
+};
 use tempfile::TempDir;
 
 /// The stash options the app used before they were chosen: untracked files are stashed too.
@@ -540,15 +542,158 @@ fn merge_refuses_branch_whose_tip_moved_after_selection() {
     repo.git(&["switch", "main"]);
     let main_head = repo.head();
 
-    let result = client().merge(&shown, "main", Some(&main_head), repo.path());
+    let result = client().merge(&shown, "main", Some(&main_head), MergeStyle::Default, repo.path());
 
     assert!(error_text(result).contains("selected branch changed"));
     assert_eq!(repo.head(), main_head);
 
     // With the current tip shown again, the same merge succeeds.
     let fresh = local_branch(&snapshot(repo.path()), "feature");
-    client().merge(&fresh, "main", Some(&main_head), repo.path()).expect("merge fresh tip");
+    client().merge(&fresh, "main", Some(&main_head), MergeStyle::Default, repo.path()).expect("merge fresh tip");
     assert!(repo.path().join("b.txt").exists());
+}
+
+/// A `main` with one commit, and a `feature` one commit ahead of it. `main` is still checked out.
+fn fast_forwardable_feature(repo: &Repo) {
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["switch", "-c", "feature"]);
+    repo.commit("b.txt", "feature work\n", "Feature work");
+    repo.git(&["switch", "main"]);
+}
+
+/// A `main` and a `feature` that have each gained a commit since they split. `main` is checked out.
+fn diverged_feature(repo: &Repo) {
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["switch", "-c", "feature"]);
+    repo.commit("b.txt", "feature work\n", "Feature work");
+    repo.git(&["switch", "main"]);
+    repo.commit("c.txt", "main work\n", "Main work");
+}
+
+fn has_merge_head(directory: &Path) -> bool {
+    git_output(directory, &["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]).status.success()
+}
+
+#[test]
+fn merge_default_fast_forwards_a_branch_that_is_ahead() {
+    let repo = Repo::new();
+    fast_forwardable_feature(&repo);
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+
+    client().merge(&shown, "main", Some(&repo.head()), MergeStyle::Default, repo.path()).expect("fast-forward merge");
+
+    assert_eq!(repo.head(), shown.tip);
+    assert!(!git_output(repo.path(), &["rev-parse", "--verify", "--quiet", "HEAD^2"]).status.success(), "fast-forward has one parent");
+}
+
+#[test]
+fn merge_no_fast_forward_records_a_merge_commit() {
+    let repo = Repo::new();
+    fast_forwardable_feature(&repo);
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+    let main_head = repo.head();
+
+    client().merge(&shown, "main", Some(&main_head), MergeStyle::NoFastForward, repo.path()).expect("merge commit");
+
+    assert_eq!(repo.git(&["rev-parse", "HEAD^1"]).trim(), main_head);
+    assert_eq!(repo.git(&["rev-parse", "HEAD^2"]).trim(), shown.tip);
+}
+
+#[test]
+fn squash_stages_a_diverged_branch_without_moving_head() {
+    let repo = Repo::new();
+    diverged_feature(&repo);
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+    let main_head = repo.head();
+
+    client().merge(&shown, "main", Some(&main_head), MergeStyle::Squash, repo.path()).expect("squash");
+
+    assert_eq!(repo.head(), main_head);
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]).trim(), "b.txt");
+    assert!(!has_merge_head(repo.path()));
+    assert!(git_output(repo.path(), &["rev-parse", "--git-path", "SQUASH_MSG"]).status.success());
+    // The working tree holds the merge result, with nothing left unstaged.
+    assert_eq!(repo.read("b.txt"), "feature work\n");
+    assert_eq!(repo.read("c.txt"), "main work\n");
+    assert!(repo.git(&["diff", "--name-only"]).trim().is_empty());
+}
+
+#[test]
+fn squash_refuses_a_branch_that_is_already_contained() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["branch", "behind"]);
+    repo.commit("b.txt", "two\n", "Second");
+    let shown = local_branch(&snapshot(repo.path()), "behind");
+    let main_head = repo.head();
+
+    let result = client().merge(&shown, "main", Some(&main_head), MergeStyle::Squash, repo.path());
+
+    assert!(error_text(result).contains("Already up to date: there is nothing to squash."));
+    assert_eq!(repo.head(), main_head);
+    assert!(repo.git(&["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn squash_of_a_branch_that_brings_no_change_is_refused_and_leaves_no_message() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["switch", "-c", "feature"]);
+    repo.commit("b.txt", "two\n", "Feature");
+    repo.git(&["switch", "main"]);
+    // The same change, made again on main: the histories differ, but nothing is left to bring.
+    repo.commit("b.txt", "two\n", "Same change on main");
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+    let main_head = repo.head();
+
+    let result = client().merge(&shown, "main", Some(&main_head), MergeStyle::Squash, repo.path());
+
+    assert!(error_text(result).contains("brings no changes to squash"));
+    assert_eq!(repo.head(), main_head);
+    assert!(repo.git(&["status", "--porcelain"]).is_empty());
+    let git_dir = repo.git(&["rev-parse", "--absolute-git-dir"]);
+    assert!(!Path::new(git_dir.trim()).join("SQUASH_MSG").exists(), "Git's squash message is removed");
+}
+
+#[test]
+fn squash_refuses_a_predicted_conflict_before_changing_anything() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["switch", "-c", "feature"]);
+    repo.commit("a.txt", "feature\n", "Feature");
+    repo.git(&["switch", "main"]);
+    repo.commit("a.txt", "main\n", "Main");
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+    let main_head = repo.head();
+
+    let result = client().merge(&shown, "main", Some(&main_head), MergeStyle::Squash, repo.path());
+
+    assert!(error_text(result).contains("This squash would conflict."));
+    assert_eq!(repo.head(), main_head);
+    assert!(repo.git(&["status", "--porcelain"]).is_empty());
+    assert!(!has_merge_head(repo.path()));
+}
+
+#[test]
+fn squash_refuses_a_moved_tip_and_a_dirty_tree() {
+    let repo = Repo::new();
+    diverged_feature(&repo);
+    let shown = local_branch(&snapshot(repo.path()), "feature");
+    let main_head = repo.head();
+    repo.git(&["switch", "feature"]);
+    repo.commit("d.txt", "moved\n", "Moved on");
+    repo.git(&["switch", "main"]);
+
+    let moved = client().merge(&shown, "main", Some(&main_head), MergeStyle::Squash, repo.path());
+    assert!(error_text(moved).contains("selected branch changed"));
+    assert!(repo.git(&["diff", "--cached", "--name-only"]).is_empty());
+
+    let fresh = local_branch(&snapshot(repo.path()), "feature");
+    repo.write("c.txt", "uncommitted\n");
+    let dirty = client().merge(&fresh, "main", Some(&main_head), MergeStyle::Squash, repo.path());
+    assert!(error_text(dirty).contains("Commit or stash changes"));
+    assert_eq!(repo.head(), main_head);
+    assert!(repo.git(&["diff", "--cached", "--name-only"]).is_empty());
 }
 
 // MARK: Stashes

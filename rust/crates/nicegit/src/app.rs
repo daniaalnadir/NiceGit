@@ -207,6 +207,8 @@ pub enum Recorded {
         redo: bool,
     },
     Discard(DiscardUndo),
+    /// A squash merge's suggested summary, filled into the commit box when the box is empty.
+    SquashSummary(String),
 }
 
 /// Pushes onto a history stack, dropping the oldest entries past the cap.
@@ -945,6 +947,18 @@ impl NiceGitApp {
         });
     }
 
+    /// Runs a squash merge. HEAD does not move, so nothing is recorded for Undo. Once it succeeds,
+    /// an empty commit box is filled with a summary for the squashed commit.
+    pub fn act_squash(&mut self, source_name: String, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
+        let slot = self.recorded.clone();
+        let summary = format!("Squash merge of {source_name}");
+        self.act("Squash", move |client, path| {
+            let result = action(client, path)?;
+            *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::SquashSummary(summary));
+            Ok(result)
+        });
+    }
+
     /// Runs an action that returns its own undo record, such as deleting a branch.
     pub fn act_with_record(
         &mut self,
@@ -1223,6 +1237,9 @@ impl NiceGitApp {
                 let excess = repo.discard_undo.len().saturating_sub(20);
                 repo.discard_undo.drain(..excess);
             }
+            // A message being written is kept, as with the commit template.
+            Some(Recorded::SquashSummary(summary)) if repo.draft.is_empty() => repo.draft.summary = summary,
+            Some(Recorded::SquashSummary(_)) => {}
             None => {}
         }
         None
