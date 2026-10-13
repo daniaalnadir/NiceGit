@@ -1031,6 +1031,11 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    /// How long a test waits for the shell. A shell starts in well under a second alone, but
+    /// with the whole test suite running at once it can take several; each wait ends as soon as
+    /// the output appears, so a generous limit costs nothing when the shell is quick.
+    const SHELL_DEADLINE: Duration = Duration::from_secs(30);
+
     impl TerminalSession {
         fn input(&self, bytes: Vec<u8>) {
             self.notifier.notify(bytes);
@@ -1044,7 +1049,7 @@ mod tests {
         // The typed line contains "$((6*7))", so only the output can contain "nicegit-42".
         session.input(b"echo nicegit-$((6*7))\r".to_vec());
 
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + SHELL_DEADLINE;
         loop {
             let text = session.screen_text();
             if text.contains("nicegit-42") {
@@ -1078,7 +1083,7 @@ mod tests {
         frame(&mut session, vec![]);
         frame(&mut session, vec![egui::Event::Text("echo ui-$((5*5))".to_string()), key(Key::Enter)]);
 
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + SHELL_DEADLINE;
         while !session.screen_text().contains("ui-25") {
             assert!(Instant::now() < deadline, "typed input never reached the shell:\n{}", session.screen_text());
             frame(&mut session, vec![]);
@@ -1086,7 +1091,7 @@ mod tests {
         }
 
         frame(&mut session, vec![egui::Event::Text("exit".to_string()), key(Key::Enter)]);
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + SHELL_DEADLINE;
         while !session.is_exited() {
             assert!(Instant::now() < deadline, "the shell did not exit");
             frame(&mut session, vec![]);
@@ -1108,7 +1113,7 @@ mod tests {
             let mut registry = registry();
             group_for(&mut registry, &dir).tabs[0].input(b"echo attached-$((6*7))\r".to_vec());
         }
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + SHELL_DEADLINE;
         loop {
             let text = group_for(&mut registry(), &dir).tabs[0].screen_text();
             if text.contains("attached-42") {
