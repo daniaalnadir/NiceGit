@@ -103,6 +103,8 @@
   It also covers cherry-picking a merge commit.
 - Right-click a remote's header in the sidebar to fetch just that remote, copy its fetch
   URL, or open its settings; the command palette also has a Fetch for each remote.
+- Deleting a stash can be undone from the toolbar while NiceGit is open; the stash comes back
+  as the newest one. Before, a deleted stash could not be recovered from NiceGit.
 
 ## 1.5.0 - Fewer surprises
 

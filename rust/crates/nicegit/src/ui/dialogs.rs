@@ -818,7 +818,13 @@ impl NiceGitApp {
             Pending::DeleteTag { name, tip } => self
                 .act("Delete tag", move |client, path| client.delete_tag(&name, &tip, path).map(|_| Some(format!("Deleted tag {name}.")))),
             Pending::DropStash(stash) => {
-                self.act("Delete stash", move |client, path| client.drop_stash(&stash, path).map(|_| Some("Deleted the stash.".into())))
+                let name = stash.message.clone();
+                self.act_with_record("Delete stash", move |client, path| {
+                    let deletion = client.drop_stash_keeping_undo(&stash, path)?;
+                    let step = nicegit_core::undo::UndoStep::StashDeletion(deletion);
+                    let entry = crate::app::HistoryEntry { title: "Delete stash".into(), detail: Some(name), step };
+                    Ok((Some("Deleted the stash.".into()), Some(crate::app::Recorded::Step(entry))))
+                })
             }
             Pending::Merge { source, branch, head, style } => {
                 let name = source.display_name();

@@ -339,7 +339,7 @@ impl StashWindow {
                 format!("Apply {} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.", stash.reference),
                 "Pop stash",
             ),
-            Confirm::Delete => (format!("Delete {} permanently? Its changes cannot be recovered.", stash.reference), "Delete stash"),
+            Confirm::Delete => (format!("Delete {}? Undo can bring it back while NiceGit is open.", stash.reference), "Delete stash"),
         };
         let mut confirmed = false;
         let mut cancelled = false;
@@ -368,9 +368,15 @@ impl StashWindow {
                 Confirm::Pop => cx.act(format!("Pop {reference}"), move |client, directory| {
                     client.pop_stash(&stash, directory).map(|()| Some(format!("Popped {reference}.")))
                 }),
-                Confirm::Delete => cx.act(format!("Delete {reference}"), move |client, directory| {
-                    client.drop_stash(&stash, directory).map(|()| Some(format!("Deleted {reference}.")))
-                }),
+                Confirm::Delete => {
+                    let name = stash.message.clone();
+                    cx.act_with_record(format!("Delete {reference}"), move |client, directory| {
+                        let deletion = client.drop_stash_keeping_undo(&stash, directory)?;
+                        let step = nicegit_core::undo::UndoStep::StashDeletion(deletion);
+                        let entry = crate::app::HistoryEntry { title: "Delete stash".into(), detail: Some(name), step };
+                        Ok((Some(format!("Deleted {reference}.")), Some(crate::app::Recorded::Step(entry))))
+                    })
+                }
             }
         }
         ui.add_space(6.0);

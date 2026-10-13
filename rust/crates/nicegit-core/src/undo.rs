@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 use crate::client::GitClient;
-use crate::models::{Branch, GitError, ResetMode, Result, Snapshot, StatusEntry, StatusKind};
+use crate::models::{Branch, GitError, ResetMode, Result, Snapshot, Stash, StatusEntry, StatusKind};
 use crate::rebase::{io_failure, path_text, Scratch};
 use crate::runner;
 
@@ -42,6 +42,13 @@ pub struct BranchDeletion {
     pub upstream_merge: Option<String>,
 }
 
+/// A deleted stash, with what is needed to put it back: its commit and the text it was listed under.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StashDeletion {
+    pub hash: String,
+    pub message: String,
+}
+
 /// One undoable action. Applying it with [`GitClient::undo_step`] returns the inverse, which
 /// redoes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +60,10 @@ pub enum UndoStep {
     /// Branches were restored by an undo. Redoing deletes them again, while they still point to
     /// the tips they were restored at.
     BranchRestorations(Vec<BranchDeletion>),
+    /// A stash was deleted. Undoing stores it again as the newest stash.
+    StashDeletion(StashDeletion),
+    /// A stash was put back by an undo. Redoing drops it again, while it is still listed.
+    StashRestoration(StashDeletion),
 }
 
 /// The index entry or working file for a path, as Git records it.
@@ -105,6 +116,14 @@ impl GitClient {
             UndoStep::BranchRestorations(deletions) => {
                 self.delete_restored_branches(deletions, directory)?;
                 Ok(UndoStep::BranchDeletions(deletions.clone()))
+            }
+            UndoStep::StashDeletion(deletion) => {
+                self.restore_stash(deletion, directory)?;
+                Ok(UndoStep::StashRestoration(deletion.clone()))
+            }
+            UndoStep::StashRestoration(deletion) => {
+                self.drop_restored_stash(deletion, directory)?;
+                Ok(UndoStep::StashDeletion(deletion.clone()))
             }
         }
     }
@@ -207,6 +226,36 @@ impl GitClient {
             }
         }
         Ok(())
+    }
+
+    /// Deletes `stash` like `drop_stash`, first saving what is needed to put it back. The stash's
+    /// commit stays in the repository until Git's garbage collection removes it.
+    pub fn drop_stash_keeping_undo(&self, stash: &Stash, directory: &Path) -> Result<StashDeletion> {
+        let listed = self.require_listed_stash(stash, "stash drop", directory)?;
+        let deletion = StashDeletion { hash: listed.hash, message: listed.message };
+        self.drop_stash(stash, directory)?;
+        Ok(deletion)
+    }
+
+    /// Stores a deleted stash again, as the newest stash, under the text it was listed with. The
+    /// stash is not put back at its old position, which other stashes may have taken.
+    fn restore_stash(&self, deletion: &StashDeletion, directory: &Path) -> Result<()> {
+        if self.list_stashes(directory)?.iter().any(|stash| stash.hash == deletion.hash) {
+            return Err(GitError::failed("undo stash deletion", "This stash is already in the stash list."));
+        }
+        if self.try_trimmed(&["cat-file", "-t", &deletion.hash], directory).as_deref() != Some("commit") {
+            return Err(GitError::failed("undo stash deletion", "The deleted stash is no longer in this repository."));
+        }
+        self.run(&["stash", "store", "-m", &deletion.message, &deletion.hash], directory).map(drop)
+    }
+
+    /// Drops a restored stash again, while it is still listed.
+    fn drop_restored_stash(&self, deletion: &StashDeletion, directory: &Path) -> Result<()> {
+        let listed = self.list_stashes(directory)?.into_iter().find(|stash| stash.hash == deletion.hash);
+        let Some(listed) = listed else {
+            return Err(GitError::failed("redo stash deletion", "This stash is no longer in the stash list, so it was not deleted again."));
+        };
+        self.run(&["stash", "drop", &listed.reference], directory).map(drop)
     }
 
     /// Discards `entry` like `discard`, first saving what is needed to undo it. Returns `None`
