@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use egui::accesskit::Role;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{By, Queryable};
 use egui_kittest::Harness;
 use egui_phosphor::regular as icon;
 
@@ -424,4 +424,229 @@ fn settings_shots(folder: &Path) {
     type_into(&mut harness, "GitHub Enterprise hosts", "not a host");
     settle(&mut harness);
     save(&mut harness, folder, "settings-enterprise-dark");
+}
+
+// MARK: Design review of the second batch of new interface pieces
+
+#[test]
+#[ignore = "renders design-review screenshots; run on request"]
+fn review_screenshots_2() {
+    let Some(folder) = review_folder() else {
+        eprintln!("Set NICEGIT_SCREENSHOTS to a folder to render screenshots.");
+        return;
+    };
+    pull_request_shots(&folder);
+    go_to_file_shots(&folder);
+    clone_shots(&folder);
+    conflict_shots(&folder);
+    save_stash_shots(&folder);
+    squash_shots(&folder);
+    line_history_shots(&folder);
+    undo_history_shots(&folder);
+    settings_scroll_shots(&folder);
+}
+
+/// Runs frames for up to `seconds` while `done` is false. For windows that may never finish
+/// loading here, such as anything waiting on the GitHub CLI, so the render captures what shows.
+fn run_until(harness: &mut App, seconds: u64, done: impl Fn(&App) -> bool) {
+    let start = std::time::Instant::now();
+    while !done(harness) && start.elapsed() < std::time::Duration::from_secs(seconds) {
+        harness.step();
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    harness.run_steps(3);
+}
+
+fn pull_request_shots(folder: &Path) {
+    for (width, height) in [(1440.0, 900.0), (1100.0, 800.0)] {
+        let repo = repository();
+        let path = repo.path();
+        git(path, &["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+        git(path, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+        git(path, &["config", "branch.feature.remote", "origin"]);
+        git(path, &["config", "branch.feature.merge", "refs/heads/feature"]);
+        let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(width, height));
+        loaded(&mut harness);
+        harness.get_by_label("feature").click_secondary();
+        settle(&mut harness);
+        harness.get_by_label_contains("Create pull request on GitHub").click();
+        wait(&mut harness, "the pull request dialog", |h| h.state().pull_request.is_some());
+        run_until(&mut harness, 5, |h| h.state().pull_request.as_ref().is_some_and(|d| d.settled()));
+        save(&mut harness, folder, &format!("pull-request-dialog-{width}-dark"));
+    }
+}
+
+fn go_to_file_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::create_dir_all(path.join("src")).unwrap();
+    std::fs::create_dir_all(path.join("docs")).unwrap();
+    commit_file(path, "src/guide.md", "# Guide\n", "Add a guide");
+    commit_file(path, "src/guide_tests.rs", "// tests\n", "Add guide tests");
+    commit_file(path, "docs/guide-notes.txt", "notes\n", "Add guide notes");
+    commit_file(path, "README.md", "# Readme\n", "Add a readme");
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+    wait(&mut harness, "the file finder", |h| h.state().go_to_file.is_some());
+    harness.event(egui::Event::Text("guide".into()));
+    wait(&mut harness, "the file listing", |h| shows_text(h, "guide.md"));
+    settle(&mut harness);
+    save(&mut harness, folder, "go-to-file-dark");
+}
+
+fn clone_shots(folder: &Path) {
+    let source = repository();
+    let parent = temp_dir();
+    let mut harness = open_rendering_at(source.path(), Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.state_mut().settings.clone_folder = Some(parent.path().join("Projects"));
+    repository_menu(&mut harness, &folder_name(source.path()), "Clone repository");
+    wait(&mut harness, "the clone dialog", |h| h.state().dialog.is_some());
+    type_into(&mut harness, "Repository URL or local path", "https://github.com/owner/widgets.git");
+    settle(&mut harness);
+    save(&mut harness, folder, "clone-dialog-default-folder-dark");
+    // The GitHub picker is left out: it lists the repositories of whoever's gh login is on the
+    // machine, private ones included, which do not belong in a design screenshot.
+}
+
+/// Stops a merge of `feature` into main on a conflict in two files, from the feature's menu.
+fn stop_a_merge_on_two_conflicts(harness: &mut App) {
+    harness.get_by_label("feature").click_secondary();
+    settle(harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(harness, "the merge confirmation", |h| h.state().dialog.is_some());
+    harness.get_by_label("Merge").click();
+    idle(harness);
+    wait(harness, "the operation banner", |h| h.query_by_label_contains("  notes.txt").is_some());
+    wait(harness, "both conflicted files in the banner", |h| h.query_by_label_contains("  extra.txt").is_some());
+    settle(harness);
+}
+
+fn conflict_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "notes.txt", "first\nfrom feature\n", "Change notes on feature");
+    commit_file(path, "extra.txt", "from feature\n", "Add extra on feature");
+    git(path, &["switch", "-q", "main"]);
+    commit_file(path, "extra.txt", "from main\n", "Add extra on main");
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    stop_a_merge_on_two_conflicts(&mut harness);
+    save(&mut harness, folder, "conflict-operation-bar-dark");
+
+    harness.get_by_label_contains("Resolve all").click();
+    settle(&mut harness);
+    save(&mut harness, folder, "conflict-resolve-all-menu-dark");
+    harness.key_press(egui::Key::Escape);
+    settle(&mut harness);
+
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    save(&mut harness, folder, "conflict-file-menu-dark");
+    harness.key_press(egui::Key::Escape);
+    settle(&mut harness);
+}
+
+fn save_stash_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstaged\n").unwrap();
+    git(path, &["add", "--", "notes.txt"]);
+    std::fs::write(path.join("fresh.txt"), "fresh\n").unwrap();
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    toolbar_button(&mut harness, "Stash");
+    wait(&mut harness, "the stash dialog", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    save(&mut harness, folder, "save-stash-dialog-dark");
+}
+
+fn squash_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "one.txt", "one\n", "Squash one");
+    commit_file(path, "two.txt", "two\n", "Squash two");
+    commit_file(path, "three.txt", "three\n", "Squash three");
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_by_label("Squash one").click_modifiers(egui::Modifiers::COMMAND);
+    harness.step();
+    harness.get_by_label("Squash three").click_modifiers(egui::Modifiers::COMMAND);
+    harness.step();
+    wait(&mut harness, "the marked commits bar", |h| shows_text(h, "2 commits selected"));
+    settle(&mut harness);
+    save(&mut harness, folder, "marked-commits-bar-dark");
+    harness.get_by_label("Squash…").click();
+    wait(&mut harness, "the squash window", |h| h.state().tools.iter().any(|t| t.title() == "Squash commits"));
+    wait(&mut harness, "the squash plan", |h| shows_text(h, "Rewrite 3 commits on main"));
+    settle(&mut harness);
+    save(&mut harness, folder, "squash-window-dark");
+}
+
+fn line_history_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "notes.txt", "first\nsecond\nthird\n", "Add a third line");
+    commit_file(path, "notes.txt", "first\nSECOND\nTHIRD\n", "Capitalise the last two lines");
+    let head = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.get_by_label("Capitalise the last two lines").click();
+    wait_for_commit_file(&mut harness, "notes.txt");
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Blame at this commit").click();
+    let second_line = format!("{} · Test · SECOND", &head[..7]);
+    wait(&mut harness, "the blame lines", |h| shows_text(h, &second_line));
+    settle(&mut harness);
+    harness.get_by_label(&second_line).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("History of lines 2–3").click();
+    wait(&mut harness, "the line history window", |h| h.state().tools.iter().any(|t| t.title() == "History of notes.txt lines 2–3"));
+    wait(&mut harness, "the commits that changed the lines", |h| shows_text(h, "Add a third line · Test"));
+    settle(&mut harness);
+    save(&mut harness, folder, "line-history-window-dark");
+}
+
+fn undo_history_shots(folder: &Path) {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open_rendering_at(path, Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    for (text, summary) in [("first\nsecond\nthird\n", "Add a third line"), ("first\nsecond\nthird\nfourth\n", "Add a fourth line")] {
+        std::fs::write(path.join("notes.txt"), text).unwrap();
+        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::R);
+        wait(&mut harness, "the changed file to be listed", |h| h.state().snapshot().is_some_and(|s| !s.status.is_empty()));
+        idle(&mut harness);
+        harness.get_by_label("Stage All Changes").click();
+        idle(&mut harness);
+        type_into(&mut harness, "Commit summary", summary);
+        wait(&mut harness, "the commit button", |h| shows_text(h, "Commit 1 file to main"));
+        harness.get_by_label_contains("Commit 1 file to main").click();
+        idle(&mut harness);
+    }
+    settle(&mut harness);
+    harness.get_by_label("Undo history options").click();
+    settle(&mut harness);
+    save(&mut harness, folder, "undo-history-menu-dark");
+}
+
+fn settings_scroll_shots(folder: &Path) {
+    let repo = repository();
+    let mut harness = open_rendering_at(repo.path(), Appearance::Dark, egui::vec2(1440.0, 900.0));
+    loaded(&mut harness);
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    let clone_into = harness.query_all(By::new().role(Role::Label).value("Clone into")).next().expect("Clone into").rect().center();
+    harness.hover_at(clone_into);
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -260.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: egui::Modifiers::NONE,
+    });
+    settle(&mut harness);
+    save(&mut harness, folder, "settings-clone-into-dark");
 }
