@@ -2650,9 +2650,12 @@ mod watch_path_tests {
         assert_eq!(paths[1], (common.join("refs"), RecursiveMode::Recursive));
         assert_eq!(paths[2], (common.clone(), RecursiveMode::NonRecursive));
         // A name that ends in a space keeps it; only the line terminator is removed. That
-        // directory does not exist, so only the Git directory itself is returned.
-        std::fs::write(git_dir.join("commondir"), "../.. \n").unwrap();
-        assert_eq!(extra_watch_paths(&root, &git_dir).len(), 1);
+        // directory does not exist, so only the Git directory itself is returned. Windows drops
+        // a trailing space from a name, so there the path would name the shared directory.
+        if cfg!(not(windows)) {
+            std::fs::write(git_dir.join("commondir"), "../.. \n").unwrap();
+            assert_eq!(extra_watch_paths(&root, &git_dir).len(), 1);
+        }
     }
 
     #[test]
