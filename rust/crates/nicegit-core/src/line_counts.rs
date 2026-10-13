@@ -7,6 +7,7 @@ use std::path::Path;
 
 use crate::client::GitClient;
 use crate::models::Result;
+use crate::runner;
 
 /// Untracked files larger than this are not read to count their lines.
 const MAX_UNTRACKED_BYTES: u64 = 2_000_000;
@@ -42,10 +43,13 @@ impl GitClient {
     /// lists every changed path, whose working files are checked for being large.
     pub fn line_counts(&self, untracked: &[String], changed: &[String], directory: &Path) -> Result<LineCounts> {
         let options = ["diff", "--numstat", "-z", "--no-ext-diff", "--no-color", "--no-textconv"];
-        let mut unstaged = parse_numstat(&self.run(&options, directory)?);
-        let mut cached = options.to_vec();
-        cached.push("--cached");
-        let staged = parse_numstat(&self.run(&cached, directory)?);
+        // The two diffs are independent reads, so they run at the same time.
+        let unstaged_command: Vec<String> = options.iter().map(|argument| argument.to_string()).collect();
+        let mut cached_command = unstaged_command.clone();
+        cached_command.push("--cached".to_string());
+        let mut results = runner::run_concurrently(&[unstaged_command, cached_command], directory, &self.options()).into_iter();
+        let mut unstaged = parse_numstat(&results.next().unwrap()?);
+        let staged = parse_numstat(&results.next().unwrap()?);
         for path in untracked.iter().filter(|path| !path.ends_with('/')) {
             if let Some(count) = count_untracked(&directory.join(path)) {
                 unstaged.insert(path.clone(), count);
