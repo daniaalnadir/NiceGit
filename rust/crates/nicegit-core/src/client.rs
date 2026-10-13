@@ -3,6 +3,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::diff::DiffRequest;
+use crate::merge_preview::MergeOutcome;
 use crate::models::*;
 use crate::parsers::*;
 use crate::rebase::edit_stop_in;
@@ -870,7 +871,15 @@ impl GitClient {
     }
 
     /// Starts a merge of the selected branch, after confirming both checkouts are as displayed.
-    pub fn merge(&self, source: &Branch, expected_branch: &str, expected_head: Option<&str>, directory: &Path) -> Result<()> {
+    /// `style` chooses the merge commit, fast-forward, or squash behaviour; see [`MergeStyle`].
+    pub fn merge(
+        &self,
+        source: &Branch,
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        style: MergeStyle,
+        directory: &Path,
+    ) -> Result<()> {
         let state = self.require_checkout(expected_branch, expected_head, "merge", directory)?;
         if state.operation.is_some() || !self.load_status(directory)?.is_empty() {
             return Err(GitError::failed("merge", "Commit or stash changes and finish the current operation first."));
@@ -886,7 +895,37 @@ impl GitClient {
         if state.head_hash.is_some() {
             self.require_no_ignored_merge_collisions(&current, directory)?;
         }
-        self.run(&["merge", "--no-overwrite-ignore", "--no-edit", &current], directory).map(drop)
+        match style {
+            MergeStyle::Default => self.run(&["merge", "--no-overwrite-ignore", "--no-edit", &current], directory).map(drop),
+            MergeStyle::NoFastForward => {
+                self.run(&["merge", "--no-ff", "--no-overwrite-ignore", "--no-edit", &current], directory).map(drop)
+            }
+            MergeStyle::Squash => {
+                if state.head_hash.is_none() {
+                    return Err(GitError::failed("merge", "Squash needs a commit to merge into."));
+                }
+                if self.run(&["merge-base", "--is-ancestor", &current, "HEAD"], directory).is_ok() {
+                    return Err(GitError::failed("merge", "Already up to date: there is nothing to squash."));
+                }
+                // A squash that conflicts leaves no MERGE_HEAD, which Continue and Abort rely on, so
+                // it is refused before anything changes.
+                if matches!(self.preview_merge(&current, directory)?.outcome, MergeOutcome::Conflicts(_)) {
+                    return Err(GitError::failed(
+                        "merge",
+                        "This squash would conflict. Merge normally instead, so you can resolve the conflicts and continue or abort.",
+                    ));
+                }
+                self.run(&["merge", "--squash", "--no-overwrite-ignore", &current], directory)?;
+                // The branch can differ from HEAD's history yet bring no change, as when its work
+                // was already cherry-picked. Git then stages nothing but still writes SQUASH_MSG,
+                // which a later commit in a terminal would pick up.
+                if self.run(&["diff", "--cached", "--quiet"], directory).is_ok() {
+                    let _ = std::fs::remove_file(self.git_directory(directory)?.join("SQUASH_MSG"));
+                    return Err(GitError::failed("merge", "Already up to date: the branch brings no changes to squash."));
+                }
+                Ok(())
+            }
+        }
     }
 
     /// `--no-overwrite-ignore` does not protect divergent merges with the ort strategy, so check

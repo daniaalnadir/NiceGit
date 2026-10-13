@@ -122,6 +122,63 @@ fn drag_a_branch_onto_the_current_branch_to_merge_it() {
 }
 
 #[test]
+fn squash_a_diverged_branch_into_staged_changes_from_the_merge_confirmation() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "side.txt", b"from feature\n", "Work on the feature");
+    git(path, &["switch", "-q", "main"]);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(&mut harness, "the merge confirmation", |h| shows(h, "Merge feature into main?"));
+    settle(&mut harness);
+    harness.get_by_label("Squash into staged changes").click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Squash").click();
+    idle(&mut harness);
+    wait(&mut harness, "the squash notice", |h| {
+        h.state().notice.as_ref().is_some_and(|n| n.text == "Staged feature's changes as a squash. Review and commit them.")
+    });
+
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), before, "HEAD does not move");
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "side.txt", "the feature's file is staged");
+    assert!(!path.join(".git/MERGE_HEAD").exists(), "no merge is in progress");
+    wait(&mut harness, "the commit summary", |h| h.state().repo().is_some_and(|r| r.draft.summary == "Squash merge of feature"));
+}
+
+#[test]
+fn always_create_a_merge_commit_for_a_branch_that_could_fast_forward() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "-c", "ahead"]);
+    commit_file(path, "side.txt", b"from ahead\n", "Work ahead of main");
+    let ahead_tip = git(path, &["rev-parse", "ahead"]);
+    git(path, &["switch", "-q", "main"]);
+    let main_tip = git(path, &["rev-parse", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("ahead").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Merge into main").click();
+    wait(&mut harness, "the merge confirmation", |h| shows(h, "Merge ahead into main?"));
+    settle(&mut harness);
+    harness.get_by_label("Always create a merge commit").click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Merge").click();
+    idle(&mut harness);
+    wait(&mut harness, "the merge commit", |_| git(path, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count() == 3);
+
+    assert_eq!(git(path, &["rev-parse", "HEAD^1"]), main_tip, "the first parent is the old main");
+    assert_eq!(git(path, &["rev-parse", "HEAD^2"]), ahead_tip, "the second parent is the merged branch");
+}
+
+#[test]
 fn hide_whitespace_leaves_out_whitespace_only_changes() {
     let repo = repository();
     let path = repo.path();

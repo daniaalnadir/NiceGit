@@ -86,6 +86,8 @@
 - Create branch from stash… from a stash's right-click menu makes a branch at the commit the
   stash was made on, switches to it, and applies the stash there. The stash is removed once
   it applies.
+- The Merge confirmation can always create a merge commit, or squash a branch's changes into
+  the staged changes to commit as one new commit. A squash that would conflict is refused.
 
 ## 1.5.0 - Fewer surprises
 

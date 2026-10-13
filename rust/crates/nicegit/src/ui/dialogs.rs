@@ -4,7 +4,7 @@
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
-use nicegit_core::{Branch, GitError, Operation, Snapshot, Stash, StashOptions, StatusEntry};
+use nicegit_core::{Branch, GitError, MergeStyle, Operation, Snapshot, Stash, StashOptions, StatusEntry};
 
 use crate::app::NiceGitApp;
 use crate::theme;
@@ -32,6 +32,8 @@ pub enum Pending {
         source: Branch,
         branch: String,
         head: Option<String>,
+        /// Chosen in the confirmation, which starts as the default. Not remembered between dialogs.
+        style: MergeStyle,
     },
     Rebase {
         onto: Branch,
@@ -328,6 +330,33 @@ impl Pending {
     }
 }
 
+/// The three ways a merge can combine the branch, with a note under the chosen one.
+fn merge_style_choices(ui: &mut egui::Ui, style: &mut MergeStyle) {
+    let choices = [
+        (MergeStyle::Default, "Merge (fast-forward when possible)", "Git follows this repository's merge.ff setting."),
+        (
+            MergeStyle::NoFastForward,
+            "Always create a merge commit",
+            "Records the merge with a merge commit even when the branch could move forward.",
+        ),
+        (
+            MergeStyle::Squash,
+            "Squash into staged changes",
+            "Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged.",
+        ),
+    ];
+    for (choice, title, note) in choices {
+        if widgets::radio(ui, *style == choice, title).clicked() {
+            *style = choice;
+        }
+        if *style == choice {
+            ui.indent(title, |ui| {
+                ui.label(RichText::new(note).small().color(theme::of(ui).muted));
+            });
+        }
+    }
+}
+
 /// The most conflicted files the confirmation lists by name.
 const LISTED_CONFLICTS: usize = 15;
 
@@ -390,6 +419,12 @@ impl NiceGitApp {
                     });
                     ui.add_space(8.0);
                     ui.label(message.as_str());
+                    // A merge can be made in three ways, and the confirm button says what the chosen one does.
+                    if let Pending::Merge { style, .. } = pending {
+                        ui.add_space(12.0);
+                        merge_style_choices(ui, style);
+                        *button = if *style == MergeStyle::Squash { "Squash" } else { "Merge" }.to_string();
+                    }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         let confirm = if pending.destructive() {
@@ -767,11 +802,21 @@ impl NiceGitApp {
             Pending::DropStash(stash) => {
                 self.act("Delete stash", move |client, path| client.drop_stash(&stash, path).map(|_| Some("Deleted the stash.".into())))
             }
-            Pending::Merge { source, branch, head } => {
+            Pending::Merge { source, branch, head, style } => {
                 let name = source.display_name();
-                self.act_recording_detail("Merge", "Merge", Some(name.clone()), move |client, path| {
-                    client.merge(&source, &branch, head.as_deref(), path).map(|_| Some(format!("Merged {name}.")))
-                })
+                match style {
+                    // A squash leaves HEAD where it is, so there is no merge to undo.
+                    MergeStyle::Squash => self.act_squash(name.clone(), move |client, path| {
+                        client
+                            .merge(&source, &branch, head.as_deref(), MergeStyle::Squash, path)
+                            .map(|_| Some(format!("Staged {name}'s changes as a squash. Review and commit them.")))
+                    }),
+                    MergeStyle::Default | MergeStyle::NoFastForward => {
+                        self.act_recording_detail("Merge", "Merge", Some(name.clone()), move |client, path| {
+                            client.merge(&source, &branch, head.as_deref(), style, path).map(|_| Some(format!("Merged {name}.")))
+                        })
+                    }
+                }
             }
             Pending::Rebase { onto, branch, head } => {
                 let name = onto.display_name();

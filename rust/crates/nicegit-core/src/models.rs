@@ -209,6 +209,20 @@ impl ResetMode {
     }
 }
 
+/// How a merge combines a branch into the current one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MergeStyle {
+    /// Git decides, following the repository's `merge.ff` setting. A branch that is strictly
+    /// ahead is fast-forwarded when that is possible.
+    #[default]
+    Default,
+    /// Always make a merge commit (`--no-ff`), even when the branch could move forward.
+    NoFastForward,
+    /// Put the incoming changes in the index without committing or recording a merge
+    /// (`--squash`). HEAD does not move.
+    Squash,
+}
+
 /// Which branches the commit graph's history covers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HistoryScope {
