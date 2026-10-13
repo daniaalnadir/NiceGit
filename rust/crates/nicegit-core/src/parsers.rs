@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::models::{Branch, Commit, Stash, StatusEntry, StatusKind, Worktree};
+use crate::models::{Branch, Commit, GitError, Result, Stash, StatusEntry, StatusKind, TagDetails, Worktree};
 
 pub const BRANCH_FORMAT: &str = "%(refname)%09%(HEAD)%09%(objectname)%09%(contents:subject)%09%(upstream)%09%(symref)";
 
@@ -326,6 +326,45 @@ pub fn parse_worktrees(output: &str) -> Vec<Worktree> {
 /// Tag names and the object each points to, from `for-each-ref --format=%(refname:strip=2)%09%(objectname)`.
 pub fn parse_tags(output: &str) -> Vec<(String, String)> {
     output.split('\n').filter_map(|line| line.split_once('\t')).map(|(name, tip)| (name.to_string(), tip.to_string())).collect()
+}
+
+/// The fields `GitClient::tag_details` reads for a tag, each followed by a NUL.
+pub const TAG_DETAILS_FORMAT: &str =
+    "%(objecttype)%00%(taggername)%00%(taggeremail)%00%(taggerdate:unix)%00%(*objectname)%00%(contents)%00";
+
+/// The longest tag message the details keep, in characters.
+const TAG_MESSAGE_LIMIT: usize = 2000;
+
+/// Reads the output of `TAG_DETAILS_FORMAT` for one tag. Fields are split on NUL, so a message
+/// with newlines stays whole; Git ends the record with a newline after its last NUL.
+pub fn parse_tag_details(output: &str) -> Result<Option<TagDetails>> {
+    let fields: Vec<&str> = output.split('\0').collect();
+    let &[object_type, tagger, email, date, target, contents, ..] = fields.as_slice() else {
+        return Err(GitError::failed("read tag", "This tag does not exist."));
+    };
+    // A lightweight tag names its commit directly and has no tagger, date, or message.
+    if object_type != "tag" {
+        return Ok(None);
+    }
+    let tagger = if tagger.is_empty() { email.trim_start_matches('<').trim_end_matches('>') } else { tagger };
+    Ok(Some(TagDetails { tagger: tagger.to_string(), date: date.parse().ok(), message: tag_message(contents), target: target.to_string() }))
+}
+
+/// A tag's message as the details show it: the text before any signature block, with the block
+/// replaced by "(signed)", and at most `TAG_MESSAGE_LIMIT` characters.
+fn tag_message(contents: &str) -> String {
+    const SIGNATURES: [&str; 2] = ["-----BEGIN PGP SIGNATURE-----", "-----BEGIN SSH SIGNATURE-----"];
+    let signature = SIGNATURES.iter().filter_map(|marker| contents.find(marker)).min();
+    let text = match signature {
+        Some(start) => &contents[..start],
+        None => contents,
+    };
+    let body: String = text.trim_end().chars().take(TAG_MESSAGE_LIMIT).collect();
+    match (signature.is_some(), body.is_empty()) {
+        (false, _) => body,
+        (true, true) => "(signed)".to_string(),
+        (true, false) => format!("{body}\n\n(signed)"),
+    }
 }
 
 #[cfg(test)]

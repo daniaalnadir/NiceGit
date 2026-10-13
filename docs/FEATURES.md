@@ -121,7 +121,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Interactive rebase from a commit's context menu: drag to reorder, and pick, reword,
   edit, squash, fix up, or drop each commit, with a warning for commits already on a remote.
   Edit stops the rebase after that commit so you can change its files; Continue folds in
-  what you have staged.
+  what you have staged. A row whose choice is not Pick says what that choice does.
 - Compare any commit with the working files, or two commits with each other (mark one,
   then compare from another), with a changed-file list and per-file diffs.
 - Blame a file (working version or at a commit), with author, age tinting, an
@@ -315,7 +315,8 @@ Create lightweight or annotated local tags from a commit or branch menu. Annotat
 tags require a message and use the repository's Git identity. A tag can be pushed to a
 chosen remote as it is created, with Push to remote in the New tag dialog, or later from
 its sidebar menu, and it can be deleted from a remote there. Tags are unsigned; signing
-tags is not yet available in the interface.
+tags is not yet available in the interface. Hovering a tag in the sidebar shows an
+annotated tag's tagger, date, and message, or a lightweight tag's commit.
 
 Commit menus support revert with confirmation, merge-parent selection, and
 conflict Continue/Abort. Revert requires a clean working tree and retains the

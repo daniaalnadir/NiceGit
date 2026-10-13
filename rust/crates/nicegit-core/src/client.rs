@@ -1476,6 +1476,17 @@ impl GitClient {
         self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &format!("refs/tags/{name}")], directory)
     }
 
+    /// The tagger, date, message, and target of an annotated tag, or `None` for a lightweight tag,
+    /// which has no tag object. The name must already have passed `create_tag`'s check.
+    pub fn tag_details(&self, name: &str, directory: &Path) -> Result<Option<TagDetails>> {
+        let reference = format!("refs/tags/{name}");
+        self.run(&["check-ref-format", &reference], directory)?;
+        // Git's pattern matches only this tag: no other tag can be named under it, as a tag
+        // cannot be both a ref and a directory of refs.
+        let output = self.run(&["for-each-ref", &format!("--format={TAG_DETAILS_FORMAT}"), &reference], directory)?;
+        parse_tag_details(&output)
+    }
+
     /// Deletes a tag only while it still points to the object shown when it was selected.
     pub fn delete_tag(&self, name: &str, expected_tip: &str, directory: &Path) -> Result<()> {
         self.run(&["update-ref", "-d", &format!("refs/tags/{name}"), expected_tip], directory)

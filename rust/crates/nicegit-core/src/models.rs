@@ -138,6 +138,20 @@ pub struct StashFile {
     pub untracked: bool,
 }
 
+/// An annotated tag's tagger, date, and message, from `GitClient::tag_details`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagDetails {
+    /// The tagger's name, or their email when the tag records no name.
+    pub tagger: String,
+    /// When the tag was made, in Unix seconds, when Git recorded a date.
+    pub date: Option<i64>,
+    /// The message without any signature block, at most 2000 characters. A signed tag's message
+    /// ends with "(signed)" in place of its signature.
+    pub message: String,
+    /// The object the tag names, as a full hash.
+    pub target: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Worktree {
     pub path: String,

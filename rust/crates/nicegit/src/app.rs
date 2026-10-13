@@ -152,6 +152,9 @@ impl HistoryEntry {
 /// Lines added and removed in each file, by path.
 pub type FileLineCounts = std::collections::HashMap<String, nicegit_core::line_counts::LineCount>;
 
+/// A tag's details as read for its sidebar hover text, with the tip they were read for.
+pub type TagDetailsRead = (String, Task<nicegit_core::Result<Option<nicegit_core::TagDetails>>>);
+
 /// Returns every side and bottom panel to its default width, a share of the window.
 pub fn restore_panel_widths(ctx: &egui::Context) {
     ctx.data_mut(|data| {
@@ -282,6 +285,9 @@ pub struct Repo {
     pub template_read: Option<(String, Task<Option<String>>)>,
     /// The draft last filled from `commit.template`. The commit box labels it while it is unchanged.
     pub draft_from_template: Option<Draft>,
+    /// Each tag's details for its sidebar hover text, by tag name. A refresh drops the entries
+    /// whose tip has moved or whose tag is gone.
+    pub tag_details: std::collections::HashMap<String, TagDetailsRead>,
 }
 
 impl Repo {
@@ -378,6 +384,7 @@ impl Repo {
             github: [None, None],
             template_read: None,
             draft_from_template: None,
+            tag_details: std::collections::HashMap::new(),
         }
     }
 
@@ -1123,6 +1130,9 @@ impl NiceGitApp {
                 tool.repository_changed(&snapshot);
             }
         }
+        self.repos[index]
+            .tag_details
+            .retain(|name, (tip, _)| snapshot.tag_tips.get(name).is_some_and(|current| current.as_str() == tip.as_str()));
         self.repos[index].snapshot = Some(snapshot);
         if read_template {
             self.start_template_read(index);
