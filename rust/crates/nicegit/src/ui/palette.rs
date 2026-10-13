@@ -33,6 +33,7 @@ enum Run {
     Redo,
     Terminal,
     Settings,
+    GoToFile,
     Open,
     Clone,
     NewRepository,
@@ -59,7 +60,7 @@ struct Command {
 
 /// Orders commands by how well `query` matches their title: every query character must
 /// appear in order; earlier, word-starting, and consecutive matches rank higher.
-fn score(title: &[char], needle: &[char]) -> Option<i32> {
+pub(crate) fn score(title: &[char], needle: &[char]) -> Option<i32> {
     let (mut score, mut position, mut previous) = (0i32, 0usize, -2isize);
     for character in needle {
         let found = title[position..].iter().position(|c| c == character)? + position;
@@ -133,6 +134,7 @@ impl NiceGitApp {
             command("Stashes", "Save selected files, preview, apply, or delete stashes", icon::ARCHIVE, has, Run::Tool("stashes")),
             command("Search history", "Shift-Ctrl/Cmd-F · every branch", icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
             command("Search file contents", "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
+            command("Go to file…", "Find a tracked file by name", icon::FILE, has, Run::GoToFile),
             command(
                 "Recover lost work",
                 "Commits from resets, rebases, and deleted branches",
@@ -281,6 +283,7 @@ impl NiceGitApp {
             Run::Redo => self.confirm_redo(),
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
+            Run::GoToFile => self.open_go_to_file(ctx),
             Run::PullRequest(name) => {
                 let branch =
                     self.snapshot().and_then(|s| s.branches.iter().find(|b| !b.is_remote && b.is_current && b.name == name).cloned());

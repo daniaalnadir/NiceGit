@@ -29,6 +29,7 @@ pub mod settings;
 pub mod signature;
 pub mod staging;
 pub mod submodule;
+pub mod tracked;
 pub mod undo;
 pub mod worktree;
 

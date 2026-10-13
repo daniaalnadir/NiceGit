@@ -346,3 +346,68 @@ fn settings_window_rejects_an_invalid_enterprise_host() {
     assert!(shows(&harness, "Not saved"), "the invalid line gets a warning");
     assert!(shows(&harness, "not a host"), "the warning names the invalid line");
 }
+
+// MARK: Go to file
+
+/// The shared repository plus `src/guide.md`, committed on top of its two commits.
+fn repository_with_a_nested_file() -> tempfile::TempDir {
+    let repo = repository();
+    std::fs::create_dir(repo.path().join("src")).unwrap();
+    std::fs::write(repo.path().join("src").join("guide.md"), "# Guide\n").unwrap();
+    git(repo.path(), &["add", "src/guide.md"]);
+    git(repo.path(), &["commit", "-q", "-m", "Add a guide"]);
+    repo
+}
+
+/// Opens the Go to file finder with Command-P, types `query`, and waits until the listing shows `file`.
+fn open_finder_and_type(harness: &mut App, query: &str, file: &str) {
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::P);
+    wait(harness, "the file finder", |h| h.state().go_to_file.is_some());
+    harness.event(egui::Event::Text(query.into()));
+    wait(harness, "the file listing", |h| shows(h, file));
+}
+
+#[test]
+fn go_to_file_opens_history() {
+    let repo = repository_with_a_nested_file();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    open_finder_and_type(&mut harness, "guide", "guide.md");
+    harness.key_press(Key::Enter);
+    wait(&mut harness, "the file history window", |h| h.state().tools.iter().any(|t| t.id() == "file-history\0src/guide.md"));
+    assert!(harness.state().go_to_file.is_none(), "choosing a file closes the finder");
+}
+
+#[test]
+fn go_to_file_command_enter_opens_blame() {
+    let repo = repository_with_a_nested_file();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    open_finder_and_type(&mut harness, "guide", "guide.md");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    wait(&mut harness, "the blame window", |h| h.state().tools.iter().any(|t| t.id() == "blame\0src/guide.md\0"));
+    assert!(!harness.state().tools.iter().any(|t| t.id().starts_with("file-history")), "blame opens instead of history");
+}
+
+#[test]
+fn go_to_file_escape_closes() {
+    let repo = repository_with_a_nested_file();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    open_finder_and_type(&mut harness, "guide", "guide.md");
+    harness.key_press(Key::Escape);
+    wait(&mut harness, "the finder to close", |h| h.state().go_to_file.is_none());
+    assert!(harness.state().tools.is_empty(), "closing the finder opens nothing");
+}
+
+#[test]
+fn go_to_file_does_nothing_without_a_repository() {
+    let mut harness = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(|cc| NiceGitApp::new(cc, None));
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::P);
+    settle(&mut harness);
+    assert!(harness.state().go_to_file.is_none());
+}

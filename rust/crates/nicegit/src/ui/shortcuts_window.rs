@@ -14,6 +14,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             "Anywhere",
             vec![
                 (with("Shift-Cmd-P"), "Command palette"),
+                (with("Cmd-P"), "Go to a file"),
                 (with("Cmd-O"), "Open a repository"),
                 (with("Cmd-1 … Cmd-9"), "Go to a repository tab; Cmd-9 for the last"),
                 (with("Cmd-W"), "Close the open window, or else the repository tab"),

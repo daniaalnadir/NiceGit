@@ -5,6 +5,7 @@ pub mod changes;
 pub mod clone_picker;
 pub mod dialogs;
 pub mod github_section;
+pub mod go_to_file;
 pub mod history;
 pub mod history_columns;
 pub mod inspector;
@@ -31,6 +32,9 @@ impl NiceGitApp {
         let command_alt = |key| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::ALT, key);
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::P))) {
             self.toggle_palette();
+        }
+        if self.palette.is_none() && self.dialog.is_none() && ctx.input_mut(|i| i.consume_shortcut(&command(Key::P))) {
+            self.toggle_go_to_file(ctx);
         }
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::F))) && self.snapshot().is_some() {
             self.open_tool(Box::new(crate::tools::commit_search::CommitSearchWindow::new()));
@@ -61,7 +65,11 @@ impl NiceGitApp {
             }
         }
         // Command-W closes the newest open window first, then the active repository tab.
-        if ctx.input_mut(|i| i.consume_shortcut(&command(Key::W))) && self.dialog.is_none() && self.palette.is_none() {
+        if ctx.input_mut(|i| i.consume_shortcut(&command(Key::W)))
+            && self.dialog.is_none()
+            && self.palette.is_none()
+            && self.go_to_file.is_none()
+        {
             if self.tools.last().is_some_and(|tool| tool.has_unsaved_changes()) {
                 self.notify("Save or close the file you are editing first.", true);
             } else if !self.tools.is_empty() {
@@ -73,11 +81,12 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::S))) && self.showing_diff() {
             self.toggle_stage_open_file();
         }
-        // Checked first: Command-Enter also matches while Shift is held.
-        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
+        // Checked first: Command-Enter also matches while Shift is held. Both stay out of the way
+        // of the Go to file finder, where Command-Enter opens blame.
+        if self.go_to_file.is_none() && ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::Enter))) {
             self.commit_and_push();
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&command(Key::Enter))) && self.can_commit() {
+        if self.go_to_file.is_none() && ctx.input_mut(|i| i.consume_shortcut(&command(Key::Enter))) && self.can_commit() {
             self.commit();
         }
         if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::CTRL, Key::Backtick))) {
