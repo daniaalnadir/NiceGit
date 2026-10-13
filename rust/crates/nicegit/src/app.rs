@@ -19,6 +19,8 @@ use crate::worker::{ActionResult, Message, Worker};
 
 pub const PAGE: usize = 500;
 const AUTO_REFRESH: Duration = Duration::from_secs(30);
+/// How often the current branch's pull request status is read again while the window is focused.
+const PR_STATUS_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(400);
 
 pub struct Notice {
@@ -288,6 +290,11 @@ pub struct Repo {
     /// Each tag's details for its sidebar hover text, by tag name. A refresh drops the entries
     /// whose tip has moved or whose tag is gone.
     pub tag_details: std::collections::HashMap<String, TagDetailsRead>,
+    /// The current branch's pull request and its checks, read through gh, with the branch it was
+    /// read for. The status bar shows it only while the checkout is still on that branch.
+    pub pr_status: Option<(String, crate::ui::pull_request::PrStatusRead)>,
+    /// When the pull request status was last asked for. `None` asks again at the next snapshot.
+    pub pr_checked_at: Option<Instant>,
 }
 
 impl Repo {
@@ -385,6 +392,8 @@ impl Repo {
             template_read: None,
             draft_from_template: None,
             tag_details: std::collections::HashMap::new(),
+            pr_status: None,
+            pr_checked_at: None,
         }
     }
 
@@ -690,6 +699,10 @@ impl NiceGitApp {
         repo.generation = self.generation;
         repo.loading = true;
         repo.last_load = Instant::now();
+        // A deliberate load reads the pull request status again, once the snapshot arrives.
+        if deliberate {
+            repo.pr_checked_at = None;
+        }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
         self.worker.load(self.generation, repo.path.clone(), deliberate, limit, scope);
@@ -722,6 +735,35 @@ impl NiceGitApp {
         }
         self.repos[self.active].next_fetch = now + Duration::from_secs(u64::from(minutes) * 60);
         self.act(BACKGROUND_FETCH, |client, path| client.fetch(path).map(|_| None));
+    }
+
+    /// Reads the active checkout's pull request status every few minutes while the window is
+    /// focused. It is lighter than auto-fetch: only `gh` runs, and nothing waits on Git. It waits
+    /// while an action runs, a dialog is open, or the repository is loading.
+    fn auto_pr_status(&mut self, ctx: &egui::Context) {
+        if !self.was_focused {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        if repo.snapshot.is_none() {
+            return;
+        }
+        let now = Instant::now();
+        if let Some(checked) = repo.pr_checked_at {
+            let due = checked + PR_STATUS_INTERVAL;
+            if now < due {
+                ctx.request_repaint_after(due - now);
+                return;
+            }
+        }
+        let quiet = self.busy.is_none() && self.dialog.is_none() && !repo.loading;
+        if !quiet {
+            ctx.request_repaint_after(Duration::from_secs(5));
+            return;
+        }
+        let active = self.active;
+        self.refresh_pr_status(active);
+        ctx.request_repaint_after(PR_STATUS_INTERVAL);
     }
 
     /// Runs an action that changes the repository in the background, then refreshes it.
@@ -830,6 +872,10 @@ impl NiceGitApp {
                                 Err(_) => {}
                             }
                         }
+                    }
+                    // Pushing, pulling, and fetching can change the pull request or its checks, so it is read again.
+                    if matches!(&action, Some((label, _)) if crate::ui::pull_request::CHANGES_PULL_REQUEST.contains(&label.as_str())) {
+                        self.repos[index].pr_checked_at = None;
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
@@ -1073,6 +1119,7 @@ impl NiceGitApp {
         if repo.snapshot.as_ref().is_some_and(|old| old.current_branch != snapshot.current_branch) {
             repo.change_filter.clear();
         }
+        let branch_changed = repo.snapshot.as_ref().is_none_or(|old| old.current_branch != snapshot.current_branch);
         let dirty = !snapshot.status.is_empty();
         let colors = theme::GRAPH_COLOR_COUNT;
         repo.rows = if dirty {
@@ -1134,6 +1181,10 @@ impl NiceGitApp {
             .tag_details
             .retain(|name, (tip, _)| snapshot.tag_tips.get(name).is_some_and(|current| current.as_str() == tip.as_str()));
         self.repos[index].snapshot = Some(snapshot);
+        // The pull request is read for a new branch, and whenever a read is due.
+        if branch_changed || self.repos[index].pr_checked_at.is_none() {
+            self.refresh_pr_status(index);
+        }
         if read_template {
             self.start_template_read(index);
         }
@@ -1996,6 +2047,7 @@ impl eframe::App for NiceGitApp {
         self.drop_folders(&ctx);
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
+        self.auto_pr_status(&ctx);
         self.debug_open(&ctx);
         self.layout(ui);
         self.tool_windows(&ctx);

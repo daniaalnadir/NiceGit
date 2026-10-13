@@ -4,9 +4,11 @@
 //! interface; every `gh` and Git read runs in the background.
 
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
-use egui::RichText;
-use nicegit_core::github::{GhStatus, GitHubRepository};
+use egui::{Color32, RichText};
+use egui_phosphor::regular as icon;
+use nicegit_core::github::{GhStatus, GitHubRepository, PrState, PullRequestStatus};
 use nicegit_core::{Branch, GitClient, GitError, Snapshot};
 
 use crate::app::{NiceGitApp, Notice, NoticeAction};
@@ -452,9 +454,128 @@ impl NiceGitApp {
                     action: Some(NoticeAction::OpenUrl(url)),
                     detail: None,
                 });
+                // Creating a pull request gives no new snapshot, so its status is read here.
+                self.refresh_pr_status(self.active);
             }
         }
     }
+}
+
+/// A pull request status being read through gh, or read: `None` when the branch has no pull request.
+pub type PrStatusRead = Task<Result<Option<PullRequestStatus>, String>>;
+
+/// Actions after which the current branch's pull request and its checks are read again.
+pub const CHANGES_PULL_REQUEST: [&str; 7] = ["Fetch", "Pull", "Push", "Push branch", "Publish", "Force push", "Commit and push"];
+
+impl NiceGitApp {
+    /// Starts reading the current branch's pull request through `gh`, in the background, when the
+    /// branch's upstream is on a GitHub remote. A branch without one has no status. The status stays
+    /// on screen while it is read again, if the branch is the same. Without `gh`, or signed out of
+    /// it, the status is simply none.
+    pub fn refresh_pr_status(&mut self, index: usize) {
+        let hosts = self.settings.github_enterprise_hosts.clone();
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repos.get_mut(index) else { return };
+        repo.pr_checked_at = Some(Instant::now());
+        let target = repo.snapshot.as_ref().and_then(|snapshot| {
+            let branch = snapshot.current().filter(|branch| !branch.is_remote)?;
+            let target = git_ext::github_pull_request_target(snapshot, branch, &hosts)?;
+            Some((snapshot.current_branch.clone(), target))
+        });
+        let Some((branch, target)) = target else {
+            repo.pr_status = None;
+            return;
+        };
+        let stale = repo.pr_status.take().filter(|(name, _)| *name == branch).and_then(|(_, mut task)| task.get().cloned());
+        let path = repo.path.clone();
+        let read_branch = branch.clone();
+        let task = Task::spawn_with(&context, stale, move || {
+            let client = GitClient::new();
+            match client.gh_status(&target.repository.host, &path) {
+                GhStatus::SignedIn => {
+                    client.pull_request_for_branch(&target.repository, &read_branch, &path).map_err(|error| error.to_string())
+                }
+                GhStatus::NotInstalled | GhStatus::SignedOut(_) => Ok(None),
+            }
+        });
+        repo.pr_status = Some((branch, task));
+    }
+
+    /// The active checkout's pull request, once its status has been read for the branch the checkout
+    /// is on. Nothing is returned while that read is still going, or when it failed.
+    pub fn pull_request_status(&mut self) -> Option<PullRequestStatus> {
+        let repo = self.repos.get_mut(self.active)?;
+        let snapshot = repo.snapshot.as_ref()?;
+        let (name, task) = repo.pr_status.as_mut()?;
+        if *name != snapshot.current_branch {
+            return None;
+        }
+        task.get()?.clone().ok().flatten()
+    }
+}
+
+/// The status bar's pull request: its label, the checks' label, and the link it opens.
+pub struct PrBadge {
+    label: String,
+    label_color: Color32,
+    checks: Option<(String, Color32)>,
+    hover: String,
+    /// The pull request's page, opened when the badge is clicked.
+    pub url: String,
+}
+
+impl PrBadge {
+    pub fn new(status: &PullRequestStatus, c: &crate::theme::Colors) -> Self {
+        let (glyph, color) = match status.state {
+            PrState::Open => (icon::GIT_PULL_REQUEST, c.accent),
+            PrState::Draft => (icon::GIT_PULL_REQUEST, c.muted),
+            PrState::Merged => (icon::GIT_MERGE, c.renamed),
+            PrState::Closed => (icon::X, c.muted),
+        };
+        let checks = status.checks;
+        // A failing check is the news, then a pending one; when neither, the passed count.
+        let checks_label = if checks.failed > 0 {
+            Some((format!("{} {}", icon::X, checks.failed), c.danger))
+        } else if checks.pending > 0 {
+            Some((format!("{} {}", icon::CIRCLE, checks.pending), c.warning))
+        } else if checks.passed > 0 {
+            Some((format!("{} {}", icon::CHECK, checks.passed), c.added))
+        } else {
+            None
+        };
+        Self {
+            label: format!("{glyph}  PR #{}", status.number),
+            label_color: color,
+            checks: checks_label,
+            hover: format!("{}\n{} passed, {} failed, {} pending", status.title, checks.passed, checks.failed, checks.pending),
+            url: status.url.clone(),
+        }
+    }
+
+    /// The width the badge takes in the status bar, in points, including button padding.
+    pub fn width(&self, ui: &egui::Ui) -> f32 {
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let padding = ui.spacing().button_padding.x * 2.0;
+        let measure = |text: &str, color: Color32| ui.painter().layout_no_wrap(text.to_string(), font.clone(), color).size().x + padding;
+        let mut width = measure(&self.label, self.label_color);
+        if let Some((text, color)) = &self.checks {
+            width += ui.spacing().item_spacing.x + measure(text, *color);
+        }
+        width
+    }
+}
+
+/// Draws the badge as two buttons, the pull request and its checks. Returns whether either was clicked.
+pub fn show_pull_request_badge(ui: &mut egui::Ui, badge: &PrBadge) -> bool {
+    let mut clicked = ui
+        .add(egui::Button::new(RichText::new(&badge.label).small().color(badge.label_color)).frame(false))
+        .on_hover_text(badge.hover.as_str())
+        .clicked();
+    if let Some((text, color)) = &badge.checks {
+        clicked |=
+            ui.add(egui::Button::new(RichText::new(text).small().color(*color)).frame(false)).on_hover_text(badge.hover.as_str()).clicked();
+    }
+    clicked
 }
 
 #[cfg(test)]

@@ -540,3 +540,48 @@ fn failed_undo_clears_older_steps() {
     assert!(harness.state().repo().is_some_and(|r| r.undo.is_empty()), "Undo is now disabled");
     assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Made outside NiceGit", "nothing was moved");
 }
+
+/// A pull request with five passing checks, standing in for what `gh` reports for the branch.
+/// Tests never call `gh`, so the status is set on the repository directly.
+fn sample_pull_request() -> nicegit_core::github::PullRequestStatus {
+    use nicegit_core::github::{Checks, PrState, PullRequestStatus};
+    PullRequestStatus {
+        number: 12,
+        title: "Add the status bar".into(),
+        state: PrState::Open,
+        url: "https://github.com/acme/app/pull/12".into(),
+        checks: Checks { passed: 5, failed: 0, pending: 0 },
+    }
+}
+
+#[test]
+fn status_bar_shows_the_current_branchs_pull_request_and_checks() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+    harness.state_mut().repos[0].pr_status = Some(("main".into(), crate::tools::Task::ready(Ok(Some(sample_pull_request())))));
+    settle(&mut harness);
+    assert!(harness.query_by_label_contains("PR #12").is_some(), "the status bar names the pull request");
+    assert!(harness.query_by_label_contains(&format!("{} 5", icon::CHECK)).is_some(), "and its passed checks");
+
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+    harness.get_by_label_contains("PR #12").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec!["https://github.com/acme/app/pull/12".to_string()], "clicking opens the pull request");
+}
+
+#[test]
+fn status_bar_keeps_the_pull_request_inside_a_narrow_window() {
+    let repo = repository();
+    let long = "work/a-branch-name-long-enough-to-need-shortening-in-a-narrow-status-bar";
+    git(repo.path(), &["switch", "-q", "-c", long]);
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    harness.state_mut().repos[0].pr_status = Some((long.into(), crate::tools::Task::ready(Ok(Some(sample_pull_request())))));
+    harness.set_size(egui::vec2(560.0, 700.0));
+    settle(&mut harness);
+    let badge = harness.get_by_label_contains("PR #12").rect();
+    assert!(badge.max.x <= 560.0, "the badge stays inside the window: {badge:?}");
+}

@@ -70,6 +70,8 @@
 - Revert several selected commits at once, newest first, from the graph's selection bar.
 - In Blame, see the history of a group of lines: every commit that changed them, with each
   change to just those lines.
+- The status bar shows the current branch's pull request and how its checks are doing; click it
+  to open the pull request.
 
 ## 1.5.0 - Fewer surprises
 
