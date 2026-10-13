@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use egui::{Color32, Margin, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::diff::{parse_diff, DiffContext, DiffRequest};
-use nicegit_core::models::{Operation, Stash, StatusEntry, StatusKind};
+use nicegit_core::models::{Operation, Stash, StashOptions, StatusEntry, StatusKind};
 use nicegit_core::Snapshot;
 
 use crate::diff_view::{self, DiffContent};
@@ -270,7 +270,9 @@ impl StashWindow {
         self.awaiting_save = Some(cx.snapshot.stashes.len());
         match plan {
             SavePlan::All => cx.act("Stash changes", move |client, directory| {
-                client.save_stash(&message, directory).map(|()| Some("Saved your changes in a stash.".to_string()))
+                // This window has no options of its own, so it keeps the stash's long-standing choices.
+                let options = StashOptions { keep_index: false, include_untracked: true };
+                client.save_stash(&message, options, directory).map(|()| Some("Saved your changes in a stash.".to_string()))
             }),
             SavePlan::Paths(paths) => {
                 let label = format!("Stash {} selected files", paths.len());

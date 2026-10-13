@@ -237,6 +237,16 @@ pub struct Settings {
     /// of the first clone; the Clone dialog fills its destination from it.
     #[serde(default)]
     pub clone_folder: Option<PathBuf>,
+    /// Whether saving a stash leaves staged changes in the index and the working files.
+    #[serde(default)]
+    pub stash_keep_index: bool,
+    /// Whether saving a stash also takes untracked files. On by default, as it always was.
+    #[serde(default = "default_true")]
+    pub stash_include_untracked: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -262,6 +272,8 @@ impl Default for Settings {
             history_scope: HistoryScope::All,
             diff_context: DiffContextSetting::default(),
             clone_folder: None,
+            stash_keep_index: false,
+            stash_include_untracked: true,
         }
     }
 }

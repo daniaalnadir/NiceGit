@@ -6,8 +6,11 @@ use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
 use nicegit_core::diff::{DiffContext, DiffRequest};
-use nicegit_core::models::{Branch, GitError, HistoryScope, Operation, Snapshot, StashFile, StatusEntry, StatusKind};
+use nicegit_core::models::{Branch, GitError, HistoryScope, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind};
 use tempfile::TempDir;
+
+/// The stash options the app used before they were chosen: untracked files are stashed too.
+const DEFAULT_STASH: StashOptions = StashOptions { keep_index: false, include_untracked: true };
 
 // MARK: Helpers
 
@@ -557,7 +560,7 @@ fn save_and_apply_stash_keeps_the_entry_until_dropped() {
     repo.write("a.txt", "two\n");
     repo.write("scratch.txt", "untracked\n");
 
-    client().save_stash("my work", repo.path()).expect("save stash");
+    client().save_stash("my work", DEFAULT_STASH, repo.path()).expect("save stash");
     assert!(client().load_status(repo.path()).unwrap().is_empty());
     let stashes = client().list_stashes(repo.path()).unwrap();
     assert_eq!(stashes.len(), 1);
@@ -578,7 +581,7 @@ fn pop_stash_restores_changes_and_removes_entry() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
     repo.write("a.txt", "two\n");
-    client().save_stash("", repo.path()).expect("save stash");
+    client().save_stash("", DEFAULT_STASH, repo.path()).expect("save stash");
     assert_eq!(repo.read("a.txt"), "one\n");
     let stash = client().list_stashes(repo.path()).unwrap()[0].clone();
 
@@ -593,7 +596,7 @@ fn drop_of_stash_no_longer_listed_fails() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
     repo.write("a.txt", "two\n");
-    client().save_stash("gone soon", repo.path()).expect("save stash");
+    client().save_stash("gone soon", DEFAULT_STASH, repo.path()).expect("save stash");
     let stash = client().list_stashes(repo.path()).unwrap()[0].clone();
     client().drop_stash(&stash, repo.path()).expect("first drop");
 
@@ -606,13 +609,71 @@ fn save_stash_on_clean_tree_reports_error() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
 
-    assert!(client().save_stash("nothing", repo.path()).is_err());
+    assert!(client().save_stash("nothing", DEFAULT_STASH, repo.path()).is_err());
     assert!(client().list_stashes(repo.path()).unwrap().is_empty());
+}
+
+#[test]
+fn stash_keeping_the_index_leaves_staged_changes() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.commit("b.txt", "one\n", "Second");
+    repo.write("a.txt", "staged\n");
+    repo.git(&["add", "--", "a.txt"]);
+    repo.write("b.txt", "unstaged\n");
+    let options = StashOptions { keep_index: true, include_untracked: true };
+
+    client().save_stash("keep the index", options, repo.path()).expect("save stash");
+
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]).trim(), "a.txt", "a.txt is still staged");
+    assert_eq!(repo.read("a.txt"), "staged\n", "its staged change is still in the working file");
+    assert_eq!(repo.read("b.txt"), "one\n", "the unstaged change is stashed");
+    assert!(repo.git(&["diff", "--name-only"]).trim().is_empty(), "nothing is unstaged");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "a new stash exists");
+}
+
+#[test]
+fn stash_without_untracked_leaves_new_files() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    repo.write("new.txt", "new\n");
+    let options = StashOptions { keep_index: false, include_untracked: false };
+
+    client().save_stash("tracked only", options, repo.path()).expect("save stash");
+
+    assert_eq!(repo.read("new.txt"), "new\n", "the untracked file stays where it was");
+    assert_eq!(repo.read("a.txt"), "one\n", "the tracked change is stashed");
+    let status = client().load_status(repo.path()).unwrap();
+    assert_eq!(status.iter().map(|entry| entry.path.as_str()).collect::<Vec<_>>(), vec!["new.txt"]);
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "a new stash exists");
+}
+
+#[test]
+fn stash_with_a_partly_staged_file_and_keep_index() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "staged\n");
+    repo.git(&["add", "--", "a.txt"]);
+    repo.write("a.txt", "staged\nunstaged\n");
+    let options = StashOptions { keep_index: true, include_untracked: true };
+
+    client().save_stash("partly staged", options, repo.path()).expect("save stash");
+
+    // Git keeps the staged content in the index and rewrites the working file to match it.
+    assert_eq!(repo.git(&["show", ":a.txt"]), "staged\n", "the staged content stays staged");
+    assert_eq!(repo.read("a.txt"), "staged\n", "the working file equals the index");
+    let status = client().load_status(repo.path()).unwrap();
+    assert_eq!(
+        status.iter().map(|entry| (entry.path.as_str(), entry.index_status, entry.work_tree_status)).collect::<Vec<_>>(),
+        vec![("a.txt", 'M', ' ')]
+    );
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "a new stash exists");
 }
 
 /// Stashes the working changes, returning the stash entry.
 fn stash_all(repo: &Repo, message: &str) -> nicegit_core::models::Stash {
-    client().save_stash(message, repo.path()).expect("save stash");
+    client().save_stash(message, DEFAULT_STASH, repo.path()).expect("save stash");
     client().list_stashes(repo.path()).unwrap()[0].clone()
 }
 
@@ -1215,7 +1276,7 @@ fn pop_that_conflicts_keeps_the_stash() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
     repo.write("a.txt", "two\n");
-    client().save_stash("keep me", repo.path()).expect("save stash");
+    client().save_stash("keep me", DEFAULT_STASH, repo.path()).expect("save stash");
     repo.commit("a.txt", "three\n", "Change the same line");
     let stash = client().list_stashes(repo.path()).unwrap()[0].clone();
 

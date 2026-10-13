@@ -250,6 +250,31 @@ fn pop_a_stash_from_the_sidebar_menu_after_confirming() {
 }
 
 #[test]
+fn stash_dialog_can_keep_staged_changes_in_place() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "one\n", "Add another file");
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstaged\n").unwrap();
+    git(path, &["add", "--", "notes.txt"]);
+    std::fs::write(path.join("other.txt"), "two\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    toolbar_button(&mut harness, "Stash");
+    wait(&mut harness, "the stash dialog", |h| h.state().dialog.is_some());
+    harness.get_by_role_and_label(Role::CheckBox, "Keep staged changes").click();
+    settle(&mut harness);
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash", |_| !git(path, &["stash", "list"]).is_empty());
+
+    assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "one stash was made");
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "notes.txt", "the staged change stays staged");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nstaged\n", "its staged content stays");
+    assert_eq!(std::fs::read_to_string(path.join("other.txt")).unwrap(), "one\n", "the unstaged change is stashed");
+}
+
+#[test]
 fn delete_one_stash_from_the_stashes_window_after_confirming() {
     let repo = repository();
     let path = repo.path();

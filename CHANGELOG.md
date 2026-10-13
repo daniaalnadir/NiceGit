@@ -65,6 +65,8 @@
 - Hovering an annotated tag in the sidebar shows its message, tagger, and date.
 - Squash or drop the commits you've selected in the graph: the interactive rebase window opens
   with them arranged for review.
+- Saving a stash can keep your staged changes in place or leave untracked files out; the
+  choices are remembered.
 
 ## 1.5.0 - Fewer surprises
 

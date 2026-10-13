@@ -7,8 +7,10 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
-use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StatusEntry, StatusKind};
+use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StashOptions, StatusEntry, StatusKind};
 use tempfile::TempDir;
+
+const DEFAULT_STASH: StashOptions = StashOptions { keep_index: false, include_untracked: true };
 
 // MARK: Helpers
 
@@ -718,7 +720,7 @@ fn stash_diff_shows_tracked_and_untracked_changes() {
     repo.commit("a.txt", "one\n", "First");
     repo.write("a.txt", "two\n");
     repo.write("scratch.txt", "untracked\n");
-    client().save_stash("mixed", repo.path()).expect("save stash");
+    client().save_stash("mixed", DEFAULT_STASH, repo.path()).expect("save stash");
     let stash = client().list_stashes(repo.path()).unwrap()[0].clone();
 
     let diff = client().stash_diff(&stash, repo.path()).expect("stash diff");
