@@ -233,6 +233,10 @@ pub struct Settings {
     /// How many unchanged lines each diff shows around its changes.
     #[serde(default)]
     pub diff_context: DiffContextSetting,
+    /// The folder clones go into by default. Set in Settings, or remembered from the parent folder
+    /// of the first clone; the Clone dialog fills its destination from it.
+    #[serde(default)]
+    pub clone_folder: Option<PathBuf>,
 }
 
 impl Default for Settings {
@@ -257,6 +261,7 @@ impl Default for Settings {
             github_enterprise_hosts: Vec::new(),
             history_scope: HistoryScope::All,
             diff_context: DiffContextSetting::default(),
+            clone_folder: None,
         }
     }
 }

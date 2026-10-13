@@ -139,7 +139,52 @@ pub enum InputKind {
         default_remote: Option<String>,
     },
     SaveStash,
-    Clone,
+    /// Cloning. The destination follows the address until the person edits it or chooses one.
+    Clone(CloneDestination),
+}
+
+/// The Clone dialog's destination. While it is automatic it is the default folder joined with
+/// the repository's name, and it follows the address as that is typed or picked.
+#[derive(Clone, Default)]
+pub struct CloneDestination {
+    /// The destination last written from the default folder and the address.
+    automatic: String,
+    /// Set once the destination is typed or chosen; from then on the dialog leaves it alone.
+    by_hand: bool,
+}
+
+impl CloneDestination {
+    /// Writes the automatic destination for `url` into `destination`, unless it is the person's.
+    fn follow(&mut self, folder: &std::path::Path, url: &str, destination: &mut String) {
+        if self.by_hand || !(destination.is_empty() || *destination == self.automatic) {
+            return;
+        }
+        let url = url.trim();
+        let wanted = if url.is_empty() { String::new() } else { folder.join(repository_folder_name(url)).display().to_string() };
+        *destination = wanted.clone();
+        self.automatic = wanted;
+    }
+}
+
+/// The folder a clone of `url` is named after: its last path segment without `.git`, such as
+/// `app` for `https://github.com/acme/app.git` or `git@github.com:acme/app.git`.
+pub fn repository_folder_name(url: &str) -> String {
+    let name = url.trim().trim_end_matches(['/', '\\']).rsplit(['/', ':', '\\']).next().unwrap_or_default();
+    let name = name.strip_suffix(".git").unwrap_or(name);
+    // `.` and `..` would name the default folder itself or its parent, not a new folder in it.
+    if name.is_empty() || name == "." || name == ".." {
+        "repository".into()
+    } else {
+        name.into()
+    }
+}
+
+/// Whether `path` is taken, so a clone into it would fail: it exists and is not an empty folder.
+fn is_taken(path: &std::path::Path) -> bool {
+    match std::fs::read_dir(path) {
+        Ok(mut entries) => entries.next().is_some(),
+        Err(_) => path.exists(),
+    }
 }
 
 pub enum Dialog {
@@ -199,7 +244,12 @@ impl Dialog {
     }
 
     pub fn clone_repository() -> Self {
-        Self::with_second("Clone repository", "Repository URL or local path", "Destination folder", InputKind::Clone)
+        Self::with_second(
+            "Clone repository",
+            "Repository URL or local path",
+            "Destination folder",
+            InputKind::Clone(CloneDestination::default()),
+        )
     }
 
     /// The New tag dialog for `target`, capturing the snapshot's remotes and push addresses now.
@@ -334,7 +384,7 @@ impl NiceGitApp {
                     ui.add_space(8.0);
                     ui.label(RichText::new(label.as_str()).color(c.muted));
                     // The Clone dialog's address field has a "From GitHub…" button beside it.
-                    let first = if matches!(kind, InputKind::Clone) {
+                    let first = if matches!(kind, InputKind::Clone(_)) {
                         ui.horizontal(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let pick = ui
@@ -405,33 +455,45 @@ impl NiceGitApp {
                         }
                     }
                     let tag_needs_message = matches!(kind, InputKind::CreateTag { annotated: true, .. }) && second.trim().is_empty();
+                    // While the destination is still automatic, the default folder and the address give it.
+                    if let (InputKind::Clone(destination), Some(folder)) = (&mut *kind, self.settings.clone_folder.as_deref()) {
+                        destination.follow(folder, value.as_str(), second);
+                    }
+                    let mut edited_destination = false;
+                    let mut chose_destination = false;
                     if let Some(second_label) = second_label.as_ref().filter(|_| show_second) {
                         ui.add_space(6.0);
                         ui.label(RichText::new(second_label.as_str()).color(c.muted));
                         ui.horizontal(|ui| {
-                            let browse = matches!(kind, InputKind::Clone);
+                            let browse = matches!(kind, InputKind::Clone(_));
                             let width = ui.available_width() - if browse { 90.0 } else { 0.0 };
                             if matches!(kind, InputKind::CreateTag { .. }) {
                                 ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width))
                                     .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tag message"));
                             } else {
                                 let second_name = second_label.clone();
-                                ui.add(egui::TextEdit::singleline(second).desired_width(width))
-                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &second_name));
+                                let response = ui.add(egui::TextEdit::singleline(second).desired_width(width));
+                                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &second_name));
+                                edited_destination = response.changed();
                             }
                             if browse && ui.button("Choose…").clicked() {
                                 if let Some(folder) = crate::file_dialog::pick_folder("Clone into") {
-                                    let name = value
-                                        .trim_end_matches('/')
-                                        .rsplit(['/', ':'])
-                                        .next()
-                                        .unwrap_or("repository")
-                                        .trim_end_matches(".git")
-                                        .to_string();
-                                    *second = folder.join(if name.is_empty() { "repository".into() } else { name }).display().to_string();
+                                    *second = folder.join(repository_folder_name(value.as_str())).display().to_string();
+                                    chose_destination = true;
                                 }
                             }
                         });
+                        if edited_destination || chose_destination {
+                            if let InputKind::Clone(destination) = &mut *kind {
+                                destination.by_hand = true;
+                            }
+                        }
+                        if let InputKind::Clone(destination) = &*kind {
+                            let path = std::path::PathBuf::from(second.trim());
+                            if !destination.by_hand && !second.trim().is_empty() && is_taken(&path) {
+                                ui.label(RichText::new(format!("{} already exists; choose another folder.", path.display())).color(c.muted));
+                            }
+                        }
                     }
                     ui.add_space(16.0);
                     // While the GitHub picker is open, Enter belongs to it, not to this dialog.
@@ -780,7 +842,7 @@ impl NiceGitApp {
             }),
             InputKind::SaveStash => self
                 .act("Stash", move |client, path| client.save_stash(&value, path).map(|_| Some("Saved your changes in a stash.".into()))),
-            InputKind::Clone => {
+            InputKind::Clone(_) => {
                 let destination = std::path::PathBuf::from(second.trim());
                 let source = value.trim().to_string();
                 if destination.as_os_str().is_empty() {
@@ -803,7 +865,7 @@ impl NiceGitApp {
 
 #[cfg(test)]
 mod tests {
-    use super::default_push_remote;
+    use super::{default_push_remote, repository_folder_name, CloneDestination};
 
     #[test]
     fn a_new_tag_is_pushed_to_the_upstream_remote_then_origin_then_the_first() {
@@ -817,5 +879,42 @@ mod tests {
         assert_eq!(default_push_remote(&nested, Some("team/fork/main")).as_deref(), Some("team/fork"));
         assert_eq!(default_push_remote(&remotes(&["origin"]), Some("originals/main")).as_deref(), Some("origin"));
         assert_eq!(default_push_remote(&[], None), None);
+    }
+
+    #[test]
+    fn repository_folder_name_is_the_last_path_segment_without_git() {
+        assert_eq!(repository_folder_name("https://github.com/acme/app.git"), "app");
+        assert_eq!(repository_folder_name("https://host/acme/.."), "repository");
+        assert_eq!(repository_folder_name("."), "repository");
+        assert_eq!(repository_folder_name("git@github.com:acme/app.git"), "app");
+        assert_eq!(repository_folder_name("https://host/path/app/"), "app");
+        assert_eq!(repository_folder_name("ssh://git@host:22/acme/app"), "app");
+        assert_eq!(repository_folder_name("/local/path/repo"), "repo");
+        assert_eq!(repository_folder_name("  https://github.com/acme/app  "), "app");
+        // A Windows path uses backslashes, and a drive's colon is not a separator.
+        assert_eq!(repository_folder_name(r"C:\repos\x"), "x");
+        assert_eq!(repository_folder_name(""), "repository");
+        assert_eq!(repository_folder_name(".git"), "repository");
+    }
+
+    #[test]
+    fn clone_folder_destination_follows_the_address_until_the_person_edits_it() {
+        let folder = std::path::Path::new("/work/clones");
+        // Joined as the app joins them, so the separator is right on every platform.
+        let inside = |name: &str| folder.join(name).display().to_string();
+        let mut state = CloneDestination::default();
+        let mut destination = String::new();
+        state.follow(folder, "https://github.com/acme/app.git", &mut destination);
+        assert_eq!(destination, inside("app"));
+        state.follow(folder, "https://github.com/acme/tool", &mut destination);
+        assert_eq!(destination, inside("tool"), "still automatic, so it follows the address");
+        state.follow(folder, "", &mut destination);
+        assert_eq!(destination, "", "an empty address leaves no automatic destination");
+
+        state.follow(folder, "https://github.com/acme/app.git", &mut destination);
+        destination.push_str("-copy");
+        state.by_hand = true;
+        state.follow(folder, "https://github.com/acme/other.git", &mut destination);
+        assert_eq!(destination, format!("{}-copy", inside("app")), "an edited destination is not overwritten");
     }
 }

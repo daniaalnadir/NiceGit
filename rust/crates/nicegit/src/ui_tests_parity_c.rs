@@ -307,6 +307,93 @@ fn returning_to_the_app_waits_for_an_open_dialog_to_close() {
     wait(&mut harness, "the refresh once the dialog closes", listed);
 }
 
+/// The text in the Clone dialog's destination field.
+fn clone_destination(harness: &App) -> Option<String> {
+    harness.get_by_role_and_label(Role::TextInput, "Destination folder").accesskit_node().value()
+}
+
+/// Opens the Clone dialog from the repository menu of the open repository.
+fn open_clone_dialog(harness: &mut App, source: &Path) {
+    repository_menu(harness, &folder_name(source), "Clone repository");
+    wait(harness, "the clone dialog", |h| h.state().dialog.is_some());
+}
+
+#[test]
+fn clone_destination_fills_from_the_default_folder_until_it_is_edited() {
+    let source = repository();
+    let default = temp_dir();
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+    harness.state_mut().settings.clone_folder = Some(default.path().to_path_buf());
+    open_clone_dialog(&mut harness, source.path());
+
+    type_into(&mut harness, "Repository URL or local path", "https://github.com/acme/app.git");
+    let automatic = default.path().join("app").display().to_string();
+    wait(&mut harness, "the destination to fill from the address", |h| clone_destination(h).as_deref() == Some(automatic.as_str()));
+
+    type_into(&mut harness, "Destination folder", "-copy");
+    settle(&mut harness);
+    let edited = clone_destination(&harness).expect("destination field");
+    assert!(edited.contains("-copy"), "the typed destination is kept: {edited}");
+
+    type_into(&mut harness, "Repository URL or local path", "-two");
+    settle(&mut harness);
+    assert_eq!(clone_destination(&harness).as_deref(), Some(edited.as_str()), "an edited destination is not overwritten");
+}
+
+#[test]
+fn choosing_a_clone_destination_stops_it_following_the_address() {
+    let source = repository();
+    let default = temp_dir();
+    let chosen = temp_dir();
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+    harness.state_mut().settings.clone_folder = Some(default.path().to_path_buf());
+    open_clone_dialog(&mut harness, source.path());
+
+    crate::file_dialog::answer_next(chosen.path());
+    harness.get_by_role_and_label(Role::Button, "Choose…").click();
+    settle(&mut harness);
+    let chosen_destination = chosen.path().join("repository").display().to_string();
+    assert_eq!(clone_destination(&harness), Some(chosen_destination.clone()), "the chosen folder fills the destination");
+
+    type_into(&mut harness, "Repository URL or local path", "https://github.com/acme/tool.git");
+    settle(&mut harness);
+    assert_eq!(clone_destination(&harness), Some(chosen_destination), "a chosen destination is not overwritten");
+}
+
+#[test]
+fn an_automatic_clone_destination_that_already_holds_files_is_warned_about() {
+    let source = repository();
+    let default = temp_dir();
+    std::fs::create_dir(default.path().join("app")).unwrap();
+    std::fs::write(default.path().join("app").join("keep.txt"), "not ours\n").unwrap();
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+    harness.state_mut().settings.clone_folder = Some(default.path().to_path_buf());
+    open_clone_dialog(&mut harness, source.path());
+
+    type_into(&mut harness, "Repository URL or local path", "https://github.com/acme/app.git");
+    let folder = default.path().join("app").display().to_string();
+    wait(&mut harness, "the warning about the existing folder", |h| shows(h, &format!("{folder} already exists; choose another folder.")));
+}
+
+#[test]
+fn the_first_clone_remembers_its_parent_folder_as_the_default() {
+    let source = repository();
+    let parent = temp_dir();
+    let destination = parent.path().join("cloned");
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+    assert_eq!(harness.state().settings.clone_folder, None);
+    open_clone_dialog(&mut harness, source.path());
+    type_into(&mut harness, "Repository URL or local path", &source.path().display().to_string());
+    type_into(&mut harness, "Destination folder", &destination.display().to_string());
+    harness.get_by_label("OK").click();
+    wait(&mut harness, "the clone to open", |h| h.state().busy.is_none() && h.state().repos.len() == 2);
+    assert_eq!(harness.state().settings.clone_folder.as_deref(), Some(parent.path()));
+}
+
 #[test]
 fn save_a_commit_as_zip() {
     let repo = repository();
