@@ -50,7 +50,7 @@
 - In a narrow Changes panel the section titles and bulk buttons shorten so the file counts
   stay visible, and the diff's line-staging hint wraps instead of being cut off.
 - Undo and Redo step back and forth through the last 20 recorded actions instead of only the
-  most recent one.
+  most recent one, each named by its commit or target.
 - In Blame, right-click a line to blame the file as it was before that line's change, and
   step back with Back.
 - Create pull requests from the branch menu or command palette: NiceGit fills in the title,

@@ -138,7 +138,15 @@ pub enum Selection {
 #[derive(Clone)]
 pub struct HistoryEntry {
     pub title: String,
+    /// What the action was done to, such as the commit's summary or the branch's name, when known.
+    pub detail: Option<String>,
     pub step: UndoStep,
+}
+
+/// The summary line of a commit message, or `None` when the message starts blank.
+pub fn summary_of(message: &str) -> Option<String> {
+    let line = message.lines().next()?.trim();
+    (!line.is_empty()).then(|| line.to_string())
 }
 
 impl HistoryEntry {
@@ -794,17 +802,29 @@ impl NiceGitApp {
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a
     /// completed move is recorded: an operation that stopped partway is not undoable.
     pub fn act_recording(&mut self, label: &str, title: &str, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
+        self.act_recording_detail(label, title, None, action);
+    }
+
+    /// Like `act_recording`, with the detail Undo and Redo name the step by, such as the commit's summary.
+    pub fn act_recording_detail(
+        &mut self,
+        label: &str,
+        title: &str,
+        detail: Option<String>,
+        action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
+    ) {
         let mode = match title {
             "Commit" | "Amend" | "Undo commit" => UndoMode::Soft,
             _ => UndoMode::Keep,
         };
-        self.act_recording_mode(label, title, mode, action);
+        self.act_recording_mode_detail(label, title, detail, mode, action);
     }
 
-    pub fn act_recording_mode(
+    pub fn act_recording_mode_detail(
         &mut self,
         label: &str,
         title: &str,
+        detail: Option<String>,
         mode: UndoMode,
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
@@ -820,7 +840,7 @@ impl NiceGitApp {
                 if state.operation.is_none() && state.current_branch == branch {
                     if let Some(after) = state.head_hash.filter(|after| *after != before) {
                         let step = UndoStep::BranchMove { branch, before, after, mode };
-                        *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::Step(HistoryEntry { title, step }));
+                        *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::Step(HistoryEntry { title, detail, step }));
                     }
                 }
             }
@@ -1627,11 +1647,13 @@ impl NiceGitApp {
         if repo.amend {
             let Some(head) = snapshot.head_hash.clone() else { return };
             let branch = snapshot.current_branch.clone();
-            self.act_recording("Amend", "Amend", move |client, path| {
+            self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
                 client.amend(&message, &branch, &head, path).map(|_| Some("Amended the last commit.".into()))
             });
         } else {
-            self.act_recording("Commit", "Commit", move |client, path| client.commit(&message, path).map(|_| None));
+            self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
+                client.commit(&message, path).map(|_| None)
+            });
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
@@ -1662,7 +1684,7 @@ impl NiceGitApp {
         }
         let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
         let count = self.snapshot().map_or(0, |s| s.status.len());
-        self.act_recording("Commit", "Commit", move |client, path| {
+        self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
             client.stage_all(path)?;
             client.commit(&message, path).map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
         });
@@ -1681,7 +1703,7 @@ impl NiceGitApp {
         }
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
-        self.act_recording("Commit and push", "Commit", move |client, path| {
+        self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
             client.commit_and_push(&message, &snapshot, path).map(|_| Some("Committed and pushed.".into()))
         });
         if self.busy.is_some() {
@@ -1708,7 +1730,8 @@ impl NiceGitApp {
 
     pub fn pull(&mut self) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
-        self.act_recording("Pull", "Pull", move |client, path| {
+        let branch = snapshot.is_on_branch().then(|| snapshot.current_branch.clone());
+        self.act_recording_detail("Pull", "Pull", branch, move |client, path| {
             client.pull(&snapshot, path).map(|_| Some("Pulled the latest changes.".into()))
         });
     }
@@ -1762,7 +1785,7 @@ impl NiceGitApp {
         let label = format!("{verb} {}", entry.title.to_lowercase());
         self.act(&label, move |client, path| match client.undo_step(&entry.step, path) {
             Ok(step) => {
-                let inverse = HistoryEntry { title: entry.title.clone(), step };
+                let inverse = HistoryEntry { title: entry.title.clone(), detail: entry.detail.clone(), step };
                 // Undoing offers the inverse as a redo; redoing offers it as an undo, and the redo steps not yet
                 // applied stay.
                 let record = if redo { Recorded::Undo(inverse) } else { Recorded::Redo(inverse) };
@@ -1865,10 +1888,12 @@ impl NiceGitApp {
     pub fn handle(&mut self, request: Request) {
         match request {
             Request::Act { label, action } => self.act(&label, action),
-            Request::ActRecording { label, title, mode, action } => self.act_recording_mode(&label, &title, mode, action),
-            Request::RecordUndo { title, step } => {
+            Request::ActRecording { label, title, detail, mode, action } => {
+                self.act_recording_mode_detail(&label, &title, detail, mode, action)
+            }
+            Request::RecordUndo { title, detail, step } => {
                 if let Some(repo) = self.repo_mut() {
-                    repo.record_step(HistoryEntry { title, step });
+                    repo.record_step(HistoryEntry { title, detail, step });
                 }
             }
             Request::Notice { text, is_error } => self.notify(text, is_error),
@@ -2173,7 +2198,7 @@ mod history_tests {
 
     fn step(title: &str) -> HistoryEntry {
         let step = UndoStep::BranchMove { branch: "main".into(), before: "a".into(), after: "b".into(), mode: UndoMode::Soft };
-        HistoryEntry { title: title.into(), step }
+        HistoryEntry { title: title.into(), detail: None, step }
     }
 
     fn titles(stack: &[HistoryEntry]) -> Vec<&str> {
