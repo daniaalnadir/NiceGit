@@ -27,6 +27,23 @@ pub struct ForcePushPreview {
     pub added_count: usize,
 }
 
+/// Whether the status left after `git stash push` holds only what `options` intentionally keeps.
+/// Untracked files can remain only without `include_untracked`, and only if they were untracked
+/// before. With `keep_index`, a staged entry can remain only if its staged side is unchanged and
+/// its working-tree side is clean. Anything else, such as a dirty submodule, is unexpected.
+fn stash_left_expected(before: &[StatusEntry], after: &[StatusEntry], options: StashOptions) -> bool {
+    after.iter().all(|entry| {
+        if entry.kind == StatusKind::Untracked {
+            return !options.include_untracked && before.iter().any(|old| old.kind == StatusKind::Untracked && old.path == entry.path);
+        }
+        options.keep_index
+            && entry.work_tree_status == ' '
+            && before
+                .iter()
+                .any(|old| old.index_status == entry.index_status && old.path == entry.path && old.original_path == entry.original_path)
+    })
+}
+
 /// Whether `value` is a full object ID, as Git prints them: 40 hex digits, or 64 for SHA-256.
 fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -1157,18 +1174,27 @@ impl GitClient {
         Ok(parse_stashes(&self.run(&["stash", "list", &format!("--format={STASH_FORMAT}")], directory)?))
     }
 
-    /// Saves every change, including untracked files, and confirms Git really did.
-    pub fn save_stash(&self, message: &str, directory: &Path) -> Result<()> {
+    /// Saves the working changes that `options` take, and confirms that Git left only what they keep.
+    pub fn save_stash(&self, message: &str, options: StashOptions, directory: &Path) -> Result<()> {
         self.require_finished_operation("stash", directory)?;
+        let before = self.load_status(directory)?;
         let previous = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "refs/stash"], directory);
         let message =
             if message.trim().is_empty() { format!("WIP on {}", self.current_branch(directory)) } else { message.trim().to_string() };
-        self.run(&["stash", "push", "--include-untracked", "-m", &message], directory)?;
+        let mut arguments = vec!["stash", "push"];
+        if options.include_untracked {
+            arguments.push("--include-untracked");
+        }
+        if options.keep_index {
+            arguments.push("--keep-index");
+        }
+        arguments.extend(["-m", &message]);
+        self.run(&arguments, directory)?;
         let saved = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "refs/stash"], directory);
         let Some(saved) = saved.filter(|saved| Some(saved) != previous.as_ref()) else {
             return Err(GitError::failed("stash", "Git did not save any changes. Check any dirty submodules."));
         };
-        if !self.load_status(directory)?.is_empty() {
+        if !stash_left_expected(&before, &self.load_status(directory)?, options) {
             return Err(GitError::failed(
                 "stash",
                 format!(
@@ -1532,4 +1558,61 @@ pub fn operation_in(git_directory: &Path) -> Option<Operation> {
         Some("revert") => Some(Operation::Revert),
         _ => None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(path: &str, index: char, work: char) -> StatusEntry {
+        let kind = if index == '?' { StatusKind::Untracked } else { StatusKind::Modified };
+        StatusEntry { path: path.into(), original_path: None, kind, index_status: index, work_tree_status: work }
+    }
+
+    const DEFAULT: StashOptions = StashOptions { keep_index: false, include_untracked: true };
+    const KEEP_INDEX: StashOptions = StashOptions { keep_index: true, include_untracked: true };
+    const TRACKED_ONLY: StashOptions = StashOptions { keep_index: false, include_untracked: false };
+
+    #[test]
+    fn a_clean_tree_after_the_default_stash_is_expected() {
+        let before = [status("a.txt", ' ', 'M'), status("new.txt", '?', '?')];
+        assert!(stash_left_expected(&before, &[], DEFAULT));
+    }
+
+    #[test]
+    fn untracked_files_left_without_include_untracked_are_expected_when_they_were_untracked_before() {
+        let before = [status("a.txt", ' ', 'M'), status("new.txt", '?', '?')];
+        let after = [status("new.txt", '?', '?')];
+        assert!(stash_left_expected(&before, &after, TRACKED_ONLY));
+        assert!(!stash_left_expected(&before, &after, DEFAULT), "with include_untracked, nothing untracked may remain");
+    }
+
+    #[test]
+    fn an_untracked_file_that_was_not_there_before_is_unexpected() {
+        let before = [status("a.txt", ' ', 'M')];
+        let after = [status("appeared.txt", '?', '?')];
+        assert!(!stash_left_expected(&before, &after, TRACKED_ONLY));
+    }
+
+    #[test]
+    fn with_keep_index_a_staged_entry_with_a_clean_working_side_is_expected() {
+        let before = [status("a.txt", 'M', ' '), status("b.txt", ' ', 'M')];
+        let after = [status("a.txt", 'M', ' ')];
+        assert!(stash_left_expected(&before, &after, KEEP_INDEX));
+        assert!(!stash_left_expected(&before, &after, DEFAULT), "without keep_index, a staged entry must not remain");
+    }
+
+    #[test]
+    fn with_keep_index_an_entry_that_still_has_unstaged_changes_is_unexpected() {
+        let before = [status("a.txt", 'M', 'M')];
+        let after = [status("a.txt", 'M', 'M')];
+        assert!(!stash_left_expected(&before, &after, KEEP_INDEX));
+    }
+
+    #[test]
+    fn with_keep_index_a_staged_side_that_changed_is_unexpected() {
+        let before = [status("a.txt", 'M', ' ')];
+        let after = [status("a.txt", 'A', ' ')];
+        assert!(!stash_left_expected(&before, &after, KEEP_INDEX));
+    }
 }

@@ -128,6 +128,17 @@ pub struct Stash {
     pub message: String,
 }
 
+/// Which working changes a stash takes. The default is Git's own `stash push`: tracked changes
+/// only, with the index cleared too.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StashOptions {
+    /// Leave staged changes in the index and the working files (`--keep-index`). The stash
+    /// still holds a copy of them.
+    pub keep_index: bool,
+    /// Stash untracked files too (`--include-untracked`).
+    pub include_untracked: bool,
+}
+
 /// A file a stash saved, with Git's change letter for it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StashFile {

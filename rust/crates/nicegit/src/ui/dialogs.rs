@@ -3,7 +3,7 @@
 
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
-use nicegit_core::{Branch, GitError, Operation, Snapshot, Stash, StatusEntry};
+use nicegit_core::{Branch, GitError, Operation, Snapshot, Stash, StashOptions, StatusEntry};
 
 use crate::app::NiceGitApp;
 use crate::theme;
@@ -416,6 +416,17 @@ impl NiceGitApp {
                     let name_problem = names_a_ref.then(|| crate::git_ext::ref_name_problem(value.trim())).flatten();
                     if let Some(problem) = name_problem {
                         ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    // A stash's options sit under its message, and are remembered in Settings.
+                    if matches!(kind, InputKind::SaveStash) {
+                        ui.add_space(6.0);
+                        widgets::checkbox(ui, true, &mut self.settings.stash_include_untracked, "Include untracked files").on_hover_text(
+                            "New files that Git does not track yet are saved in the stash and removed from the folder.",
+                        );
+                        widgets::checkbox(ui, true, &mut self.settings.stash_keep_index, "Keep staged changes").on_hover_text(
+                            "Staged changes stay staged and in your files, and only unstaged changes leave your files. \
+                             The stash still holds a copy of the staged changes, as Git's --keep-index does.",
+                        );
                     }
                     let mut show_second = second_label.is_some();
                     if let InputKind::CreateTag { annotated, push, remotes, default_remote, .. } = kind {
@@ -840,8 +851,13 @@ impl NiceGitApp {
                     }
                 }
             }),
-            InputKind::SaveStash => self
-                .act("Stash", move |client, path| client.save_stash(&value, path).map(|_| Some("Saved your changes in a stash.".into()))),
+            InputKind::SaveStash => {
+                let options =
+                    StashOptions { keep_index: self.settings.stash_keep_index, include_untracked: self.settings.stash_include_untracked };
+                self.act("Stash", move |client, path| {
+                    client.save_stash(&value, options, path).map(|_| Some("Saved your changes in a stash.".into()))
+                })
+            }
             InputKind::Clone(_) => {
                 let destination = std::path::PathBuf::from(second.trim());
                 let source = value.trim().to_string();
