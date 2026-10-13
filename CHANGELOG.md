@@ -83,6 +83,9 @@
   operation changed, instead of reloading the whole history.
 - Commits, staging, and branch switches made in another app in a linked worktree now appear
   without waiting for the periodic refresh.
+- Create branch from stash… from a stash's right-click menu makes a branch at the commit the
+  stash was made on, switches to it, and applies the stash there. The stash is removed once
+  it applies.
 
 ## 1.5.0 - Fewer surprises
 

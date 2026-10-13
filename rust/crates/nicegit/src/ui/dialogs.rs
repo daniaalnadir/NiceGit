@@ -132,6 +132,13 @@ pub enum InputKind {
         head: Option<String>,
     },
     CreateBranchFrom(Branch),
+    /// A branch at the commit a stash was made on. The branch and HEAD are captured when the
+    /// dialog opens, as Create branch's are.
+    BranchFromStash {
+        stash: Stash,
+        branch: String,
+        head: Option<String>,
+    },
     RenameBranch(Branch),
     /// A lightweight tag, or an annotated one with a message. `push` is the remote to publish
     /// the tag to once it exists, or `None` to keep it local. The remotes and their push
@@ -430,11 +437,25 @@ impl NiceGitApp {
                     // explained before OK rather than after.
                     let names_a_ref = matches!(
                         kind,
-                        InputKind::CreateBranch { .. } | InputKind::CreateBranchFrom(_) | InputKind::RenameBranch(_) | InputKind::CreateTag { .. }
+                        InputKind::CreateBranch { .. }
+                            | InputKind::CreateBranchFrom(_)
+                            | InputKind::BranchFromStash { .. }
+                            | InputKind::RenameBranch(_)
+                            | InputKind::CreateTag { .. }
                     );
                     let name_problem = names_a_ref.then(|| crate::git_ext::ref_name_problem(value.trim())).flatten();
                     if let Some(problem) = name_problem {
                         ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    if matches!(kind, InputKind::BranchFromStash { .. }) {
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(
+                                "Creates the branch at the commit this stash was made on, switches to it, applies the stash, and removes the stash once it applies.",
+                            )
+                            .small()
+                            .color(c.muted),
+                        );
                     }
                     // A stash's options sit under its message, and are remembered in Settings.
                     if matches!(kind, InputKind::SaveStash) {
@@ -543,7 +564,11 @@ impl NiceGitApp {
                         // A stash's message is optional: Git names one after the branch when it is empty.
                         let optional = matches!(kind, InputKind::SaveStash);
                         let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none();
-                        let ok_label = if matches!(kind, InputKind::CreateTag { push: Some(_), .. }) { "Create and push" } else { "OK" };
+                        let ok_label = match kind {
+                            InputKind::CreateTag { push: Some(_), .. } => "Create and push",
+                            InputKind::BranchFromStash { .. } => "Create branch",
+                            _ => "OK",
+                        };
                         if widgets::primary_button(ui, ok_label, ready).clicked() || (enter && ready) {
                             run = true;
                         }
@@ -872,6 +897,11 @@ impl NiceGitApp {
             }),
             InputKind::CreateBranchFrom(source) => self.act("Create branch", move |client, path| {
                 client.create_branch_from(&value, &source, path).map(|_| Some(format!("Created branch {}.", value.trim())))
+            }),
+            InputKind::BranchFromStash { stash, branch, head } => self.act("Create branch from stash", move |client, path| {
+                client
+                    .branch_from_stash(&value, &stash, &branch, head.as_deref(), path)
+                    .map(|_| Some(format!("Created {} from the stash and switched to it.", value.trim())))
             }),
             InputKind::RenameBranch(branch) => {
                 self.act("Rename branch", move |client, path| client.rename_branch(&branch, &value, path).map(|_| None))

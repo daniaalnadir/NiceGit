@@ -152,7 +152,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Save, apply, pop, and delete stashes, including untracked files. Pop removes the
   saved stash only after applying succeeds; failed applies retain it. The Stash dialog can
   keep staged changes in place (Keep staged changes) and leave untracked files out (Include
-  untracked files, on by default); both choices are remembered.
+  untracked files, on by default); both choices are remembered. Create branch from stash…
+  in a stash's right-click menu makes a branch at the commit the stash was made on, applies
+  the stash there, and removes it once it applies.
 - Preview a stash's tracked and untracked changes before applying it. Selecting a stash lists
   its files in the inspector; click one to see just its changes, or restore that file from the
   stash.
