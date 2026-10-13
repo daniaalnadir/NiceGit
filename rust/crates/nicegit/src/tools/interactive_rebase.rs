@@ -77,6 +77,17 @@ impl Entry {
 #[derive(Clone, Copy)]
 struct DraggedRow(usize);
 
+/// How the plan starts. It is applied when the plan loads, so Reset returns to it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Preset {
+    /// Edit the message of one commit.
+    Reword(String),
+    /// Combine the commits with these hashes into one, at the oldest of them.
+    Squash(Vec<String>),
+    /// Remove the commits with these hashes.
+    Drop(Vec<String>),
+}
+
 /// Edits the commits after `base` through HEAD. The branch and HEAD are captured when the window
 /// opens, so the rewrite refuses if the checkout changed while the editor was open.
 pub struct InteractiveRebaseWindow {
@@ -91,8 +102,10 @@ pub struct InteractiveRebaseWindow {
     entries: Vec<Entry>,
     error: Option<String>,
     closing: bool,
-    /// The commit whose message is being edited, set to Reword when the plan loads.
-    reword: Option<String>,
+    /// The starting arrangement, applied when the plan loads.
+    preset: Option<Preset>,
+    /// Whether applying the preset moved commits, so the window warns that they may conflict.
+    moved: bool,
     /// Whether the reworded commit's message should take keyboard focus on its first frame.
     focus_pending: bool,
 }
@@ -111,7 +124,8 @@ impl InteractiveRebaseWindow {
             entries: Vec::new(),
             error: None,
             closing: false,
-            reword: None,
+            preset: None,
+            moved: false,
             focus_pending: false,
         }
     }
@@ -120,7 +134,38 @@ impl InteractiveRebaseWindow {
     /// with that commit set to Reword. A root commit rewrites from the root.
     pub fn reword(commit: &Commit, snapshot: &Snapshot) -> Self {
         let base = commit.parents.first().cloned().unwrap_or_default();
-        Self { reword: Some(commit.hash.clone()), ..Self::new(base, snapshot) }
+        Self { preset: Some(Preset::Reword(commit.hash.clone())), ..Self::new(base, snapshot) }
+    }
+
+    /// Opens the editor to combine the commits in `hashes` into one. The window lists the commits
+    /// after the oldest one's parent, with the others set to Squash and moved next to the oldest.
+    pub fn squash(hashes: &BTreeSet<String>, snapshot: &Snapshot) -> Self {
+        Self::selected(hashes, snapshot, Preset::Squash)
+    }
+
+    /// Opens the editor to remove the commits in `hashes`, with their changes.
+    pub fn drop_commits(hashes: &BTreeSet<String>, snapshot: &Snapshot) -> Self {
+        Self::selected(hashes, snapshot, Preset::Drop)
+    }
+
+    /// A window for the commits in `hashes`, with `preset` applied. When they cannot be rewritten
+    /// together (not all in the loaded history, or one is a merge), the window shows that instead.
+    fn selected(hashes: &BTreeSet<String>, snapshot: &Snapshot, preset: fn(Vec<String>) -> Preset) -> Self {
+        match selection_base(hashes, snapshot) {
+            Some(base) => Self { preset: Some(preset(hashes.iter().cloned().collect())), ..Self::new(base, snapshot) },
+            None => Self {
+                error: Some("The selected commits must be in the loaded history, and none can be a merge.".to_string()),
+                ..Self::new(String::new(), snapshot)
+            },
+        }
+    }
+
+    /// The hash of the commit whose message is being edited, if this window is a reword.
+    fn reworded_hash(&self) -> Option<String> {
+        match &self.preset {
+            Some(Preset::Reword(hash)) => Some(hash.clone()),
+            _ => None,
+        }
     }
 
     /// Takes the loaded plan once it arrives, and starts the editor from it.
@@ -144,13 +189,15 @@ impl InteractiveRebaseWindow {
                     .collect();
                 // Preset before `original` is taken, so Reset returns to the preset and nothing
                 // counts as changed until the message is edited.
-                if let Some(hash) = &self.reword {
-                    if !preset_reword(&mut entries, hash) {
-                        // The commit is on another branch whose parent is in this one's history.
-                        self.error = Some(format!("This commit is not part of {}'s history.", self.branch));
-                        return;
+                if let Some(preset) = self.preset.clone() {
+                    match apply_preset(&mut entries, &preset, &self.branch) {
+                        Ok(moved) => self.moved = moved,
+                        Err(error) => {
+                            self.error = Some(error);
+                            return;
+                        }
                     }
-                    self.focus_pending = true;
+                    self.focus_pending = matches!(preset, Preset::Reword(_));
                 }
                 self.original = entries.clone();
                 self.entries = entries;
@@ -192,6 +239,12 @@ impl InteractiveRebaseWindow {
 
     fn changed(&self) -> bool {
         self.entries != self.original
+    }
+
+    /// Whether Rewrite commits has something to apply. A squash or drop is itself the rewrite, so
+    /// it can run straight away; a reword needs an edited message.
+    fn has_pending_rewrite(&self) -> bool {
+        self.changed() || matches!(self.preset, Some(Preset::Squash(_) | Preset::Drop(_)))
     }
 
     /// The steps for Git, oldest first.
@@ -311,15 +364,23 @@ impl InteractiveRebaseWindow {
 
 impl ToolWindow for InteractiveRebaseWindow {
     fn id(&self) -> String {
-        // An edit of one message is its own window, so it never replaces a rebase from the same base.
-        match &self.reword {
-            Some(hash) => format!("interactive-rebase-reword:{hash}"),
+        // Each kind of edit is its own window, so it never replaces a rebase from the same base.
+        match &self.preset {
+            Some(Preset::Reword(hash)) => format!("interactive-rebase-reword:{hash}"),
+            Some(Preset::Squash(_)) => format!("interactive-rebase-squash:{}", self.base),
+            Some(Preset::Drop(_)) => format!("interactive-rebase-drop:{}", self.base),
             None => format!("interactive-rebase:{}", self.base),
         }
     }
 
     fn title(&self) -> String {
-        if self.reword.is_some() { "Edit commit message" } else { "Interactive rebase" }.to_string()
+        match &self.preset {
+            Some(Preset::Reword(_)) => "Edit commit message",
+            Some(Preset::Squash(_)) => "Squash commits",
+            Some(Preset::Drop(_)) => "Drop commits",
+            None => "Interactive rebase",
+        }
+        .to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -346,6 +407,12 @@ impl ToolWindow for InteractiveRebaseWindow {
             .color(c.muted),
         );
         ui.add_space(8.0);
+        if self.moved {
+            ui.label(
+                RichText::new("Selected commits were moved next to each other; moving commits can cause conflicts.").small().color(c.muted),
+            );
+            ui.add_space(8.0);
+        }
 
         let published = self.published_count();
         if published > 0 {
@@ -370,7 +437,7 @@ impl ToolWindow for InteractiveRebaseWindow {
             let published = self.plan.as_ref().map(|plan| plan.published_commits.clone()).unwrap_or_default();
             // Leave room below the list for the summary and buttons.
             let list_height = (ui.available_height() - 110.0).max(120.0);
-            let focus = if self.focus_pending { self.reword.clone() } else { None };
+            let focus = if self.focus_pending { self.reworded_hash() } else { None };
             egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(list_height).show(ui, |ui| {
                 for index in 0..self.entries.len() {
                     Self::row(&mut self.entries, index, &published, idle, focus.as_deref(), &mut moved, ui);
@@ -400,7 +467,7 @@ impl ToolWindow for InteractiveRebaseWindow {
         let mut cancel = false;
         let mut reset = false;
         ui.horizontal(|ui| {
-            let ready = cx.idle && self.plan.is_some() && self.head.is_some() && problem.is_none() && self.changed();
+            let ready = cx.idle && self.plan.is_some() && self.head.is_some() && problem.is_none() && self.has_pending_rewrite();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 start = widgets::primary_button(ui, "Rewrite commits", ready).clicked();
                 if ui.button("Cancel").clicked() {
@@ -499,6 +566,83 @@ fn preset_reword(entries: &mut [Entry], hash: &str) -> bool {
         }
         None => false,
     }
+}
+
+/// The base for rewriting the commits in `hashes`: the first parent of the oldest of them. Returns
+/// `None` when one is not in the loaded history or is a merge, and an empty base when the oldest
+/// is a root commit, so the rewrite starts from the root.
+pub fn selection_base(hashes: &BTreeSet<String>, snapshot: &Snapshot) -> Option<String> {
+    // The loaded history is in topological order, newest first, so the oldest has the highest index.
+    let mut oldest: Option<usize> = None;
+    for hash in hashes {
+        let index = snapshot.commits.iter().position(|commit| &commit.hash == hash)?;
+        if snapshot.commits[index].parents.len() > 1 {
+            return None;
+        }
+        oldest = oldest.max(Some(index));
+    }
+    let commit = &snapshot.commits[oldest?];
+    Some(commit.parents.first().cloned().unwrap_or_default())
+}
+
+/// Applies `preset` to `entries`, newest first. Returns whether any commit moved, or the message
+/// to show when a commit the preset names is not in the list.
+fn apply_preset(entries: &mut Vec<Entry>, preset: &Preset, branch: &str) -> Result<bool, String> {
+    let missing = || format!("Some selected commits are not part of {branch}'s history.");
+    match preset {
+        Preset::Reword(hash) => {
+            if preset_reword(entries, hash) {
+                Ok(false)
+            } else {
+                // The commit is on another branch whose parent is in this one's history.
+                Err(format!("This commit is not part of {branch}'s history."))
+            }
+        }
+        Preset::Squash(hashes) => squash_together(entries, hashes).ok_or_else(missing),
+        Preset::Drop(hashes) => drop_together(entries, hashes).ok_or_else(missing),
+    }
+}
+
+/// Moves the commits in `hashes` next to each other, with the oldest kept and the rest set to
+/// Squash. The others go directly above the oldest, in their original order. Commits that were
+/// between them keep their order and end up above the group. Returns whether the order changed,
+/// or `None`, leaving `entries` as it was, when a hash is not listed.
+fn squash_together(entries: &mut Vec<Entry>, hashes: &[String]) -> Option<bool> {
+    let mut marked: Vec<usize> =
+        hashes.iter().map(|hash| entries.iter().position(|entry| &entry.commit.hash == hash)).collect::<Option<_>>()?;
+    marked.sort_unstable();
+    marked.dedup();
+    // Entries are newest first, so the oldest marked commit has the highest index.
+    let Some((&oldest, others)) = marked.split_last() else { return Some(false) };
+    let original: Vec<&str> = entries.iter().map(|entry| entry.commit.hash.as_str()).collect();
+
+    let mut arranged = Vec::with_capacity(entries.len());
+    for (index, entry) in entries.iter().enumerate().take(oldest) {
+        if marked.binary_search(&index).is_err() {
+            arranged.push(entry.clone());
+        }
+    }
+    // The others are listed newest first, as they appear above the oldest in the list.
+    for &index in others {
+        arranged.push(Entry { choice: Choice::Squash, ..entries[index].clone() });
+    }
+    arranged.push(Entry { choice: Choice::Pick, ..entries[oldest].clone() });
+    arranged.extend(entries.iter().skip(oldest + 1).cloned());
+
+    let moved = arranged.iter().map(|entry| entry.commit.hash.as_str()).ne(original);
+    *entries = arranged;
+    Some(moved)
+}
+
+/// Sets the commits in `hashes` to Drop. Returns `None`, leaving `entries` as it was, when a hash
+/// is not listed. Dropping does not move commits.
+fn drop_together(entries: &mut [Entry], hashes: &[String]) -> Option<bool> {
+    let indices: Vec<usize> =
+        hashes.iter().map(|hash| entries.iter().position(|entry| &entry.commit.hash == hash)).collect::<Option<_>>()?;
+    for index in indices {
+        entries[index].choice = Choice::Drop;
+    }
+    Some(false)
 }
 
 /// The steps for Git, oldest first. The entries are shown newest first, so they are reversed.
@@ -632,5 +776,95 @@ mod tests {
         assert!(!oldest_kept_combines(&entries));
         let steps: Vec<RebaseAction> = oldest_first_steps(&entries).into_iter().map(|step| step.action).collect();
         assert_eq!(steps, vec![RebaseAction::Edit, RebaseAction::Squash]);
+    }
+
+    /// The hash and action of each entry, newest first.
+    fn shape(entries: &[Entry]) -> Vec<(&str, Choice)> {
+        entries.iter().map(|entry| (entry.commit.hash.as_str(), entry.choice)).collect()
+    }
+
+    /// The entries "d", "c", "b", "a" in that order, newest first, all picked.
+    fn four_picks() -> Vec<Entry> {
+        vec![entry("d", Choice::Pick), entry("c", Choice::Pick), entry("b", Choice::Pick), entry("a", Choice::Pick)]
+    }
+
+    #[test]
+    fn squash_of_two_adjacent_commits_keeps_their_order() {
+        let mut entries = vec![entry("c", Choice::Pick), entry("b", Choice::Pick), entry("a", Choice::Pick)];
+        let moved = apply_preset(&mut entries, &Preset::Squash(hashes(&["b", "c"])), "main");
+        assert_eq!(moved, Ok(false), "adjacent commits do not move");
+        assert_eq!(shape(&entries), [("c", Choice::Squash), ("b", Choice::Pick), ("a", Choice::Pick)]);
+    }
+
+    #[test]
+    fn squash_of_two_non_adjacent_commits_moves_the_between_commit_above_the_group() {
+        // "b" and "d" are squashed; "c" lies between them in history and moves above the group.
+        let mut entries = four_picks();
+        let moved = apply_preset(&mut entries, &Preset::Squash(hashes(&["b", "d"])), "main");
+        assert_eq!(moved, Ok(true));
+        assert_eq!(shape(&entries), [("c", Choice::Pick), ("d", Choice::Squash), ("b", Choice::Pick), ("a", Choice::Pick)]);
+        // Oldest first, as Git applies them: "a", then "b" with "d" squashed into it, then "c".
+        let order: Vec<(String, RebaseAction)> =
+            oldest_first_steps(&entries).into_iter().map(|step| (step.commit.hash, step.action)).collect();
+        assert_eq!(
+            order,
+            [
+                ("a".to_string(), RebaseAction::Pick),
+                ("b".to_string(), RebaseAction::Pick),
+                ("d".to_string(), RebaseAction::Squash),
+                ("c".to_string(), RebaseAction::Pick),
+            ]
+        );
+    }
+
+    #[test]
+    fn squash_of_three_commits_keeps_their_relative_order() {
+        // Newest first: "e", "d", "c", "b", "a". "a", "c", and "e" are squashed; "d" and "b" lie
+        // between them and move above the group, keeping their order.
+        let mut entries = vec![
+            entry("e", Choice::Pick),
+            entry("d", Choice::Pick),
+            entry("c", Choice::Pick),
+            entry("b", Choice::Pick),
+            entry("a", Choice::Pick),
+        ];
+        let moved = apply_preset(&mut entries, &Preset::Squash(hashes(&["c", "a", "e"])), "main");
+        assert_eq!(moved, Ok(true));
+        assert_eq!(
+            shape(&entries),
+            [("d", Choice::Pick), ("b", Choice::Pick), ("e", Choice::Squash), ("c", Choice::Squash), ("a", Choice::Pick)]
+        );
+    }
+
+    #[test]
+    fn drop_of_two_commits_marks_both_and_moves_nothing() {
+        let mut entries = vec![entry("c", Choice::Pick), entry("b", Choice::Pick), entry("a", Choice::Pick)];
+        let moved = apply_preset(&mut entries, &Preset::Drop(hashes(&["a", "c"])), "main");
+        assert_eq!(moved, Ok(false));
+        assert_eq!(shape(&entries), [("c", Choice::Drop), ("b", Choice::Pick), ("a", Choice::Drop)]);
+    }
+
+    #[test]
+    fn squash_or_drop_of_a_commit_outside_the_list_is_an_error() {
+        let expected = Err("Some selected commits are not part of main's history.".to_string());
+
+        let mut entries = four_picks();
+        assert_eq!(apply_preset(&mut entries, &Preset::Squash(hashes(&["b", "z"])), "main"), expected);
+        assert_eq!(entries, four_picks(), "a failed squash changes nothing");
+
+        let mut entries = four_picks();
+        assert_eq!(apply_preset(&mut entries, &Preset::Drop(hashes(&["z"])), "main"), expected);
+        assert_eq!(entries, four_picks(), "a failed drop changes nothing");
+    }
+
+    #[test]
+    fn reword_preset_reports_a_commit_outside_the_list_as_not_part_of_the_branch() {
+        let mut entries = four_picks();
+        assert_eq!(
+            apply_preset(&mut entries, &Preset::Reword("z".to_string()), "main"),
+            Err("This commit is not part of main's history.".to_string())
+        );
+        assert_eq!(apply_preset(&mut entries, &Preset::Reword("b".to_string()), "main"), Ok(false));
+        assert_eq!(shape(&entries)[2], ("b", Choice::Reword));
     }
 }

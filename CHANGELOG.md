@@ -63,6 +63,8 @@
   the editor.
 - Interactive rebase shows what each row's choice will do.
 - Hovering an annotated tag in the sidebar shows its message, tagger, and date.
+- Squash or drop the commits you've selected in the graph: the interactive rebase window opens
+  with them arranged for review.
 
 ## 1.5.0 - Fewer surprises
 

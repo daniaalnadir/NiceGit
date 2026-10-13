@@ -207,6 +207,37 @@ impl NiceGitApp {
                             },
                         );
                     }
+                    // Squash and Drop open the interactive rebase window with the commits arranged, so
+                    // nothing is rewritten until its own Rewrite button is clicked.
+                    let rewritable = tools::interactive_rebase::selection_base(&marked, &snapshot).is_some();
+                    let rewrite_reason = if !can {
+                        "Commit or stash your changes first"
+                    } else if !rewritable {
+                        "The selected commits must be in the loaded history, and none can be a merge"
+                    } else {
+                        "Select at least two commits to squash"
+                    };
+                    if ui
+                        .add_enabled(can && rewritable && marked.len() >= 2, egui::Button::new("Squash…"))
+                        .on_hover_text("Combine the selected commits into one, in the interactive rebase window to review")
+                        .on_disabled_hover_text(rewrite_reason)
+                        .clicked()
+                    {
+                        self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::squash(&marked, &snapshot)));
+                    }
+                    let drop_reason = if !can {
+                        "Commit or stash your changes first"
+                    } else {
+                        "The selected commits must be in the loaded history, and none can be a merge"
+                    };
+                    if ui
+                        .add_enabled(can && rewritable, egui::Button::new("Drop…"))
+                        .on_hover_text("Remove the selected commits and their changes, in the interactive rebase window to review")
+                        .on_disabled_hover_text(drop_reason)
+                        .clicked()
+                    {
+                        self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::drop_commits(&marked, &snapshot)));
+                    }
                     if ui.button("Clear").clicked() {
                         self.repos[self.active].marked.clear();
                     }

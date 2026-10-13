@@ -94,7 +94,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Drag a branch (from the sidebar or a graph label) onto the current branch in the sidebar
   to merge it in or rebase onto it, after confirming.
 - Command-click commits in the graph to select several, then cherry-pick them together,
-  oldest first.
+  oldest first. Squash… and Drop… open the interactive rebase window with the selected
+  commits arranged, so you can review them before clicking Rewrite commits.
 - Undo a discard from the Changes panel: the file's staged and unstaged versions are
   saved before discarding and restored exactly, until the file changes again.
 - See submodules in the sidebar with their state (not checked out, at the recorded commit,

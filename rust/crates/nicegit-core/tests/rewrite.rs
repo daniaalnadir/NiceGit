@@ -313,6 +313,36 @@ fn interactive_rebase_drop_removes_the_commit_and_its_changes() {
 }
 
 #[test]
+fn squashing_two_non_adjacent_commits_combines_them() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    repo.commit("a.txt", "a\n", "Add a");
+    repo.commit("b.txt", "b\n", "Add b");
+    repo.commit("c.txt", "c\n", "Add c");
+    repo.commit("d.txt", "d\n", "Add d");
+    let plan = plan_after(repo.path(), &base);
+    // "Add b" and "Add d" are squashed, so "Add c", which lay between them, moves above the group:
+    // the steps are a, b, d (squashed into b), then c.
+    let steps = [
+        step(&plan, 0, RebaseAction::Pick),
+        step(&plan, 1, RebaseAction::Pick),
+        step(&plan, 3, RebaseAction::Squash),
+        step(&plan, 2, RebaseAction::Pick),
+    ];
+    rewrite(&repo, &steps, &plan).expect("rewrite");
+
+    let commits = commits_after(repo.path(), &base);
+    assert_eq!(commits.len(), 3, "two commits became one: {:?}", subjects_after(repo.path(), &base));
+    assert_eq!(subjects_after(repo.path(), &base), ["Add a", "Add b", "Add c"]);
+    let message = full_message(repo.path(), &commits[1]);
+    assert!(message.contains("Add b") && message.contains("Add d"), "{message:?}");
+    let files = files_at(repo.path(), "HEAD");
+    for file in ["a.txt", "b.txt", "c.txt", "d.txt"] {
+        assert!(files.contains(&file.to_string()), "{file} is kept: {files:?}");
+    }
+}
+
+#[test]
 fn interactive_rebase_refuses_squash_into_nothing() {
     let repo = Repo::new();
     let (base, _, _, _) = linear_history(&repo);

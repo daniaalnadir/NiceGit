@@ -245,6 +245,37 @@ fn interactive_rebase_warns_about_commits_already_on_a_remote() {
 }
 
 #[test]
+fn command_click_squashes_the_marked_commits_through_the_rebase_window() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "one.txt", "one\n", "Squash one");
+    commit_file(path, "two.txt", "two\n", "Squash two");
+    commit_file(path, "three.txt", "three\n", "Squash three");
+    let count = |path: &Path| git(path, &["rev-list", "--count", "HEAD"]).trim().parse::<usize>().expect("commit count");
+    let before = count(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Squash one").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.get_by_label("Squash three").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    wait(&mut harness, "the marked commits bar", |h| shows(h, "2 commits selected"));
+
+    harness.get_by_label("Squash…").click();
+    wait(&mut harness, "the squash window", |h| h.state().tools.iter().any(|t| t.title() == "Squash commits"));
+    wait(&mut harness, "the squash plan", |h| shows(h, "Rewrite 3 commits on main"));
+    settle(&mut harness);
+    assert!(shows(&harness, "Selected commits were moved"), "the note warns that the commits moved");
+    harness.get_by_role_and_label(Role::Button, "Rewrite commits").click();
+    idle(&mut harness);
+    wait(&mut harness, "the squashed history", |_| count(path) == before - 1);
+    let log = git(path, &["log", "--format=%s"]);
+    assert!(log.starts_with("Squash two\nSquash one\nAdd a second line"), "{log}");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
 fn mark_a_commit_then_compare_it_with_another() {
     let repo = repository();
     let path = repo.path();
