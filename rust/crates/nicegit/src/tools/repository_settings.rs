@@ -121,6 +121,11 @@ impl RepositorySettingsWindow {
         }
     }
 
+    /// The window opened on its Remotes section, from a remote's menu in the sidebar.
+    pub fn on_remotes() -> Self {
+        Self { section: Section::Remotes, ..Self::new() }
+    }
+
     /// Starts reading the identity when the repository changes, and stores the result when it
     /// arrives.
     fn sync_identity(&mut self, ctx: &Context, repo: &Path) {

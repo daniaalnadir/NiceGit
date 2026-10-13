@@ -262,9 +262,9 @@ impl NiceGitApp {
                 if !filter.is_empty() {
                     state.set_open(true);
                 }
-                state
+                let (_, header, _) = state
                     .show_header(ui, |ui| {
-                        ui.label(RichText::new(format!("{}  {remote}", icon::CLOUD)).strong());
+                        ui.add(egui::Label::new(RichText::new(format!("{}  {remote}", icon::CLOUD)).strong()).sense(egui::Sense::click()))
                     })
                     .body_unindented(|ui| {
                         for branch in snapshot.branches.iter().filter(|b| b.remote_name(&snapshot.remotes) == Some(remote.as_str())) {
@@ -292,6 +292,7 @@ impl NiceGitApp {
                             response.context_menu(|ui| self.branch_menu(ui, branch, snapshot, can_switch));
                         }
                     });
+                header.inner.context_menu(|ui| self.remote_menu(ui, remote, snapshot));
             }
         });
 
@@ -572,6 +573,26 @@ impl NiceGitApp {
                 "Delete",
                 Pending::DeleteTag { name: tag.to_string(), tip: tip.to_string() },
             );
+        }
+    }
+
+    /// A remote's menu: a fetch of that remote alone, its first fetch address, and its settings.
+    fn remote_menu(&mut self, ui: &mut Ui, remote: &str, snapshot: &Snapshot) {
+        let idle = self.idle();
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  Fetch {remote}", icon::CLOUD_ARROW_DOWN))).clicked() {
+            ui.close();
+            self.fetch_remote(remote.to_string());
+        }
+        if let Some(address) = snapshot.remote_fetch_addresses.get(remote).and_then(|addresses| addresses.first()) {
+            if ui.button(format!("{}  Copy fetch URL", icon::COPY)).clicked() {
+                ui.close();
+                ui.ctx().copy_text(address.clone());
+            }
+        }
+        ui.separator();
+        if ui.button(format!("{}  Edit in Repository Settings…", icon::GEAR)).clicked() {
+            ui.close();
+            self.open_tool(Box::new(tools::repository_settings::RepositorySettingsWindow::on_remotes()));
         }
     }
 

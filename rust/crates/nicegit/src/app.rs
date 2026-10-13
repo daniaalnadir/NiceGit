@@ -192,6 +192,8 @@ pub const MAX_ZOOM: f32 = 2.0;
 
 /// The busy label of a fetch NiceGit starts on its own; its result is reported quietly.
 pub const BACKGROUND_FETCH: &str = "Fetching in the background";
+/// The start of the busy label of a fetch of one remote, which is followed by the remote's name.
+pub const REMOTE_FETCH_PREFIX: &str = "Fetch ";
 /// How long after a repository opens its first background fetch waits.
 const FIRST_FETCH_DELAY: Duration = Duration::from_secs(30);
 
@@ -1035,7 +1037,8 @@ impl NiceGitApp {
                     let mut action_failed = false;
                     let history_note = if action.is_some() { self.take_record(index) } else { None };
                     if let Some((label, result)) = &action {
-                        // Fetching, by hand, in the background, or as part of Pull, resets the timer.
+                        // Fetching, by hand, in the background, or as part of Pull, resets the timer. A fetch of one
+                        // remote leaves the others unfetched, so it does not.
                         if matches!(label.as_str(), BACKGROUND_FETCH | "Fetch" | "Pull") {
                             let repo = &mut self.repos[index];
                             let minutes = u64::from(self.settings.auto_fetch_minutes.max(1));
@@ -1051,7 +1054,10 @@ impl NiceGitApp {
                         }
                     }
                     // Pushing, pulling, and fetching can change the pull request or its checks, so it is read again.
-                    if matches!(&action, Some((label, _)) if crate::ui::pull_request::CHANGES_PULL_REQUEST.contains(&label.as_str())) {
+                    let changes_pull_request =
+                        matches!(&action, Some((label, _)) if crate::ui::pull_request::CHANGES_PULL_REQUEST.contains(&label.as_str()));
+                    let remote_fetch = matches!(&action, Some((label, _)) if label.starts_with(REMOTE_FETCH_PREFIX));
+                    if changes_pull_request || remote_fetch {
                         self.repos[index].pr_checked_at = None;
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
@@ -1958,6 +1964,16 @@ impl NiceGitApp {
 
     pub fn fetch(&mut self) {
         self.act("Fetch", |client, path| client.fetch(path).map(|_| Some("Fetched from all remotes.".into())));
+    }
+
+    /// Fetches one remote. The fetch addresses shown in the snapshot are passed to Git, so the fetch
+    /// is refused if the remote no longer has them.
+    pub fn fetch_remote(&mut self, remote: String) {
+        let Some(snapshot) = self.snapshot() else { return };
+        let addresses = snapshot.remote_fetch_addresses.get(&remote).cloned().unwrap_or_default();
+        let label = format!("{REMOTE_FETCH_PREFIX}{remote}");
+        let notice = format!("Fetched {remote}.");
+        self.act(&label, move |client, path| client.fetch_remote(&remote, &addresses, path).map(|_| Some(notice)));
     }
 
     /// Undoes the newest recorded step; its inverse becomes the newest redo step.
