@@ -1663,6 +1663,21 @@ fn the_inspector_shows_a_verified_signature() {
 }
 
 #[test]
+fn the_inspector_lists_the_branches_and_first_tag_that_contain_a_commit() {
+    let repo = repository();
+    let path = repo.path();
+    // `feature` was made at the first commit, so main and feature both contain it.
+    git(path, &["tag", "v1.0", "HEAD~1"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Start the notes").click();
+    wait(&mut harness, "the branches that contain the commit", |h| shows(h, "main, feature"));
+    wait(&mut harness, "the first tag that contains the commit", |h| shows(h, "First tag") && shows(h, "v1.0"));
+    assert!(!shows(&harness, "Not on any branch"), "the commit is on branches");
+}
+
+#[test]
 fn drag_a_graph_label_onto_the_current_row_to_rebase_onto_it() {
     let repo = repository();
     let path = repo.path();

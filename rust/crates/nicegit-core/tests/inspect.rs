@@ -1,5 +1,5 @@
-//! Integration tests for bisect, commit comparison, file versions, signatures, and GitHub
-//! remotes and items. Repository tests run against temporary repositories; GitHub tests never
+//! Integration tests for bisect, commit comparison, file versions, signatures, the refs that
+//! contain a commit, and GitHub remotes and items. Repository tests run against temporary repositories; GitHub tests never
 //! touch the network.
 
 use std::fs;
@@ -305,6 +305,81 @@ fn commit_with_an_unchecked_signature_is_not_reported_as_verified() {
 
     let signature = client.signature(&id, repo.path()).unwrap().expect("the commit is signed");
     assert_ne!(signature.status, SignatureStatus::Verified);
+}
+
+// MARK: Containing refs
+
+/// Runs Git in `directory` with `GIT_COMMITTER_DATE` set, so a tag made here has a known date.
+fn git_dated(directory: &Path, date: &str, arguments: &[&str]) {
+    let mut command = Command::new("git");
+    command.args(arguments).current_dir(directory).env("GIT_COMMITTER_DATE", date);
+    for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR"] {
+        command.env_remove(key);
+    }
+    let output = command.output().unwrap_or_else(|error| panic!("could not run git {arguments:?}: {error}"));
+    assert!(output.status.success(), "git {arguments:?} failed: {}", String::from_utf8_lossy(&output.stderr));
+}
+
+#[test]
+fn the_first_tag_follows_ancestry_when_tagged_commits_share_a_date() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    repo.commit("Start");
+    // Commits made in the same second, as a rebase makes them. The older one's tag sorts last by
+    // name, so only the ancestry can put it first.
+    git_dated(repo.path(), "2020-01-01T00:00:00Z", &["commit", "-q", "--allow-empty", "-m", "Older"]);
+    let older = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+    repo.git(&["tag", "zeta"]);
+    git_dated(repo.path(), "2020-01-01T00:00:00Z", &["commit", "-q", "--allow-empty", "-m", "Newer"]);
+    repo.git(&["tag", "alpha"]);
+
+    let refs = client.containing_refs(&older, repo.path()).unwrap();
+    assert_eq!(refs.first_tag.as_deref(), Some("zeta"), "the tag on the older commit is the first release");
+    assert_eq!(refs.tag_count, 2);
+}
+
+#[test]
+fn containing_refs_list_the_branches_and_first_tag_that_hold_a_commit() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    let a = repo.commit("A");
+    git_dated(repo.path(), "2020-01-01T00:00:00Z", &["tag", "-a", "v1", "-m", "First release"]);
+    repo.git(&["switch", "-q", "-c", "feature"]);
+    repo.write("b.txt", "b\n");
+    let b = repo.commit("B");
+    repo.git(&["switch", "-q", "main"]);
+    repo.write("c.txt", "c\n");
+    let c = repo.commit("C");
+    git_dated(repo.path(), "2021-01-01T00:00:00Z", &["tag", "-a", "v2", "-m", "Second release"]);
+    repo.git(&["update-ref", "refs/remotes/origin/main", &c]);
+    repo.git(&["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+
+    let refs = client.containing_refs(&a, repo.path()).unwrap();
+    assert_eq!(refs.local, ["main", "feature"], "the current branch comes first");
+    assert_eq!(refs.remote, ["origin/main"], "the remote HEAD alias is left out");
+    assert_eq!(refs.first_tag.as_deref(), Some("v1"));
+    assert_eq!(refs.tag_count, 2);
+
+    let refs = client.containing_refs(&b, repo.path()).unwrap();
+    assert_eq!(refs.local, ["feature"]);
+    assert!(refs.remote.is_empty());
+    assert_eq!(refs.first_tag, None);
+    assert_eq!(refs.tag_count, 0);
+
+    let refs = client.containing_refs(&c, repo.path()).unwrap();
+    assert_eq!(refs.local, ["main"]);
+    assert_eq!(refs.remote, ["origin/main"]);
+    assert_eq!(refs.first_tag.as_deref(), Some("v2"));
+    assert_eq!(refs.tag_count, 1);
+
+    // A commit that no ref holds, but that is still in the object store, is in no list.
+    repo.write("d.txt", "d\n");
+    let d = repo.commit("D");
+    repo.git(&["reset", "-q", "--hard", &c]);
+    let refs = client.containing_refs(&d, repo.path()).unwrap();
+    assert_eq!(refs, nicegit_core::containing::ContainingRefs::default());
 }
 
 // MARK: GitHub

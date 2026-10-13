@@ -1,14 +1,20 @@
+use std::hash::{Hash, Hasher};
+
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::containing::ContainingRefs;
 use nicegit_core::line_counts::LineCount;
 use nicegit_core::models::short;
-use nicegit_core::{Stash, StashFile};
+use nicegit_core::{GitClient, Snapshot, Stash, StashFile};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::ui::history::middle_ellipsis;
 
 /// A commit's signature summary, filled in by a background thread: None while loading.
 type SignatureCell = std::sync::Arc<std::sync::Mutex<Option<Option<crate::git_ext::SignatureSummary>>>>;
+/// The refs that contain a commit, filled in by a background thread: None while loading, and
+/// Some(None) when Git could not say.
+type ContainingCell = std::sync::Arc<std::sync::Mutex<Option<Option<ContainingRefs>>>>;
 use crate::theme;
 use crate::tools::{self, widgets};
 
@@ -31,6 +37,7 @@ impl NiceGitApp {
         let details = self.repos[self.active].details.as_mut().and_then(|task| task.get().map(|r| r.clone().map_err(|e| e.to_string())));
         let files = self.repo().map(|r| r.commit_files.clone()).unwrap_or_default();
         let signature = self.signature_for(&hash, ui.ctx());
+        let containing = self.containing_for(&hash, &snapshot, ui.ctx());
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -123,6 +130,7 @@ impl NiceGitApp {
                                 });
                                 ui.end_row();
                             }
+                            containing_rows(ui, &c, &containing);
                             if let Some((text, color, help)) = &signature {
                                 caption(ui, "Signature");
                                 let label = ui.label(RichText::new(text).color(*color));
@@ -341,6 +349,88 @@ impl NiceGitApp {
         };
         let value = cell.lock().unwrap_or_else(|p| p.into_inner()).clone();
         value.flatten().map(|summary| (summary.text, signature_color(summary.level, &c), summary.help))
+    }
+
+    /// The branches and tags that contain a commit, loaded once per commit and cached in egui
+    /// memory. The cache also keys on the snapshot's branches and tags, so a moved branch or a new
+    /// tag loads again while an unrelated repaint does not run Git.
+    fn containing_for(&self, hash: &str, snapshot: &Snapshot, ctx: &egui::Context) -> Option<Option<ContainingRefs>> {
+        let id = egui::Id::new(("containing", hash.to_string()));
+        let repo = self.repo()?.path.clone();
+        let key = refs_fingerprint(snapshot);
+        let cached: Option<(u64, ContainingCell)> = ctx.data(|d| d.get_temp(id));
+        let cell = match cached {
+            Some((cached_key, cell)) if cached_key == key => cell,
+            _ => {
+                let cell: ContainingCell = std::sync::Arc::new(std::sync::Mutex::new(None));
+                ctx.data_mut(|d| d.insert_temp(id, (key, cell.clone())));
+                let (writer, hash, ctx2) = (cell.clone(), hash.to_string(), ctx.clone());
+                std::thread::spawn(move || {
+                    // A failure is recorded too, so the rows are left out rather than loading forever.
+                    let refs = GitClient::new().containing_refs(&hash, &repo).ok();
+                    *writer.lock().unwrap_or_else(|p| p.into_inner()) = Some(refs);
+                    ctx2.request_repaint();
+                });
+                cell
+            }
+        };
+        let value = cell.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        value
+    }
+}
+
+/// A fingerprint of the refs that decide a commit's containing list: each branch's name, tip and
+/// kind, and each tag's name and tip.
+fn refs_fingerprint(snapshot: &Snapshot) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for branch in &snapshot.branches {
+        (&branch.name, &branch.tip, branch.is_remote).hash(&mut hasher);
+    }
+    snapshot.tags.hash(&mut hasher);
+    snapshot.tag_tips.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// The Branches and First tag rows of the commit inspector. Branches lists the local branches
+/// (current first) and then the remote-tracking ones, with the full list on hover. While the refs
+/// load, Branches shows a placeholder; when Git could not say, both rows are left out.
+fn containing_rows(ui: &mut Ui, c: &theme::Colors, containing: &Option<Option<ContainingRefs>>) {
+    let caption = |ui: &mut Ui, text: &str| {
+        ui.label(RichText::new(text).small().color(c.muted));
+    };
+    match containing {
+        None => {
+            caption(ui, "Branches");
+            ui.label(RichText::new("…").color(c.muted));
+            ui.end_row();
+        }
+        Some(None) => {}
+        Some(Some(refs)) => {
+            let names: Vec<&str> = refs.local.iter().chain(&refs.remote).map(String::as_str).collect();
+            caption(ui, "Branches");
+            if names.is_empty() {
+                ui.label(RichText::new("Not on any branch").color(c.muted));
+            } else {
+                // Long lists are cut short to keep the inspector tidy; the hover text has them all.
+                let shown = names.len().min(8);
+                let mut text = names[..shown].join(", ");
+                if names.len() > shown {
+                    text = format!("{text} and {} more", names.len() - shown);
+                }
+                ui.add(egui::Label::new(text).wrap()).on_hover_text(names.join("\n"));
+            }
+            ui.end_row();
+            if let Some(tag) = &refs.first_tag {
+                caption(ui, "First tag");
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(tag);
+                    if refs.tag_count > 1 {
+                        ui.label(RichText::new(format!("and {} later", refs.tag_count - 1)).color(c.muted));
+                    }
+                });
+                ui.end_row();
+            }
+        }
     }
 }
 
