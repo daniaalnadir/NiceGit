@@ -48,6 +48,36 @@ cargo test -p nicegit -- --ignored github_pull_requests_and_issues_load_from_git
 Do not add tokens, shell histories, private repository contents, signing keys,
 generated app bundles, or local IDE preferences to a pull request.
 
+## Performance
+
+The benchmarks time the reads that run on every repository refresh, and the frame time of
+the commit history, against a generated repository of 20,000 commits, 200 branches, 100
+tags, and 3,000 files, with 200 modified files, 20 staged changes, and 50 untracked files.
+Generating it takes a few seconds and needs Git and bash:
+
+```sh
+cd rust
+scripts/benchmark-repository.sh <folder>
+```
+
+Then run the Git benchmark and the interface benchmark against it. Both are ignored by
+default and print a table; the Git benchmark also prints the Git version:
+
+```sh
+NICEGIT_BENCH_REPO=<folder> cargo test --release -p nicegit-core --test benchmark -- --ignored --nocapture
+NICEGIT_BENCH_REPO=<folder> cargo test --release -p nicegit ui_bench -- --ignored --nocapture
+```
+
+Without `NICEGIT_BENCH_REPO`, both generate a repository in a temporary folder. On Windows,
+or without bash, they skip with a message. Each operation runs once to warm up and then five
+times, and the table shows the median, the fastest, and the slowest run. Timings vary with
+what else the machine is doing, so compare runs made under similar conditions.
+
+Measure before and after any performance change against the same generated repository:
+run the benchmark on the code as it was, make the change, run it again, and report both
+tables in the pull request. Changes to how the history is drawn also need the interface
+benchmark's frame times before and after.
+
 ## Pull Requests
 
 Describe the behavior changed, tests run, and any known limits. Include screenshots

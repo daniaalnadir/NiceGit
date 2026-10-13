@@ -11,6 +11,8 @@ mod theme;
 mod tools;
 mod ui;
 #[cfg(test)]
+mod ui_bench;
+#[cfg(test)]
 mod ui_screenshots;
 #[cfg(test)]
 mod ui_tests;
