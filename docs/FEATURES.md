@@ -44,7 +44,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Choose which branches the graph shows from the "Branches shown" menu in the history header:
   all branches (the default), local branches only, or the current branch and its upstream. A
   note above the graph says what is shown, with a link back to all branches. Searching all
-  history still covers every branch.
+  history still covers every branch. Individual branches can also be hidden from the graph
+  from their right-click menu, in the sidebar or on the graph's branch label. Commits that
+  other shown branches reach still appear, and hidden branches are remembered for each
+  repository.
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.

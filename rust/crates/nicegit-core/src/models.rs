@@ -107,6 +107,16 @@ impl Branch {
     pub fn is_detached(&self) -> bool {
         !self.is_remote && self.name.starts_with('(')
     }
+
+    /// The branch's full ref name, such as `refs/heads/main` or `refs/remotes/origin/main`. Unlike
+    /// the display name, it tells a local branch from a remote-tracking branch with the same text.
+    pub fn full_ref(&self) -> String {
+        if self.is_remote {
+            format!("refs/{}", self.name)
+        } else {
+            format!("refs/heads/{}", self.name)
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

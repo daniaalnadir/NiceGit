@@ -39,6 +39,8 @@
   it must be edited before it can be committed.
 - Choose whether the commit graph shows all branches, only local branches, or just the current
   branch and its upstream.
+- Hide a single branch from the commit graph from its right-click menu, in the sidebar or on
+  its label; commits other shown branches reach still appear.
 - Choose how many unchanged lines diffs show around each change, up to the whole file. The
   setting also applies to file history, blame, and compare.
 - Choose how many unchanged lines diffs show around each change, up to the whole file.

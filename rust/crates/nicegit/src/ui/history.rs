@@ -32,9 +32,13 @@ struct Label {
 
 /// The branch and tag labels for a commit. A local branch and its upstream on the same commit
 /// share one label; the pairing compares full ref names, since display names are ambiguous.
-fn labels(commit: &Commit, snapshot: &Snapshot) -> Vec<Label> {
-    let locals: HashMap<&str, &Branch> = snapshot.branches.iter().filter(|b| !b.is_remote).map(|b| (b.name.as_str(), b)).collect();
-    let remotes: HashMap<String, &Branch> = snapshot.branches.iter().filter(|b| b.is_remote).map(|b| (b.display_name(), b)).collect();
+/// A hidden branch has no label, even where a shown branch reaches its commit.
+fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String]) -> Vec<Label> {
+    let shown = |branch: &&Branch| hidden.is_empty() || !hidden.contains(&branch.full_ref());
+    let locals: HashMap<&str, &Branch> =
+        snapshot.branches.iter().filter(|b| !b.is_remote).filter(shown).map(|b| (b.name.as_str(), b)).collect();
+    let remotes: HashMap<String, &Branch> =
+        snapshot.branches.iter().filter(|b| b.is_remote).filter(shown).map(|b| (b.display_name(), b)).collect();
     let mut out: Vec<Label> = Vec::new();
     let mut paired: HashSet<String> = HashSet::new();
     let mut remote_labels = Vec::new();
@@ -111,8 +115,15 @@ impl NiceGitApp {
 
         // A scope change is applied after the frame, once nothing borrows the repository.
         let mut scope_change: Option<HistoryScope> = None;
+        let mut show_hidden = false;
         let idle = self.idle();
         let shown = self.settings.history_scope;
+        let hidden = self.hidden_branches();
+        let hidden_count = if hidden.is_empty() {
+            0
+        } else {
+            snapshot.branches.iter().filter(|b| !b.is_detached() && hidden.contains(&b.full_ref())).count()
+        };
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 10, bottom: 6 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Commit history").size(16.0).strong());
@@ -148,6 +159,16 @@ impl NiceGitApp {
                     ui.label(RichText::new(what).small().color(c.muted));
                     if ui.add_enabled(idle, egui::Link::new("Show all branches")).clicked() {
                         scope_change = Some(HistoryScope::All);
+                    }
+                });
+            }
+            // Hidden branches are not in the Current scope's history, so the note waits for the others.
+            if hidden_count > 0 && shown != HistoryScope::Current {
+                ui.horizontal(|ui| {
+                    let branches = if hidden_count == 1 { "branch" } else { "branches" };
+                    ui.label(RichText::new(format!("{hidden_count} {branches} hidden.")).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new("Show all")).clicked() {
+                        show_hidden = true;
                     }
                 });
             }
@@ -271,6 +292,9 @@ impl NiceGitApp {
             self.settings.history_scope = scope;
             self.load(true);
         }
+        if show_hidden {
+            self.show_all_branches();
+        }
 
         // Column headers, which resize the columns and choose which are shown.
         let graph_width = graph_view::width_for(self.repo().map(|r| r.lanes).unwrap_or(1)).clamp(44.0, 240.0);
@@ -364,6 +388,7 @@ impl NiceGitApp {
         let c = theme::of(ui);
         let Some(repo) = self.repo() else { return };
         let Some(row) = repo.rows.get(index).cloned() else { return };
+        let hidden = self.hidden_branches();
         let dirty = repo.dirty();
         let is_working_tree = dirty && index == 0;
         let commit = repo.commit_at(index).cloned();
@@ -450,8 +475,8 @@ impl NiceGitApp {
         let Some(commit) = commit else { return };
 
         // Branch and tag labels, joined to the node by a line in the lane colour.
-        let all_labels = labels(&commit, snapshot);
-        let mut draggable: Vec<(egui::Rect, Branch)> = Vec::new();
+        let all_labels = labels(&commit, snapshot, &hidden);
+        let mut branch_pills: Vec<(egui::Rect, Branch)> = Vec::new();
         if let (false, Some(refs)) = (all_labels.is_empty(), layout.get(Column::Refs)) {
             let painter = painter.with_clip_rect(cell(refs));
             let mut x = refs.min + 10.0;
@@ -493,8 +518,8 @@ impl NiceGitApp {
                     painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.5, Color32::WHITE.gamma_multiply(0.85)), egui::StrokeKind::Inside);
                 }
                 painter.galley(egui::pos2(pill.left() + 6.0, y - galley.size().y / 2.0), galley, Color32::WHITE);
-                if let Some(branch) = label.branch.as_ref().filter(|b| !b.is_current && b.name != commit.hash) {
-                    draggable.push((pill, branch.clone()));
+                if let Some(branch) = label.branch.as_ref() {
+                    branch_pills.push((pill, branch.clone()));
                 }
                 last_right = pill.right();
                 x = pill.right() + 4.0;
@@ -534,13 +559,22 @@ impl NiceGitApp {
             }
         }
 
-        // Drag a branch label onto the current commit to merge it in or rebase onto it.
-        for (index, (pill, branch)) in draggable.into_iter().enumerate() {
-            let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::drag());
+        // Drop a branch label onto the current branch's commit to merge or rebase.
+        let can_switch = self.idle() && snapshot.operation.is_none();
+        // A label takes the pointer over the row, so a click on it selects the commit as a click
+        // on the row does, and its right-click opens the branch's menu rather than the commit's.
+        let mut label_clicked = false;
+        for (index, (pill, branch)) in branch_pills.into_iter().enumerate() {
+            let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::click_and_drag());
             let name = format!("Branch label {}", branch.display_name());
             label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+            label_clicked |= label.clicked();
             let label = label.on_hover_text(branch.display_name());
-            label.dnd_set_drag_payload(branch);
+            // Drag a branch label onto the current commit to merge it in or rebase onto it.
+            if !branch.is_current && branch.name != commit.hash {
+                label.dnd_set_drag_payload(branch.clone());
+            }
+            label.context_menu(|ui| self.branch_menu(ui, &branch, snapshot, can_switch));
         }
         if is_head && snapshot.is_on_branch() {
             if let Some(source) = response.dnd_release_payload::<Branch>() {
@@ -550,7 +584,7 @@ impl NiceGitApp {
             }
         }
         let response = response.on_hover_text_at_pointer(format!("{}\n{} <{}>", commit.subject, commit.author_name, commit.author_email));
-        if response.clicked() {
+        if response.clicked() || label_clicked {
             let toggle = ui.input(|i| i.modifiers.command);
             if toggle {
                 let repo = &mut self.repos[self.active];
@@ -562,8 +596,6 @@ impl NiceGitApp {
                 self.select_commit(commit.hash.clone());
             }
         }
-        // Drop a branch label onto the current branch's commit to merge or rebase.
-        let can_switch = self.idle() && snapshot.operation.is_none();
         response.context_menu(|ui| self.commit_menu(ui, &commit, snapshot, can_switch));
     }
 

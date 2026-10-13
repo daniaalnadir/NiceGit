@@ -42,8 +42,17 @@ pub(crate) fn section<R>(ui: &mut Ui, id: &str, glyph: &str, title: &str, count:
     ui.separator();
 }
 
-/// A sidebar row: icon, label, optional trailing text. Returns the row's response.
-fn row(ui: &mut Ui, glyph: &str, glyph_color: egui::Color32, text: RichText, trailing: Option<RichText>, selected: bool) -> egui::Response {
+/// A sidebar row: icon, label, optional trailing text, and an optional marker just before the
+/// trailing text. Returns the row's response.
+fn row(
+    ui: &mut Ui,
+    glyph: &str,
+    glyph_color: egui::Color32,
+    text: RichText,
+    trailing: Option<RichText>,
+    marker: Option<RichText>,
+    selected: bool,
+) -> egui::Response {
     let c = theme::of(ui);
     let height = 26.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
@@ -56,9 +65,14 @@ fn row(ui: &mut Ui, glyph: &str, glyph_color: egui::Color32, text: RichText, tra
         egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(14.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     child.label(RichText::new(glyph).color(glyph_color));
-    if let Some(trailing) = trailing {
+    if trailing.is_some() || marker.is_some() {
         child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(trailing);
+            if let Some(trailing) = trailing {
+                ui.label(trailing);
+            }
+            if let Some(marker) = marker {
+                ui.label(marker);
+            }
             ui.add(egui::Label::new(text).truncate().selectable(false));
         });
     } else {
@@ -150,6 +164,7 @@ impl NiceGitApp {
         let filter = self.repo().map(|r| r.branch_filter.to_lowercase()).unwrap_or_default();
         let matches = |text: &str| filter.is_empty() || text.to_lowercase().contains(&filter);
         let other_worktrees = GitClient::branches_in_other_worktrees(snapshot);
+        let hidden_refs = self.hidden_branches();
 
         let locals: Vec<Branch> = snapshot.branches.iter().filter(|b| !b.is_remote && matches(&b.name)).cloned().collect();
         let tracking = self.repos[self.active].branch_tracking.as_mut().and_then(|task| task.get()).cloned().flatten().unwrap_or_default();
@@ -188,12 +203,15 @@ impl NiceGitApp {
                     Some(Tracking::Gone) => "\nIts upstream branch no longer exists on the remote".to_string(),
                     _ => String::new(),
                 };
-                let response = row(ui, glyph, color, text, trailing, false);
+                let hidden = hidden_refs.contains(&branch.full_ref());
+                let marker = hidden.then(|| RichText::new(icon::EYE_SLASH).color(c.muted));
+                let response = row(ui, glyph, color, text, trailing, marker, false);
                 let response = response.on_hover_text(format!(
-                    "{}  {}{}{tracking_note}",
+                    "{}  {}{}{tracking_note}{}",
                     short(&branch.tip),
                     branch.subject,
-                    if in_other { "\nChecked out in another worktree" } else { "" }
+                    if in_other { "\nChecked out in another worktree" } else { "" },
+                    if hidden { "\nHidden from the graph" } else { "" }
                 ));
                 // Drag a branch onto the current branch to merge it in or rebase onto it.
                 if !branch.is_current {
@@ -241,8 +259,15 @@ impl NiceGitApp {
                             if !matches(&display) {
                                 continue;
                             }
-                            let response = row(ui, icon::GIT_BRANCH, c.remote_branch, RichText::new(name), None, false)
-                                .on_hover_text(format!("{}  {}", short(&branch.tip), branch.subject));
+                            let hidden = hidden_refs.contains(&branch.full_ref());
+                            let marker = hidden.then(|| RichText::new(icon::EYE_SLASH).color(c.muted));
+                            let response = row(ui, icon::GIT_BRANCH, c.remote_branch, RichText::new(name), None, marker, false)
+                                .on_hover_text(format!(
+                                    "{}  {}{}",
+                                    short(&branch.tip),
+                                    branch.subject,
+                                    if hidden { "\nHidden from the graph" } else { "" }
+                                ));
                             response.dnd_set_drag_payload(branch.clone());
                             if response.double_clicked() && can_switch {
                                 self.checkout(branch.clone());
@@ -269,6 +294,7 @@ impl NiceGitApp {
                         if current { c.accent } else { c.muted },
                         RichText::new(label),
                         worktree.is_prunable.then(|| RichText::new("missing").small().color(c.warning)),
+                        None,
                         current,
                     )
                     .on_hover_text(&worktree.path);
@@ -310,7 +336,7 @@ impl NiceGitApp {
             }
             for tag in tags {
                 let tip = snapshot.tag_tips.get(tag).cloned().unwrap_or_default();
-                let response = row(ui, icon::TAG, c.tag, RichText::new(tag), None, false);
+                let response = row(ui, icon::TAG, c.tag, RichText::new(tag), None, None, false);
                 // A tag's details are read the first time its row is hovered, not for every tag up front.
                 let response = if response.hovered() {
                     let text = self.tag_hover_text(tag, &tip);
@@ -341,8 +367,8 @@ impl NiceGitApp {
             });
             for stash in &snapshot.stashes {
                 let selected = matches!(self.repo().map(|r| &r.selection), Some(Selection::Stash { hash, .. }) if *hash == stash.hash);
-                let response =
-                    row(ui, icon::ARCHIVE_BOX, c.muted, RichText::new(&stash.message), None, selected).on_hover_text(&stash.reference);
+                let response = row(ui, icon::ARCHIVE_BOX, c.muted, RichText::new(&stash.message), None, None, selected)
+                    .on_hover_text(&stash.reference);
                 if response.clicked() {
                     self.select_stash(stash.clone());
                 }
@@ -416,6 +442,7 @@ impl NiceGitApp {
                         color,
                         RichText::new(&submodule.path),
                         Some(RichText::new(state).small().color(color)),
+                        None,
                         false,
                     )
                     .on_hover_text(format!("Recorded commit {}", short(&submodule.recorded_commit)));
@@ -722,6 +749,22 @@ impl NiceGitApp {
                     "Delete",
                     Pending::DeleteBranch { branch: branch.clone(), force: false },
                 );
+            }
+        }
+        // Git lists a detached HEAD as a description, not a branch, so it has nothing to hide.
+        if !branch.is_detached() {
+            if self.hidden_branches().contains(&branch.full_ref()) {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  Show in graph", icon::EYE))).clicked() {
+                    ui.close();
+                    self.set_branch_hidden(branch, false);
+                }
+            } else {
+                let hide = ui.add_enabled(idle && !branch.is_current, egui::Button::new(format!("{}  Hide in graph", icon::EYE_SLASH)));
+                let hide = if branch.is_current { hide.on_disabled_hover_text("The current branch is always shown.") } else { hide };
+                if hide.clicked() {
+                    ui.close();
+                    self.set_branch_hidden(branch, true);
+                }
             }
         }
         ui.separator();

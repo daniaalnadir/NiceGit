@@ -1,8 +1,8 @@
 //! Preferences and per-checkout state remembered across launches. Stored by eframe in the
 //! platform's app data folder; nothing is sent anywhere.
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -243,6 +243,10 @@ pub struct Settings {
     /// Whether saving a stash also takes untracked files. On by default, as it always was.
     #[serde(default = "default_true")]
     pub stash_include_untracked: bool,
+    /// Branches hidden from the commit graph, keyed like `drafts`. Each entry is a full ref name,
+    /// such as `refs/heads/feature`, so a local and a remote branch never collide.
+    #[serde(default)]
+    pub hidden_branches: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn default_true() -> bool {
@@ -274,6 +278,7 @@ impl Default for Settings {
             clone_folder: None,
             stash_keep_index: false,
             stash_include_untracked: true,
+            hidden_branches: BTreeMap::new(),
         }
     }
 }
@@ -307,6 +312,22 @@ impl Settings {
         checkout.to_string()
     }
 
+    /// The full ref names of the branches hidden in the checkout at `folder`. Keyed by the folder the
+    /// repository was opened at, as a snapshot's root is not known before the first load.
+    pub fn hidden_branches_of(&self, folder: &Path) -> Vec<String> {
+        self.hidden_branches.get(&Self::draft_key(&folder.to_string_lossy())).map(|set| set.iter().cloned().collect()).unwrap_or_default()
+    }
+
+    /// Changes the hidden branches of the checkout at `folder`, dropping its entry once none are left.
+    pub fn change_hidden_branches(&mut self, folder: &Path, change: impl FnOnce(&mut BTreeSet<String>)) {
+        let key = Self::draft_key(&folder.to_string_lossy());
+        let mut hidden = self.hidden_branches.remove(&key).unwrap_or_default();
+        change(&mut hidden);
+        if !hidden.is_empty() {
+            self.hidden_branches.insert(key, hidden);
+        }
+    }
+
     pub fn remember(&mut self, path: PathBuf) {
         self.recent.retain(|recent| recent != &path);
         self.recent.insert(0, path);
@@ -316,7 +337,69 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_enterprise_hosts, Draft};
+    use super::{parse_enterprise_hosts, Draft, Settings, STORAGE_KEY};
+    use eframe::Storage;
+    use std::path::Path;
+
+    /// Saved state held in memory, as the platform's storage holds it between launches.
+    #[derive(Default)]
+    struct MemoryStorage(std::collections::HashMap<String, String>);
+
+    impl eframe::Storage for MemoryStorage {
+        fn get_string(&self, key: &str) -> Option<String> {
+            self.0.get(key).cloned()
+        }
+
+        fn set_string(&mut self, key: &str, value: String) {
+            self.0.insert(key.to_string(), value);
+        }
+
+        fn remove_string(&mut self, key: &str) {
+            self.0.remove(key);
+        }
+
+        fn flush(&mut self) {}
+    }
+
+    #[test]
+    fn hidden_branches_round_trip_for_their_checkout_only() {
+        let folder = Path::new("/work/repo");
+        let mut settings = Settings::default();
+        settings.change_hidden_branches(folder, |hidden| {
+            hidden.insert("refs/heads/feature".into());
+            hidden.insert("refs/remotes/origin/feature".into());
+        });
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert_eq!(loaded.hidden_branches_of(folder), ["refs/heads/feature", "refs/remotes/origin/feature"]);
+        assert!(loaded.hidden_branches_of(Path::new("/work/other")).is_empty());
+    }
+
+    #[test]
+    fn showing_every_branch_again_drops_the_checkout_entry() {
+        let folder = Path::new("/work/repo");
+        let mut settings = Settings::default();
+        settings.change_hidden_branches(folder, |hidden| {
+            hidden.insert("refs/heads/feature".into());
+        });
+        assert_eq!(settings.hidden_branches.len(), 1);
+        settings.change_hidden_branches(folder, |hidden| hidden.clear());
+        assert!(settings.hidden_branches.is_empty());
+    }
+
+    #[test]
+    fn settings_saved_before_hidden_branches_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // An empty map is written as `hidden_branches:{}`; an older file has no such field.
+        let older = saved.replacen(",hidden_branches:{}", "", 1);
+        assert_ne!(older, saved, "the field is in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.hidden_branches.is_empty());
+    }
 
     #[test]
     fn enterprise_hosts_are_trimmed_lowercased_and_deduplicated_and_invalid_lines_kept_apart() {

@@ -763,6 +763,41 @@ impl NiceGitApp {
         self.load_repo(self.active, deliberate);
     }
 
+    /// The full ref names of the branches the active repository's commit graph leaves out.
+    pub fn hidden_branches(&self) -> Vec<String> {
+        self.repos.get(self.active).map(|repo| self.settings.hidden_branches_of(&repo.path)).unwrap_or_default()
+    }
+
+    /// Hides a branch from the active repository's commit graph, or shows it again, then reloads
+    /// the history. Like a scope change, the reload is deliberate, so the graph updates at once.
+    pub fn set_branch_hidden(&mut self, branch: &Branch, hidden: bool) {
+        if self.busy.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let folder = repo.path.clone();
+        let reference = branch.full_ref();
+        self.settings.change_hidden_branches(&folder, |set| {
+            if hidden {
+                set.insert(reference);
+            } else {
+                set.remove(&reference);
+            }
+        });
+        self.load(true);
+    }
+
+    /// Shows every branch hidden from the active repository's commit graph, then reloads the history.
+    pub fn show_all_branches(&mut self) {
+        if self.busy.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let folder = repo.path.clone();
+        self.settings.change_hidden_branches(&folder, BTreeSet::clear);
+        self.load(true);
+    }
+
     fn load_repo(&mut self, index: usize, deliberate: bool) {
         self.start_load(index, deliberate, false);
     }
@@ -791,6 +826,7 @@ impl NiceGitApp {
         }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
+        let hidden = self.settings.hidden_branches_of(&repo.path);
         let path = repo.path.clone();
         let previous = if quick { repo.snapshot.clone() } else { None };
         // Any load started now reads the checkout as it is, so changes noticed before it are covered.
@@ -801,14 +837,14 @@ impl NiceGitApp {
                 {
                     self.quick_loads += 1;
                 }
-                self.worker.quick_load(self.generation, path, previous, limit, scope);
+                self.worker.quick_load(self.generation, path, previous, limit, scope, hidden);
             }
             None => {
                 #[cfg(test)]
                 {
                     self.full_loads += 1;
                 }
-                self.worker.load(self.generation, path, deliberate, limit, scope);
+                self.worker.load(self.generation, path, deliberate, limit, scope, hidden);
             }
         }
     }
@@ -895,7 +931,8 @@ impl NiceGitApp {
         }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
-        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, action);
+        let hidden = self.settings.hidden_branches_of(&repo.path);
+        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, action);
     }
 
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a
