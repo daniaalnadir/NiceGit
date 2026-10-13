@@ -79,12 +79,37 @@ impl ToolItem {
     }
 }
 
-/// The hover text of Undo or Redo: the newest step's title, and how many steps there are.
+/// The most characters of a step's line in the Undo list before it is cut short.
+const HISTORY_LINE_CHARS: usize = 60;
+
+/// A step's name in Undo and Redo wording, such as `commit “Add a fourth line”`.
+pub fn step_name(step: &HistoryEntry) -> String {
+    match &step.detail {
+        Some(detail) => format!("{} “{detail}”", step.title.to_lowercase()),
+        None => step.title.to_lowercase(),
+    }
+}
+
+/// A step's line in the Undo list, such as `Commit: Add a fourth line`, ending in an ellipsis when long.
+fn history_line(step: &HistoryEntry) -> String {
+    let line = match &step.detail {
+        Some(detail) => format!("{}: {detail}", step.title),
+        None => step.title.clone(),
+    };
+    if line.chars().count() <= HISTORY_LINE_CHARS {
+        return line;
+    }
+    let mut cut: String = line.chars().take(HISTORY_LINE_CHARS - 1).collect();
+    cut.push('…');
+    cut
+}
+
+/// The hover text of Undo or Redo: the newest step's name, and how many steps there are.
 fn history_tip(verb: &str, stack: &[HistoryEntry]) -> String {
     match stack.last() {
         None => format!("Nothing to {}", verb.to_lowercase()),
-        Some(step) if stack.len() == 1 => format!("{verb} {}", step.title.to_lowercase()),
-        Some(step) => format!("{verb} {} ({} steps)", step.title.to_lowercase(), stack.len()),
+        Some(step) if stack.len() == 1 => format!("{verb} {}", step_name(step)),
+        Some(step) => format!("{verb} {} ({} steps)", step_name(step), stack.len()),
     }
 }
 
@@ -244,7 +269,7 @@ impl NiceGitApp {
         let redo_steps = self.repo().map(|r| r.redo.as_slice()).unwrap_or_default();
         let undo_tip = history_tip("Undo", undo_steps);
         let redo_tip = history_tip("Redo", redo_steps);
-        let undo_titles: Vec<String> = undo_steps.iter().rev().map(|s| s.title.clone()).collect();
+        let undo_lines: Vec<String> = undo_steps.iter().rev().map(history_line).collect();
         let can_undo = idle && undo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let can_redo = idle && redo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let mut sync_action = self.settings.sync_action;
@@ -261,8 +286,7 @@ impl NiceGitApp {
         // Groups of buttons, in order; a gap separates groups.
         let groups: Vec<Vec<ToolItem>> = vec![
             vec![
-                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, "Undo", undo_tip.clone(), can_undo, ToolAction::Undo)
-                    .with_history(undo_titles),
+                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, "Undo", undo_tip.clone(), can_undo, ToolAction::Undo).with_history(undo_lines),
                 ToolItem::new(icon::ARROW_CLOCKWISE, "Redo", redo_tip.clone(), can_redo, ToolAction::Redo),
             ],
             vec![
@@ -537,7 +561,7 @@ impl NiceGitApp {
 
     /// Asks before undoing the last recorded step, from the toolbar or the command palette.
     pub fn confirm_undo(&mut self) {
-        let Some(title) = self.repo().and_then(|r| r.undo.last()).map(|s| s.title.to_lowercase()) else { return };
+        let Some(title) = self.repo().and_then(|r| r.undo.last()).map(step_name) else { return };
         self.confirm(
             format!("Undo {title}?"),
             "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
@@ -548,7 +572,7 @@ impl NiceGitApp {
 
     /// Asks before redoing the last undone step, from the toolbar or the command palette.
     pub fn confirm_redo(&mut self) {
-        let Some(title) = self.repo().and_then(|r| r.redo.last()).map(|s| s.title.to_lowercase()) else { return };
+        let Some(title) = self.repo().and_then(|r| r.redo.last()).map(step_name) else { return };
         self.confirm(
             format!("Redo {title}?"),
             "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
@@ -602,5 +626,28 @@ impl NiceGitApp {
                 InputKind::CreateBranch { branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nicegit_core::undo::{UndoMode, UndoStep};
+
+    fn step(title: &str, detail: Option<&str>) -> HistoryEntry {
+        let step = UndoStep::BranchMove { branch: "main".into(), before: "a".into(), after: "b".into(), mode: UndoMode::Soft };
+        HistoryEntry { title: title.into(), detail: detail.map(str::to_string), step }
+    }
+
+    #[test]
+    fn undo_history_line_names_the_step_and_cuts_long_lines() {
+        assert_eq!(history_line(&step("Commit", Some("Add a fourth line"))), "Commit: Add a fourth line");
+        assert_eq!(history_line(&step("Commit", None)), "Commit");
+        assert_eq!(step_name(&step("Commit", Some("Add a fourth line"))), "commit “Add a fourth line”");
+        assert_eq!(step_name(&step("Commit", None)), "commit");
+
+        let long = history_line(&step("Commit", Some(&"x".repeat(100))));
+        assert_eq!(long.chars().count(), HISTORY_LINE_CHARS);
+        assert!(long.ends_with('…'), "a cut line ends in an ellipsis: {long}");
     }
 }

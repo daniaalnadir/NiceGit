@@ -214,7 +214,7 @@ impl NiceGitApp {
         if let Some(step) = self.repo().and_then(|r| r.undo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
             list.push(command(
-                &format!("Undo {}", step.title.to_lowercase()),
+                &format!("Undo {}", super::toolbar::step_name(step)),
                 "",
                 icon::ARROW_COUNTER_CLOCKWISE,
                 idle && applies,
@@ -223,7 +223,7 @@ impl NiceGitApp {
         }
         if let Some(step) = self.repo().and_then(|r| r.redo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
-            list.push(command(&format!("Redo {}", step.title.to_lowercase()), "", icon::ARROW_CLOCKWISE, idle && applies, Run::Redo));
+            list.push(command(&format!("Redo {}", super::toolbar::step_name(step)), "", icon::ARROW_CLOCKWISE, idle && applies, Run::Redo));
         }
         if let Some(snapshot) = snapshot {
             for branch in snapshot.branches.iter().filter(|b| !b.is_current && !b.is_detached()) {

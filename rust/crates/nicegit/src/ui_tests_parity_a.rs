@@ -516,6 +516,27 @@ fn undo_history_lists_the_steps_it_will_take_back() {
 }
 
 #[test]
+fn undo_history_names_each_commit_newest_first() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_notes(&mut harness, path, "first\nsecond\nthird\n", "Add a third line");
+    commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\n", "Add a fourth line");
+    settle(&mut harness);
+    harness.get_by_label("Undo history options").click();
+    wait(&mut harness, "the undo steps", |h| h.query_by_label_contains("Commit: Add a fourth line").is_some());
+
+    // Each step names its commit. The list is drawn top down, so the newest sits above the older one.
+    let top = |h: &App, summary: &str| h.query_by_label_contains(&format!("Commit: {summary}")).map(|node| node.rect().min.y);
+    let newest = top(&harness, "Add a fourth line").expect("the newest commit is listed");
+    let older = top(&harness, "Add a third line").expect("the older commit is listed");
+    assert!(newest < older, "the newest commit is listed first: {newest} vs {older}");
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a fourth line", "listing changes nothing");
+}
+
+#[test]
 fn failed_undo_clears_older_steps() {
     let repo = repository();
     let path = repo.path();

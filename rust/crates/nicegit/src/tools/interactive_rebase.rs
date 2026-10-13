@@ -492,9 +492,11 @@ impl ToolWindow for InteractiveRebaseWindow {
                 let rewritten = steps.len();
                 // Git stops at the oldest Edit first, so its subject is the one the notice names.
                 let stop_subject = steps.iter().find(|step| step.action == RebaseAction::Edit).map(|step| step.commit.subject.clone());
+                let detail = format!("{rewritten} commit{}", if rewritten == 1 { "" } else { "s" });
                 cx.act_recording(
                     format!("Rewrite commits on {branch}"),
                     "Interactive rebase",
+                    Some(detail),
                     nicegit_core::undo::UndoMode::Keep,
                     move |client, repo| match client.interactive_rebase(&steps, &plan, &branch, &head, repo)? {
                         RebaseOutcome::Finished => Ok(Some(format!("Rewrote {rewritten} commits on {branch}."))),

@@ -3,6 +3,7 @@
 
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
+use nicegit_core::models::short;
 use nicegit_core::{Branch, GitError, Operation, Snapshot, Stash, StashOptions, StatusEntry};
 
 use crate::app::NiceGitApp;
@@ -169,6 +170,14 @@ impl CloneDestination {
         let wanted = if url.is_empty() { String::new() } else { folder.join(repository_folder_name(url)).display().to_string() };
         *destination = wanted.clone();
         self.automatic = wanted;
+    }
+}
+
+/// Names commits in a history detail: one commit by its short hash, several by their count.
+fn commits_detail(commits: &[String]) -> String {
+    match commits {
+        [one] => short(one).to_string(),
+        _ => format!("{} commits", commits.len()),
     }
 }
 
@@ -654,14 +663,14 @@ impl NiceGitApp {
                 Dialog::ChooseParent { commit, selected, revert, branch, head, .. } => {
                     let operation = if revert { Operation::Revert } else { Operation::CherryPick };
                     let title = if revert { "Revert" } else { "Cherry-pick" };
-                    self.act_recording(title, title, move |client, path| {
+                    self.act_recording_detail(title, title, Some(short(&commit).to_string()), move |client, path| {
                         let expected =
                             nicegit_core::rebase::Expectation { branch: Some(&branch), head: head.as_deref(), source_branch: None };
                         client.start(operation, &commit, Some(selected + 1), expected, path).map(|_| None)
                     });
                 }
                 Dialog::EditMessage { message, branch, head } => {
-                    self.act_recording("Edit message", "Edit message", move |client, path| {
+                    self.act_recording_detail("Edit message", "Edit message", crate::app::summary_of(&message), move |client, path| {
                         client.amend_message(&message, &branch, &head, path).map(|_| Some("Updated the commit message.".into()))
                     });
                 }
@@ -709,7 +718,7 @@ impl NiceGitApp {
                 self.act_with_record("Delete branch", move |client, path| {
                     let deletion = client.delete_branch_keeping_undo(&branch, force, path)?;
                     let step = nicegit_core::undo::UndoStep::BranchDeletions(vec![deletion]);
-                    let entry = crate::app::HistoryEntry { title: format!("Delete {name}"), step };
+                    let entry = crate::app::HistoryEntry { title: "Delete branch".into(), detail: Some(name.clone()), step };
                     Ok((Some(format!("Deleted branch {name}.")), Some(crate::app::Recorded::Step(entry))))
                 })
             }
@@ -720,31 +729,33 @@ impl NiceGitApp {
             }
             Pending::Merge { source, branch, head } => {
                 let name = source.display_name();
-                self.act_recording("Merge", "Merge", move |client, path| {
+                self.act_recording_detail("Merge", "Merge", Some(name.clone()), move |client, path| {
                     client.merge(&source, &branch, head.as_deref(), path).map(|_| Some(format!("Merged {name}.")))
                 })
             }
             Pending::Rebase { onto, branch, head } => {
                 let name = onto.display_name();
-                self.act_recording("Rebase", "Rebase", move |client, path| {
+                self.act_recording_detail("Rebase", "Rebase", Some(format!("onto {name}")), move |client, path| {
                     crate::git_ext::rebase_onto(client, &onto, &branch, head.as_deref(), path)
                         .map(|_| Some(format!("Rebased onto {name}.")))
                 })
             }
             Pending::CherryPick { commits, branch, head } => {
                 let count = commits.len();
-                self.act_recording("Cherry-pick", "Cherry-pick", move |client, path| {
+                self.act_recording_detail("Cherry-pick", "Cherry-pick", Some(commits_detail(&commits)), move |client, path| {
                     client.cherry_pick(&commits, head.as_deref(), &branch, path).map(|_| {
                         Some(if count == 1 { "Cherry-picked the commit.".to_string() } else { format!("Cherry-picked {count} commits.") })
                     })
                 })
             }
-            Pending::Revert { commit, branch, head } => self.act_recording("Revert", "Revert", move |client, path| {
-                crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some("Reverted the commit.".into()))
-            }),
+            Pending::Revert { commit, branch, head } => {
+                self.act_recording_detail("Revert", "Revert", Some(short(&commit).to_string()), move |client, path| {
+                    crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some("Reverted the commit.".into()))
+                })
+            }
             Pending::RevertMany { commits, branch, head } => {
                 let count = commits.len();
-                self.act_recording("Revert", "Revert", move |client, path| {
+                self.act_recording_detail("Revert", "Revert", Some(commits_detail(&commits)), move |client, path| {
                     client.revert_commits(&commits, head.as_deref(), &branch, path).map(|_| Some(format!("Reverted {count} commits.")))
                 })
             }
@@ -753,10 +764,16 @@ impl NiceGitApp {
                 // Soft mode: Undo moves the branch back to the old commits and keeps the folded
                 // changes staged, which is what they were before the fix up. A rebase that stops
                 // for a conflict is not recorded, since the rebase is still in progress.
-                self.act_recording_mode("Fix up", "Fix up", nicegit_core::undo::UndoMode::Soft, move |client, path| {
-                    client.fixup_into(&target, &branch, &head, path)?;
-                    Ok(Some(format!("Folded the staged changes into “{subject}”.")))
-                })
+                self.act_recording_mode_detail(
+                    "Fix up",
+                    "Fix up",
+                    Some(subject.clone()),
+                    nicegit_core::undo::UndoMode::Soft,
+                    move |client, path| {
+                        client.fixup_into(&target, &branch, &head, path)?;
+                        Ok(Some(format!("Folded the staged changes into “{subject}”.")))
+                    },
+                )
             }
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
                 client.abort_operation(operation, path).map(|_| Some(format!("Aborted the {}.", operation.name())))
@@ -823,9 +840,11 @@ impl NiceGitApp {
             }),
             Pending::Undo => self.undo(),
             Pending::Redo => self.redo(),
-            Pending::UndoCommit { branch, head } => self.act_recording("Undo commit", "Undo commit", move |client, path| {
-                client.undo_last_commit(&branch, &head, path).map(|_| Some("Undid the last commit. Its changes are staged.".into()))
-            }),
+            Pending::UndoCommit { branch, head } => {
+                self.act_recording_detail("Undo commit", "Undo commit", Some(short(&head).to_string()), move |client, path| {
+                    client.undo_last_commit(&branch, &head, path).map(|_| Some("Undid the last commit. Its changes are staged.".into()))
+                })
+            }
         }
     }
 

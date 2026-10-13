@@ -146,7 +146,8 @@ impl ToolWindow for BranchCleanupWindow {
                         })
                         .collect(),
                 );
-                cx.record_undo(format!("Clean up {} {}", deletions.len(), noun(deletions.len())), step);
+                let names = deletions.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ");
+                cx.record_undo(format!("Clean up {} {}", deletions.len(), noun(deletions.len())), Some(names), step);
                 self.undo = Some(deletions);
                 self.confirming = false;
             }
