@@ -572,6 +572,61 @@ fn cherry_pick_can_note_the_original_commit_in_its_message() {
     assert!(git(path, &["log", "-1", "--format=%B"]).contains(&format!("(cherry picked from commit {source})")));
 }
 
+/// Merges a side branch into main as "Merge side work", then moves to the merge's first parent
+/// on `backport`, which lacks the side change. Returns the merge's full hash.
+fn merge_then_backport(path: &Path) -> String {
+    git(path, &["switch", "-q", "-c", "side", "HEAD~1"]);
+    commit_file(path, "side.txt", "side\n", "Side work");
+    git(path, &["switch", "-q", "main"]);
+    git(path, &["merge", "--no-ff", "--no-edit", "-q", "-m", "Merge side work", "side"]);
+    let merge = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["switch", "-q", "-c", "backport", "HEAD~1"]);
+    merge
+}
+
+#[test]
+fn cherry_pick_of_a_merge_can_note_the_merge_in_its_message() {
+    let repo = repository();
+    let path = repo.path();
+    let merge = merge_then_backport(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Merge side work").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Cherry-pick").click();
+    wait(&mut harness, "the parent choice", |h| shows(h, "Cherry-pick a merge"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::CheckBox, "Note the original commit in each message").click();
+    harness.step();
+    assert!(harness.state().settings.cherry_pick_record_origin, "the choice is on for this dialog");
+    harness.get_all_by_label("Cherry-pick").last().expect("confirm button").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the cherry-picked merge", |_| git(path, &["log", "-1", "--format=%s"]) == "Merge side work");
+    assert!(
+        git(path, &["log", "-1", "--format=%B"]).contains(&format!("(cherry picked from commit {merge})")),
+        "the new commit names the merge"
+    );
+    assert_eq!(std::fs::read_to_string(path.join("side.txt")).unwrap(), "side\n", "the side change is applied");
+}
+
+#[test]
+fn revert_of_a_merge_does_not_offer_the_original_commit_note() {
+    let repo = repository();
+    let path = repo.path();
+    merge_then_backport(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Merge side work").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Revert").click();
+    wait(&mut harness, "the parent choice", |h| shows(h, "Revert a merge"));
+    settle(&mut harness);
+    assert!(!shows(&harness, "Note the original commit"), "a revert does not name the commit it came from");
+}
+
 #[test]
 fn abort_a_rebase_stopped_by_a_conflict_from_the_banner() {
     let repo = rebase_conflict_repository();

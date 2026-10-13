@@ -330,6 +330,15 @@ impl Pending {
     }
 }
 
+/// Remembered in Settings, so backporting several fixes keeps the same choice. Shown for a
+/// cherry-pick, single or of a merge; a revert does not name the commit it came from.
+fn record_origin_checkbox(ui: &mut egui::Ui, record_origin: &mut bool) {
+    widgets::checkbox(ui, true, record_origin, "Note the original commit in each message").on_hover_text(
+        "Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. \
+         Useful when backporting a fix to another branch.",
+    );
+}
+
 /// The three ways a merge can combine the branch, with a note under the chosen one.
 fn merge_style_choices(ui: &mut egui::Ui, style: &mut MergeStyle) {
     let choices = [
@@ -425,14 +434,9 @@ impl NiceGitApp {
                         merge_style_choices(ui, style);
                         *button = if *style == MergeStyle::Squash { "Squash" } else { "Merge" }.to_string();
                     }
-                    // Remembered in Settings, so backporting several fixes keeps the same choice.
                     if matches!(pending, Pending::CherryPick { .. }) {
                         ui.add_space(12.0);
-                        widgets::checkbox(ui, true, &mut self.settings.cherry_pick_record_origin, "Note the original commit in each message")
-                            .on_hover_text(
-                                "Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. \
-                                 Useful when backporting a fix to another branch.",
-                            );
+                        record_origin_checkbox(ui, &mut self.settings.cherry_pick_record_origin);
                     }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
@@ -655,6 +659,10 @@ impl NiceGitApp {
                             *selected = index;
                         }
                     }
+                    if !*revert {
+                        ui.add_space(12.0);
+                        record_origin_checkbox(ui, &mut self.settings.cherry_pick_record_origin);
+                    }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         if widgets::primary_button(ui, if *revert { "Revert" } else { "Cherry-pick" }, true).clicked() {
@@ -747,10 +755,11 @@ impl NiceGitApp {
                 Dialog::ChooseParent { commit, selected, revert, branch, head, .. } => {
                     let operation = if revert { Operation::Revert } else { Operation::CherryPick };
                     let title = if revert { "Revert" } else { "Cherry-pick" };
+                    let record_origin = !revert && self.settings.cherry_pick_record_origin;
                     self.act_recording_detail(title, title, Some(short(&commit).to_string()), move |client, path| {
                         let expected =
                             nicegit_core::rebase::Expectation { branch: Some(&branch), head: head.as_deref(), source_branch: None };
-                        client.start(operation, &commit, Some(selected + 1), expected, path).map(|_| None)
+                        client.start(operation, &commit, Some(selected + 1), record_origin, expected, path).map(|_| None)
                     });
                 }
                 Dialog::EditMessage { message, branch, head } => {

@@ -100,6 +100,7 @@
   offers Merge or rebase… as a refused push does; before, it showed only Git's message.
 - The Cherry-pick confirmation can note the original commit in each new message, as
   `git cherry-pick -x` does, which helps when backporting a fix; the choice is remembered.
+  It also covers cherry-picking a merge commit.
 
 ## 1.5.0 - Fewer surprises
 

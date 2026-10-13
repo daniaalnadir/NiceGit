@@ -671,6 +671,7 @@ fn rebase_onto_branch_replays_the_current_branch() {
             Operation::Rebase,
             "main",
             None,
+            false,
             Expectation { branch: Some("feature"), head: Some(&feature_tip), source_branch: Some(&main) },
             repo.path(),
         )
@@ -695,6 +696,7 @@ fn rebase_refuses_source_branch_whose_tip_moved() {
         Operation::Rebase,
         "main",
         None,
+        false,
         Expectation { branch: Some("feature"), head: Some(&feature_tip), source_branch: Some(&main) },
         repo.path(),
     ));
@@ -742,6 +744,82 @@ fn cherry_pick_without_record_origin_leaves_the_message_alone() {
 
     client().cherry_pick(std::slice::from_ref(&side), Some(&base), "main", false, repo.path()).expect("cherry-pick");
     assert_eq!(full_message(repo.path(), &repo.head()).trim_end(), "Side one");
+}
+
+/// A repository whose `main` merged `side` as "Merge side work", then moved to the merge's first
+/// parent on `backport`, which lacks the side change. Returns the repository, the merge, and the
+/// first parent.
+fn merge_to_backport() -> (Repo, String, String) {
+    let repo = Repo::new();
+    let base = repo.commit_at("base.txt", "base\n", "Base", 1_700_000_000);
+    repo.git(&["switch", "-c", "side", &base]);
+    repo.commit_at("side.txt", "side\n", "Side change", 1_700_000_100);
+    repo.git(&["switch", "main"]);
+    let main_tip = repo.commit_at("main.txt", "main\n", "Main change", 1_700_000_200);
+    repo.git(&["merge", "--no-ff", "--no-edit", "-m", "Merge side work", "side"]);
+    let merge = repo.head();
+    repo.git(&["switch", "-c", "backport", &main_tip]);
+    (repo, merge, main_tip)
+}
+
+#[test]
+fn cherry_pick_of_merge_with_record_origin_names_the_merge() {
+    let (repo, merge, main_tip) = merge_to_backport();
+    client()
+        .start(
+            Operation::CherryPick,
+            &merge,
+            Some(1),
+            true,
+            Expectation { branch: Some("backport"), head: Some(&main_tip), source_branch: None },
+            repo.path(),
+        )
+        .expect("cherry-pick merge with mainline 1");
+    assert!(files_at(repo.path(), "HEAD").contains(&"side.txt".to_string()), "the side change is picked");
+    assert!(full_message(repo.path(), &repo.head()).trim_end().ends_with(&format!("(cherry picked from commit {merge})")));
+}
+
+#[test]
+fn cherry_pick_of_merge_without_record_origin_leaves_the_message_alone() {
+    let (repo, merge, main_tip) = merge_to_backport();
+    client()
+        .start(
+            Operation::CherryPick,
+            &merge,
+            Some(1),
+            false,
+            Expectation { branch: Some("backport"), head: Some(&main_tip), source_branch: None },
+            repo.path(),
+        )
+        .expect("cherry-pick merge with mainline 1");
+    assert!(files_at(repo.path(), "HEAD").contains(&"side.txt".to_string()), "the side change is picked");
+    assert_eq!(full_message(repo.path(), &repo.head()).trim_end(), "Merge side work");
+}
+
+#[test]
+fn revert_of_merge_ignores_record_origin() {
+    let repo = Repo::new();
+    repo.commit("base.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side"]);
+    repo.commit("side.txt", "side\n", "Side change");
+    repo.git(&["switch", "main"]);
+    repo.commit("main.txt", "main\n", "Main change");
+    repo.git(&["merge", "--no-ff", "--no-edit", "side"]);
+    let merge = repo.head();
+
+    client()
+        .start(
+            Operation::Revert,
+            &merge,
+            Some(1),
+            true,
+            Expectation { branch: Some("main"), head: Some(&merge), source_branch: None },
+            repo.path(),
+        )
+        .expect("revert merge with mainline 1");
+    let message = full_message(repo.path(), &repo.head());
+    assert!(message.starts_with("Revert"), "{message}");
+    assert!(!message.contains("cherry picked from"), "{message}");
 }
 
 #[test]
@@ -841,6 +919,7 @@ fn revert_undoes_one_commit() {
             Operation::Revert,
             &change,
             None,
+            false,
             Expectation { branch: Some("main"), head: Some(&change), source_branch: None },
             repo.path(),
         )
@@ -865,6 +944,7 @@ fn revert_of_merge_keeps_the_chosen_parent_side() {
             Operation::Revert,
             &merge,
             Some(1),
+            false,
             Expectation { branch: Some("main"), head: Some(&merge), source_branch: None },
             repo.path(),
         )
