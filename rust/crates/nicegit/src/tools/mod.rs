@@ -24,6 +24,7 @@ pub mod gitflow;
 pub mod github;
 pub mod interactive_rebase;
 pub mod lfs;
+pub mod line_history;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;

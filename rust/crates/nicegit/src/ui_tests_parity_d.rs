@@ -411,3 +411,44 @@ fn go_to_file_does_nothing_without_a_repository() {
     settle(&mut harness);
     assert!(harness.state().go_to_file.is_none());
 }
+
+/// Writes a file and commits it as the test repository's author.
+fn commit_file(dir: &Path, file: &str, contents: &str, message: &str) {
+    std::fs::write(dir.join(file), contents).unwrap();
+    git(dir, &["add", "--", file]);
+    git(dir, &["commit", "-q", "-m", message]);
+}
+
+#[test]
+fn history_of_these_lines_lists_the_commits_that_changed_them() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "notes.txt", "first\nsecond\nthird\n", "Add a third line");
+    commit_file(path, "notes.txt", "first\nSECOND\nTHIRD\n", "Capitalise the last two lines");
+    let head = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Capitalise the last two lines").click();
+    wait_for_commit_file(&mut harness, "notes.txt");
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Blame at this commit").click();
+    let second_line = format!("{} · Test · SECOND", &head[..7]);
+    wait(&mut harness, "the blame lines", |h| shows(h, &second_line));
+    settle(&mut harness);
+
+    // Lines 2 and 3 share the commit that capitalised them, so the menu covers both.
+    harness.get_by_label(&second_line).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("History of lines 2–3").click();
+    let id = format!("line-history\0notes.txt\02\03\0{head}");
+    wait(&mut harness, "the line history window", |h| h.state().tools.iter().any(|t| t.id() == id));
+    wait(&mut harness, "the commits that changed the lines", |h| shows(h, "Add a third line · Test"));
+    settle(&mut harness);
+
+    assert!(harness.state().tools.iter().any(|t| t.title() == "History of notes.txt lines 2–3"), "the window is titled by its range");
+    assert!(shows(&harness, "Capitalise the last two lines · Test"), "the commit that changed both lines is listed");
+    assert!(shows(&harness, "Add a second line · Test"), "the commit that wrote line 2 is listed");
+    assert!(!shows(&harness, "Start the notes · Test"), "the commit that wrote only line 1 is not listed");
+}

@@ -40,6 +40,8 @@ impl BlameCommit {
 pub struct BlameLine {
     /// One-based line number in the blamed version of the file.
     pub number: usize,
+    /// One-based line number of the same line in `commit`'s version of the file (`commit.path`).
+    pub original_number: usize,
     /// The line's text without its newline. A CRLF file keeps the carriage return.
     pub content: String,
     pub commit: BlameCommit,
@@ -57,8 +59,10 @@ pub fn parse_blame(output: &[u8]) -> Vec<BlameLine> {
     while let Some(header) = lines.next() {
         let header = String::from_utf8_lossy(header);
         let mut fields = header.split(' ');
-        let (Some(hash), Some(_original), Some(number)) = (fields.next(), fields.next(), fields.next()) else { continue };
-        let (true, Ok(number)) = (hash.len() >= 40, number.parse::<usize>()) else { continue };
+        let (Some(hash), Some(original), Some(number)) = (fields.next(), fields.next(), fields.next()) else { continue };
+        let (true, Ok(original_number), Ok(number)) = (hash.len() >= 40, original.parse::<usize>(), number.parse::<usize>()) else {
+            continue;
+        };
 
         let mut info: HashMap<String, String> = HashMap::new();
         while let Some(line) = lines.peek().copied() {
@@ -85,7 +89,7 @@ pub fn parse_blame(output: &[u8]) -> Vec<BlameLine> {
             }),
         });
         let content = String::from_utf8_lossy(&content[1..]).into_owned();
-        result.push(BlameLine { number, content, commit: commit.clone() });
+        result.push(BlameLine { number, original_number, content, commit: commit.clone() });
     }
     result
 }
