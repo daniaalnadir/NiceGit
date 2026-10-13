@@ -147,6 +147,9 @@ fn refresh_reads() {
         let output = client.run(&["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], &root).expect("status");
         parse_status_with_checkout(&output)
     }));
+    timings.push(measure("quick_snapshot, from the scope All snapshot", || {
+        client.quick_snapshot(&snapshot, &root).expect("quick snapshot").expect("a quick refresh applies to an unchanged checkout")
+    }));
     timings.push(measure("line_counts for the changed files", || client.line_counts(&untracked, &changed, &root).expect("line counts")));
     timings.push(measure("branch_tracking", || client.branch_tracking(&root).expect("tracking")));
     timings.push(measure("tracked_files", || client.tracked_files(&root).expect("tracked files")));

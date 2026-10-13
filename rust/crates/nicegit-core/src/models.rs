@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StatusKind {
@@ -250,6 +251,9 @@ pub struct Snapshot {
     /// Whether the checkout has a `.gitmodules` file at its root. A submodule's gitlink can exist
     /// without one, but such a repository is rare, and its submodules are not listed.
     pub has_gitmodules: bool,
+    /// This checkout's own Git directory, as an absolute path. A quick refresh reads the
+    /// unfinished operation from it; absent for a snapshot that was not loaded from Git.
+    pub absolute_git_dir: Option<PathBuf>,
 }
 
 impl Snapshot {

@@ -500,6 +500,14 @@ pub struct NiceGitApp {
     pub(crate) diff_panel_width: Option<f32>,
     watcher: Option<Watch>,
     watched_change: Option<Instant>,
+    /// Whether a watched change since the last refresh touched the Git directory, which means a
+    /// full load rather than a quick status refresh.
+    watched_git_change: bool,
+    /// Loads started by the interface, counted for the tests: quick status refreshes and full loads.
+    #[cfg(test)]
+    pub(crate) quick_loads: usize,
+    #[cfg(test)]
+    pub(crate) full_loads: usize,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
     /// The "From GitHub…" list over the Clone dialog, while it is open.
@@ -516,6 +524,8 @@ pub struct NiceGitApp {
 
 struct Watch {
     path: PathBuf,
+    /// The watched path with symbolic links resolved, as the file system may report events.
+    canonical: PathBuf,
     _watcher: notify::RecommendedWatcher,
     events: Receiver<notify::Result<notify::Event>>,
 }
@@ -546,6 +556,11 @@ impl NiceGitApp {
             diff_panel_width: None,
             watcher: None,
             watched_change: None,
+            watched_git_change: false,
+            #[cfg(test)]
+            quick_loads: 0,
+            #[cfg(test)]
+            full_loads: 0,
             applied_appearance: None,
             pending_clone: None,
             clone_picker: None,
@@ -742,6 +757,19 @@ impl NiceGitApp {
     }
 
     fn load_repo(&mut self, index: usize, deliberate: bool) {
+        self.start_load(index, deliberate, false);
+    }
+
+    /// Refreshes only the working-tree status of the active repository, keeping the rest of its
+    /// snapshot. It is for a watched file change that touched nothing in the Git directory.
+    fn load_quick(&mut self) {
+        self.start_load(self.active, false, true);
+    }
+
+    /// Starts a load of one repository: a full load, or a quick status refresh when `quick` and a
+    /// snapshot exists to refresh. Both share the generation and loading bookkeeping. A quick
+    /// refresh never writes the index, so it is never deliberate.
+    fn start_load(&mut self, index: usize, deliberate: bool, quick: bool) {
         if self.busy.is_some() {
             return;
         }
@@ -756,7 +784,26 @@ impl NiceGitApp {
         }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
-        self.worker.load(self.generation, repo.path.clone(), deliberate, limit, scope);
+        let path = repo.path.clone();
+        let previous = if quick { repo.snapshot.clone() } else { None };
+        // Any load started now reads the checkout as it is, so changes noticed before it are covered.
+        self.watched_git_change = false;
+        match previous {
+            Some(previous) => {
+                #[cfg(test)]
+                {
+                    self.quick_loads += 1;
+                }
+                self.worker.quick_load(self.generation, path, previous, limit, scope);
+            }
+            None => {
+                #[cfg(test)]
+                {
+                    self.full_loads += 1;
+                }
+                self.worker.load(self.generation, path, deliberate, limit, scope);
+            }
+        }
     }
 
     /// Fetches the open repository from its remotes every few minutes, as Settings chooses, so
@@ -832,6 +879,8 @@ impl NiceGitApp {
         repo.generation = self.generation;
         repo.loading = true;
         repo.last_load = Instant::now();
+        // The reload after an action reads the whole checkout, so earlier Git changes are covered.
+        self.watched_git_change = false;
         self.busy = Some(label.to_string());
         // A background fetch leaves the last message for the person to read.
         if label != BACKGROUND_FETCH {
@@ -2019,7 +2068,8 @@ impl NiceGitApp {
         self.watcher = None;
         if let Ok(mut watcher) = watcher {
             if watcher.watch(&path, notify::RecursiveMode::Recursive).is_ok() {
-                self.watcher = Some(Watch { path, _watcher: watcher, events });
+                let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                self.watcher = Some(Watch { path, canonical, _watcher: watcher, events });
             }
         }
     }
@@ -2037,6 +2087,9 @@ impl NiceGitApp {
                 let Ok(event) = event else { continue };
                 if changes_visible_state(&event) && last_load.elapsed() > WATCH_DEBOUNCE {
                     self.watched_change.get_or_insert_with(Instant::now);
+                    if touches_git_directory(&event, &watch.path, &watch.canonical) {
+                        self.watched_git_change = true;
+                    }
                 }
             }
         }
@@ -2056,8 +2109,16 @@ impl NiceGitApp {
         let watched = auto && self.watched_change.is_some_and(|at| at.elapsed() >= WATCH_DEBOUNCE);
         let periodic = auto && focused && self.repo().is_some_and(|r| r.last_load.elapsed() >= AUTO_REFRESH);
         if regained || watched || periodic {
+            // Only a watched working file changed, and nothing in the Git directory did, so the
+            // branches, commits, and other refs are as the snapshot has them. Any other trigger
+            // reads everything.
+            let quick = watched && !regained && !periodic && !self.watched_git_change;
             self.watched_change = None;
-            self.load(false);
+            if quick {
+                self.load_quick();
+            } else {
+                self.load(false);
+            }
         }
         if focused {
             ctx.request_repaint_after(AUTO_REFRESH);
@@ -2182,6 +2243,16 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+/// Whether a watched path is in a Git directory: `.git` itself or anything under it. A linked
+/// worktree keeps its Git directory elsewhere, so a path outside the watched folder counts too.
+/// Either spelling of the root is accepted, since the file system may report a resolved path.
+fn touches_git_directory(event: &notify::Event, root: &Path, canonical: &Path) -> bool {
+    event.paths.iter().any(|path| {
+        let text = path.to_string_lossy().replace('\\', "/");
+        text.contains("/.git/") || text.ends_with("/.git") || !(path.starts_with(root) || path.starts_with(canonical))
+    })
 }
 
 #[cfg(test)]
@@ -2333,10 +2404,26 @@ mod tests {
     use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, EventKind, ModifyKind};
     use notify::Event;
 
-    use super::changes_visible_state;
+    use std::path::Path;
+
+    use super::{changes_visible_state, touches_git_directory};
 
     fn event(kind: EventKind, path: &str) -> Event {
         Event::new(kind).add_path(path.into())
+    }
+
+    #[test]
+    fn git_directory_changes_are_told_apart_from_working_files() {
+        let write = EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let root = Path::new("/repo");
+        let touches = |path: &str| touches_git_directory(&event(write, path), root, root);
+        assert!(touches("/repo/.git/refs/heads/main"));
+        assert!(touches("/repo/.git/index"));
+        assert!(touches("/repo/.git"), "a linked worktree's .git file");
+        assert!(touches("/elsewhere/git-dir/HEAD"), "a path outside the watched folder");
+        assert!(!touches("/repo/src/main.rs"));
+        assert!(!touches("/repo/.gitignore"));
+        assert!(!touches("/repo/notes/.git-notes.txt"));
     }
 
     #[test]

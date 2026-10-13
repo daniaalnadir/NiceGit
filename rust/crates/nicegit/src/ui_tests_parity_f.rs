@@ -920,3 +920,71 @@ fn branch_tracking_is_read_again_only_when_a_tip_moved() {
     wait(&mut harness, "the topic branch to show one commit to push", |h| shows(h, "\u{2191}1 \u{2193}0"));
     assert_eq!(reads(&harness), first + 1, "the moved tip starts exactly one tracking read");
 }
+
+/// Lets the watcher's events from the last load pass, and any refresh they start, so the load
+/// counts that a test compares afterwards are its own.
+fn settle_after_load(harness: &mut App) {
+    for _ in 0..30 {
+        std::thread::sleep(Duration::from_millis(40));
+        harness.step();
+    }
+    wait(harness, "any refresh from the load to finish", |h| h.state().repo().is_some_and(|r| !r.loading));
+}
+
+/// The quick status refreshes and the full loads that the app has started so far.
+fn load_counts(harness: &App) -> (usize, usize) {
+    (harness.state().quick_loads, harness.state().full_loads)
+}
+
+#[test]
+fn a_saved_working_file_refreshes_only_the_status() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    settle_after_load(&mut harness);
+    let (quick, full) = load_counts(&harness);
+
+    std::fs::write(path.join("saved-elsewhere.txt"), "saved in another app\n").unwrap();
+    wait(&mut harness, "the new file in the Changes panel", |h| shows(h, "saved-elsewhere.txt"));
+    let (quick_after, full_after) = load_counts(&harness);
+    assert!(quick_after > quick, "the file change starts a quick status refresh");
+    assert_eq!(full_after, full, "no full load: no branch, commit, or Git file changed");
+}
+
+#[test]
+fn a_commit_made_outside_reloads_the_whole_history() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    settle_after_load(&mut harness);
+    let (quick, full) = load_counts(&harness);
+
+    commit_file(path, "outside.txt", "made in another app\n", "Commit from another app");
+    wait(&mut harness, "the commit in the history", |h| {
+        h.state().snapshot().is_some_and(|s| s.commits.iter().any(|c| c.subject == "Commit from another app"))
+    });
+    let (quick_after, full_after) = load_counts(&harness);
+    assert_eq!(quick_after, quick, "the commit moved HEAD and the refs, so no quick refresh");
+    assert!(full_after > full, "the commit's Git files start a full load");
+}
+
+#[test]
+fn returning_to_the_app_reloads_everything() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    settle_after_load(&mut harness);
+    let (quick, full) = load_counts(&harness);
+    let focus = |harness: &mut App, focused: bool| {
+        harness.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().focused = Some(focused);
+        harness.run_steps(3);
+    };
+
+    focus(&mut harness, false);
+    focus(&mut harness, true);
+    wait(&mut harness, "the full refresh on return", |h| load_counts(h).1 > full);
+    assert_eq!(load_counts(&harness).0, quick, "returning to the app never starts a quick refresh");
+}

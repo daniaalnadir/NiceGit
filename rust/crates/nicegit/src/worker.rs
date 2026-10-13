@@ -65,6 +65,21 @@ impl Worker {
         });
     }
 
+    /// Refreshes the working-tree status of `previous` and keeps the rest, when the checkout is
+    /// unchanged (see `GitClient::quick_snapshot`). Otherwise, and when the quick read fails, it
+    /// loads everything; a real failure then surfaces from that full load.
+    pub fn quick_load(&self, generation: u64, path: PathBuf, previous: Snapshot, history_limit: usize, scope: HistoryScope) {
+        self.spawn(move || {
+            let client = GitClient::new();
+            let quick = client.quick_snapshot(&previous, &path).ok().flatten();
+            let snapshot = match quick {
+                Some(snapshot) => Ok(snapshot),
+                None => client.load_snapshot_scoped(&path, history_limit, scope),
+            };
+            Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
+        });
+    }
+
     /// Runs an action that changes the repository, then reloads it.
     pub fn act(
         &self,

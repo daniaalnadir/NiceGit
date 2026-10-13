@@ -61,13 +61,28 @@ pub struct StatusWithCheckout {
     pub entries: Vec<StatusEntry>,
     pub branch: Option<String>,
     pub head_hash: Option<String>,
+    /// The upstream branch's name, as status prints it, when the branch has one.
+    pub upstream: Option<String>,
+    /// Commits the branch has that its upstream lacks, from the `# branch.ab` header. Absent
+    /// when there is no upstream, or when status was asked not to count it.
+    pub ahead: Option<usize>,
+    /// Commits the upstream has that the branch lacks, from the `# branch.ab` header.
+    pub behind: Option<usize>,
     /// False when any record could not be parsed; callers then fall back to a full refresh.
     pub is_complete: bool,
 }
 
 pub fn parse_status_with_checkout(output: &str) -> StatusWithCheckout {
     let records: Vec<&str> = output.split('\0').filter(|record| !record.is_empty()).collect();
-    let mut result = StatusWithCheckout { entries: Vec::new(), branch: None, head_hash: None, is_complete: true };
+    let mut result = StatusWithCheckout {
+        entries: Vec::new(),
+        branch: None,
+        head_hash: None,
+        upstream: None,
+        ahead: None,
+        behind: None,
+        is_complete: true,
+    };
     let mut saw_oid = false;
     let mut index = 0;
     while index < records.len() {
@@ -80,6 +95,17 @@ pub fn parse_status_with_checkout(output: &str) -> StatusWithCheckout {
         if let Some(oid) = record.strip_prefix("# branch.oid ") {
             saw_oid = true;
             result.head_hash = (oid != "(initial)").then(|| oid.to_string());
+            continue;
+        }
+        if let Some(upstream) = record.strip_prefix("# branch.upstream ") {
+            result.upstream = Some(upstream.to_string());
+            continue;
+        }
+        if let Some(counts) = record.strip_prefix("# branch.ab ") {
+            // The header reads "+<ahead> -<behind>".
+            let mut parts = counts.split_whitespace();
+            result.ahead = parts.next().and_then(|value| value.strip_prefix('+')).and_then(|value| value.parse().ok());
+            result.behind = parts.next().and_then(|value| value.strip_prefix('-')).and_then(|value| value.parse().ok());
             continue;
         }
         if let Some(path) = record.strip_prefix("? ") {
@@ -415,6 +441,23 @@ mod tests {
         assert_eq!(parsed.entries[1].original_path.as_deref(), Some("original.txt"));
         assert_eq!(parsed.entries[2].kind, StatusKind::Untracked);
         assert!(!parse_status_with_checkout("# branch.oid (initial)\0").is_complete);
+    }
+
+    #[test]
+    fn status_v2_reports_upstream_and_ahead_behind() {
+        let output = "# branch.oid abc123\0# branch.head main\0# branch.upstream origin/main\0# branch.ab +2 -5\0";
+        let parsed = parse_status_with_checkout(output);
+        assert_eq!(parsed.upstream.as_deref(), Some("origin/main"));
+        assert_eq!((parsed.ahead, parsed.behind), (Some(2), Some(5)));
+
+        // Without an upstream, status prints neither the upstream nor the counts.
+        let parsed = parse_status_with_checkout("# branch.oid abc123\0# branch.head main\0");
+        assert_eq!((parsed.upstream, parsed.ahead, parsed.behind), (None, None, None));
+
+        // A gone upstream is named without counts, so a caller can see the counts are missing.
+        let parsed = parse_status_with_checkout("# branch.oid abc123\0# branch.head main\0# branch.upstream origin/gone\0");
+        assert_eq!(parsed.upstream.as_deref(), Some("origin/gone"));
+        assert_eq!((parsed.ahead, parsed.behind), (None, None));
     }
 
     #[test]

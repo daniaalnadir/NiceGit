@@ -335,7 +335,55 @@ impl GitClient {
         snapshot.rebase_stopped_for_edit = edit_stop_in(&git_directory, &snapshot.status);
         snapshot.bisecting = git_directory.join("BISECT_START").exists();
         snapshot.has_gitmodules = root.join(".gitmodules").exists();
+        snapshot.absolute_git_dir = Some(git_directory);
         Ok(snapshot)
+    }
+
+    /// Refreshes only the working-tree status of `previous`, a snapshot of this checkout. Commits,
+    /// branches, tags, stashes, remotes, and worktrees are taken from `previous` unchanged, so this
+    /// is right only while none of them moved.
+    ///
+    /// It returns `Ok(None)`, meaning a full load is needed, when the branch, HEAD, upstream, or
+    /// unfinished operation differs from `previous`, when the status output is incomplete, or when
+    /// `previous` has no Git directory. An error is returned for a failed read, which the caller
+    /// can treat as a full load too. The read never writes the index.
+    pub fn quick_snapshot(&self, previous: &Snapshot, directory: &Path) -> Result<Option<Snapshot>> {
+        let Some(git_directory) = previous.absolute_git_dir.as_deref() else { return Ok(None) };
+        // Built here rather than reusing `self`, so a deliberate client cannot write the index.
+        let quiet = GitClient::new();
+        let output = quiet.run(&["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], directory)?;
+        let status = parse_status_with_checkout(&output);
+        if !status.is_complete {
+            return Ok(None);
+        }
+        // Status names a detached HEAD "(detached)", and the snapshot names it "Detached HEAD <commit>".
+        // That name follows HEAD, which is compared below.
+        let same_branch = match status.branch.as_deref() {
+            Some("(detached)") => previous.current_branch.starts_with("Detached HEAD "),
+            Some(branch) => branch == previous.current_branch,
+            None => false,
+        };
+        if !same_branch || status.head_hash != previous.head_hash || status.upstream != previous.upstream {
+            return Ok(None);
+        }
+        // With an upstream, both counts must be present; without one, there are none.
+        let (ahead, behind) = match (&status.upstream, status.ahead, status.behind) {
+            (None, _, _) => (None, None),
+            (Some(_), Some(ahead), Some(behind)) => (Some(ahead), Some(behind)),
+            _ => return Ok(None),
+        };
+        if operation_in(git_directory) != previous.operation {
+            return Ok(None);
+        }
+        let mut snapshot = previous.clone();
+        snapshot.status = status.entries;
+        snapshot.ahead = ahead;
+        snapshot.behind = behind;
+        snapshot.rebase_stopped_for_edit = edit_stop_in(git_directory, &snapshot.status);
+        // A working-file change can add or remove .gitmodules; both checks are file checks.
+        snapshot.bisecting = git_directory.join("BISECT_START").exists();
+        snapshot.has_gitmodules = Path::new(&previous.root_path).join(".gitmodules").exists();
+        Ok(Some(snapshot))
     }
 
     pub fn load_status(&self, directory: &Path) -> Result<Vec<StatusEntry>> {

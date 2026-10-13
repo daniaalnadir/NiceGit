@@ -77,6 +77,8 @@
   with 200 tracked branches.
 - Refreshes skip the bisect and submodule checks in repositories that are not bisecting or have
   no submodules.
+- Saving a file in another app refreshes only the changed-file list when no branch, commit, or
+  operation changed, instead of reloading the whole history.
 
 ## 1.5.0 - Fewer surprises
 
