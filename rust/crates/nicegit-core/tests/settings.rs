@@ -255,7 +255,7 @@ fn push_tag_publishes_shown_tag_and_refuses_moved_tag() {
     let repo = Repo::new();
     let first = repo.commit("a.txt", "one\n", "First");
     repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
-    client().create_tag("v1", &first, None, repo.path()).expect("create tag");
+    client().create_tag("v1", &first, None, false, repo.path()).expect("create tag");
     let before = snapshot(repo.path());
     let tip = before.tag_tips["v1"].clone();
     let expected = before.remote_push_addresses["origin"].clone();

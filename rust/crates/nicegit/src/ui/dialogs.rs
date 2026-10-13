@@ -139,6 +139,9 @@ pub enum InputKind {
     CreateTag {
         target: String,
         annotated: bool,
+        /// Whether an annotated tag is signed with the user's signing key. It is kept while the tag is
+        /// lightweight, but only an annotated tag is created signed.
+        sign: bool,
         push: Option<String>,
         remotes: Vec<String>,
         push_addresses: std::collections::BTreeMap<String, Vec<String>>,
@@ -278,6 +281,7 @@ impl Dialog {
             InputKind::CreateTag {
                 target,
                 annotated: false,
+                sign: false,
                 push: None,
                 remotes,
                 push_addresses: snapshot.remote_push_addresses.clone(),
@@ -444,7 +448,7 @@ impl NiceGitApp {
                         );
                     }
                     let mut show_second = second_label.is_some();
-                    if let InputKind::CreateTag { annotated, push, remotes, default_remote, .. } = kind {
+                    if let InputKind::CreateTag { annotated, sign, push, remotes, default_remote, .. } = kind {
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
                             if widgets::radio(ui, !*annotated, "Lightweight").clicked() {
@@ -455,6 +459,17 @@ impl NiceGitApp {
                             }
                         });
                         show_second = *annotated;
+                        // Only an annotated tag can be signed. A lightweight tag shows the box unticked, and
+                        // the choice is kept for when the tag is annotated again.
+                        let mut signing = *annotated && *sign;
+                        let signing_changed = widgets::checkbox(ui, *annotated, &mut signing, "Sign with your signing key")
+                            .on_hover_text(
+                                "Git signs the tag with your configured signing key (user.signingKey and gpg.format), as `git tag --sign` does.",
+                            )
+                            .changed();
+                        if signing_changed {
+                            *sign = signing;
+                        }
                         if !remotes.is_empty() {
                             ui.add_space(6.0);
                             ui.horizontal(|ui| {
@@ -861,24 +876,29 @@ impl NiceGitApp {
             InputKind::RenameBranch(branch) => {
                 self.act("Rename branch", move |client, path| client.rename_branch(&branch, &value, path).map(|_| None))
             }
-            InputKind::CreateTag { target, annotated, push, push_addresses, .. } => self.act("Create tag", move |client, path| {
+            InputKind::CreateTag { target, annotated, sign, push, push_addresses, .. } => self.act("Create tag", move |client, path| {
                 let name = value.trim().to_string();
                 let message = annotated.then_some(second.as_str());
-                client.create_tag(&value, &target, message, path)?;
+                let signed = annotated && sign;
+                client.create_tag(&value, &target, message, signed, path)?;
+                let created = if signed { "signed tag" } else { "tag" };
                 let Some(remote) = push else {
-                    return Ok(Some(format!("Created tag {name}.")));
+                    return Ok(Some(format!("Created {created} {name}.")));
                 };
                 // The tag exists now, so a failed push leaves it in place and says so.
                 let addresses = push_addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
                 let pushed = client.tag_tip(&name, path).and_then(|tip| client.push_tag(&name, &remote, &tip, addresses, path));
                 match pushed {
-                    Ok(()) => Ok(Some(format!("Created tag {name} and pushed it to {remote}."))),
+                    Ok(()) => Ok(Some(format!("Created {created} {name} and pushed it to {remote}."))),
                     Err(error) => {
                         let reason = match error {
                             GitError::CommandFailed { message, .. } => message,
                             other => other.to_string(),
                         };
-                        Err(GitError::failed("create tag", format!("Created tag {name}, but could not push it to {remote}: {reason}")))
+                        Err(GitError::failed(
+                            "create tag",
+                            format!("Created {created} {name}, but could not push it to {remote}: {reason}"),
+                        ))
                     }
                 }
             }),

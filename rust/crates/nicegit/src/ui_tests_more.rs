@@ -2626,6 +2626,71 @@ fn create_tag_without_push_stays_local() {
 }
 
 #[test]
+fn signing_is_offered_only_for_an_annotated_tag() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    // A lightweight tag cannot be signed, so the box is shown unticked and disabled.
+    assert!(harness.get_by_role_and_label(Role::CheckBox, "Sign with your signing key").accesskit_node().is_disabled());
+    assert_ne!(
+        harness.get_by_role_and_label(Role::CheckBox, "Sign with your signing key").accesskit_node().toggled(),
+        Some(egui::accesskit::Toggled::True)
+    );
+
+    harness.get_by_label("Annotated, with a message").click();
+    settle(&mut harness);
+    assert!(!harness.get_by_role_and_label(Role::CheckBox, "Sign with your signing key").accesskit_node().is_disabled());
+}
+
+#[test]
+fn create_signed_annotated_tag_from_the_dialog() {
+    let repo = repository();
+    let path = repo.path();
+    let keys = temp_dir();
+    let key = keys.path().join("signing");
+    let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output();
+    let Ok(made) = made else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+    // Repository-local settings, so a machine's own signing program is not used.
+    let key_path = key.to_string_lossy().replace('\\', "/");
+    git(path, &["config", "gpg.format", "ssh"]);
+    git(path, &["config", "gpg.ssh.program", "ssh-keygen"]);
+    git(path, &["config", "user.signingkey", &key_path]);
+    // A machine's global settings can stop Git signing, for example an empty gpg.format, which
+    // the repository's own value does not override.
+    let probe = Command::new("git").args(["tag", "--sign", "--message", "probe", "nicegit-probe", "HEAD"]).current_dir(path).output();
+    if !probe.is_ok_and(|output| output.status.success()) {
+        eprintln!("Git cannot sign tags with this machine's settings; skipping");
+        return;
+    }
+    git(path, &["tag", "--delete", "nicegit-probe"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    new_tag_on_head(&mut harness, "v9.9.9");
+    harness.get_by_label("Annotated, with a message").click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::CheckBox, "Sign with your signing key").click();
+    settle(&mut harness);
+    type_into(&mut harness, "Tag message", "First release");
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+
+    assert!(git(path, &["cat-file", "tag", "v9.9.9"]).contains("-----BEGIN SSH SIGNATURE-----"), "the tag is signed");
+    assert!(
+        harness.state().notice.as_ref().is_some_and(|n| n.text.contains("Created signed tag v9.9.9.")),
+        "notice: {:?}",
+        harness.state().notice.as_ref().map(|n| n.text.clone())
+    );
+}
+
+#[test]
 fn create_tag_reports_a_failed_push() {
     let repo = repository();
     let path = repo.path();

@@ -328,8 +328,10 @@ branch moved since your last fetch.
 Create lightweight or annotated local tags from a commit or branch menu. Annotated
 tags require a message and use the repository's Git identity. A tag can be pushed to a
 chosen remote as it is created, with Push to remote in the New tag dialog, or later from
-its sidebar menu, and it can be deleted from a remote there. Tags are unsigned; signing
-tags is not yet available in the interface. Hovering a tag in the sidebar shows an
+its sidebar menu, and it can be deleted from a remote there. An annotated tag can be signed
+with "Sign with your signing key", which uses your Git signing setup (user.signingKey and
+gpg.format) as `git tag --sign` does; unsigned tags stay unsigned even when tag.gpgSign is
+set. Hovering a tag in the sidebar shows an
 annotated tag's tagger, date, and message, or a lightweight tag's commit.
 
 Commit menus support revert with confirmation, merge-parent selection, and
