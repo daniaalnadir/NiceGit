@@ -49,6 +49,17 @@ pub enum IgnoreScope {
     Local,
 }
 
+/// What to do with a remote's separate push address when its settings are saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PushUrlChange {
+    /// Leave the push addresses as they are.
+    Keep,
+    /// Replace every push address with this one.
+    Set(String),
+    /// Remove the separate push address, so pushes use the fetch address again.
+    Clear,
+}
+
 /// The addresses one remote was shown with, in the shape `require_remote_addresses` compares.
 fn expected_addresses_for(remote: &str, addresses: &[String]) -> BTreeMap<String, Vec<String>> {
     BTreeMap::from([(remote.to_string(), addresses.to_vec())])
@@ -56,6 +67,22 @@ fn expected_addresses_for(remote: &str, addresses: &[String]) -> BTreeMap<String
 
 fn io_failure(command: &str, error: std::io::Error) -> GitError {
     GitError::failed(command, error.to_string())
+}
+
+/// The error for a step that failed after earlier steps of the same remote edit were saved. It
+/// names what was saved, since the remote has then changed in part.
+fn partial_edit_failure(renamed: Option<&str>, fetch_changed: bool, step: &str, error: GitError) -> GitError {
+    let saved = match (renamed, fetch_changed) {
+        (Some(new_name), true) => format!("Renamed the remote to {new_name} and changed its fetch address"),
+        (Some(new_name), false) => format!("Renamed the remote to {new_name}"),
+        (None, true) => "Changed the remote's fetch address".to_string(),
+        (None, false) => return error,
+    };
+    let reason = match error {
+        GitError::CommandFailed { message, .. } => message,
+        other => other.to_string(),
+    };
+    GitError::failed("remote edit", format!("{saved}, but could not {step}: {reason}"))
 }
 
 /// The ignore pattern for `path`, with wildcard and comment characters escaped so the name is
@@ -159,6 +186,69 @@ impl GitClient {
         }
         self.require_remote_addresses(&expected_addresses_for(name, expected_addresses), name, false, "remote set-url", directory)?;
         self.run(&["remote", "set-url", "--", name, address], directory).map(drop)
+    }
+
+    /// Renames a remote, changes its fetch address, and sets or clears its separate push address,
+    /// if the addresses shown for each direction still match. Both are checked before anything
+    /// changes: once the fetch address changes, a remote without its own push address reports the
+    /// new one for pushes too.
+    #[allow(clippy::too_many_arguments)]
+    pub fn edit_remote(
+        &self,
+        name: &str,
+        new_name: &str,
+        new_fetch: &str,
+        push: PushUrlChange,
+        expected_fetch: &[String],
+        expected_push: &[String],
+        directory: &Path,
+    ) -> Result<()> {
+        let new_name = new_name.trim();
+        let new_fetch = new_fetch.trim();
+        if new_name.is_empty() {
+            return Err(GitError::failed("remote edit", "Enter the remote's name."));
+        }
+        if new_fetch.is_empty() {
+            return Err(GitError::failed("remote edit", "Enter the remote's new address."));
+        }
+        let push = match push {
+            PushUrlChange::Set(url) if url.trim().is_empty() => PushUrlChange::Clear,
+            PushUrlChange::Set(url) => PushUrlChange::Set(url.trim().to_string()),
+            other => other,
+        };
+        self.require_remote_addresses(&expected_addresses_for(name, expected_fetch), name, false, "remote edit", directory)?;
+        self.require_remote_addresses(&expected_addresses_for(name, expected_push), name, true, "remote edit", directory)?;
+
+        let mut current = name.to_string();
+        let mut renamed = None;
+        if new_name != name {
+            self.run(&["remote", "rename", "--", name, new_name], directory).map(drop)?;
+            current = new_name.to_string();
+            renamed = Some(new_name);
+        }
+        let mut fetch_changed = false;
+        if expected_fetch.first().map(String::as_str) != Some(new_fetch) {
+            self.run(&["remote", "set-url", "--", &current, new_fetch], directory)
+                .map(drop)
+                .map_err(|error| partial_edit_failure(renamed, fetch_changed, "change its fetch address", error))?;
+            fetch_changed = true;
+        }
+        let key = format!("remote.{current}.pushurl");
+        match push {
+            PushUrlChange::Keep => {}
+            PushUrlChange::Set(url) => {
+                self.run(&["config", "--local", "--replace-all", "--", &key, &url], directory)
+                    .map(drop)
+                    .map_err(|error| partial_edit_failure(renamed, fetch_changed, "change its push URL", error))?;
+            }
+            // Exit status 5 means there was no push address to remove.
+            PushUrlChange::Clear => {
+                self.run_accepting(&["config", "--local", "--unset-all", "--", &key], directory, &[0, 5])
+                    .map(drop)
+                    .map_err(|error| partial_edit_failure(renamed, fetch_changed, "change its push URL", error))?;
+            }
+        }
+        Ok(())
     }
 
     // MARK: Tags on remotes

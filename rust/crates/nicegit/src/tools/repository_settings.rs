@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use egui::{Color32, Context, RichText, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::settings::IdentityProfile;
+use nicegit_core::settings::{IdentityProfile, PushUrlChange};
 use nicegit_core::{GitError, Snapshot};
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +50,11 @@ struct RemoteEdit {
     original: String,
     name: String,
     address: String,
+    /// The separate push address, or empty when pushes use the fetch address.
+    push: String,
+    /// Whether the push address can be edited. A remote with several separate push addresses
+    /// keeps them as they are.
+    push_editable: bool,
 }
 
 /// A button press on one remote card, handled once the card is drawn.
@@ -67,7 +72,7 @@ enum RemoteAction {
 /// what the user typed.
 enum RemotePending {
     Add(String),
-    Edit { name: String, address: String },
+    Edit { name: String, address: String, push: PushUrlChange },
     Remove(String),
 }
 
@@ -333,7 +338,7 @@ impl RepositorySettingsWindow {
             let fetch = snapshot.remote_fetch_addresses.get(remote).cloned().unwrap_or_default();
             let push = snapshot.remote_push_addresses.get(remote).cloned().unwrap_or_default();
             if let Some(action) = self.remote_card(ui, idle, remote, &fetch, &push) {
-                self.handle_remote_action(cx, remote, fetch, action);
+                self.handle_remote_action(cx, remote, fetch, push, action);
             }
             ui.add_space(6.0);
         }
@@ -382,6 +387,7 @@ impl RepositorySettingsWindow {
     fn remote_card(&mut self, ui: &mut Ui, idle: bool, name: &str, fetch: &[String], push: &[String]) -> Option<RemoteAction> {
         let c = theme::of(ui);
         let displayed = fetch.first().cloned().unwrap_or_default();
+        let displayed_push = push_field(fetch, push).0;
         let mut action = None;
         card(ui, |ui| {
             if let Some(edit) = self.edit.as_mut().filter(|edit| edit.original == name) {
@@ -395,9 +401,29 @@ impl RepositorySettingsWindow {
                     ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.address).desired_width(320.0))
                         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit fetch URL"));
                     ui.end_row();
+                    ui.label("Push URL");
+                    if edit.push_editable {
+                        ui.add_enabled(
+                            idle,
+                            egui::TextEdit::singleline(&mut edit.push).hint_text("Same as fetch URL").desired_width(320.0),
+                        )
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit push URL"));
+                    } else {
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new("This remote pushes to several URLs; NiceGit leaves them as they are.")
+                                    .small()
+                                    .color(c.muted),
+                            )
+                            .wrap(),
+                        );
+                    }
+                    ui.end_row();
                 });
                 let valid = !edit.name.trim().is_empty() && !edit.address.trim().is_empty();
-                let changed = edit.name.trim() != name || edit.address.trim() != displayed;
+                let changed = edit.name.trim() != name
+                    || edit.address.trim() != displayed
+                    || (edit.push_editable && edit.push.trim() != displayed_push);
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if ui.add_enabled(idle, egui::Button::new("Cancel")).clicked() {
@@ -454,13 +480,16 @@ impl RepositorySettingsWindow {
         action
     }
 
-    fn handle_remote_action(&mut self, cx: &mut Ctx, name: &str, fetch: Vec<String>, action: RemoteAction) {
+    fn handle_remote_action(&mut self, cx: &mut Ctx, name: &str, fetch: Vec<String>, push: Vec<String>, action: RemoteAction) {
         match action {
             RemoteAction::StartEdit => {
+                let (push, push_editable) = push_field(&fetch, &push);
                 self.edit = Some(RemoteEdit {
                     original: name.to_string(),
                     name: name.to_string(),
                     address: fetch.first().cloned().unwrap_or_default(),
+                    push,
+                    push_editable,
                 });
             }
             RemoteAction::CancelEdit => self.edit = None,
@@ -468,18 +497,19 @@ impl RepositorySettingsWindow {
                 let Some(edit) = self.edit.clone() else { return };
                 let new_name = edit.name.trim().to_string();
                 let new_address = edit.address.trim().to_string();
-                let displayed = fetch.first().cloned().unwrap_or_default();
+                let new_push = edit.push.trim().to_string();
+                let push_change = if !edit.push_editable || new_push == push_field(&fetch, &push).0 {
+                    PushUrlChange::Keep
+                } else if new_push.is_empty() {
+                    PushUrlChange::Clear
+                } else {
+                    PushUrlChange::Set(new_push)
+                };
                 let old = name.to_string();
-                self.pending = Some(RemotePending::Edit { name: new_name.clone(), address: new_address.clone() });
+                self.pending =
+                    Some(RemotePending::Edit { name: new_name.clone(), address: new_address.clone(), push: push_change.clone() });
                 cx.act(format!("Save remote {name}"), move |client, dir| {
-                    let mut current = old.clone();
-                    if new_name != old {
-                        client.rename_remote(&old, &new_name, &fetch, dir)?;
-                        current = new_name.clone();
-                    }
-                    if new_address != displayed {
-                        client.set_remote_address(&current, &new_address, &fetch, dir)?;
-                    }
+                    client.edit_remote(&old, &new_name, &new_address, push_change, &fetch, &push, dir)?;
                     Ok(Some(format!("Saved remote {new_name}.")))
                 });
             }
@@ -581,8 +611,9 @@ impl ToolWindow for RepositorySettingsWindow {
                 self.new_remote_name.clear();
                 self.new_remote_address.clear();
             }
-            Some(RemotePending::Edit { name, address })
-                if snapshot.remote_fetch_addresses.get(&name).and_then(|addresses| addresses.first()) == Some(&address) =>
+            Some(RemotePending::Edit { name, address, push })
+                if snapshot.remote_fetch_addresses.get(&name).and_then(|addresses| addresses.first()) == Some(&address)
+                    && push_matches(snapshot, &name, &push) =>
             {
                 self.edit = None;
             }
@@ -591,6 +622,29 @@ impl ToolWindow for RepositorySettingsWindow {
             }
             _ => {}
         }
+    }
+}
+
+/// The push address the edit form shows, and whether it can be edited. It is empty when pushes use
+/// the fetch address, the single separate push address otherwise. A remote with several separate
+/// push addresses is not editable here.
+fn push_field(fetch: &[String], push: &[String]) -> (String, bool) {
+    if push.is_empty() || push == fetch {
+        return (String::new(), true);
+    }
+    match push {
+        [only] => (only.clone(), true),
+        _ => (String::new(), false),
+    }
+}
+
+/// Whether the snapshot shows the push addresses that a saved edit should have produced.
+fn push_matches(snapshot: &Snapshot, name: &str, push: &PushUrlChange) -> bool {
+    let current = snapshot.remote_push_addresses.get(name);
+    match push {
+        PushUrlChange::Keep => true,
+        PushUrlChange::Clear => current == snapshot.remote_fetch_addresses.get(name),
+        PushUrlChange::Set(url) => current.is_some_and(|addresses| *addresses == [url.clone()]),
     }
 }
 

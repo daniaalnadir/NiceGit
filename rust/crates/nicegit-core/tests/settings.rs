@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
 use nicegit_core::models::{Branch, GitError, Snapshot, Worktree};
-use nicegit_core::settings::{ignore_pattern, IgnoreRule, IgnoreScope};
+use nicegit_core::settings::{ignore_pattern, IgnoreRule, IgnoreScope, PushUrlChange};
 use nicegit_core::submodule::SubmoduleState;
 use tempfile::TempDir;
 
@@ -245,6 +245,196 @@ fn remove_remote_forgets_it_and_refuses_stale_view() {
     client().remove_remote("origin", &expected, repo.path()).expect("remove remote");
     assert!(snapshot(repo.path()).remotes.is_empty());
     assert!(remote.path().exists(), "the server must be left alone");
+}
+
+/// The addresses `git remote get-url --push --all` lists for `name`.
+fn push_addresses(directory: &Path, name: &str) -> Vec<String> {
+    git(directory, &["remote", "get-url", "--push", "--all", name]).lines().map(str::to_string).collect()
+}
+
+/// A repository with `origin` fetching from `first`, returning the displayed addresses too.
+fn repo_with_origin(first: &Path) -> (Repo, Vec<String>, Vec<String>) {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(first)]);
+    let shown = snapshot(repo.path());
+    let fetch = shown.remote_fetch_addresses["origin"].clone();
+    let push = shown.remote_push_addresses["origin"].clone();
+    (repo, fetch, push)
+}
+
+#[test]
+fn edit_remote_sets_push_url_when_remote_has_none() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let (repo, fetch, push) = repo_with_origin(first.path());
+
+    client()
+        .edit_remote(
+            "origin",
+            "origin",
+            &path_string(first.path()),
+            PushUrlChange::Set(path_string(second.path())),
+            &fetch,
+            &push,
+            repo.path(),
+        )
+        .expect("set push URL");
+
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(second.path())]);
+    assert_eq!(client().remote_address("origin", repo.path()).expect("address"), path_string(first.path()));
+}
+
+#[test]
+fn edit_remote_changes_and_clears_push_url() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let third = bare_remote();
+    let (repo, fetch, _) = repo_with_origin(first.path());
+    repo.git(&["config", "remote.origin.pushurl", &path_string(second.path())]);
+    let push = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+
+    client()
+        .edit_remote(
+            "origin",
+            "origin",
+            &path_string(first.path()),
+            PushUrlChange::Set(path_string(third.path())),
+            &fetch,
+            &push,
+            repo.path(),
+        )
+        .expect("change push URL");
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(third.path())]);
+
+    let push = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    client()
+        .edit_remote("origin", "origin", &path_string(first.path()), PushUrlChange::Clear, &fetch, &push, repo.path())
+        .expect("clear push URL");
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(first.path())], "pushes use the fetch URL again");
+
+    // Clearing when no separate push URL is set is not an error.
+    let push = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    client()
+        .edit_remote("origin", "origin", &path_string(first.path()), PushUrlChange::Clear, &fetch, &push, repo.path())
+        .expect("clear again");
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(first.path())]);
+}
+
+#[test]
+fn edit_remote_treats_blank_push_url_as_clear() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let (repo, fetch, _) = repo_with_origin(first.path());
+    repo.git(&["config", "remote.origin.pushurl", &path_string(second.path())]);
+    let push = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+
+    client()
+        .edit_remote("origin", "origin", &path_string(first.path()), PushUrlChange::Set("  ".to_string()), &fetch, &push, repo.path())
+        .expect("blank");
+
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(first.path())]);
+}
+
+#[test]
+fn edit_remote_renames_and_sets_fetch_and_push_together() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let third = bare_remote();
+    let (repo, fetch, push) = repo_with_origin(first.path());
+
+    client()
+        .edit_remote(
+            "origin",
+            "  upstream ",
+            &path_string(second.path()),
+            PushUrlChange::Set(path_string(third.path())),
+            &fetch,
+            &push,
+            repo.path(),
+        )
+        .expect("edit remote");
+
+    assert_eq!(snapshot(repo.path()).remotes, vec!["upstream".to_string()]);
+    assert_eq!(client().remote_address("upstream", repo.path()).expect("address"), path_string(second.path()));
+    assert_eq!(push_addresses(repo.path(), "upstream"), vec![path_string(third.path())]);
+}
+
+#[test]
+fn edit_remote_requires_name_and_address() {
+    let first = bare_remote();
+    let (repo, fetch, push) = repo_with_origin(first.path());
+
+    let no_name = client().edit_remote("origin", "  ", &path_string(first.path()), PushUrlChange::Keep, &fetch, &push, repo.path());
+    assert!(error_text(no_name).contains("Enter the remote's name."));
+    let no_address = client().edit_remote("origin", "origin", " ", PushUrlChange::Keep, &fetch, &push, repo.path());
+    assert!(error_text(no_address).contains("Enter the remote's new address."));
+    assert_eq!(snapshot(repo.path()).remotes, vec!["origin".to_string()]);
+}
+
+#[test]
+fn edit_remote_changes_fetch_address_of_remote_without_push_url() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let (repo, fetch, push) = repo_with_origin(first.path());
+
+    client()
+        .edit_remote("origin", "origin", &path_string(second.path()), PushUrlChange::Keep, &fetch, &push, repo.path())
+        .expect("change fetch address");
+
+    assert_eq!(client().remote_address("origin", repo.path()).expect("address"), path_string(second.path()));
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(second.path())], "pushes follow the new fetch address");
+}
+
+#[test]
+fn edit_remote_refuses_stale_fetch_or_push_view_and_changes_nothing() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let third = bare_remote();
+    let (repo, fetch, push) = repo_with_origin(first.path());
+
+    repo.git(&["remote", "set-url", "origin", &path_string(second.path())]);
+    let stale_fetch =
+        client().edit_remote("origin", "renamed", &path_string(third.path()), PushUrlChange::Keep, &fetch, &push, repo.path());
+    assert!(error_text(stale_fetch).contains("remote address changed"));
+    assert_eq!(snapshot(repo.path()).remotes, vec!["origin".to_string()]);
+    assert_eq!(client().remote_address("origin", repo.path()).expect("address"), path_string(second.path()));
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(second.path())]);
+
+    let shown_fetch = vec![path_string(second.path())];
+    repo.git(&["config", "remote.origin.pushurl", &path_string(third.path())]);
+    let stale_push =
+        client().edit_remote("origin", "renamed", &path_string(first.path()), PushUrlChange::Clear, &shown_fetch, &push, repo.path());
+    assert!(error_text(stale_push).contains("remote address changed"));
+    assert_eq!(snapshot(repo.path()).remotes, vec!["origin".to_string()]);
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(third.path())]);
+}
+
+#[test]
+fn edit_remote_replaces_several_push_urls_with_one() {
+    let first = bare_remote();
+    let second = bare_remote();
+    let third = bare_remote();
+    let fourth = bare_remote();
+    let (repo, fetch, _) = repo_with_origin(first.path());
+    repo.git(&["config", "--add", "remote.origin.pushurl", &path_string(second.path())]);
+    repo.git(&["config", "--add", "remote.origin.pushurl", &path_string(third.path())]);
+    let push = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    assert_eq!(push.len(), 2);
+
+    client()
+        .edit_remote(
+            "origin",
+            "origin",
+            &path_string(first.path()),
+            PushUrlChange::Set(path_string(fourth.path())),
+            &fetch,
+            &push,
+            repo.path(),
+        )
+        .expect("replace push URLs");
+
+    assert_eq!(push_addresses(repo.path(), "origin"), vec![path_string(fourth.path())]);
 }
 
 // MARK: Tags on remotes
