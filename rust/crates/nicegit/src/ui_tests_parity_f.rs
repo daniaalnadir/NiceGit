@@ -16,6 +16,7 @@ use egui_phosphor::regular as icon;
 
 use crate::app::NiceGitApp;
 use crate::ui_tests::*;
+use crate::ui_tests_more::publish_to_bare;
 
 type App = Harness<'static, NiceGitApp>;
 
@@ -882,4 +883,40 @@ fn a_notice_opens_its_link_only_when_its_open_button_is_clicked() {
     let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
     assert_eq!(opened, vec![url.to_string()]);
     assert!(harness.state().notice.is_none(), "opening the link dismisses the notice");
+}
+
+#[test]
+fn branch_tracking_is_read_again_only_when_a_tip_moved() {
+    let repo = repository();
+    let path = repo.path();
+    let _remote = publish_to_bare(path);
+    // A topic branch tracking its remote copy, which is then committed to. Main stays checked out.
+    git(path, &["checkout", "-q", "-b", "topic"]);
+    git(path, &["push", "-q", "-u", "origin", "topic"]);
+    git(path, &["checkout", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    idle(&mut harness);
+    // The first read has arrived once the sidebar has drawn the branches.
+    wait(&mut harness, "the first tracking read", |h| {
+        h.state().repo().is_some_and(|r| r.branch_tracking.as_ref().and_then(|task| task.peek()).is_some())
+    });
+    let reads = |h: &App| h.state().repo().map_or(0, |r| r.branch_tracking_reads);
+    let first = reads(&harness);
+
+    // Nothing moved, so refreshing does not count the branches again.
+    harness.state_mut().load(false);
+    idle(&mut harness);
+    harness.state_mut().load(false);
+    idle(&mut harness);
+    assert_eq!(reads(&harness), first, "refreshes without a moved tip do not start a tracking read");
+
+    // A commit on topic moves its tip, so the next refresh reads the counts again.
+    git(path, &["checkout", "-q", "topic"]);
+    commit_file(path, "topic.txt", "Topic work\n", "Work on the topic");
+    git(path, &["checkout", "-q", "main"]);
+    harness.state_mut().load(false);
+    idle(&mut harness);
+    wait(&mut harness, "the topic branch to show one commit to push", |h| shows(h, "\u{2191}1 \u{2193}0"));
+    assert_eq!(reads(&harness), first + 1, "the moved tip starts exactly one tracking read");
 }

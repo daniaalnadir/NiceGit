@@ -303,6 +303,43 @@ pub struct Repo {
     pub pr_status: Option<(String, crate::ui::pull_request::PrStatusRead)>,
     /// When the pull request status was last asked for. `None` asks again at the next snapshot.
     pub pr_checked_at: Option<Instant>,
+    /// The tips that `branch_tracking` was read for. While a refresh leaves them unchanged, the
+    /// read is not repeated.
+    pub branch_tracking_key: Option<TrackingKey>,
+    /// How many branch tracking reads have started, for tests.
+    #[cfg(test)]
+    pub branch_tracking_reads: usize,
+}
+
+/// Each local branch that has an upstream, with the tips its ahead and behind counts depend on:
+/// the branch's name and tip, the upstream's full ref, and that ref's tip. The tip is `None` when
+/// the snapshot does not list the upstream, as when it was deleted. Sorted by branch name.
+pub type TrackingKey = Vec<(String, String, String, Option<String>)>;
+
+/// The tracking key for a snapshot. Two snapshots with the same key give the same ahead and
+/// behind counts, so the counts need reading again only when the key changes.
+pub fn tracking_key(snapshot: &Snapshot) -> TrackingKey {
+    // Remote branches are named `remotes/origin/x`, so their full ref is `refs/remotes/origin/x`.
+    let tips: std::collections::HashMap<String, &str> = snapshot
+        .branches
+        .iter()
+        .map(|branch| {
+            let reference = if branch.is_remote { format!("refs/{}", branch.name) } else { format!("refs/heads/{}", branch.name) };
+            (reference, branch.tip.as_str())
+        })
+        .collect();
+    let mut key: TrackingKey = snapshot
+        .branches
+        .iter()
+        .filter(|branch| !branch.is_remote)
+        .filter_map(|branch| {
+            let upstream = branch.upstream.as_ref()?;
+            let upstream_tip = tips.get(upstream.as_str()).map(|tip| (*tip).to_string());
+            Some((branch.name.clone(), branch.tip.clone(), upstream.clone(), upstream_tip))
+        })
+        .collect();
+    key.sort();
+    key
 }
 
 impl Repo {
@@ -402,6 +439,9 @@ impl Repo {
             tag_details: std::collections::HashMap::new(),
             pr_status: None,
             pr_checked_at: None,
+            branch_tracking_key: None,
+            #[cfg(test)]
+            branch_tracking_reads: 0,
         }
     }
 
@@ -1200,6 +1240,7 @@ impl NiceGitApp {
         self.repos[index]
             .tag_details
             .retain(|name, (tip, _)| snapshot.tag_tips.get(name).is_some_and(|current| current.as_str() == tip.as_str()));
+        let tracking = tracking_key(&snapshot);
         self.repos[index].snapshot = Some(snapshot);
         // The pull request is read for a new branch, and whenever a read is due.
         if branch_changed || self.repos[index].pr_checked_at.is_none() {
@@ -1228,9 +1269,24 @@ impl NiceGitApp {
         let changed: Vec<String> = self.repos[index].snapshot.iter().flat_map(|s| &s.status).map(|e| e.path.clone()).collect();
         let counts_path = path.clone();
         let tracking_path = path.clone();
-        let previous_tracking = self.repos[index].branch_tracking.take().and_then(|mut task| task.get().cloned().flatten());
-        self.repos[index].branch_tracking =
-            Some(Task::spawn_with(&context, previous_tracking.map(Some), move || GitClient::new().branch_tracking(&tracking_path).ok()));
+        // The counts depend only on the tips in the key, so a refresh that moved none of them keeps
+        // the previous read, whether it has arrived or is still on its way. An upstream whose tip
+        // the snapshot does not list (gone, or not a listed branch) cannot be compared, so then the
+        // counts are always read again.
+        let tracking_unchanged = self.repos[index].branch_tracking.is_some()
+            && tracking.iter().all(|(_, _, _, upstream_tip)| upstream_tip.is_some())
+            && self.repos[index].branch_tracking_key.as_ref() == Some(&tracking);
+        if !tracking_unchanged {
+            let previous_tracking = self.repos[index].branch_tracking.take().and_then(|mut task| task.get().cloned().flatten());
+            self.repos[index].branch_tracking = Some(Task::spawn_with(&context, previous_tracking.map(Some), move || {
+                GitClient::new().branch_tracking(&tracking_path).ok()
+            }));
+            self.repos[index].branch_tracking_key = Some(tracking);
+            #[cfg(test)]
+            {
+                self.repos[index].branch_tracking_reads += 1;
+            }
+        }
         self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
         // The previous counts stay until the new ones arrive, so the numbers do not flicker.
         let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
@@ -2108,6 +2164,103 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
         })
+}
+
+#[cfg(test)]
+mod tracking_key_tests {
+    use nicegit_core::{Branch, Snapshot};
+
+    use super::tracking_key;
+
+    fn local(name: &str, tip: &str, upstream: Option<&str>) -> Branch {
+        Branch {
+            name: name.into(),
+            is_current: false,
+            is_remote: false,
+            tip: tip.into(),
+            subject: String::new(),
+            upstream: upstream.map(str::to_string),
+        }
+    }
+
+    /// A remote-tracking branch, named as `git branch --all` lists it.
+    fn remote(name: &str, tip: &str) -> Branch {
+        Branch {
+            name: format!("remotes/{name}"),
+            is_current: false,
+            is_remote: true,
+            tip: tip.into(),
+            subject: String::new(),
+            upstream: None,
+        }
+    }
+
+    fn tracked() -> Snapshot {
+        Snapshot {
+            branches: vec![
+                local("main", "a1", Some("refs/remotes/origin/main")),
+                local("topic", "b1", Some("refs/remotes/origin/topic")),
+                remote("origin/main", "a1"),
+                remote("origin/topic", "b2"),
+            ],
+            ..Snapshot::default()
+        }
+    }
+
+    #[test]
+    fn the_same_tips_give_equal_keys() {
+        assert_eq!(tracking_key(&tracked()), tracking_key(&tracked()));
+        assert_eq!(tracking_key(&tracked()).len(), 2);
+    }
+
+    #[test]
+    fn a_moved_local_tip_changes_the_key() {
+        let mut moved = tracked();
+        moved.branches[1].tip = "b3".into();
+        assert_ne!(tracking_key(&moved), tracking_key(&tracked()));
+    }
+
+    #[test]
+    fn a_moved_upstream_tip_changes_the_key() {
+        let mut moved = tracked();
+        moved.branches[3].tip = "b3".into();
+        assert_ne!(tracking_key(&moved), tracking_key(&tracked()));
+    }
+
+    #[test]
+    fn a_removed_upstream_ref_changes_the_key_to_none() {
+        let mut gone = tracked();
+        gone.branches.remove(3);
+        let key = tracking_key(&gone);
+        assert_eq!(
+            key,
+            vec![
+                ("main".to_string(), "a1".to_string(), "refs/remotes/origin/main".to_string(), Some("a1".to_string())),
+                ("topic".to_string(), "b1".to_string(), "refs/remotes/origin/topic".to_string(), None),
+            ]
+        );
+        assert_ne!(key, tracking_key(&tracked()));
+    }
+
+    #[test]
+    fn removing_an_upstream_setting_changes_the_key() {
+        let mut unset = tracked();
+        unset.branches[1].upstream = None;
+        assert_ne!(tracking_key(&unset), tracking_key(&tracked()));
+    }
+
+    #[test]
+    fn branches_without_an_upstream_do_not_affect_the_key() {
+        let mut others = tracked();
+        others.branches.push(local("scratch", "c1", None));
+        others.branches.push(remote("origin/scratch", "c1"));
+        let before = tracking_key(&tracked());
+        assert_eq!(tracking_key(&others), before);
+        others.branches[4].tip = "c2".into();
+        assert_eq!(tracking_key(&others), before);
+        others.branches[5].tip = "c3".into();
+        assert_eq!(tracking_key(&others), before);
+    }
 }
 
 #[cfg(test)]
