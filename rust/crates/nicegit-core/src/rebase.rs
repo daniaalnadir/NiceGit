@@ -421,6 +421,71 @@ impl GitClient {
         self.run(&arguments, directory).map(drop)
     }
 
+    /// Reverts several commits as one sequence, newest first, so each change is undone before the
+    /// earlier changes it builds on. Every commit must already be on the checkout's history.
+    /// Conflicts stop the sequence for Continue or Abort, like a single revert.
+    pub fn revert_commits(&self, commits: &[String], expected_head: Option<&str>, expected_branch: &str, directory: &Path) -> Result<()> {
+        const COMMAND: &str = "revert";
+        let state = self.checkout_state(directory)?;
+        if state.head_hash.as_deref() != expected_head || state.current_branch != expected_branch {
+            return Err(GitError::failed(
+                COMMAND,
+                "The current branch or HEAD changed since this action was selected. Refresh and review the operation again.",
+            ));
+        }
+        if state.operation.is_some() || !self.load_status(directory)?.is_empty() {
+            return Err(GitError::failed(COMMAND, "Commit or stash changes and finish the current operation first."));
+        }
+        // Resolve first, so two names for one commit become one revert.
+        let mut hashes: BTreeSet<String> = BTreeSet::new();
+        for commit in commits {
+            hashes.insert(self.resolve_commit(commit, directory)?);
+        }
+        let mut has_merge = false;
+        for hash in &hashes {
+            // Parents are listed after the hash; two of them mark a merge.
+            let parents = self.run_trimmed(&["show", "--no-patch", "--format=%P", hash.as_str(), "--"], directory)?;
+            has_merge |= parents.split_whitespace().count() > 1;
+        }
+        if has_merge && hashes.len() > 1 {
+            return Err(GitError::failed(
+                COMMAND,
+                "Merge commits cannot be reverted together with others. Revert a merge on its own and choose its parent.",
+            ));
+        }
+        if has_merge {
+            return Err(GitError::failed(COMMAND, "Revert a merge on its own and choose its parent."));
+        }
+        if hashes.is_empty() {
+            return Ok(());
+        }
+        for hash in &hashes {
+            if self.run(&["merge-base", "--is-ancestor", hash.as_str(), "HEAD"], directory).is_err() {
+                return Err(GitError::failed(COMMAND, format!("Only commits already on {expected_branch} can be reverted.")));
+            }
+        }
+        // Topological order over the whole history: a commit comes before every commit it is built
+        // on. Committer times are not used, since rebases and clock skew can make them misleading.
+        // The walk covers all of HEAD's history, so it costs more on very large repositories.
+        let head = state.head_hash.as_deref().unwrap_or("HEAD");
+        let history = self.run_trimmed(&["rev-list", "--topo-order", head, "--"], directory)?;
+        let newest_first: Vec<&str> = history.lines().filter(|line| hashes.contains(*line)).collect();
+        let mut arguments = vec!["revert", "--no-edit"];
+        arguments.extend(newest_first);
+        match self.run(&arguments, directory) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                if matches!(self.current_operation(directory), Ok(Some(Operation::Revert))) {
+                    return Err(GitError::failed(
+                        COMMAND,
+                        "The revert sequence stopped, usually for a conflict. Resolve and stage the files, then continue the revert, or abort to return to the original commits.",
+                    ));
+                }
+                Err(error)
+            }
+        }
+    }
+
     /// Whether a remote-tracking branch already contains `commit`.
     pub fn is_published(&self, commit: &str, directory: &Path) -> Result<bool> {
         let id = self.resolve_commit(commit, directory)?;

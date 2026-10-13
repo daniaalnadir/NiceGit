@@ -95,7 +95,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   to merge it in or rebase onto it, after confirming.
 - Command-click commits in the graph to select several, then cherry-pick them together,
   oldest first. Squash… and Drop… open the interactive rebase window with the selected
-  commits arranged, so you can review them before clicking Rewrite commits.
+  commits arranged, so you can review them before clicking Rewrite commits. Revert… undoes
+  them with new commits, newest first, in one sequence.
 - Undo a discard from the Changes panel: the file's staged and unstaged versions are
   saved before discarding and restored exactly, until the file changes again.
 - See submodules in the sidebar with their state (not checked out, at the recorded commit,

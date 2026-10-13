@@ -67,6 +67,7 @@
   with them arranged for review.
 - Saving a stash can keep your staged changes in place or leave untracked files out; the
   choices are remembered.
+- Revert several selected commits at once, newest first, from the graph's selection bar.
 
 ## 1.5.0 - Fewer surprises
 
