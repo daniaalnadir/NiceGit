@@ -83,3 +83,4 @@
 - Launch Git by absolute path found once in NiceGit's PATH, keep independent reads concurrent (about six at a time), and validate actions with `checkout_state` rather than a full snapshot.
 - Let `git status` write the index only on deliberate loads (opening, and Command-R, which is Ctrl-R on Windows and Linux); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
 - Measure against a generated repository before and after performance changes.
+- Skip off-screen rows by testing the clip rect, not `is_rect_visible`: in a pass egui will discard (a new Grid requests one), everything reports invisible, and widgets skipped there lose their open context menus.
