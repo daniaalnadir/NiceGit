@@ -1398,6 +1398,32 @@ fn check_out_a_submodule_at_its_recorded_commit() {
     wait(&mut harness, "the recorded commit", |_| git(&checkout, &["rev-parse", "HEAD"]) == recorded);
 }
 
+/// Without a .gitmodules file a refresh skips the submodule listing, so the sidebar shows no
+/// submodule section. Adding the file brings the listing back on the next refresh.
+#[test]
+fn a_repository_without_gitmodules_runs_no_submodule_listing() {
+    let repo = repository();
+    let path = repo.path();
+    let target = path.canonicalize().unwrap();
+    let listed = || {
+        let listings = crate::app::SUBMODULE_LISTINGS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        listings.iter().any(|listing| listing.canonicalize().is_ok_and(|listed| listed == target))
+    };
+    let mut harness = open(path);
+    loaded(&mut harness);
+    idle(&mut harness);
+    settle(&mut harness);
+
+    let submodules = harness.state().repo().and_then(|r| r.submodules.as_ref()).and_then(|task| task.peek());
+    assert!(submodules.is_some_and(|list| list.is_empty()), "no submodules are listed");
+    assert!(!shows(&harness, "SUBMODULES"), "the sidebar shows no submodule section");
+    assert!(!listed(), "no listing ran without a .gitmodules file");
+
+    std::fs::write(path.join(".gitmodules"), "").unwrap();
+    harness.state_mut().load(false);
+    wait(&mut harness, "the submodule listing to run", |_| listed());
+}
+
 #[test]
 fn the_inspector_shows_a_verified_signature() {
     let repo = repository();

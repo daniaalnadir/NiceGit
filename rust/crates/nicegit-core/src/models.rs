@@ -244,6 +244,12 @@ pub struct Snapshot {
     pub behind: Option<usize>,
     pub head_hash: Option<String>,
     pub worktrees: Vec<Worktree>,
+    /// Whether Git is bisecting in this checkout, read from its `BISECT_START` file. Git writes
+    /// that file only while a bisect runs, so the bisect status is read only when it is set.
+    pub bisecting: bool,
+    /// Whether the checkout has a `.gitmodules` file at its root. A submodule's gitlink can exist
+    /// without one, but such a repository is rare, and its submodules are not listed.
+    pub has_gitmodules: bool,
 }
 
 impl Snapshot {

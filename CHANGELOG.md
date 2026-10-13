@@ -75,6 +75,8 @@
 - Refreshes no longer recount every branch's ahead and behind commits when no branch or
   upstream moved, which saved about 0.2 s of background work per refresh in a repository
   with 200 tracked branches.
+- Refreshes skip the bisect and submodule checks in repositories that are not bisecting or have
+  no submodules.
 
 ## 1.5.0 - Fewer surprises
 

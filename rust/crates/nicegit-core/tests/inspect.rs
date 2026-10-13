@@ -136,6 +136,24 @@ fn bisect_full_cycle_finds_first_bad_commit_and_end_restores_branch() {
 }
 
 #[test]
+fn snapshot_reports_bisecting_only_while_a_bisect_runs() {
+    let repo = Repo::new();
+    let mut commits = Vec::new();
+    for index in 1..=3 {
+        repo.write("app.txt", &format!("version {index}\n"));
+        commits.push(repo.commit(&format!("commit {index}")));
+    }
+    let client = GitClient::new();
+    assert!(!client.load_snapshot(repo.path(), 10).unwrap().bisecting, "an ordinary checkout is not bisecting");
+
+    repo.git(&["bisect", "start", &commits[2], &commits[0]]);
+    assert!(client.load_snapshot(repo.path(), 10).unwrap().bisecting, "a running bisect is reported");
+
+    repo.git(&["bisect", "reset"]);
+    assert!(!client.load_snapshot(repo.path(), 10).unwrap().bisecting, "the flag clears once the bisect ends");
+}
+
+#[test]
 fn bisect_refuses_to_start_with_uncommitted_tracked_changes() {
     let repo = Repo::new();
     let client = GitClient::new();

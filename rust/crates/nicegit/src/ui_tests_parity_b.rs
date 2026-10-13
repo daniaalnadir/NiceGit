@@ -216,6 +216,27 @@ fn bisect_bar_keeps_its_buttons_across_refreshes() {
     }
 }
 
+/// A refresh reads the bisect only when Git has started one, so an ordinary repository shows no
+/// bar. A bisect started outside the app appears on the next refresh.
+#[test]
+fn bisect_bar_appears_only_after_a_refresh_finds_a_bisect() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "bug.txt", "one\n", "Step one");
+    commit_file(path, "bug.txt", "two\n", "Step two");
+    commit_file(path, "bug.txt", "three\n", "Step three");
+    let mut harness = open(path);
+    loaded(&mut harness);
+    idle(&mut harness);
+    assert!(harness.state().bisect_status().is_none(), "no bisect is read in an ordinary repository");
+    assert!(harness.query_by_role_and_label(Role::Button, "Skip").is_none(), "no bisect bar in an ordinary repository");
+
+    git(path, &["bisect", "start", "HEAD", "HEAD~3"]);
+    harness.state_mut().load(false);
+    wait(&mut harness, "the bisect bar", |h| h.query_by_role_and_label(Role::Button, "Skip").is_some());
+    assert!(harness.state().bisect_status().is_some(), "the refresh read the running bisect");
+}
+
 #[test]
 fn interactive_rebase_warns_about_commits_already_on_a_remote() {
     let repo = repository();

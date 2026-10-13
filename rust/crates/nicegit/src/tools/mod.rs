@@ -179,7 +179,6 @@ impl<T: Send + 'static> Task<T> {
     }
 
     /// A task that already has its value.
-    #[allow(dead_code)]
     pub fn ready(value: T) -> Self {
         Self { receiver: None, value: Some(value) }
     }

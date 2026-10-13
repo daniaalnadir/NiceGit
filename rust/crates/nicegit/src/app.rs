@@ -22,6 +22,9 @@ const AUTO_REFRESH: Duration = Duration::from_secs(30);
 /// How often the current branch's pull request status is read again while the window is focused.
 const PR_STATUS_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(400);
+/// The repositories whose submodules a refresh listed, so tests can tell whether a listing ran.
+#[cfg(test)]
+pub static SUBMODULE_LISTINGS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 pub struct Notice {
     pub text: String,
@@ -1255,10 +1258,15 @@ impl NiceGitApp {
         let context = self.worker.context.clone();
         let path = self.repos[index].path.clone();
         let bisect_path = path.clone();
+        // The snapshot says whether a bisect runs, so ordinary checkouts skip the Git read.
+        let (bisecting, has_gitmodules) =
+            self.repos[index].snapshot.as_ref().map_or((false, false), |snapshot| (snapshot.bisecting, snapshot.has_gitmodules));
         let previous_bisect = self.repos[index].bisect.take().and_then(|mut task| task.get().cloned().flatten());
-        self.repos[index].bisect = Some(Task::spawn_with(&context, previous_bisect.map(Some), move || {
-            GitClient::new().bisect_status(&bisect_path).ok().flatten()
-        }));
+        self.repos[index].bisect = Some(if bisecting {
+            Task::spawn_with(&context, previous_bisect.map(Some), move || GitClient::new().bisect_status(&bisect_path).ok().flatten())
+        } else {
+            Task::ready(None)
+        });
         let untracked: Vec<String> = self.repos[index]
             .snapshot
             .iter()
@@ -1287,7 +1295,17 @@ impl NiceGitApp {
                 self.repos[index].branch_tracking_reads += 1;
             }
         }
-        self.repos[index].submodules = Some(Task::spawn(&context, move || GitClient::new().submodules(&path).unwrap_or_default()));
+        // Without a .gitmodules file the listing is skipped: most repositories have no submodules,
+        // and the listing costs two Git processes per refresh.
+        self.repos[index].submodules = Some(if has_gitmodules {
+            Task::spawn(&context, move || {
+                #[cfg(test)]
+                SUBMODULE_LISTINGS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(path.clone());
+                GitClient::new().submodules(&path).unwrap_or_default()
+            })
+        } else {
+            Task::ready(Vec::new())
+        });
         // The previous counts stay until the new ones arrive, so the numbers do not flicker.
         let previous = self.repos[index].line_counts.take().and_then(|mut task| task.get().cloned().flatten());
         self.repos[index].line_counts = Some(Task::spawn_with(&context, previous.map(Some), move || {
