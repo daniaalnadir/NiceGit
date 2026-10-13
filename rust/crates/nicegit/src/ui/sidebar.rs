@@ -327,6 +327,8 @@ impl NiceGitApp {
             }
         });
 
+        // Creating a branch from a stash rewrites working files, so the unsaved editor blocks it too.
+        let editor_open = self.has_unsaved_editor();
         section(ui, "stashes", icon::ARCHIVE, "Stashes", snapshot.stashes.len(), true, |ui| {
             if snapshot.stashes.is_empty() {
                 ui.label(RichText::new("   No stashes").small().color(c.muted));
@@ -365,6 +367,22 @@ impl NiceGitApp {
                             "Pop",
                             Pending::PopStash(stash),
                         );
+                    }
+                    if ui
+                        .add_enabled(allowed && !editor_open, egui::Button::new(format!("{}  Create branch from stash…", icon::GIT_BRANCH)))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.dialog = Some(Dialog::input(
+                            "Branch from stash",
+                            "Branch name",
+                            "",
+                            InputKind::BranchFromStash {
+                                stash: stash.clone(),
+                                branch: snapshot.current_branch.clone(),
+                                head: snapshot.head_hash.clone(),
+                            },
+                        ));
                     }
                     ui.separator();
                     if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {

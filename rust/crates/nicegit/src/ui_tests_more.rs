@@ -913,6 +913,31 @@ fn undo_a_merge_from_the_toolbar() {
 }
 
 #[test]
+fn create_a_branch_from_a_stash_in_the_sidebar_menu() {
+    let repo = repository();
+    let path = repo.path();
+    let base = git(path, &["rev-parse", "HEAD"]);
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstashed\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Draft changes"]);
+    commit_file(path, "other.txt", b"other\n", "Move on");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Draft changes").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Create branch from stash").click();
+    wait(&mut harness, "the branch from stash dialog", |h| h.query_by_role_and_label(Role::TextInput, "Branch name").is_some());
+    type_into(&mut harness, "Branch name", "from-stash");
+    harness.get_by_label("Create branch").click();
+    idle(&mut harness);
+
+    assert_eq!(git(path, &["branch", "--show-current"]), "from-stash", "the new branch is checked out");
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), base, "it is made at the commit the stash was made on");
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\nstashed\n", "the stash is applied");
+    assert!(git(path, &["stash", "list"]).is_empty(), "the applied stash is removed");
+}
+
+#[test]
 fn stash_only_the_ticked_files_then_preview_the_stash() {
     let repo = repository();
     let path = repo.path();

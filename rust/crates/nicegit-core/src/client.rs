@@ -1297,6 +1297,53 @@ impl GitClient {
         Ok(())
     }
 
+    /// Makes a branch at the commit a stash was made on, switches to it, applies the stash there,
+    /// and removes the stash once it applies. This takes the place of `git stash branch`, which
+    /// checks out without `--no-overwrite-ignore` and names the stash by position.
+    pub fn branch_from_stash(
+        &self,
+        name: &str,
+        stash: &Stash,
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        directory: &Path,
+    ) -> Result<()> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(GitError::EmptyBranchName);
+        }
+        self.run(&["check-ref-format", "--branch", name], directory)?;
+        let state = self.require_checkout(expected_branch, expected_head, "branch from stash", directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed(
+                "branch from stash",
+                "Finish or abort the current Git operation before creating a branch from a stash.",
+            ));
+        }
+        self.require_listed_stash(stash, "branch from stash", directory)?;
+        if !self.load_status(directory)?.is_empty() {
+            return Err(GitError::failed(
+                "branch from stash",
+                "Commit, stash, or discard your changes before creating a branch from a stash.",
+            ));
+        }
+        // A stash's first parent is the commit it was made on.
+        let base = self.resolve_commit(&format!("{}^1", stash.hash), directory)?;
+        self.run(&["switch", "--no-overwrite-ignore", "--no-track", "--create", name, &base], directory)?;
+        self.run(&["stash", "apply", "--index", &stash.hash], directory).map_err(|error| {
+            GitError::failed(
+                "branch from stash",
+                format!("Created and switched to {name}, but the stash could not be applied. It is kept. {error}"),
+            )
+        })?;
+        self.drop_stash(stash, directory).map_err(|error| {
+            GitError::failed(
+                "branch from stash",
+                format!("The stash was applied on {name}, but could not be removed. Do not apply it again. {error}"),
+            )
+        })
+    }
+
     pub fn stash_diff(&self, stash: &Stash, directory: &Path) -> Result<String> {
         self.stash_diff_with(stash, DiffRequest::default(), directory)
     }

@@ -888,6 +888,125 @@ fn restore_from_a_dropped_stash_is_refused() {
     assert_eq!(repo.read("a.txt"), "one\n", "the working file is untouched");
 }
 
+// MARK: Branch from stash
+
+#[test]
+fn branch_from_stash_restores_changes_on_the_stash_commit() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let base = repo.commit("b.txt", "one\n", "Second");
+    repo.write("a.txt", "staged\n");
+    repo.git(&["add", "--", "a.txt"]);
+    repo.write("b.txt", "unstaged\n");
+    repo.write("scratch.txt", "new\n");
+    let stash = stash_all(&repo, "work in progress");
+    let later = repo.commit("c.txt", "later\n", "Later");
+    assert_eq!(repo.head(), later);
+
+    client().branch_from_stash("topic", &stash, "main", Some(&later), repo.path()).expect("branch from stash");
+
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "topic");
+    assert_eq!(repo.head(), base, "the branch is made at the commit the stash was made on");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]).trim(), "a.txt", "the staged change is staged again");
+    assert_eq!(repo.read("a.txt"), "staged\n");
+    assert_eq!(repo.git(&["diff", "--name-only"]).trim(), "b.txt", "the unstaged change is unstaged");
+    assert_eq!(repo.read("b.txt"), "unstaged\n");
+    assert_eq!(repo.read("scratch.txt"), "new\n", "the untracked file is back");
+    assert!(!repo.path().join("c.txt").exists(), "the later commit's file is not on the new branch");
+    assert!(client().list_stashes(repo.path()).unwrap().is_empty(), "the applied stash is removed");
+}
+
+#[test]
+fn branch_from_stash_refuses_a_dirty_tree_without_changing_anything() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "kept");
+    let head = repo.head();
+    repo.write("a.txt", "dirty\n");
+
+    let result = client().branch_from_stash("topic", &stash, "main", Some(&head), repo.path());
+
+    assert!(error_text(result).contains("Commit, stash, or discard"));
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
+    assert_eq!(repo.read("a.txt"), "dirty\n", "the working change is untouched");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is still listed");
+}
+
+#[test]
+fn branch_from_stash_refuses_a_dropped_stash() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "gone soon");
+    client().drop_stash(&stash, repo.path()).expect("drop stash");
+    let head = repo.head();
+
+    let result = client().branch_from_stash("topic", &stash, "main", Some(&head), repo.path());
+
+    assert!(error_text(result).contains("no longer exists"));
+    assert!(!branch_exists(repo.path(), "topic"));
+    assert_eq!(repo.read("a.txt"), "one\n");
+}
+
+#[test]
+fn branch_from_stash_refuses_a_moved_head() {
+    let repo = Repo::new();
+    let base = repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "stale");
+    let later = repo.commit("b.txt", "later\n", "Later");
+    assert_ne!(base, later);
+
+    let result = client().branch_from_stash("topic", &stash, "main", Some(&base), repo.path());
+
+    assert!(error_text(result).contains("changed since this action was selected"));
+    assert!(!branch_exists(repo.path(), "topic"));
+    assert_eq!(repo.head(), later);
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is still listed");
+}
+
+#[test]
+fn branch_from_stash_refuses_bad_and_existing_names() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "named");
+    let head = repo.head();
+
+    assert_eq!(client().branch_from_stash("   ", &stash, "main", Some(&head), repo.path()), Err(GitError::EmptyBranchName));
+    assert!(client().branch_from_stash("bad name..", &stash, "main", Some(&head), repo.path()).is_err());
+    assert!(client().branch_from_stash("main", &stash, "main", Some(&head), repo.path()).is_err());
+
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is still listed");
+    assert_eq!(repo.read("a.txt"), "one\n", "the working tree is untouched");
+}
+
+#[test]
+fn branch_from_stash_does_not_overwrite_ignored_files() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let base = repo.commit("build/out.txt", "tracked\n", "Add build output");
+    repo.write("a.txt", "two\n");
+    let stash = stash_all(&repo, "on base");
+    repo.git(&["rm", "-q", "--", "build/out.txt"]);
+    repo.write(".gitignore", "build/\n");
+    repo.git(&["add", "--", ".gitignore"]);
+    repo.git(&["commit", "--quiet", "-m", "Ignore build output"]);
+    repo.write("build/out.txt", "local\n");
+    let head = repo.head();
+    assert_ne!(head, base);
+
+    let result = client().branch_from_stash("topic", &stash, "main", Some(&head), repo.path());
+
+    assert!(result.is_err(), "switching would overwrite the ignored file");
+    assert!(!branch_exists(repo.path(), "topic"), "no branch is left behind");
+    assert_eq!(repo.read("build/out.txt"), "local\n", "the ignored file keeps its contents");
+    assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is still listed");
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
+}
+
 // MARK: Tags
 
 #[test]
