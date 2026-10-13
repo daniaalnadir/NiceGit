@@ -186,7 +186,8 @@ impl NiceGitApp {
             });
             if !marked.is_empty() {
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                // Wraps onto a second line in a narrow graph pane, rather than running off its edge.
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{}  {} commits selected", icon::CHECK_SQUARE, marked.len())).color(c.accent));
                     let can = self.idle() && snapshot.operation.is_none() && snapshot.is_on_branch() && snapshot.status.is_empty();
                     if widgets::primary_button(ui, "Cherry-pick", can)

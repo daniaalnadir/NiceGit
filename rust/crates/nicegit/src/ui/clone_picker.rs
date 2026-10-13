@@ -200,11 +200,11 @@ fn repository_list(ui: &mut egui::Ui, repositories: &[GitHubRepoListing], filter
                 .vertical(|ui| {
                     let clicked = ui
                         .horizontal(|ui| {
-                            if repo.is_private {
-                                ui.label(RichText::new(icon::LOCK_SIMPLE).color(c.muted)).on_hover_text("Private");
-                            }
-                            if repo.is_fork {
-                                ui.label(RichText::new(icon::GIT_FORK).color(c.muted)).on_hover_text("Fork");
+                            // Both icon slots are always reserved, so the names line up on every row.
+                            let lock = repo.is_private.then_some((icon::LOCK_SIMPLE, "Private"));
+                            let fork = repo.is_fork.then_some((icon::GIT_FORK, "Fork"));
+                            for mark in [lock, fork] {
+                                icon_slot(ui, mark, c.muted);
                             }
                             ui.add(egui::Button::new(RichText::new(&repo.name_with_owner).strong()).frame(false)).clicked()
                         })
@@ -223,6 +223,16 @@ fn repository_list(ui: &mut egui::Ui, repositories: &[GitHubRepoListing], filter
         }
     });
     picked
+}
+
+/// A fixed-width slot for one row's icon, left empty when the row does not have that icon.
+fn icon_slot(ui: &mut egui::Ui, mark: Option<(&str, &str)>, color: egui::Color32) {
+    let size = egui::vec2(16.0, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        if let Some((glyph, hover)) = mark {
+            ui.label(RichText::new(glyph).color(color)).on_hover_text(hover);
+        }
+    });
 }
 
 /// The command that signs `gh` in to `host`.
