@@ -514,7 +514,7 @@ fn hovering_an_annotated_tag_reads_its_message() {
     wait(&mut harness, "the tag's message in its tooltip", |h| shows(h, "First release notes"));
     let cached = harness.state().repo().and_then(|r| r.tag_details.get("v1.0")).and_then(|(_, task)| task.peek());
     assert!(
-        matches!(cached, Some(Ok(Some(details))) if details.message == "First release notes"),
+        matches!(cached, Some(Ok((Some(details), None))) if details.message == "First release notes"),
         "the annotated tag's details are cached for its tip"
     );
 }

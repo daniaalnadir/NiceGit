@@ -21,6 +21,8 @@
 - The New tag dialog can push the tag to a remote as soon as it is created.
 - An annotated tag can be signed with your signing key from the New tag dialog, as
   `git tag --sign` does.
+- Hovering a signed tag in the sidebar checks its signature locally and shows whether it is
+  verified, from an untrusted key, bad, or cannot be checked on this computer.
 - An Add trailers menu in the commit box adds Signed-off-by and Co-authored-by lines,
   choosing co-authors from recent history.
 - Selecting a stash lists its files in the inspector; click one to see just its changes, or

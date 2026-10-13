@@ -4,6 +4,7 @@ use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
 use nicegit_core::parsers::Tracking;
+use nicegit_core::signature::CommitSignature;
 use nicegit_core::{Branch, GitClient, MergeStyle, Snapshot, TagDetails};
 
 use crate::app::{NiceGitApp, Selection};
@@ -98,6 +99,19 @@ fn annotated_tag_text(tag: &str, details: &TagDetails) -> String {
     if !details.message.is_empty() {
         text.push_str("\n\n");
         text.push_str(&details.message);
+    }
+    text
+}
+
+/// The line that shows a signed tag's signature: its status, the signer when Git named one, and
+/// the problem on its own line when Git reported one.
+fn tag_signature_text(signature: &CommitSignature) -> String {
+    let signer = if signature.signer.is_empty() { String::new() } else { format!(" — {}", signature.signer) };
+    // Each title already names the signature, so the line needs no label of its own.
+    let mut text = format!("{}{signer}", signature.status.tag_title());
+    if let Some(problem) = &signature.problem {
+        text.push('\n');
+        text.push_str(problem);
     }
     text
 }
@@ -492,15 +506,31 @@ impl NiceGitApp {
         let Some(repo) = self.repo_mut() else { return tag.to_string() };
         if repo.tag_details.get(tag).is_none_or(|(read_tip, _)| read_tip != tip) {
             let (name, path) = (tag.to_string(), repo.path.clone());
-            let task = Task::spawn(&context, move || GitClient::new().tag_details(&name, &path));
+            let task = Task::spawn(&context, move || {
+                let client = GitClient::new();
+                let details = client.tag_details(&name, &path)?;
+                // The message of a signed tag ends with "(signed)", so only such a tag is checked.
+                let signature = match &details {
+                    Some(details) if details.message.ends_with("(signed)") => client.tag_signature(&name, &path)?,
+                    _ => None,
+                };
+                Ok((details, signature))
+            });
             repo.tag_details.insert(tag.to_string(), (tip.to_string(), task));
         }
         let Some((_, task)) = repo.tag_details.get_mut(tag) else { return tag.to_string() };
         match task.get() {
             None => format!("{tag}\nLoading…"),
             Some(Err(error)) => format!("{tag}\nCould not read this tag: {error}"),
-            Some(Ok(None)) => format!("{tag}\nLightweight tag at {}", short(tip)),
-            Some(Ok(Some(details))) => annotated_tag_text(tag, details),
+            Some(Ok((None, _))) => format!("{tag}\nLightweight tag at {}", short(tip)),
+            Some(Ok((Some(details), signature))) => {
+                let mut text = annotated_tag_text(tag, details);
+                if let Some(signature) = signature {
+                    text.push('\n');
+                    text.push_str(&tag_signature_text(signature));
+                }
+                text
+            }
         }
     }
 
@@ -850,5 +880,36 @@ impl NiceGitApp {
                 "Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.".into()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tag_signature_text;
+    use nicegit_core::signature::{CommitSignature, SignatureStatus};
+
+    #[test]
+    fn a_tag_signature_line_names_the_status_signer_and_problem() {
+        let verified = CommitSignature {
+            status: SignatureStatus::Verified,
+            signer: "Alice <alice@example.com>".to_string(),
+            key: "SHA256:example".to_string(),
+            problem: None,
+        };
+        assert_eq!(tag_signature_text(&verified), "Verified signature — Alice <alice@example.com>");
+
+        let bad = CommitSignature { status: SignatureStatus::Bad, signer: String::new(), key: String::new(), problem: None };
+        assert_eq!(tag_signature_text(&bad), "Bad signature: this tag does not match it");
+
+        let unchecked = CommitSignature {
+            status: SignatureStatus::Unverifiable,
+            signer: String::new(),
+            key: String::new(),
+            problem: Some("error: gpg.ssh.allowedSignersFile needs to be configured".to_string()),
+        };
+        assert_eq!(
+            tag_signature_text(&unchecked),
+            "Signed, but it cannot be verified on this computer\nerror: gpg.ssh.allowedSignersFile needs to be configured"
+        );
     }
 }

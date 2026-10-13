@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -115,6 +115,27 @@ fn describe(arguments: &[&str]) -> String {
 
 /// Runs Git with NiceGit's environment and returns its raw standard output.
 pub fn run_bytes(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Vec<u8>> {
+    let output = output_of(arguments, directory, options)?;
+    let status = output.status.code().unwrap_or(-1);
+    let accepted = if options.accepted.is_empty() { &[0][..] } else { options.accepted };
+    if !accepted.contains(&status) {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if message.is_empty() { format!("Exited with status {status}.") } else { message };
+        return Err(GitError::failed(describe(arguments), message));
+    }
+    Ok(output.stdout)
+}
+
+/// Runs Git and returns its standard output followed by its standard error, whatever the exit
+/// status. Unlike `run`, a failing exit is not an error: for commands such as `verify-tag`, whose
+/// result is in the report even when Git exits non-zero.
+pub fn run_reporting(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<String> {
+    let output = output_of(arguments, directory, options)?;
+    Ok(format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr)))
+}
+
+/// Starts Git with NiceGit's environment and waits for it to finish.
+fn output_of(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Output> {
     let git = git_executable().ok_or(GitError::GitNotFound)?;
     let mut command = Command::new(git);
     command.args(arguments).current_dir(directory).stdin(Stdio::null());
@@ -145,15 +166,7 @@ pub fn run_bytes(arguments: &[&str], directory: &Path, options: &RunOptions) -> 
     }
     // `output` reads both pipes while waiting, so a large output cannot block Git, and it waits
     // on the process itself rather than polling.
-    let output = command.output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
-    let status = output.status.code().unwrap_or(-1);
-    let accepted = if options.accepted.is_empty() { &[0][..] } else { options.accepted };
-    if !accepted.contains(&status) {
-        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let message = if message.is_empty() { format!("Exited with status {status}.") } else { message };
-        return Err(GitError::failed(describe(arguments), message));
-    }
-    Ok(output.stdout)
+    command.output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
 }
 
 pub fn run(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<String> {
