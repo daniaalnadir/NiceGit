@@ -172,8 +172,10 @@ impl HistoryEntry {
 /// Lines added and removed in each file, by path.
 pub type FileLineCounts = std::collections::HashMap<String, nicegit_core::line_counts::LineCount>;
 
-/// A tag's details as read for its sidebar hover text, with the tip they were read for.
-pub type TagDetailsRead = (String, Task<nicegit_core::Result<Option<nicegit_core::TagDetails>>>);
+/// A tag's details and signature as read for its sidebar hover text, with the tip they were read for.
+/// The details are `None` for a lightweight tag, and the signature is `None` unless the tag is signed.
+pub type TagDetailsRead =
+    (String, Task<nicegit_core::Result<(Option<nicegit_core::TagDetails>, Option<nicegit_core::signature::CommitSignature>)>>);
 
 /// Returns every side and bottom panel to its default width, a share of the window.
 pub fn restore_panel_widths(ctx: &egui::Context) {

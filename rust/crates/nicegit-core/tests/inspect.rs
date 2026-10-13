@@ -1,5 +1,5 @@
-//! Integration tests for bisect, commit comparison, file versions, signatures, the refs that
-//! contain a commit, and GitHub remotes and items. Repository tests run against temporary repositories; GitHub tests never
+//! Integration tests for bisect, commit comparison, file versions, commit and tag signatures, the
+//! refs that contain a commit, and GitHub remotes and items. Repository tests run against temporary repositories; GitHub tests never
 //! touch the network.
 
 use std::fs;
@@ -46,6 +46,16 @@ fn configure(directory: &Path) {
     ] {
         git(directory, &["config", key, value]);
     }
+}
+
+/// Makes an ed25519 signing key in `directory`, returning its private path and public key line,
+/// or `None` when `ssh-keygen` is not installed.
+fn generate_ssh_key(directory: &Path) -> Option<(std::path::PathBuf, String)> {
+    let key = directory.join("signing");
+    let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output().ok()?;
+    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+    let public = fs::read_to_string(key.with_extension("pub")).unwrap();
+    Some((key, public))
 }
 
 /// A temporary repository on branch `main`.
@@ -478,14 +488,10 @@ fn ssh_signed_commit_is_verified_only_with_its_key_allowed() {
     let repo = Repo::new();
     let client = GitClient::new();
     let keys = tempfile::tempdir().unwrap();
-    let key = keys.path().join("signing");
-    let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output();
-    let Ok(made) = made else {
+    let Some((key, public)) = generate_ssh_key(keys.path()) else {
         eprintln!("ssh-keygen is not installed; skipping");
         return;
     };
-    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
-    let public = fs::read_to_string(key.with_extension("pub")).unwrap();
     let key_path = key.to_string_lossy().replace('\\', "/");
     repo.git(&["config", "gpg.format", "ssh"]);
     repo.git(&["config", "user.signingkey", &key_path]);
@@ -522,4 +528,65 @@ fn ssh_signed_commit_is_verified_only_with_its_key_allowed() {
     fs::write(&allowed, "").unwrap();
     let signature = client.signature(&commit, repo.path()).unwrap().expect("a signature");
     assert_ne!(signature.status, SignatureStatus::Verified, "{signature:?}");
+}
+
+// MARK: Tag signatures
+
+#[test]
+fn unsigned_and_lightweight_tags_have_no_tag_signature() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    repo.commit("one");
+    repo.git(&["tag", "-a", "notes", "-m", "plain notes"]);
+    repo.git(&["tag", "light"]);
+    assert_eq!(client.tag_signature("notes", repo.path()).unwrap(), None);
+    assert_eq!(client.tag_signature("light", repo.path()).unwrap(), None);
+}
+
+#[test]
+fn ssh_signed_tag_is_verified_only_with_its_key_allowed() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    let keys = tempfile::tempdir().unwrap();
+    let Some((key, public)) = generate_ssh_key(keys.path()) else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    let key_path = key.to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "user.signingkey", &key_path]);
+    repo.write("a.txt", "a\n");
+    repo.commit("one");
+    // Sign without the machine's own Git settings, which may name another signing tool.
+    let empty = keys.path().join("empty-config");
+    fs::write(&empty, "").unwrap();
+    let signed = Command::new("git")
+        .args(["tag", "-s", "-m", "signed release", "release"])
+        .current_dir(repo.path())
+        .env("GIT_CONFIG_GLOBAL", &empty)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .unwrap();
+    assert!(signed.status.success(), "{}", String::from_utf8_lossy(&signed.stderr));
+    // NiceGit checks tags with the user's settings, as it checks commits. A global setting Git
+    // rejects is reported as a fatal error before any verifier runs, so there is nothing to compare.
+    let probe = Command::new("git").args(["verify-tag", "--raw", "release"]).current_dir(repo.path()).output().unwrap();
+    if String::from_utf8_lossy(&probe.stderr).contains("fatal:") {
+        eprintln!("Git cannot check signatures with this machine's settings; skipping: {}", String::from_utf8_lossy(&probe.stderr));
+        return;
+    }
+
+    // Allowed for its own email: verified, with the signer named.
+    let allowed = keys.path().join("allowed_signers");
+    fs::write(&allowed, format!("test@example.com {public}")).unwrap();
+    repo.git(&["config", "gpg.ssh.allowedSignersFile", &allowed.to_string_lossy().replace('\\', "/")]);
+    let signature = client.tag_signature("release", repo.path()).unwrap().expect("a signature");
+    assert_eq!(signature.status, SignatureStatus::Verified, "{signature:?}");
+    assert_eq!(signature.signer, "test@example.com", "{signature:?}");
+
+    // With no key allowed, the signature is genuine but its key is not trusted.
+    fs::write(&allowed, "").unwrap();
+    let signature = client.tag_signature("release", repo.path()).unwrap().expect("a signature");
+    assert_eq!(signature.status, SignatureStatus::Untrusted, "{signature:?}");
 }

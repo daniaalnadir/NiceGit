@@ -379,7 +379,7 @@ pub fn parse_tag_details(output: &str) -> Result<Option<TagDetails>> {
 /// A tag's message as the details show it: the text before any signature block, with the block
 /// replaced by "(signed)", and at most `TAG_MESSAGE_LIMIT` characters.
 fn tag_message(contents: &str) -> String {
-    const SIGNATURES: [&str; 2] = ["-----BEGIN PGP SIGNATURE-----", "-----BEGIN SSH SIGNATURE-----"];
+    const SIGNATURES: [&str; 3] = ["-----BEGIN PGP SIGNATURE-----", "-----BEGIN SSH SIGNATURE-----", "-----BEGIN SIGNED MESSAGE-----"];
     let signature = SIGNATURES.iter().filter_map(|marker| contents.find(marker)).min();
     let text = match signature {
         Some(start) => &contents[..start],
@@ -412,6 +412,15 @@ mod tracking_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tag_message_hides_each_kind_of_signature_block() {
+        for marker in ["-----BEGIN PGP SIGNATURE-----", "-----BEGIN SSH SIGNATURE-----", "-----BEGIN SIGNED MESSAGE-----"] {
+            let contents = format!("Release one\n{marker}\nAAAA\n-----END-----\n");
+            assert_eq!(tag_message(&contents), "Release one\n\n(signed)", "{marker}");
+        }
+        assert_eq!(tag_message("Release one\n"), "Release one");
+    }
 
     #[test]
     fn status_keeps_newlines_in_paths_and_rename_sources() {

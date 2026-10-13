@@ -343,7 +343,9 @@ its sidebar menu, and it can be deleted from a remote there. An annotated tag ca
 with "Sign with your signing key", which uses your Git signing setup (user.signingKey and
 gpg.format) as `git tag --sign` does; unsigned tags stay unsigned even when tag.gpgSign is
 set. Hovering a tag in the sidebar shows an
-annotated tag's tagger, date, and message, or a lightweight tag's commit.
+annotated tag's tagger, date, and message, or a lightweight tag's commit. A signed tag's
+signature is checked locally and shown as verified, untrusted, bad, or not checkable, like
+a commit's.
 
 Commit menus support revert with confirmation, merge-parent selection, and
 conflict Continue/Abort. Revert requires a clean working tree and retains the
