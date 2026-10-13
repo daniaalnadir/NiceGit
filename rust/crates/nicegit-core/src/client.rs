@@ -1533,11 +1533,27 @@ impl GitClient {
 
     // MARK: Tags
 
-    pub fn create_tag(&self, name: &str, target: &str, message: Option<&str>, directory: &Path) -> Result<()> {
+    /// Creates a tag. A signed tag is always annotated, so it needs a message. Git signs it with
+    /// the user's own signing setup, and it is not created when signing fails.
+    pub fn create_tag(&self, name: &str, target: &str, message: Option<&str>, sign: bool, directory: &Path) -> Result<()> {
         let name = name.trim();
+        let message = message.map(str::trim).filter(|message| !message.is_empty());
+        if sign && message.is_none() {
+            return Err(GitError::failed("create tag", "A signed tag needs a message."));
+        }
         self.run(&["check-ref-format", &format!("refs/tags/{name}")], directory)?;
         let commit = self.resolve_commit(target, directory)?;
-        match message.map(str::trim).filter(|message| !message.is_empty()) {
+        if let (true, Some(message)) = (sign, message) {
+            let signed = self.run(&["tag", "--sign", "--message", message, "--", name, &commit], directory);
+            // Only a signing failure is reported as one; a name that is taken reads as Git says.
+            return signed.map(drop).map_err(|error| match error {
+                GitError::CommandFailed { message: reason, .. } if reason.contains("sign") || reason.contains("gpg") => {
+                    GitError::failed("create tag", format!("The tag could not be signed: {reason}"))
+                }
+                other => other,
+            });
+        }
+        match message {
             Some(message) => {
                 self.run(&["-c", "tag.gpgSign=false", "tag", "--annotate", "--message", message, "--", name, &commit], directory)
             }

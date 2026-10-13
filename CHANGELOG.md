@@ -19,6 +19,8 @@
 - Fix up with staged changes… folds what you've staged into an older commit from its
   right-click menu; Undo puts the changes back.
 - The New tag dialog can push the tag to a remote as soon as it is created.
+- An annotated tag can be signed with your signing key from the New tag dialog, as
+  `git tag --sign` does.
 - An Add trailers menu in the commit box adds Signed-off-by and Co-authored-by lines,
   choosing co-authors from recent history.
 - Selecting a stash lists its files in the inspector; click one to see just its changes, or

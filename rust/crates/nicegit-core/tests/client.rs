@@ -894,8 +894,8 @@ fn restore_from_a_dropped_stash_is_refused() {
 fn tag_tip_is_the_object_a_push_checks() {
     let repo = Repo::new();
     let head = repo.commit("a.txt", "one\n", "First");
-    client().create_tag("light", "HEAD", None, repo.path()).expect("lightweight tag");
-    client().create_tag("annotated", "HEAD", Some("Release"), repo.path()).expect("annotated tag");
+    client().create_tag("light", "HEAD", None, false, repo.path()).expect("lightweight tag");
+    client().create_tag("annotated", "HEAD", Some("Release"), false, repo.path()).expect("annotated tag");
 
     // A lightweight tag names the commit itself.
     assert_eq!(client().tag_tip("light", repo.path()).expect("tip of lightweight tag"), head);
@@ -911,8 +911,8 @@ fn tag_tip_is_the_object_a_push_checks() {
 fn delete_tag_requires_the_shown_tip() {
     let repo = Repo::new();
     let head = repo.commit("a.txt", "one\n", "First");
-    client().create_tag("v1", "HEAD", None, repo.path()).expect("lightweight tag");
-    client().create_tag("v2", "HEAD", Some("Release two"), repo.path()).expect("annotated tag");
+    client().create_tag("v1", "HEAD", None, false, repo.path()).expect("lightweight tag");
+    client().create_tag("v2", "HEAD", Some("Release two"), false, repo.path()).expect("annotated tag");
     let snap = snapshot(repo.path());
     assert!(snap.tags.contains(&"v1".to_string()));
     assert!(snap.tags.contains(&"v2".to_string()));
@@ -935,7 +935,7 @@ fn delete_tag_requires_the_shown_tip() {
 fn tag_details_reads_an_annotated_tag() {
     let repo = Repo::new();
     let head = repo.commit("a.txt", "one\n", "First");
-    client().create_tag("v1", "HEAD", Some("Release one\n\nWith detail."), repo.path()).expect("annotated tag");
+    client().create_tag("v1", "HEAD", Some("Release one\n\nWith detail."), false, repo.path()).expect("annotated tag");
 
     let details = client().tag_details("v1", repo.path()).expect("read tag").expect("an annotated tag has details");
     assert_eq!(details.tagger, "Test");
@@ -948,7 +948,7 @@ fn tag_details_reads_an_annotated_tag() {
 fn tag_details_of_a_lightweight_tag_is_none() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
-    client().create_tag("light", "HEAD", None, repo.path()).expect("lightweight tag");
+    client().create_tag("light", "HEAD", None, false, repo.path()).expect("lightweight tag");
 
     assert_eq!(client().tag_details("light", repo.path()).expect("read tag"), None);
     assert!(client().tag_details("missing", repo.path()).is_err(), "a tag that does not exist is an error");
@@ -959,7 +959,7 @@ fn tag_details_strips_a_signature_block() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
     let message = "Signed release\n\n-----BEGIN PGP SIGNATURE-----\n\niQEzBAABCAAdFiEE\n-----END PGP SIGNATURE-----";
-    client().create_tag("signed", "HEAD", Some(message), repo.path()).expect("annotated tag");
+    client().create_tag("signed", "HEAD", Some(message), false, repo.path()).expect("annotated tag");
 
     let details = client().tag_details("signed", repo.path()).expect("read tag").expect("an annotated tag has details");
     assert_eq!(details.message, "Signed release\n\n(signed)");
@@ -971,8 +971,80 @@ fn create_tag_rejects_invalid_name() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
 
-    assert!(client().create_tag("bad name..", "HEAD", None, repo.path()).is_err());
+    assert!(client().create_tag("bad name..", "HEAD", None, false, repo.path()).is_err());
     assert!(snapshot(repo.path()).tags.is_empty());
+}
+
+/// Whether Git can sign a tag in `directory` with its settings, checked by signing and deleting
+/// a throwaway tag. A machine's global settings can stop Git signing, for example an empty
+/// `gpg.format`, which a repository's own value does not override.
+fn can_sign_tags(directory: &Path) -> bool {
+    let signed = Command::new("git").args(["tag", "--sign", "--message", "probe", "nicegit-probe", "HEAD"]).current_dir(directory).output();
+    let signed = signed.is_ok_and(|output| output.status.success());
+    if signed {
+        git(directory, &["tag", "--delete", "nicegit-probe"]);
+    }
+    signed
+}
+
+#[test]
+fn signed_tag_is_signed_with_the_repository_signing_key() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let keys = tempfile::tempdir().unwrap();
+    let key = keys.path().join("signing");
+    let made = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output();
+    let Ok(made) = made else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+    // Repository-local settings, so a machine's own signing program is not used.
+    let key_path = key.to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "gpg.ssh.program", "ssh-keygen"]);
+    repo.git(&["config", "user.signingkey", &key_path]);
+    if !can_sign_tags(repo.path()) {
+        eprintln!("Git cannot sign tags with this machine's settings; skipping");
+        return;
+    }
+
+    client().create_tag("signed", "HEAD", Some("Release"), true, repo.path()).expect("signed tag");
+
+    assert!(git(repo.path(), &["cat-file", "tag", "signed"]).contains("-----BEGIN SSH SIGNATURE-----"));
+    let details = client().tag_details("signed", repo.path()).expect("read tag").expect("an annotated tag has details");
+    assert!(details.message.ends_with("(signed)"), "{:?}", details.message);
+}
+
+#[test]
+fn signed_tag_without_a_usable_key_is_not_created() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let keys = tempfile::tempdir().unwrap();
+    let missing = keys.path().join("no-such-key").to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "gpg.ssh.program", "ssh-keygen"]);
+    repo.git(&["config", "user.signingkey", &missing]);
+
+    match client().create_tag("signed", "HEAD", Some("Release"), true, repo.path()) {
+        Err(GitError::CommandFailed { message, .. }) => {
+            assert!(message.starts_with("The tag could not be signed"), "{message}");
+        }
+        other => panic!("expected a signing failure, got {other:?}"),
+    }
+    assert!(!tag_exists(repo.path(), "signed"), "a tag that failed to sign is not left behind");
+}
+
+#[test]
+fn signed_tag_needs_a_message() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+
+    for message in [None, Some(""), Some("   ")] {
+        let error = error_text(client().create_tag("signed", "HEAD", message, true, repo.path()));
+        assert!(error.contains("A signed tag needs a message."), "{error}");
+    }
+    assert!(!tag_exists(repo.path(), "signed"));
 }
 
 // MARK: Remotes

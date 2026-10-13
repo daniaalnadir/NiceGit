@@ -225,7 +225,7 @@ impl GitClient {
                     .filter(|message| !message.is_empty())
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("{} {name}", if kind == GitFlowKind::Release { "Release" } else { "Hotfix" }));
-                self.create_tag(&tag, &target_reference, Some(message.as_str()), directory)?;
+                self.create_tag(&tag, &target_reference, Some(message.as_str()), false, directory)?;
             }
         }
 
