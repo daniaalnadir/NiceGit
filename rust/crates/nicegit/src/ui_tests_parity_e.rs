@@ -222,6 +222,43 @@ fn refused_push_of_a_diverged_branch_mentions_force_push() {
     assert!(text.contains("Force push"), "the notice points to Force push: {text}");
 }
 
+#[test]
+fn a_refused_pull_of_a_diverged_branch_offers_merge_or_rebase() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = crate::ui_tests_more::publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", "from the other clone\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    // Both sides moved on, so Pull's fast-forward is refused.
+    commit_file(path, "mine.txt", "mine\n", "Work from here");
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Pull is the sync button's other action, chosen from its menu.
+    settle(&mut harness);
+    harness.get_by_label("Fetch and Pull options").click();
+    wait(&mut harness, "the Fetch and Pull menu", |h| h.query_by_role_and_label(Role::RadioButton, "Pull").is_some());
+    harness.get_by_role_and_label(Role::RadioButton, "Pull").click();
+    settle(&mut harness);
+    toolbar_button(&mut harness, "Pull");
+    idle(&mut harness);
+    wait(&mut harness, "the explanation", |h| {
+        shows(h, "Pull cannot simply move your branch forward") && h.query_by_label("Merge or rebase…").is_some()
+    });
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), before, "a refused pull leaves the branch where it was");
+
+    harness.get_by_label("Merge or rebase…").click();
+    idle(&mut harness);
+    // After fetching, the usual merge or rebase choice opens for the upstream.
+    wait(&mut harness, "the merge or rebase choice", |h| shows(h, "Integrate origin/main"));
+}
+
 // MARK: Stashes
 
 #[test]
