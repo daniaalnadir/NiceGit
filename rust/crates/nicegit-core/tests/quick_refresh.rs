@@ -52,6 +52,15 @@ fn full(path: &Path) -> Snapshot {
     GitClient::new().load_snapshot_scoped(path, 100, HistoryScope::All).expect("full snapshot")
 }
 
+/// `snapshot` without its commits' relative dates ("1 second ago"), which change with the clock
+/// between two reads, so two snapshots of the same state compare equal.
+fn timeless(mut snapshot: Snapshot) -> Snapshot {
+    for commit in &mut snapshot.commits {
+        commit.relative_date.clear();
+    }
+    snapshot
+}
+
 /// The quick refresh of `previous`, which must apply to the checkout.
 fn quick(previous: &Snapshot, path: &Path) -> Snapshot {
     GitClient::new().quick_snapshot(previous, path).expect("quick snapshot").expect("a quick refresh applies")
@@ -71,7 +80,7 @@ fn quick_snapshot_updates_status_for_edited_files() {
     let refreshed = quick(&previous, path);
 
     // Only the status differs, so the quick result is exactly what a full load now reads.
-    assert_eq!(refreshed, full(path));
+    assert_eq!(timeless(refreshed.clone()), timeless(full(path)));
     assert!(refreshed.status.iter().any(|entry| entry.path == "notes.txt"));
     assert!(refreshed.status.iter().any(|entry| entry.path == "new.txt" && entry.kind == StatusKind::Untracked));
     assert_eq!(refreshed.commits, previous.commits, "the history is kept");
@@ -136,7 +145,7 @@ fn quick_snapshot_keeps_a_detached_head_when_only_files_change() {
     assert!(previous.current_branch.starts_with("Detached HEAD "), "the snapshot names the detached HEAD");
 
     fs::write(path.join("notes.txt"), "first\nsecond\nthird\n").unwrap();
-    assert_eq!(quick(&previous, path), full(path));
+    assert_eq!(timeless(quick(&previous, path)), timeless(full(path)));
 }
 
 // MARK: Unfinished operations
@@ -182,7 +191,7 @@ fn quick_snapshot_refreshes_status_within_the_same_operation() {
     fs::write(path.join("notes.txt"), "first\nfrom both\n").unwrap();
     git(path, &["add", "notes.txt"]);
     let refreshed = quick(&previous, path);
-    assert_eq!(refreshed, full(path));
+    assert_eq!(timeless(refreshed.clone()), timeless(full(path)));
     assert!(refreshed.status.iter().any(|entry| entry.path == "notes.txt" && entry.kind != StatusKind::Conflicted));
 }
 
@@ -258,5 +267,5 @@ fn quick_snapshot_notices_a_new_gitmodules_file() {
 
     // Creating the file is a working-file change, so the quick path must see it too.
     assert!(refreshed.has_gitmodules);
-    assert_eq!(refreshed, full(path));
+    assert_eq!(timeless(refreshed.clone()), timeless(full(path)));
 }
