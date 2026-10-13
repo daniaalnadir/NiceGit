@@ -1726,3 +1726,147 @@ fn history_scopes_load_a_repository_without_commits() {
         assert_eq!(snapshot.head_hash, None, "{scope:?}");
     }
 }
+
+// MARK: Hidden branches
+
+/// A repository with `feature` (two commits of its own) and `other` (one commit), both from
+/// `main`'s first commit. Returns the hashes of `first`, the feature's two commits, and `other`'s.
+fn repository_with_feature_and_other() -> (Repo, [String; 4]) {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["checkout", "-q", "-b", "feature"]);
+    let feature_one = repo.commit("feature.txt", "feature one\n", "Feature one");
+    let feature_two = repo.commit("feature.txt", "feature two\n", "Feature two");
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["checkout", "-q", "-b", "other"]);
+    let other = repo.commit("other.txt", "other\n", "Other");
+    repo.git(&["checkout", "-q", "main"]);
+    (repo, [first, feature_one, feature_two, other])
+}
+
+fn hidden(references: &[&str]) -> Vec<String> {
+    references.iter().map(|reference| reference.to_string()).collect()
+}
+
+#[test]
+fn hiding_a_branch_removes_only_its_own_commits() {
+    let (repo, [first, feature_one, feature_two, other]) = repository_with_feature_and_other();
+    let snapshot =
+        client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &hidden(&["refs/heads/feature"])).expect("snapshot");
+    let hashes = history_hashes(&snapshot);
+    assert!(!hashes.contains(&feature_one) && !hashes.contains(&feature_two), "the hidden branch's commits are left out");
+    assert!(hashes.contains(&first) && hashes.contains(&other), "other branches keep their commits");
+}
+
+#[test]
+fn hiding_a_branch_leaves_out_only_the_named_branch() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["checkout", "-q", "-b", "feature"]);
+    let feature = repo.commit("feature.txt", "feature\n", "Feature");
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["checkout", "-q", "-b", "features"]);
+    let features = repo.commit("features.txt", "features\n", "Features");
+    repo.git(&["checkout", "-q", "main"]);
+
+    for scope in [HistoryScope::All, HistoryScope::Local] {
+        let snapshot = client().load_snapshot_filtered(repo.path(), 100, scope, &hidden(&["refs/heads/feature"])).expect("snapshot");
+        let hashes = history_hashes(&snapshot);
+        assert!(!hashes.contains(&feature), "{scope:?}: the named branch is hidden");
+        assert!(hashes.contains(&features), "{scope:?}: a branch whose name starts the same way is still shown");
+        assert!(hashes.contains(&first));
+    }
+}
+
+#[test]
+fn a_commit_that_a_shown_branch_reaches_stays_visible() {
+    let repo = Repo::new();
+    let shared = repo.commit("a.txt", "one\n", "Shared");
+    repo.git(&["checkout", "-q", "-b", "feature"]);
+    let feature = repo.commit("feature.txt", "feature\n", "Feature only");
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["branch", "-q", "other", &shared]);
+
+    let snapshot =
+        client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &hidden(&["refs/heads/feature"])).expect("snapshot");
+    let hashes = history_hashes(&snapshot);
+    assert!(!hashes.contains(&feature));
+    assert!(hashes.contains(&shared), "main and other reach the shared commit, so it still shows");
+}
+
+#[test]
+fn hiding_the_current_branch_still_shows_head() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    let second = repo.commit("a.txt", "two\n", "Second");
+
+    let snapshot = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &hidden(&["refs/heads/main"])).expect("snapshot");
+    assert_eq!(history_hashes(&snapshot), vec![second.clone(), first.clone()]);
+    assert_eq!(snapshot.head_hash.as_deref(), Some(second.as_str()));
+
+    let local = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::Local, &hidden(&["refs/heads/main"])).expect("local");
+    assert_eq!(history_hashes(&local), vec![second, first], "HEAD is walked in the Local scope too");
+}
+
+#[test]
+fn a_detached_head_on_a_hidden_branch_still_shows() {
+    let (repo, [_, feature_one, feature_two, _]) = repository_with_feature_and_other();
+    repo.git(&["checkout", "-q", "--detach", "feature"]);
+
+    for scope in [HistoryScope::All, HistoryScope::Local] {
+        let snapshot = client().load_snapshot_filtered(repo.path(), 100, scope, &hidden(&["refs/heads/feature"])).expect("snapshot");
+        assert!(history_hashes(&snapshot).contains(&feature_two), "{scope:?}: HEAD's commit is shown");
+        assert!(history_hashes(&snapshot).contains(&feature_one), "{scope:?}: HEAD's history is shown");
+    }
+}
+
+#[test]
+fn hiding_a_remote_tracking_branch_removes_its_own_commits() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["checkout", "-q", "-b", "remote-only"]);
+    let remote_only = repo.commit("remote.txt", "remote\n", "Remote only");
+    repo.git(&["checkout", "-q", "main"]);
+    repo.git(&["branch", "-q", "-D", "remote-only"]);
+    repo.git(&["update-ref", "refs/remotes/origin/x", &remote_only]);
+
+    let shown = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &[]).expect("shown");
+    assert!(history_hashes(&shown).contains(&remote_only));
+
+    let hidden_snapshot =
+        client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &hidden(&["refs/remotes/origin/x"])).expect("hidden");
+    let hashes = history_hashes(&hidden_snapshot);
+    assert!(!hashes.contains(&remote_only), "the hidden remote-tracking branch's commit is left out");
+    assert!(hashes.contains(&first));
+}
+
+#[test]
+fn local_scope_leaves_out_a_hidden_local_branch() {
+    let (repo, [first, feature_one, feature_two, other]) = repository_with_feature_and_other();
+    let local = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::Local, &hidden(&["refs/heads/feature"])).expect("local");
+    let hashes = history_hashes(&local);
+    assert!(!hashes.contains(&feature_one) && !hashes.contains(&feature_two));
+    assert!(hashes.contains(&first) && hashes.contains(&other));
+}
+
+#[test]
+fn entries_that_are_not_branches_are_ignored() {
+    let (repo, _) = repository_with_feature_and_other();
+    repo.git(&["tag", "keep", "feature"]);
+    for scope in [HistoryScope::All, HistoryScope::Local, HistoryScope::Current] {
+        let ignored = client()
+            .load_snapshot_filtered(repo.path(), 100, scope, &hidden(&["refs/tags/keep", "HEAD", "refs/stash", "feature", ""]))
+            .expect("ignored");
+        let unhidden = client().load_snapshot_filtered(repo.path(), 100, scope, &[]).expect("unhidden");
+        assert_eq!(history_hashes(&ignored), history_hashes(&unhidden), "{scope:?}");
+    }
+}
+
+#[test]
+fn current_scope_ignores_hidden_branches() {
+    let (repo, _) = repository_with_feature_and_other();
+    let plain = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Current).expect("plain");
+    let with_hidden =
+        client().load_snapshot_filtered(repo.path(), 100, HistoryScope::Current, &hidden(&["refs/heads/main"])).expect("hidden");
+    assert_eq!(history_hashes(&with_hidden), history_hashes(&plain));
+}

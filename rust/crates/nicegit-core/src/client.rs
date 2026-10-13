@@ -50,6 +50,19 @@ fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+/// Escapes the characters `--exclude` reads as glob syntax, so a ref name matches only itself.
+/// Git refuses these characters in ref names, so this only guards against a future change.
+fn glob_escape(reference: &str) -> String {
+    let mut escaped = String::with_capacity(reference.len());
+    for character in reference.chars() {
+        if matches!(character, '\\' | '*' | '?' | '[') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
 /// Refuses an archive folder name that is not a single safe path component. The name becomes
 /// the top folder of the archive, so it must not add directories, climb out of the archive, or
 /// read as an option.
@@ -214,12 +227,28 @@ impl GitClient {
     /// The revisions the history log walks for `scope`, before the log's own options.
     ///
     /// Git's default, HEAD, fails on a repository without commits, so HEAD is named only once
-    /// it resolves. An upstream is named by its object ID, never by its name.
-    fn history_revisions(&self, scope: HistoryScope, root: &Path) -> Vec<String> {
+    /// it resolves. An upstream is named by its object ID, never by its name. `hidden` names refs
+    /// whose own commits the walk leaves out. `--exclude` before `--all` takes full ref names;
+    /// before `--branches` it takes names without the `refs/heads/` prefix. `--all` still includes
+    /// HEAD, so a hidden HEAD still shows.
+    fn history_revisions(&self, scope: HistoryScope, root: &Path, hidden: &[String]) -> Vec<String> {
         match scope {
-            HistoryScope::All => vec!["--exclude=refs/stash".to_string(), "--all".to_string()],
+            HistoryScope::All => {
+                let mut revisions: Vec<String> = hidden
+                    .iter()
+                    .filter(|reference| reference.starts_with("refs/heads/") || reference.starts_with("refs/remotes/"))
+                    .map(|reference| format!("--exclude={}", glob_escape(reference)))
+                    .collect();
+                revisions.extend(["--exclude=refs/stash".to_string(), "--all".to_string()]);
+                revisions
+            }
             HistoryScope::Local => {
-                let mut revisions = vec!["--branches".to_string()];
+                let mut revisions: Vec<String> = hidden
+                    .iter()
+                    .filter_map(|reference| reference.strip_prefix("refs/heads/").filter(|branch| !branch.is_empty()))
+                    .map(|branch| format!("--exclude={}", glob_escape(branch)))
+                    .collect();
+                revisions.push("--branches".to_string());
                 if self.head(root).is_some() {
                     revisions.push("HEAD".to_string());
                 }
@@ -253,13 +282,26 @@ impl GitClient {
 
     /// Like `load_snapshot`, but the history covers only the branches `scope` names.
     pub fn load_snapshot_scoped(&self, selected: &Path, history_limit: usize, scope: HistoryScope) -> Result<Snapshot> {
+        self.load_snapshot_filtered(selected, history_limit, scope, &[])
+    }
+
+    /// Like `load_snapshot_scoped`, but the history leaves out the commits that only the `hidden`
+    /// refs reach. Each hidden entry is a full ref name, such as `refs/heads/feature`; entries
+    /// that are not local or remote-tracking branches are ignored. `Current` ignores `hidden`.
+    pub fn load_snapshot_filtered(
+        &self,
+        selected: &Path,
+        history_limit: usize,
+        scope: HistoryScope,
+        hidden: &[String],
+    ) -> Result<Snapshot> {
         let root = self.repository_root(selected)?;
         let limit = history_limit.max(1);
         let log_format = format!("--pretty=format:{LOG_FORMAT}");
         let branch_format = format!("--format={BRANCH_FORMAT}");
         let stash_format = format!("--format={STASH_FORMAT}");
         let count = (limit + 1).to_string();
-        let revisions = self.history_revisions(scope, &root);
+        let revisions = self.history_revisions(scope, &root, hidden);
         let mut log = vec!["log"];
         log.extend(revisions.iter().map(String::as_str));
         log.extend(["--topo-order", "--decorate=short", "--date=relative", "-n", count.as_str(), log_format.as_str(), "--"]);
@@ -1715,6 +1757,12 @@ pub fn operation_in(git_directory: &Path) -> Option<Operation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn glob_escape_prefixes_each_glob_character_with_a_backslash() {
+        assert_eq!(glob_escape("refs/heads/feature"), "refs/heads/feature");
+        assert_eq!(glob_escape(r"refs/heads/a*b?c[d\e"), r"refs/heads/a\*b\?c\[d\\e");
+    }
 
     fn status(path: &str, index: char, work: char) -> StatusEntry {
         let kind = if index == '?' { StatusKind::Untracked } else { StatusKind::Modified };

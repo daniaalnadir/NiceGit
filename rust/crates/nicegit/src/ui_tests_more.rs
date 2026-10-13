@@ -121,6 +121,92 @@ fn drag_a_branch_onto_the_current_branch_to_merge_it() {
     assert_eq!(std::fs::read_to_string(path.join("side.txt")).unwrap(), "from feature\n");
 }
 
+/// Whether the loaded history has a commit with this subject.
+fn history_has_subject(harness: &App, subject: &str) -> bool {
+    harness.state().snapshot().is_some_and(|snapshot| snapshot.commits.iter().any(|commit| commit.subject == subject))
+}
+
+/// A repository whose `feature` branch has a commit of its own, with the checkout back on `main`.
+fn repository_with_feature_commit() -> tempfile::TempDir {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "side.txt", b"from feature\n", "Work on the feature");
+    git(path, &["switch", "-q", "main"]);
+    repo
+}
+
+#[test]
+fn hide_a_branch_in_the_graph_from_the_sidebar_and_show_it_again() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(history_has_subject(&harness, "Work on the feature"), "the feature's commit is in the graph");
+
+    harness.get_all_by_label("feature").next().expect("feature row").hover();
+    harness.step();
+    harness.get_all_by_label("feature").next().expect("feature row").click_secondary();
+    wait(&mut harness, "the sidebar menu", |h| shows(h, "Hide in graph"));
+    harness.get_by_label_contains("Hide in graph").hover();
+    harness.step();
+    harness.get_by_label_contains("Hide in graph").click();
+    wait(&mut harness, "the reload without the feature's commit", |h| !history_has_subject(h, "Work on the feature"));
+    settle(&mut harness);
+    assert!(shows(&harness, "1 branch hidden."), "the hidden note shows");
+
+    harness.get_by_label("Show all").hover();
+    harness.step();
+    harness.get_by_label("Show all").click();
+    wait(&mut harness, "the feature's commit to come back", |h| history_has_subject(h, "Work on the feature"));
+    settle(&mut harness);
+    assert!(!shows(&harness, "branch hidden."), "the note goes once every branch is shown");
+}
+
+#[test]
+fn a_click_on_a_branch_label_selects_its_commit() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    let feature_tip = git(path, &["rev-parse", "feature"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Branch label feature").hover();
+    harness.step();
+    harness.get_by_label("Branch label feature").click();
+    settle(&mut harness);
+    assert!(
+        matches!(&harness.state().repo().expect("repository").selection, crate::app::Selection::Commit { hash, .. } if *hash == feature_tip),
+        "the label's commit is selected"
+    );
+}
+
+#[test]
+fn hide_a_branch_from_its_graph_label_and_the_current_branch_cannot_be_hidden() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The pointer must reach the label before a click, as it does for a person.
+    harness.get_by_label("Branch label feature").hover();
+    harness.step();
+    harness.get_by_label("Branch label feature").click_secondary();
+    wait(&mut harness, "the label's menu", |h| shows(h, "Hide in graph"));
+    harness.get_by_label_contains("Hide in graph").hover();
+    harness.step();
+    harness.get_by_label_contains("Hide in graph").click();
+    wait(&mut harness, "the reload without the feature's commit", |h| !history_has_subject(h, "Work on the feature"));
+    settle(&mut harness);
+    assert!(shows(&harness, "1 branch hidden."));
+
+    harness.get_all_by_label("main").next().expect("main row").hover();
+    harness.step();
+    harness.get_all_by_label("main").next().expect("main row").click_secondary();
+    wait(&mut harness, "the main menu", |h| shows(h, "Hide in graph"));
+    assert!(harness.get_by_label_contains("Hide in graph").accesskit_node().is_disabled(), "the current branch's item is disabled");
+}
+
 #[test]
 fn squash_a_diverged_branch_into_staged_changes_from_the_merge_confirmation() {
     let repo = repository();
