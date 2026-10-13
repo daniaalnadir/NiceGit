@@ -72,6 +72,9 @@
   change to just those lines.
 - The status bar shows the current branch's pull request and how its checks are doing; click it
   to open the pull request.
+- Refreshes no longer recount every branch's ahead and behind commits when no branch or
+  upstream moved, which saved about 0.2 s of background work per refresh in a repository
+  with 200 tracked branches.
 
 ## 1.5.0 - Fewer surprises
 
