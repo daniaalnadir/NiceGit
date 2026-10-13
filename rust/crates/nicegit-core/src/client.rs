@@ -1036,6 +1036,15 @@ impl GitClient {
         self.run(&["fetch", "--all", "--prune"], directory).map(drop)
     }
 
+    /// Fetches one remote and prunes its deleted branches, leaving other remotes alone. The
+    /// remote must still have the fetch addresses it was displayed with, so a changed address is
+    /// never contacted.
+    pub fn fetch_remote(&self, remote: &str, expected_fetch_addresses: &[String], directory: &Path) -> Result<()> {
+        let expected = BTreeMap::from([(remote.to_string(), expected_fetch_addresses.to_vec())]);
+        self.require_remote_addresses(&expected, remote, false, "fetch", directory)?;
+        self.run(&["fetch", "--prune", "--", remote], directory).map(drop)
+    }
+
     pub(crate) fn require_upstream(&self, expected: &str, command: &str, directory: &Path) -> Result<()> {
         let current = self.try_trimmed(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], directory);
         if current.as_deref() != Some(expected) {

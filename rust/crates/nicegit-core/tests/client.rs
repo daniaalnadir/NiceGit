@@ -1622,6 +1622,76 @@ fn pop_that_conflicts_keeps_the_stash() {
     assert_eq!(client().list_stashes(repo.path()).unwrap().len(), 1, "the stash is kept to try again");
 }
 
+/// A repository with `origin` and `upstream` remotes, both holding its `main` branch.
+fn repo_with_two_remotes() -> (TempDir, TempDir, Repo, String) {
+    let origin = bare_remote();
+    let upstream = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(origin.path())]);
+    repo.git(&["remote", "add", "upstream", &path_string(upstream.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    repo.git(&["push", "-q", "upstream", "main"]);
+    (origin, upstream, repo, first)
+}
+
+#[test]
+fn fetch_remote_updates_only_the_named_remote() {
+    let (origin, upstream, repo, first) = repo_with_two_remotes();
+    // Another clone pushes a new commit to each remote.
+    let workspace = tempfile::tempdir().expect("create workspace");
+    git(workspace.path(), &["clone", "--quiet", &path_string(origin.path()), "clone"]);
+    let clone = workspace.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("origin.txt"), "on origin\n").expect("write file");
+    git(&clone, &["add", "--", "origin.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "On origin"]);
+    git(&clone, &["push", "--quiet", "origin", "main"]);
+    fs::write(clone.join("upstream.txt"), "on upstream\n").expect("write file");
+    git(&clone, &["add", "--", "upstream.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "On upstream"]);
+    git(&clone, &["push", "--quiet", &path_string(upstream.path()), "main"]);
+    let upstream_head = git(upstream.path(), &["rev-parse", "main"]).trim().to_string();
+    let expected = snapshot(repo.path()).remote_fetch_addresses["upstream"].clone();
+
+    client().fetch_remote("upstream", &expected, repo.path()).expect("fetch upstream");
+
+    assert_eq!(repo.git(&["rev-parse", "refs/remotes/upstream/main"]).trim(), upstream_head, "upstream's branch moved");
+    assert_eq!(repo.git(&["rev-parse", "refs/remotes/origin/main"]).trim(), first, "origin's tracking branch did not move");
+}
+
+#[test]
+fn fetch_remote_prunes_a_branch_deleted_on_that_remote() {
+    let (_origin, upstream, repo, _first) = repo_with_two_remotes();
+    repo.git(&["push", "-q", "upstream", "main:refs/heads/gone"]);
+    assert!(git_output(repo.path(), &["rev-parse", "--verify", "--quiet", "refs/remotes/upstream/gone"]).status.success());
+    git(upstream.path(), &["update-ref", "-d", "refs/heads/gone"]);
+    let expected = snapshot(repo.path()).remote_fetch_addresses["upstream"].clone();
+
+    client().fetch_remote("upstream", &expected, repo.path()).expect("fetch upstream");
+
+    assert!(
+        !git_output(repo.path(), &["rev-parse", "--verify", "--quiet", "refs/remotes/upstream/gone"]).status.success(),
+        "the deleted branch is pruned"
+    );
+}
+
+#[test]
+fn fetch_remote_refuses_changed_address_and_fetches_nothing() {
+    let (_origin, _upstream, repo, first) = repo_with_two_remotes();
+    let expected = snapshot(repo.path()).remote_fetch_addresses["upstream"].clone();
+    // The remote now points at another repository, which has a commit this one does not.
+    let moved = bare_remote();
+    repo.commit("b.txt", "two\n", "Second");
+    repo.git(&["push", "-q", &path_string(moved.path()), "main"]);
+    repo.git(&["remote", "set-url", "upstream", &path_string(moved.path())]);
+
+    let message = error_text(client().fetch_remote("upstream", &expected, repo.path()));
+
+    assert!(message.contains("remote address changed"), "{message}");
+    assert_eq!(repo.git(&["rev-parse", "refs/remotes/upstream/main"]).trim(), first, "nothing was fetched");
+}
+
 // MARK: History scope
 
 /// The commit hashes in a snapshot's history, newest first.

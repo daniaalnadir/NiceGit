@@ -150,6 +150,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Create local tracking branches from remote branches.
 - Publish new branches to a chosen remote and set their upstream.
 - Fetch, pull, push, and refresh from the toolbar.
+- Fetch a single remote from its right-click menu in the sidebar, instead of every remote.
 - Pull only fast-forwards. When the branch and its upstream have both moved on, Pull explains
   why it stopped and offers Merge or rebase… to integrate the upstream's commits.
 - Show outgoing and incoming commit counts against the configured upstream.

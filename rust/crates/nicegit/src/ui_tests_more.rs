@@ -1482,6 +1482,39 @@ pub(crate) fn publish_to_bare(path: &Path) -> tempfile::TempDir {
 }
 
 #[test]
+fn fetch_one_remote_from_its_sidebar_header() {
+    let repo = repository();
+    let path = repo.path();
+    let origin = publish_to_bare(path);
+    let upstream = temp_dir();
+    git(upstream.path(), &["init", "-q", "--bare", "-b", "main"]);
+    git(path, &["remote", "add", "upstream", &upstream.path().to_string_lossy()]);
+    git(path, &["push", "-q", "upstream", "main"]);
+    let first = git(path, &["rev-parse", "main"]);
+    // Another clone pushes a new commit to each remote.
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &origin.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "origin.txt", b"on origin\n", "On origin");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    commit_file(&clone, "upstream.txt", b"on upstream\n", "On upstream");
+    git(&clone, &["push", "-q", &upstream.path().to_string_lossy(), "main"]);
+    let upstream_head = git(&clone, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label(&format!("{}  upstream", icon::CLOUD)).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Fetch upstream").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the upstream fetch", |_| git(path, &["rev-parse", "refs/remotes/upstream/main"]) == upstream_head);
+    assert_eq!(git(path, &["rev-parse", "refs/remotes/origin/main"]), first, "origin was not fetched");
+}
+
+#[test]
 fn undo_a_pull_from_the_toolbar() {
     let repo = repository();
     let path = repo.path();

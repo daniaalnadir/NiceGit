@@ -23,6 +23,7 @@ enum Run {
     PullRequest(String),
     Shortcuts,
     Fetch,
+    FetchRemote(String),
     Pull,
     Push,
     ForcePush,
@@ -235,6 +236,15 @@ impl NiceGitApp {
                     run: Run::Checkout(branch.clone()),
                 });
             }
+            for remote in &snapshot.remotes {
+                list.push(command(
+                    &format!("Fetch {remote}"),
+                    "Download from this remote only",
+                    icon::CLOUD_ARROW_DOWN,
+                    idle,
+                    Run::FetchRemote(remote.clone()),
+                ));
+            }
         }
         // Saved identity profiles, from Repository Settings.
         let profiles: Vec<tools::repository_settings::StoredProfile> = self
@@ -272,6 +282,7 @@ impl NiceGitApp {
     fn run_command(&mut self, run: Run, ctx: &egui::Context) {
         match run {
             Run::Fetch => self.fetch(),
+            Run::FetchRemote(remote) => self.fetch_remote(remote),
             Run::Pull => self.pull(),
             Run::Push => self.push(),
             Run::ForcePush => self.request_force_push(),
