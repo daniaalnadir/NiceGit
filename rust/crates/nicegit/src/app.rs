@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -526,6 +526,11 @@ struct Watch {
     path: PathBuf,
     /// The watched path with symbolic links resolved, as the file system may report events.
     canonical: PathBuf,
+    /// Git directories outside the watched folder, as `extra_watch_paths` lists them.
+    extra: Vec<PathBuf>,
+    /// The shared Git directory of a linked worktree under both spellings, when it is watched
+    /// on its own. Only its `packed-refs` and `HEAD` concern this checkout.
+    shared: Vec<PathBuf>,
     _watcher: notify::RecommendedWatcher,
     events: Receiver<notify::Result<notify::Event>>,
 }
@@ -2048,15 +2053,20 @@ impl NiceGitApp {
 
     // MARK: Refresh
 
-    /// Watches the active repository for changes made in other apps.
+    /// Watches the active repository for changes made in other apps, and its Git directory too
+    /// when that lies outside the folder, as a linked worktree's does.
     fn watch_active(&mut self) {
         use notify::Watcher;
-        let Some(path) = self.repo().map(|r| r.path.clone()) else { return };
+        let Some(repo) = self.repo() else { return };
+        let path = repo.path.clone();
+        let git_dir = repo.snapshot.as_ref().and_then(|snapshot| snapshot.absolute_git_dir.clone());
         if !self.settings.auto_refresh {
             self.watcher = None;
             return;
         }
-        if self.watcher.as_ref().is_some_and(|watch| watch.path == path) {
+        let extra = git_dir.map(|dir| extra_watch_paths(&path, &dir)).unwrap_or_default();
+        let extra_paths: Vec<PathBuf> = extra.iter().map(|(dir, _)| dir.clone()).collect();
+        if self.watcher.as_ref().is_some_and(|watch| watch.path == path && watch.extra == extra_paths) {
             return;
         }
         let (sender, events) = std::sync::mpsc::channel();
@@ -2068,8 +2078,19 @@ impl NiceGitApp {
         self.watcher = None;
         if let Ok(mut watcher) = watcher {
             if watcher.watch(&path, notify::RecursiveMode::Recursive).is_ok() {
+                // A path that cannot be watched is left out; the folder's own watch still counts.
+                for (dir, mode) in &extra {
+                    let _ = watcher.watch(dir, *mode);
+                }
                 let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                self.watcher = Some(Watch { path, canonical, _watcher: watcher, events });
+                let mut shared = Vec::new();
+                for (dir, mode) in &extra {
+                    if matches!(mode, notify::RecursiveMode::NonRecursive) {
+                        shared.push(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.clone()));
+                        shared.push(dir.clone());
+                    }
+                }
+                self.watcher = Some(Watch { path, canonical, extra: extra_paths, shared, _watcher: watcher, events });
             }
         }
     }
@@ -2085,7 +2106,8 @@ impl NiceGitApp {
             let last_load = self.repo().map(|r| r.last_load).unwrap_or_else(Instant::now);
             while let Ok(event) = watch.events.try_recv() {
                 let Ok(event) = event else { continue };
-                if changes_visible_state(&event) && last_load.elapsed() > WATCH_DEBOUNCE {
+                if changes_visible_state(&event) && !only_other_shared_files(&event, &watch.shared) && last_load.elapsed() > WATCH_DEBOUNCE
+                {
                     self.watched_change.get_or_insert_with(Instant::now);
                     if touches_git_directory(&event, &watch.path, &watch.canonical) {
                         self.watched_git_change = true;
@@ -2227,6 +2249,54 @@ impl eframe::App for NiceGitApp {
     }
 }
 
+/// The paths outside the watched folder whose changes change the checkout: its Git directory, and
+/// for a linked worktree, whose `commondir` file names the shared Git directory, that directory's
+/// refs and `packed-refs`. A Git directory inside the folder is already watched, so nothing is
+/// returned for it. The shared directory is not watched recursively: other worktrees write their
+/// indexes and objects there. Only file system checks are made; no Git process runs.
+fn extra_watch_paths(root: &Path, git_dir: &Path) -> Vec<(PathBuf, notify::RecursiveMode)> {
+    use notify::RecursiveMode::{NonRecursive, Recursive};
+    let canonical_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    // The file system may report either spelling, so a directory inside the folder in either
+    // counts as inside it.
+    let inside_root = |dir: &Path| {
+        let resolved = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        [dir, resolved.as_path()].iter().any(|dir| dir.starts_with(root) || dir.starts_with(&canonical_root))
+    };
+    let mut paths = Vec::new();
+    if inside_root(git_dir) || !git_dir.is_dir() {
+        return paths;
+    }
+    paths.push((git_dir.to_path_buf(), Recursive));
+    let Ok(text) = std::fs::read_to_string(git_dir.join("commondir")) else { return paths };
+    // Only Git's own line terminator goes; a path may end in spaces.
+    let text = text.strip_suffix("\r\n").or_else(|| text.strip_suffix('\n')).unwrap_or(&text);
+    let common = normalized(&git_dir.join(text));
+    if inside_root(&common) || !common.is_dir() {
+        return paths;
+    }
+    let refs = common.join("refs");
+    if refs.is_dir() {
+        paths.push((refs, Recursive));
+    }
+    paths.push((common, NonRecursive));
+    paths
+}
+
+/// `path` with its `.` and `..` components resolved as text, so `<git dir>/../..` names the
+/// directory two levels up. Symbolic links are not resolved.
+fn normalized(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir if out.pop() => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Whether a file system event can change what NiceGit shows. Reading a file is not a change:
 /// on Linux every open is reported, and reacting to the reads of NiceGit's own refresh would
 /// refresh again in a loop. Object writes and lock files come with every Git command; the
@@ -2241,8 +2311,31 @@ fn changes_visible_state(event: &notify::Event) -> bool {
     changed
         && event.paths.iter().any(|path| {
             let text = path.to_string_lossy().replace('\\', "/");
-            !text.contains("/.git/objects/") && !text.contains("/.git/logs/") && !text.ends_with(".lock") && !text.contains("/target/")
+            !text.contains("/.git/objects/")
+                && !text.contains("/.git/logs/")
+                && !is_worktree_reflog(path)
+                && !text.ends_with(".lock")
+                && !text.contains("/target/")
         })
+}
+
+/// Whether every path of an event is a file directly in a linked worktree's shared Git directory
+/// other than `packed-refs` and `HEAD`: the main checkout's index and configuration change there
+/// without changing this checkout.
+fn only_other_shared_files(event: &notify::Event, shared: &[PathBuf]) -> bool {
+    !shared.is_empty()
+        && event.paths.iter().all(|path| {
+            path.parent().is_some_and(|parent| shared.iter().any(|dir| dir == parent))
+                && !path.file_name().is_some_and(|name| name == "packed-refs" || name == "HEAD")
+        })
+}
+
+/// Whether a path is a reflog of a linked worktree, `<common>/.git/worktrees/<name>/logs/...`.
+/// Git appends to it with every commit, switch, and reset; the refs and HEAD it records are
+/// watched themselves. The `.git` component keeps a working file named `logs` from matching.
+fn is_worktree_reflog(path: &Path) -> bool {
+    let parts: Vec<_> = path.components().map(|part| part.as_os_str().to_string_lossy()).collect();
+    parts.windows(4).any(|part| part[0] == ".git" && part[1] == "worktrees" && part[3] == "logs")
 }
 
 /// Whether a watched path is in a Git directory: `.git` itself or anything under it. A linked
@@ -2406,7 +2499,7 @@ mod tests {
 
     use std::path::Path;
 
-    use super::{changes_visible_state, touches_git_directory};
+    use super::{changes_visible_state, only_other_shared_files, touches_git_directory};
 
     fn event(kind: EventKind, path: &str) -> Event {
         Event::new(kind).add_path(path.into())
@@ -2443,6 +2536,138 @@ mod tests {
             assert!(!changes_visible_state(&event(write, path)), "{path}");
         }
         assert!(changes_visible_state(&event(write, "/repo/.git/refs/heads/main")));
+    }
+
+    #[test]
+    fn a_linked_worktrees_reflog_is_ignored_but_its_head_is_not() {
+        let write = EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let linked = "/main/.git/worktrees/feature";
+        assert!(!changes_visible_state(&event(write, &format!("{linked}/logs/HEAD"))));
+        assert!(changes_visible_state(&event(write, &format!("{linked}/HEAD"))));
+        assert!(changes_visible_state(&event(write, &format!("{linked}/index"))));
+        // A working file named like the reflog is still a change.
+        assert!(changes_visible_state(&event(write, "/repo/worktrees/feature/logs/notes.txt")));
+        assert!(changes_visible_state(&event(write, "/repo/logs/worktrees/x/y")));
+    }
+
+    #[test]
+    fn only_packed_refs_and_head_count_in_a_shared_git_directory() {
+        use std::path::PathBuf;
+        let write = EventKind::Modify(ModifyKind::Data(DataChange::Content));
+        let shared = [PathBuf::from("/main/.git")];
+        assert!(only_other_shared_files(&event(write, "/main/.git/index"), &shared));
+        assert!(only_other_shared_files(&event(write, "/main/.git/config"), &shared));
+        assert!(!only_other_shared_files(&event(write, "/main/.git/packed-refs"), &shared));
+        assert!(!only_other_shared_files(&event(write, "/main/.git/HEAD"), &shared));
+        // Refs and the worktree's own Git directory are below it, not directly in it.
+        assert!(!only_other_shared_files(&event(write, "/main/.git/refs/heads/main"), &shared));
+        assert!(!only_other_shared_files(&event(write, "/main/.git/worktrees/linked/HEAD"), &shared));
+        // Without a shared directory nothing is set aside.
+        assert!(!only_other_shared_files(&event(write, "/main/.git/index"), &[]));
+    }
+}
+
+#[cfg(test)]
+mod watch_path_tests {
+    use std::path::PathBuf;
+
+    use notify::RecursiveMode;
+
+    use super::extra_watch_paths;
+    use crate::ui_tests::{git, repository, temp_dir};
+
+    /// The paths and whether each is watched recursively, with paths made canonical so that
+    /// the `/var` and `/private/var` spellings of a temporary folder compare equal.
+    fn canonical(paths: &[(PathBuf, RecursiveMode)]) -> Vec<(PathBuf, bool)> {
+        paths
+            .iter()
+            .map(|(path, mode)| {
+                let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+                (path, matches!(mode, RecursiveMode::Recursive))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_ordinary_repository_adds_no_paths() {
+        let repo = repository();
+        assert!(extra_watch_paths(repo.path(), &repo.path().join(".git")).is_empty());
+    }
+
+    #[test]
+    fn a_linked_worktree_watches_its_git_directory_and_the_shared_refs() {
+        let repo = repository();
+        let folder = temp_dir();
+        let worktree = folder.path().join("linked");
+        git(repo.path(), &["worktree", "add", "-q", worktree.to_str().unwrap(), "-b", "linked"]);
+        let git_dir = PathBuf::from(git(&worktree, &["rev-parse", "--absolute-git-dir"]));
+        let common = repo.path().join(".git");
+
+        let paths = extra_watch_paths(&worktree, &git_dir);
+        assert_eq!(
+            canonical(&paths),
+            canonical(&[
+                (git_dir.clone(), RecursiveMode::Recursive),
+                (common.join("refs"), RecursiveMode::Recursive),
+                (common.clone(), RecursiveMode::NonRecursive),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_commondir_may_be_absolute_and_end_in_crlf() {
+        let folder = temp_dir();
+        let root = folder.path().join("root");
+        let git_dir = folder.path().join("gitdir");
+        let common = folder.path().join("common");
+        for dir in [&root, &git_dir, &common.join("refs")] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(git_dir.join("commondir"), format!("{}\r\n", common.display())).unwrap();
+
+        assert_eq!(
+            extra_watch_paths(&root, &git_dir),
+            vec![
+                (git_dir.clone(), RecursiveMode::Recursive),
+                (common.join("refs"), RecursiveMode::Recursive),
+                (common.clone(), RecursiveMode::NonRecursive),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_relative_commondir_is_read_from_the_git_directory_and_stripped_of_one_newline_only() {
+        let folder = temp_dir();
+        let root = folder.path().join("root");
+        let git_dir = folder.path().join("main").join(".git").join("worktrees").join("linked");
+        let common = folder.path().join("main").join(".git");
+        for dir in [&root, &git_dir, &common.join("refs")] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(git_dir.join("commondir"), "../..\n").unwrap();
+
+        let paths = extra_watch_paths(&root, &git_dir);
+        assert_eq!(paths[1], (common.join("refs"), RecursiveMode::Recursive));
+        assert_eq!(paths[2], (common.clone(), RecursiveMode::NonRecursive));
+        // A name that ends in a space keeps it; only the line terminator is removed. That
+        // directory does not exist, so only the Git directory itself is returned. Windows drops
+        // a trailing space from a name, so there the path would name the shared directory.
+        if cfg!(not(windows)) {
+            std::fs::write(git_dir.join("commondir"), "../.. \n").unwrap();
+            assert_eq!(extra_watch_paths(&root, &git_dir).len(), 1);
+        }
+    }
+
+    #[test]
+    fn a_git_directory_inside_the_folder_adds_nothing() {
+        let folder = temp_dir();
+        let root = folder.path().join("root");
+        let git_dir = root.join(".git").join("worktrees").join("linked");
+        std::fs::create_dir_all(root.join(".git").join("refs")).unwrap();
+        std::fs::create_dir_all(&git_dir).unwrap();
+        std::fs::write(git_dir.join("commondir"), "../..\n").unwrap();
+        // The folder's own watch covers it.
+        assert!(extra_watch_paths(&root, &git_dir).is_empty());
     }
 }
 
