@@ -79,6 +79,8 @@
   no submodules.
 - Saving a file in another app refreshes only the changed-file list when no branch, commit, or
   operation changed, instead of reloading the whole history.
+- Commits, staging, and branch switches made in another app in a linked worktree now appear
+  without waiting for the periodic refresh.
 
 ## 1.5.0 - Fewer surprises
 

@@ -59,6 +59,35 @@ fn changes_made_in_another_app_appear_without_refreshing() {
 }
 
 #[test]
+fn commits_made_in_another_app_in_a_linked_worktree_appear_without_refreshing() {
+    let repo = repository();
+    let folder = temp_dir();
+    let path = folder.path().join("linked");
+    git(repo.path(), &["worktree", "add", "-q", path.to_str().unwrap(), "-b", "linked"]);
+    let mut harness = open(&path);
+    loaded(&mut harness);
+
+    // Its Git directory is outside the folder, so the watcher must follow it to see the commit.
+    std::thread::sleep(Duration::from_millis(600));
+    let start = Instant::now();
+    git(&path, &["commit", "-q", "--allow-empty", "-m", "Made outside"]);
+    wait(&mut harness, "the commit made outside", |h| {
+        h.state().snapshot().is_some_and(|s| s.commits.iter().any(|commit| commit.subject == "Made outside"))
+    });
+    // The periodic refresh is every 30 seconds; this one came from the file watcher.
+    assert!(start.elapsed() < Duration::from_secs(10), "refreshed after {:?}", start.elapsed());
+
+    // A second commit, after the first refresh, must come from the watcher too. As above, it
+    // waits past the moments after a load, which are taken to be NiceGit's own changes.
+    std::thread::sleep(Duration::from_millis(600));
+    let head = harness.state().snapshot().and_then(|s| s.head_hash.clone());
+    let start = Instant::now();
+    git(&path, &["commit", "-q", "--allow-empty", "-m", "Made outside again"]);
+    wait(&mut harness, "the head to move", |h| h.state().snapshot().is_some_and(|s| s.head_hash != head));
+    assert!(start.elapsed() < Duration::from_secs(10), "refreshed after {:?}", start.elapsed());
+}
+
+#[test]
 fn drag_a_branch_onto_the_current_branch_to_merge_it() {
     let repo = repository();
     let path = repo.path();
