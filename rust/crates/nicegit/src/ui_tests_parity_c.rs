@@ -471,3 +471,50 @@ fn rebase_edit_stops_and_continue_folds_in_staged_changes() {
     let log = git(path, &["log", "--format=%s"]);
     assert!(log.starts_with("Keep this one too\nEdit this commit\nKeep this commit\nAdd a second line"), "{log}");
 }
+
+#[test]
+fn rebase_rows_say_what_their_choice_does() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "keep.txt", "keep\n", "Keep this commit");
+    commit_file(path, "middle.txt", "edit this\n", "Edit this commit");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Interactive rebase from here").click();
+    let action = "Action for Edit this commit";
+    wait(&mut harness, "the rebase plan", |h| h.query_by_role_and_label(Role::ComboBox, action).is_some());
+    settle(&mut harness);
+    let edit = "Stop after this commit so you can change its files";
+    assert!(!shows(&harness, edit), "a row that picks its commit has no description line");
+
+    harness.get_by_role_and_label(Role::ComboBox, action).click();
+    settle(&mut harness);
+    harness.get_all_by_label("Edit").last().expect("the Edit choice").click();
+    settle(&mut harness);
+    assert!(shows(&harness, edit), "an Edit row shows what Edit does under it");
+}
+
+#[test]
+fn hovering_an_annotated_tag_reads_its_message() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["tag", "-a", "v1.0", "-m", "First release notes"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Tags sit in a section that starts closed; open it to find the tag's row.
+    harness.get_by_label_contains("TAGS").click();
+    wait(&mut harness, "the tag in the sidebar", |h| h.query_by_label("v1.0").is_some());
+    assert!(harness.state().repo().is_some_and(|r| r.tag_details.is_empty()), "nothing is read until a row is hovered");
+
+    harness.get_by_label("v1.0").hover();
+    wait(&mut harness, "the tag's message in its tooltip", |h| shows(h, "First release notes"));
+    let cached = harness.state().repo().and_then(|r| r.tag_details.get("v1.0")).and_then(|(_, task)| task.peek());
+    assert!(
+        matches!(cached, Some(Ok(Some(details))) if details.message == "First release notes"),
+        "the annotated tag's details are cached for its tip"
+    );
+}

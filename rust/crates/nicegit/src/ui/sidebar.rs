@@ -4,11 +4,11 @@ use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
 use nicegit_core::parsers::Tracking;
-use nicegit_core::{Branch, GitClient, Snapshot};
+use nicegit_core::{Branch, GitClient, Snapshot, TagDetails};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::theme;
-use crate::tools::{self, widgets};
+use crate::tools::{self, widgets, Task};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 
 /// A collapsible sidebar section: icon, uppercase title, and a count.
@@ -65,6 +65,27 @@ fn row(ui: &mut Ui, glyph: &str, glyph_color: egui::Color32, text: RichText, tra
         child.add(egui::Label::new(text).truncate().selectable(false));
     }
     response
+}
+
+/// The hover text of an annotated tag: its name, then its tagger and date, then its message.
+fn annotated_tag_text(tag: &str, details: &TagDetails) -> String {
+    let mut text = tag.to_string();
+    let mut who_when = Vec::new();
+    if !details.tagger.is_empty() {
+        who_when.push(details.tagger.clone());
+    }
+    if let Some(date) = details.date {
+        who_when.push(tools::blame::relative_time(date));
+    }
+    if !who_when.is_empty() {
+        text.push('\n');
+        text.push_str(&who_when.join(" · "));
+    }
+    if !details.message.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(&details.message);
+    }
+    text
 }
 
 impl NiceGitApp {
@@ -290,6 +311,13 @@ impl NiceGitApp {
             for tag in tags {
                 let tip = snapshot.tag_tips.get(tag).cloned().unwrap_or_default();
                 let response = row(ui, icon::TAG, c.tag, RichText::new(tag), None, false);
+                // A tag's details are read the first time its row is hovered, not for every tag up front.
+                let response = if response.hovered() {
+                    let text = self.tag_hover_text(tag, &tip);
+                    response.on_hover_text(text)
+                } else {
+                    response
+                };
                 if response.clicked() {
                     if let Some(commit) = self.tag_commit(tag) {
                         self.select_commit(commit);
@@ -410,6 +438,25 @@ impl NiceGitApp {
     fn tag_commit(&self, tag: &str) -> Option<String> {
         let decoration = format!("tag: {tag}");
         self.snapshot()?.commits.iter().find(|c| c.refs.contains(&decoration)).map(|c| c.hash.clone())
+    }
+
+    /// The hover text of a tag row. Its details are read in the background, and read again only
+    /// when the tag's tip has moved since they were read.
+    fn tag_hover_text(&mut self, tag: &str, tip: &str) -> String {
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repo_mut() else { return tag.to_string() };
+        if repo.tag_details.get(tag).is_none_or(|(read_tip, _)| read_tip != tip) {
+            let (name, path) = (tag.to_string(), repo.path.clone());
+            let task = Task::spawn(&context, move || GitClient::new().tag_details(&name, &path));
+            repo.tag_details.insert(tag.to_string(), (tip.to_string(), task));
+        }
+        let Some((_, task)) = repo.tag_details.get_mut(tag) else { return tag.to_string() };
+        match task.get() {
+            None => format!("{tag}\nLoading…"),
+            Some(Err(error)) => format!("{tag}\nCould not read this tag: {error}"),
+            Some(Ok(None)) => format!("{tag}\nLightweight tag at {}", short(tip)),
+            Some(Ok(Some(details))) => annotated_tag_text(tag, details),
+        }
     }
 
     fn tag_menu(&mut self, ui: &mut Ui, tag: &str, tip: &str, snapshot: &Snapshot) {

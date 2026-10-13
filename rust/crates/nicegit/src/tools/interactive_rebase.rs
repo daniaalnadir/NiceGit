@@ -266,6 +266,11 @@ impl InteractiveRebaseWindow {
                         ui.label(RichText::new(&entry.commit.author_name).small().color(c.muted));
                     });
                 });
+                // What the choice does, on one truncated line under the row. For Reword it sits
+                // above the message editor, which then reads as the thing it describes.
+                if entry.choice != Choice::Pick {
+                    ui.add(egui::Label::new(RichText::new(entry.choice.help()).small().color(c.muted)).truncate());
+                }
                 if entry.choice == Choice::Reword {
                     ui.add_space(4.0);
                     let message = ui.add(

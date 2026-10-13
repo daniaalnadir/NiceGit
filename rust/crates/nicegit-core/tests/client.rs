@@ -871,6 +871,41 @@ fn delete_tag_requires_the_shown_tip() {
 }
 
 #[test]
+fn tag_details_reads_an_annotated_tag() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    client().create_tag("v1", "HEAD", Some("Release one\n\nWith detail."), repo.path()).expect("annotated tag");
+
+    let details = client().tag_details("v1", repo.path()).expect("read tag").expect("an annotated tag has details");
+    assert_eq!(details.tagger, "Test");
+    assert!(details.date.is_some_and(|date| date > 0), "the tagger date is recorded");
+    assert_eq!(details.message, "Release one\n\nWith detail.");
+    assert_eq!(details.target, head, "the tag names the commit");
+}
+
+#[test]
+fn tag_details_of_a_lightweight_tag_is_none() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    client().create_tag("light", "HEAD", None, repo.path()).expect("lightweight tag");
+
+    assert_eq!(client().tag_details("light", repo.path()).expect("read tag"), None);
+    assert!(client().tag_details("missing", repo.path()).is_err(), "a tag that does not exist is an error");
+}
+
+#[test]
+fn tag_details_strips_a_signature_block() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let message = "Signed release\n\n-----BEGIN PGP SIGNATURE-----\n\niQEzBAABCAAdFiEE\n-----END PGP SIGNATURE-----";
+    client().create_tag("signed", "HEAD", Some(message), repo.path()).expect("annotated tag");
+
+    let details = client().tag_details("signed", repo.path()).expect("read tag").expect("an annotated tag has details");
+    assert_eq!(details.message, "Signed release\n\n(signed)");
+    assert!(!details.message.contains("SIGNATURE"), "the signature block is not shown");
+}
+
+#[test]
 fn create_tag_rejects_invalid_name() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");

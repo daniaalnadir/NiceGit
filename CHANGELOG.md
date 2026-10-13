@@ -61,6 +61,8 @@
   destination fills itself in.
 - Go to file (Command-P) finds any tracked file by name and opens its history, blame, or
   the editor.
+- Interactive rebase shows what each row's choice will do.
+- Hovering an annotated tag in the sidebar shows its message, tagger, and date.
 
 ## 1.5.0 - Fewer surprises
 
