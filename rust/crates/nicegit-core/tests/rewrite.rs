@@ -712,8 +712,36 @@ fn cherry_pick_applies_several_commits_oldest_first() {
     let third = repo.commit_at("s3.txt", "three\n", "Side three", 1_700_000_300);
     repo.git(&["switch", "main"]);
 
-    client().cherry_pick(&[third.clone(), first.clone(), second.clone()], Some(&base), "main", repo.path()).expect("cherry-pick");
+    client().cherry_pick(&[third.clone(), first.clone(), second.clone()], Some(&base), "main", false, repo.path()).expect("cherry-pick");
     assert_eq!(subjects_after(repo.path(), &base), ["Side one", "Side two", "Side three"]);
+}
+
+#[test]
+fn cherry_pick_record_origin_names_each_original_commit() {
+    let repo = Repo::new();
+    let base = repo.commit_at("base.txt", "base\n", "Base", 1_700_000_000);
+    repo.git(&["switch", "-c", "side", &base]);
+    let first = repo.commit_at("s1.txt", "one\n", "Side one", 1_700_000_100);
+    let second = repo.commit_at("s2.txt", "two\n", "Side two", 1_700_000_200);
+    repo.git(&["switch", "main"]);
+
+    client().cherry_pick(&[second.clone(), first.clone()], Some(&base), "main", true, repo.path()).expect("cherry-pick");
+    let picked = commits_after(repo.path(), &base);
+    assert_eq!(picked.len(), 2);
+    assert!(full_message(repo.path(), &picked[0]).trim_end().ends_with(&format!("(cherry picked from commit {first})")));
+    assert!(full_message(repo.path(), &picked[1]).trim_end().ends_with(&format!("(cherry picked from commit {second})")));
+}
+
+#[test]
+fn cherry_pick_without_record_origin_leaves_the_message_alone() {
+    let repo = Repo::new();
+    let base = repo.commit_at("base.txt", "base\n", "Base", 1_700_000_000);
+    repo.git(&["switch", "-c", "side", &base]);
+    let side = repo.commit_at("s1.txt", "one\n", "Side one", 1_700_000_100);
+    repo.git(&["switch", "main"]);
+
+    client().cherry_pick(std::slice::from_ref(&side), Some(&base), "main", false, repo.path()).expect("cherry-pick");
+    assert_eq!(full_message(repo.path(), &repo.head()).trim_end(), "Side one");
 }
 
 #[test]
@@ -723,7 +751,7 @@ fn cherry_pick_refuses_stale_head() {
     repo.git(&["switch", "-c", "side", &base]);
     let side = repo.commit_at("s1.txt", "one\n", "Side one", 1_700_000_100);
     repo.git(&["switch", "main"]);
-    let message = refusal(client().cherry_pick(std::slice::from_ref(&side), Some(&side), "main", repo.path()));
+    let message = refusal(client().cherry_pick(std::slice::from_ref(&side), Some(&side), "main", true, repo.path()));
     assert!(message.contains("changed since this action"), "{message}");
     assert_eq!(repo.head(), base);
 }

@@ -243,6 +243,10 @@ pub struct Settings {
     /// Whether saving a stash also takes untracked files. On by default, as it always was.
     #[serde(default = "default_true")]
     pub stash_include_untracked: bool,
+    /// Whether a cherry-pick notes the original commit in each new commit's message, as
+    /// `git cherry-pick -x` does.
+    #[serde(default)]
+    pub cherry_pick_record_origin: bool,
     /// Branches hidden from the commit graph, keyed like `drafts`. Each entry is a full ref name,
     /// such as `refs/heads/feature`, so a local and a remote branch never collide.
     #[serde(default)]
@@ -278,6 +282,7 @@ impl Default for Settings {
             clone_folder: None,
             stash_keep_index: false,
             stash_include_untracked: true,
+            cherry_pick_record_origin: false,
             hidden_branches: BTreeMap::new(),
         }
     }
@@ -399,6 +404,29 @@ mod tests {
         storage.set_string(STORAGE_KEY, older);
         let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
         assert!(loaded.hidden_branches.is_empty());
+    }
+
+    #[test]
+    fn cherry_pick_origin_choice_round_trips_and_starts_off() {
+        assert!(!Settings::default().cherry_pick_record_origin);
+        let settings = Settings { cherry_pick_record_origin: true, ..Settings::default() };
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert!(loaded.cherry_pick_record_origin);
+    }
+
+    #[test]
+    fn settings_saved_before_cherry_pick_origin_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // The field is written as `cherry_pick_record_origin:false`; an older file has no such field.
+        let older = saved.replacen(",cherry_pick_record_origin:false", "", 1);
+        assert_ne!(older, saved, "the field is in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(!loaded.cherry_pick_record_origin);
     }
 
     #[test]

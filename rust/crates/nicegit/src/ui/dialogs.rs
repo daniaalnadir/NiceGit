@@ -425,6 +425,15 @@ impl NiceGitApp {
                         merge_style_choices(ui, style);
                         *button = if *style == MergeStyle::Squash { "Squash" } else { "Merge" }.to_string();
                     }
+                    // Remembered in Settings, so backporting several fixes keeps the same choice.
+                    if matches!(pending, Pending::CherryPick { .. }) {
+                        ui.add_space(12.0);
+                        widgets::checkbox(ui, true, &mut self.settings.cherry_pick_record_origin, "Note the original commit in each message")
+                            .on_hover_text(
+                                "Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. \
+                                 Useful when backporting a fix to another branch.",
+                            );
+                    }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         let confirm = if pending.destructive() {
@@ -827,8 +836,9 @@ impl NiceGitApp {
             }
             Pending::CherryPick { commits, branch, head } => {
                 let count = commits.len();
+                let record_origin = self.settings.cherry_pick_record_origin;
                 self.act_recording_detail("Cherry-pick", "Cherry-pick", Some(commits_detail(&commits)), move |client, path| {
-                    client.cherry_pick(&commits, head.as_deref(), &branch, path).map(|_| {
+                    client.cherry_pick(&commits, head.as_deref(), &branch, record_origin, path).map(|_| {
                         Some(if count == 1 { "Cherry-picked the commit.".to_string() } else { format!("Cherry-picked {count} commits.") })
                     })
                 })

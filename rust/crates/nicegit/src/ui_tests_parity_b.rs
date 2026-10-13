@@ -546,6 +546,33 @@ fn cherry_pick_one_commit_from_its_menu() {
 }
 
 #[test]
+fn cherry_pick_can_note_the_original_commit_in_its_message() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "-c", "source", "HEAD~1"]);
+    commit_file(path, "backport.txt", "fix\n", "Backport this fix");
+    let source = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Backport this fix").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Cherry-pick").click();
+    wait(&mut harness, "the cherry-pick confirmation", |h| shows(h, "Cherry-pick this commit?"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::CheckBox, "Note the original commit in each message").click();
+    harness.step();
+    assert!(harness.state().settings.cherry_pick_record_origin, "the choice is on for this confirmation");
+    harness.get_all_by_label("Cherry-pick").last().expect("confirm button").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the cherry-picked commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Backport this fix");
+    assert!(git(path, &["log", "-1", "--format=%B"]).contains("(cherry picked from commit "), "the new commit notes where it came from");
+    assert!(git(path, &["log", "-1", "--format=%B"]).contains(&format!("(cherry picked from commit {source})")));
+}
+
+#[test]
 fn abort_a_rebase_stopped_by_a_conflict_from_the_banner() {
     let repo = rebase_conflict_repository();
     let path = repo.path();
