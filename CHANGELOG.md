@@ -94,6 +94,8 @@
   somewhere other than the fetch URL; clearing it makes pushes use the fetch URL again.
 - The commit inspector lists the branches that contain a commit and the first tag that
   includes it, so you can see which release shipped it.
+- A Pull refused because the branch and its upstream have both changed now says why, and
+  offers Merge or rebase… as a refused push does; before, it showed only Git's message.
 
 ## 1.5.0 - Fewer surprises
 

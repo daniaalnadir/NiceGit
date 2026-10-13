@@ -120,6 +120,13 @@ pub fn push_needs_pull(error: &str) -> bool {
     ["non-fast-forward", "fetch first", "tip of your current branch is behind"].iter().any(|sign| error.contains(sign))
 }
 
+/// Whether a pull was refused because the branch and its upstream have both moved on, so a
+/// fast-forward cannot move the branch forward. Git words this "Not possible to fast-forward",
+/// and older versions wrote "fast forward" without the hyphen.
+pub fn pull_needs_integration(error: &str) -> bool {
+    ["Not possible to fast-forward", "Not possible to fast forward"].iter().any(|sign| error.contains(sign))
+}
+
 /// Whether a force push was refused by its lease: the remote branch no longer has the tip the
 /// user last saw, so Git would have replaced commits nobody has reviewed. Git marks exactly this
 /// refusal "stale info"; a server hook's "[remote rejected]" is a different problem.
@@ -1119,6 +1126,22 @@ impl NiceGitApp {
                                 self.notice = Some(Notice {
                                     text: format!(
                                         "{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.{rewritten}"
+                                    ),
+                                    is_error: true,
+                                    action: Some(NoticeAction::Integrate),
+                                    detail: Some(error.to_string()),
+                                });
+                            }
+                            // Pull only fast-forwards, so a branch that has diverged from its upstream is
+                            // refused. The notice offers the same merge or rebase choice as a refused push.
+                            Err(error) if label == "Pull" && pull_needs_integration(&error.to_string()) => {
+                                action_failed = true;
+                                // The snapshot is the one from before the pull, so its upstream is still the displayed one.
+                                let upstream = self.repos[index].snapshot.as_ref().and_then(|s| s.upstream.clone());
+                                let upstream = upstream.unwrap_or_else(|| "its upstream".into());
+                                self.notice = Some(Notice {
+                                    text: format!(
+                                        "Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them."
                                     ),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
@@ -2510,6 +2533,19 @@ mod lease_tests {
         assert!(!lease_was_refused(" ! [remote rejected] main -> main (pre-receive hook declined)"));
         assert!(!lease_was_refused("fatal: unable to access 'https://x.invalid/': Could not resolve host"));
         assert!(!lease_was_refused("Git could not run `force push`: Set an upstream branch before force pushing."));
+    }
+}
+
+#[cfg(test)]
+mod pull_needs_integration_tests {
+    use super::pull_needs_integration;
+
+    #[test]
+    fn a_diverged_branch_refused_by_fast_forward_needs_a_merge_or_rebase() {
+        assert!(pull_needs_integration("fatal: Not possible to fast-forward, aborting."));
+        assert!(pull_needs_integration("fatal: Not possible to fast forward, aborting."));
+        assert!(!pull_needs_integration("fatal: unable to access 'https://x.invalid/': Could not resolve host"));
+        assert!(!pull_needs_integration("error: Your local changes to the following files would be overwritten by merge"));
     }
 }
 
