@@ -92,6 +92,8 @@
   the staged changes to commit as one new commit. A squash that would conflict is refused.
 - A remote's push URL can be set, changed, or cleared in Repository Settings, so pushes can go
   somewhere other than the fetch URL; clearing it makes pushes use the fetch URL again.
+- The commit inspector lists the branches that contain a commit and the first tag that
+  includes it, so you can see which release shipped it.
 
 ## 1.5.0 - Fewer surprises
 

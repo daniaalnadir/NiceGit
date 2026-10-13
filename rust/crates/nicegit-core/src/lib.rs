@@ -9,6 +9,7 @@ pub mod cleanup;
 pub mod client;
 pub mod compare;
 pub mod conflict;
+pub mod containing;
 pub mod diff;
 pub mod file_history;
 pub mod gitflow;
