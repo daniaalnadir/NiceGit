@@ -295,6 +295,108 @@ fn blame_names_the_previous_version_even_across_a_rename_in_the_same_commit() {
     assert_eq!(before[0].commit.previous, None);
 }
 
+// MARK: Line history
+
+/// Ten lines, "line 1" to "line 10", each ending in a newline.
+fn numbered_lines() -> Vec<String> {
+    (1..=10).map(|number| format!("line {number}")).collect()
+}
+
+/// The text of a file made of `lines`, each ending in a newline.
+fn file_text(lines: &[String]) -> String {
+    lines.iter().map(|line| format!("{line}\n")).collect()
+}
+
+#[test]
+fn line_history_lists_commits_that_touched_the_range() {
+    let repo = Repo::new();
+    let mut lines = numbered_lines();
+    let written = repo.commit("notes.txt", &file_text(&lines), "A writes ten lines");
+    lines[2] = "B changed three".to_string();
+    let changed_three = repo.commit("notes.txt", &file_text(&lines), "B changes line 3");
+    lines[7] = "C changed eight".to_string();
+    let changed_eight = repo.commit("notes.txt", &file_text(&lines), "C changes line 8");
+    lines[2] = "D changed three".to_string();
+    let changed_again = repo.commit("notes.txt", &file_text(&lines), "D changes line 3 again");
+
+    let history = client().line_history("notes.txt", 2, 4, None, 50, repo.path()).expect("line history");
+    let hashes: Vec<&str> = history.iter().map(|entry| entry.commit.hash.as_str()).collect();
+    assert_eq!(hashes, vec![changed_again.as_str(), changed_three.as_str(), written.as_str()]);
+    assert!(!hashes.contains(&changed_eight.as_str()), "a change outside the range is not listed");
+
+    // Each patch shows only the change to the range, which is the line the commit rewrote.
+    assert!(history[0].patch.contains("-B changed three"), "patch: {}", history[0].patch);
+    assert!(history[0].patch.contains("+D changed three"), "patch: {}", history[0].patch);
+    assert!(!history[0].patch.contains("C changed eight"), "the change to line 8 is not in the patch");
+    assert_eq!(history[2].commit.subject, "A writes ten lines");
+    assert_eq!(history[2].commit.author_name, "Test");
+}
+
+#[test]
+fn line_history_from_a_working_copy_blame_uses_the_commits_own_line_numbers() {
+    let repo = Repo::new();
+    let mut lines = numbered_lines();
+    let written = repo.commit("notes.txt", &file_text(&lines), "A writes ten lines");
+    lines[2] = "B changed three".to_string();
+    let changed_three = repo.commit("notes.txt", &file_text(&lines), "B changes line 3");
+    // Uncommitted lines above shift the working file's numbering by five.
+    let mut edited: Vec<String> = (1..=5).map(|n| format!("new {n}")).collect();
+    edited.extend(lines.iter().cloned());
+    repo.write("notes.txt", &file_text(&edited));
+
+    let blame = client().blame("notes.txt", None, false, repo.path()).expect("blame the working file");
+    let line = blame.iter().find(|line| line.content == "B changed three").expect("the changed line");
+    assert_eq!(line.number, 8, "shown below the five new lines");
+    assert_eq!(line.original_number, 3, "the line's number in its own commit");
+    assert_eq!(line.commit.hash, changed_three);
+
+    // Read at the line's commit with its own number, as Blame does, the history is exact.
+    let history = client()
+        .line_history(&line.commit.path, line.original_number, line.original_number, Some(&line.commit.hash), 50, repo.path())
+        .expect("line history");
+    let hashes: Vec<&str> = history.iter().map(|entry| entry.commit.hash.as_str()).collect();
+    assert_eq!(hashes, vec![changed_three.as_str(), written.as_str()]);
+}
+
+#[test]
+fn line_history_follows_moved_lines_within_the_file() {
+    let repo = Repo::new();
+    let mut lines = numbered_lines();
+    let written = repo.commit("notes.txt", &file_text(&lines), "A writes ten lines");
+    lines[2] = "B changed three".to_string();
+    let changed_three = repo.commit("notes.txt", &file_text(&lines), "B changes line 3");
+    // C adds five lines above the range, moving the changed line from 3 to 8.
+    let mut shifted: Vec<String> = (1..=5).map(|number| format!("added {number}")).collect();
+    shifted.extend(lines.iter().cloned());
+    repo.commit("notes.txt", &file_text(&shifted), "C adds five lines at the top");
+
+    let history = client().line_history("notes.txt", 7, 9, None, 50, repo.path()).expect("line history of shifted lines");
+    let hashes: Vec<&str> = history.iter().map(|entry| entry.commit.hash.as_str()).collect();
+    assert!(hashes.contains(&changed_three.as_str()), "the change to the moved line is found: {hashes:?}");
+    assert!(hashes.contains(&written.as_str()), "the commit that wrote the lines is found: {hashes:?}");
+    assert_eq!(hashes.len(), 2, "the commit that only moved the lines is not listed: {hashes:?}");
+}
+
+#[test]
+fn line_history_refuses_a_bad_range() {
+    let repo = Repo::new();
+    repo.commit("notes.txt", "one\ntwo\n", "Add the notes");
+    let path = repo.path();
+
+    let starts_at_zero = error_text(client().line_history("notes.txt", 0, 1, None, 50, path));
+    assert!(starts_at_zero.contains("start at 1"), "unexpected message: {starts_at_zero}");
+    let backwards = error_text(client().line_history("notes.txt", 2, 1, None, 50, path));
+    assert!(backwards.contains("ends before it starts"), "unexpected message: {backwards}");
+    let too_long = error_text(client().line_history("notes.txt", 1, 10_001, None, 50, path));
+    assert!(too_long.contains("at most 10000 lines"), "unexpected message: {too_long}");
+    let option_like = error_text(client().line_history("-notes.txt", 1, 1, None, 50, path));
+    assert!(option_like.contains("dash"), "unexpected message: {option_like}");
+    let missing = error_text(client().line_history("missing.txt", 1, 1, None, 50, path));
+    assert!(missing.contains("missing.txt is not a file"), "unexpected message: {missing}");
+    let unknown_revision = client().line_history("notes.txt", 1, 1, Some("no-such-revision"), 50, path);
+    assert!(unknown_revision.is_err(), "an unknown revision is refused");
+}
+
 // MARK: File history and versions
 
 #[test]

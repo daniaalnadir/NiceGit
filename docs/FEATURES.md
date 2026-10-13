@@ -129,7 +129,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Blame a file (working version or at a commit), with author, age tinting, an
   ignore-whitespace option, and each line's commit change one click away. A line's
   right-click menu blames the file before that line's change ("Blame before this change"),
-  and Back returns to the newer blame.
+  and Back returns to the newer blame. "History of these lines" lists every commit that
+  changed a group of consecutive lines from one commit, each with its change to just those
+  lines.
 - Rename or remove remotes and edit their fetch URL in Repository Settings.
 - Push a tag to a remote, or delete it from a remote, from the tag's context menu.
 - Ignore untracked files from the Changes panel: the exact path or its extension in

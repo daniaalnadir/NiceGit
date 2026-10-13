@@ -13,6 +13,7 @@ use nicegit_core::Snapshot;
 
 use crate::diff_view::{self, DiffContent};
 use crate::theme;
+use crate::tools::line_history::{lines_text, LineHistoryWindow};
 use crate::tools::widgets;
 use crate::tools::{query, Ctx, Task, ToolWindow};
 
@@ -75,6 +76,14 @@ enum Choice {
     },
     ShowCommit(String),
     CopyCommit(String),
+    /// Show the commits that changed lines `start` to `end` of `path`, at `revision` or in the
+    /// working copy when `revision` is `None`.
+    LineHistory {
+        path: String,
+        revision: Option<String>,
+        start: usize,
+        end: usize,
+    },
 }
 
 /// The blamed lines and how they are drawn.
@@ -86,6 +95,8 @@ struct Rows<'a> {
     scroll_row: Option<usize>,
     /// The path the lines were blamed at, used when a line's own path is empty.
     path: &'a str,
+    /// The revision the lines were blamed at, or `None` for the working copy.
+    revision: Option<&'a str>,
     repo: &'a Path,
 }
 
@@ -211,7 +222,7 @@ impl ToolWindow for BlameWindow {
         ui.add_space(6.0);
         ui.separator();
 
-        let Self { path, lines, ages, selected, split, focus_line, focus_pending, scroll_line, .. } = self;
+        let Self { path, revision, lines, ages, selected, split, focus_line, focus_pending, scroll_line, .. } = self;
         // A change to the whitespace or context setting reloads the commit's diff.
         let request = cx.diff_request();
         if let Some(current) = selected.as_mut().filter(|current| current.request != request) {
@@ -243,7 +254,16 @@ impl ToolWindow for BlameWindow {
             None => None,
         };
         let selected_hash = selected.as_ref().map(|selection| selection.hash.clone());
-        let rows = Rows { lines, ages, selected: selected_hash.as_deref(), highlight, scroll_row, path: path.as_str(), repo: cx.repo };
+        let rows = Rows {
+            lines,
+            ages,
+            selected: selected_hash.as_deref(),
+            highlight,
+            scroll_row,
+            path: path.as_str(),
+            revision: revision.as_deref(),
+            repo: cx.repo,
+        };
         let mut clicked = None;
         let mut choice = None;
         let mut close = false;
@@ -282,6 +302,9 @@ impl ToolWindow for BlameWindow {
             Some(Choice::BlameAtHead { path: file, line }) => self.step_into(ui.ctx(), cx.repo, Some("HEAD".to_string()), file, line),
             Some(Choice::ShowCommit(hash)) => cx.select_commit(hash),
             Some(Choice::CopyCommit(hash)) => ui.ctx().copy_text(hash),
+            Some(Choice::LineHistory { path, revision, start, end }) => {
+                cx.open(Box::new(LineHistoryWindow::new(path, revision, start, end)));
+            }
             None => {}
         }
     }
@@ -425,6 +448,10 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
             }
             ui.add_enabled(false, egui::Button::new("Show commit in history")).on_disabled_hover_text("Not committed yet");
             ui.add_enabled(false, egui::Button::new("Copy commit ID")).on_disabled_hover_text("Not committed yet");
+            ui.separator();
+            let ((first, last), _) = group_bounds(rows.lines, index);
+            ui.add_enabled(false, egui::Button::new(format!("History of {}…", lines_text(first, last))))
+                .on_disabled_hover_text("Not committed yet");
             return;
         }
         // Git names the version these lines came from, with the file's path there, which
@@ -452,8 +479,40 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
             *choice = Some(Choice::CopyCommit(commit.hash.clone()));
             ui.close();
         }
+        ui.separator();
+        let ((first, last), (original_first, original_last)) = group_bounds(rows.lines, index);
+        if ui.button(format!("History of {}…", lines_text(first, last))).clicked() {
+            // Read at the lines' own commit, by their numbers and path there: blame says no later
+            // commit changed them, and edits above them in the working file cannot shift the range.
+            let path = if commit.path.is_empty() { rows.path } else { commit.path.as_str() };
+            *choice = Some(Choice::LineHistory {
+                path: path.to_string(),
+                revision: Some(commit.hash.clone()),
+                start: original_first,
+                end: original_last,
+            });
+            ui.close();
+        }
     });
     clicked
+}
+
+/// The group that line `index` belongs to: the consecutive lines sharing its commit. Returns the
+/// one-based first and last lines as shown, and as numbered in that commit's version of the file.
+fn group_bounds(lines: &[BlameLine], index: usize) -> ((usize, usize), (usize, usize)) {
+    let hash = lines[index].commit.hash.as_str();
+    let mut first = index;
+    while first > 0 && lines[first - 1].commit.hash == hash {
+        first -= 1;
+    }
+    let mut last = index;
+    while last + 1 < lines.len() && lines[last + 1].commit.hash == hash {
+        last += 1;
+    }
+    let group = &lines[first..=last];
+    let original_first = group.iter().map(|line| line.original_number).min().unwrap_or(1);
+    let original_last = group.iter().map(|line| line.original_number).max().unwrap_or(original_first);
+    ((lines[first].number, lines[last].number), (original_first, original_last))
 }
 
 /// The change to the file in the selected commit. Returns true when its close button is pressed.
@@ -521,6 +580,7 @@ mod tests {
 
     fn line(number: usize, hash: &str, time: i64) -> BlameLine {
         BlameLine {
+            original_number: number,
             number,
             content: String::new(),
             commit: nicegit_core::blame::BlameCommit {
