@@ -333,6 +333,8 @@ impl GitClient {
         let git_directory = PathBuf::from(runner::strip_line_terminator(outputs[6].clone()));
         snapshot.operation = operation_in(&git_directory);
         snapshot.rebase_stopped_for_edit = edit_stop_in(&git_directory, &snapshot.status);
+        snapshot.bisecting = git_directory.join("BISECT_START").exists();
+        snapshot.has_gitmodules = root.join(".gitmodules").exists();
         Ok(snapshot)
     }
 

@@ -784,6 +784,16 @@ fn submodules_list_recorded_commit_at_recorded_state() {
 }
 
 #[test]
+fn snapshot_reports_gitmodules_only_when_the_checkout_has_one() {
+    let plain = Repo::new();
+    plain.commit("main.txt", "main\n", "Main");
+    assert!(!snapshot(plain.path()).has_gitmodules, "a checkout without .gitmodules has no submodule listing");
+
+    let (repo, _source) = superproject_with_submodule();
+    assert!(snapshot(repo.path()).has_gitmodules, "the superproject has a .gitmodules file");
+}
+
+#[test]
 fn submodule_states_follow_local_changes_and_checkouts() {
     let (repo, _source) = superproject_with_submodule();
     let sub = repo.path().join("sub");
