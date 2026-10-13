@@ -1554,14 +1554,15 @@ fn the_change_buttons_stay_while_a_refresh_reloads_the_diff() {
 
     // A refresh, as the periodic or a watched one does, reloads the change's diff and review.
     // The lines stay stageable on every frame of that reload, so their buttons never vanish.
+    // The reload is seen by its new diff generation rather than by catching `diff_loading`, which
+    // can start and end within one frame when the worker is quick.
+    let before = harness.state().repo().expect("repository").diff_generation;
     harness.state_mut().load(false);
     let start = Instant::now();
-    let mut reloading = false;
     loop {
         harness.step();
         let repo = harness.state_mut().repo_mut().expect("repository");
-        reloading |= repo.diff_loading;
-        if reloading {
+        if repo.diff_generation != before {
             assert!(repo.diff_options.selectable, "the lines stay stageable while the refresh reloads them");
             if !repo.diff_loading {
                 break;
