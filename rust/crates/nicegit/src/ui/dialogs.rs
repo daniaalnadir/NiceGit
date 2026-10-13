@@ -900,12 +900,14 @@ mod tests {
     #[test]
     fn clone_folder_destination_follows_the_address_until_the_person_edits_it() {
         let folder = std::path::Path::new("/work/clones");
+        // Joined as the app joins them, so the separator is right on every platform.
+        let inside = |name: &str| folder.join(name).display().to_string();
         let mut state = CloneDestination::default();
         let mut destination = String::new();
         state.follow(folder, "https://github.com/acme/app.git", &mut destination);
-        assert_eq!(destination, "/work/clones/app");
+        assert_eq!(destination, inside("app"));
         state.follow(folder, "https://github.com/acme/tool", &mut destination);
-        assert_eq!(destination, "/work/clones/tool", "still automatic, so it follows the address");
+        assert_eq!(destination, inside("tool"), "still automatic, so it follows the address");
         state.follow(folder, "", &mut destination);
         assert_eq!(destination, "", "an empty address leaves no automatic destination");
 
@@ -913,6 +915,6 @@ mod tests {
         destination.push_str("-copy");
         state.by_hand = true;
         state.follow(folder, "https://github.com/acme/other.git", &mut destination);
-        assert_eq!(destination, "/work/clones/app-copy", "an edited destination is not overwritten");
+        assert_eq!(destination, format!("{}-copy", inside("app")), "an edited destination is not overwritten");
     }
 }
