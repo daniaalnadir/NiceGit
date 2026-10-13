@@ -729,6 +729,81 @@ fn cherry_pick_refuses_stale_head() {
 }
 
 #[test]
+fn revert_commits_undoes_several_commits_newest_first() {
+    let repo = Repo::new();
+    repo.commit("base.txt", "base\n", "Base");
+    repo.commit("a.txt", "one\n", "Add a");
+    let edited = repo.commit("a.txt", "two\n", "Edit a");
+    let added = repo.commit("c.txt", "c\n", "Add c");
+    let head = repo.head();
+    client().revert_commits(&[edited, added], Some(&head), "main", repo.path()).expect("revert");
+    assert_eq!(repo.read("a.txt"), "one\n", "the edit is undone");
+    assert!(!files_at(repo.path(), "HEAD").contains(&"c.txt".to_string()), "the addition is undone");
+    let subjects = subjects_after(repo.path(), &head);
+    assert_eq!(subjects.len(), 2, "{subjects:?}");
+    assert!(subjects.iter().all(|subject| subject.starts_with("Revert")), "{subjects:?}");
+    // Oldest first: the later commit's revert is made first, so it is the first new commit.
+    assert_eq!(subjects[0], "Revert \"Add c\"", "{subjects:?}");
+    assert!(git(repo.path(), &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn revert_commits_refuses_a_commit_not_on_the_branch() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side", &base]);
+    let side = repo.commit("s1.txt", "one\n", "Side one");
+    repo.git(&["switch", "main"]);
+    let message = refusal(client().revert_commits(&[side, base.clone()], Some(&base), "main", repo.path()));
+    assert!(message.contains("Only commits already on main can be reverted."), "{message}");
+    assert_eq!(repo.head(), base);
+    assert!(!repo.path().join("s1.txt").exists(), "nothing was reverted");
+}
+
+#[test]
+fn revert_commits_refuses_a_merge_with_others() {
+    let repo = Repo::new();
+    repo.commit("base.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side"]);
+    repo.commit("side.txt", "side\n", "Side change");
+    repo.git(&["switch", "main"]);
+    repo.commit("main.txt", "main\n", "Main change");
+    repo.git(&["merge", "--no-ff", "--no-edit", "side"]);
+    let merge = repo.head();
+    let later = repo.commit("later.txt", "later\n", "Later change");
+    let message = refusal(client().revert_commits(&[merge, later.clone()], Some(&later), "main", repo.path()));
+    assert!(message.contains("Merge commits cannot be reverted together with others"), "{message}");
+    assert_eq!(repo.head(), later);
+}
+
+#[test]
+fn revert_commits_stops_for_a_conflict() {
+    let repo = Repo::new();
+    repo.commit("base.txt", "base\n", "Base");
+    let added = repo.commit("a.txt", "one\n", "Add a");
+    // Not selected, so it stays: reverting the addition of a.txt now conflicts with this edit.
+    repo.commit("a.txt", "two\n", "Edit a");
+    let extra = repo.commit("c.txt", "c\n", "Add c");
+    let head = repo.head();
+    let message = refusal(client().revert_commits(&[added, extra], Some(&head), "main", repo.path()));
+    assert!(message.contains("The revert sequence stopped"), "{message}");
+    assert_eq!(client().current_operation(repo.path()).expect("operation"), Some(Operation::Revert));
+    client().abort_operation(Operation::Revert, repo.path()).expect("abort the revert");
+    assert_eq!(repo.head(), head, "abort restores HEAD");
+    assert_eq!(client().current_operation(repo.path()).expect("operation"), None);
+}
+
+#[test]
+fn revert_commits_checks_the_expected_head() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    let change = repo.commit("one.txt", "one\n", "Add one");
+    let message = refusal(client().revert_commits(std::slice::from_ref(&change), Some(&base), "main", repo.path()));
+    assert!(message.contains("changed since this action"), "{message}");
+    assert_eq!(repo.head(), change);
+}
+
+#[test]
 fn revert_undoes_one_commit() {
     let repo = Repo::new();
     repo.commit("base.txt", "base\n", "Base");

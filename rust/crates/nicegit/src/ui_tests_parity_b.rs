@@ -276,6 +276,34 @@ fn command_click_squashes_the_marked_commits_through_the_rebase_window() {
 }
 
 #[test]
+fn command_click_reverts_the_marked_commits() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "one.txt", "one\n", "Undo one");
+    commit_file(path, "two.txt", "two\n", "Keep two");
+    commit_file(path, "three.txt", "three\n", "Undo three");
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Undo one").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    harness.get_by_label("Undo three").click_modifiers(Modifiers::COMMAND);
+    harness.step();
+    wait(&mut harness, "the marked commits bar", |h| shows(h, "2 commits selected"));
+
+    harness.get_by_role_and_label(Role::Button, "Revert…").click();
+    wait(&mut harness, "the revert confirmation", |h| shows(h, "Revert 2 commits?"));
+    harness.get_by_role_and_label(Role::Button, "Revert").click();
+    idle(&mut harness);
+    wait(&mut harness, "the two revert commits", |_| git(path, &["rev-list", "--count", &format!("{before}..HEAD")]).trim() == "2");
+    let log = git(path, &["log", "--format=%s", &format!("{before}..HEAD")]);
+    // Newest first in the log: the revert of "Undo three" was made first, so "Undo one" is on top.
+    assert_eq!(log.lines().collect::<Vec<_>>(), ["Revert \"Undo one\"", "Revert \"Undo three\""], "the newest commit is reverted first");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
 fn mark_a_commit_then_compare_it_with_another() {
     let repo = repository();
     let path = repo.path();

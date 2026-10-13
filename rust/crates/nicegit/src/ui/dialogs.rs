@@ -47,6 +47,12 @@ pub enum Pending {
         branch: String,
         head: Option<String>,
     },
+    /// Reverting several marked commits as one sequence, newest first.
+    RevertMany {
+        commits: Vec<String>,
+        branch: String,
+        head: Option<String>,
+    },
     /// Folding the staged changes into an older commit. The subject names it in the result.
     FixupInto {
         target: String,
@@ -736,6 +742,12 @@ impl NiceGitApp {
             Pending::Revert { commit, branch, head } => self.act_recording("Revert", "Revert", move |client, path| {
                 crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some("Reverted the commit.".into()))
             }),
+            Pending::RevertMany { commits, branch, head } => {
+                let count = commits.len();
+                self.act_recording("Revert", "Revert", move |client, path| {
+                    client.revert_commits(&commits, head.as_deref(), &branch, path).map(|_| Some(format!("Reverted {count} commits.")))
+                })
+            }
             Pending::FixupInto { target, subject, branch, head } => {
                 let Some(head) = head else { return };
                 // Soft mode: Undo moves the branch back to the old commits and keeps the folded

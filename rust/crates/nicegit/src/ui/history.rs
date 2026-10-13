@@ -238,6 +238,27 @@ impl NiceGitApp {
                     {
                         self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::drop_commits(&marked, &snapshot)));
                     }
+                    if ui
+                        .add_enabled(can, egui::Button::new("Revert…"))
+                        .on_hover_text("Undo the selected commits with new commits, newest first")
+                        .on_disabled_hover_text("Commit or stash your changes first")
+                        .clicked()
+                    {
+                        self.confirm(
+                            format!("Revert {} commits?", marked.len()),
+                            format!(
+                                "New commits on {} undo the changes from {} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.",
+                                snapshot.current_branch,
+                                marked.len()
+                            ),
+                            "Revert",
+                            Pending::RevertMany {
+                                commits: marked.iter().cloned().collect(),
+                                branch: snapshot.current_branch.clone(),
+                                head: snapshot.head_hash.clone(),
+                            },
+                        );
+                    }
                     if ui.button("Clear").clicked() {
                         self.repos[self.active].marked.clear();
                     }
