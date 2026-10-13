@@ -232,6 +232,35 @@ pub struct GitHubRepoListing {
     pub updated_at: String,
 }
 
+/// The state of a pull request, as the status bar shows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrState {
+    Open,
+    Draft,
+    Merged,
+    Closed,
+}
+
+/// How a pull request's checks stand: how many passed, failed, or are still pending.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Checks {
+    pub passed: usize,
+    pub failed: usize,
+    pub pending: usize,
+}
+
+/// The pull request for a branch, with its checks, as `gh pr list` reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestStatus {
+    pub number: u64,
+    /// Without control characters, and at most 300 characters.
+    pub title: String,
+    pub state: PrState,
+    /// The pull request's own page, `<web base>/<owner>/<name>/pull/<number>`.
+    pub url: String,
+    pub checks: Checks,
+}
+
 /// Whether `gh` can be used for the repository.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GhStatus {
@@ -388,6 +417,41 @@ impl GitClient {
         Ok(output.lines().map(str::to_string).collect())
     }
 
+    /// The pull request whose head is `head_branch` on `repository`, with its checks, read through
+    /// `gh pr list --head`. A branch with no pull request gives `None`. The branch name is checked
+    /// before `gh` runs.
+    pub fn pull_request_for_branch(
+        &self,
+        repository: &GitHubRepository,
+        head_branch: &str,
+        directory: &Path,
+    ) -> Result<Option<PullRequestStatus>> {
+        self.check_branch_name(head_branch, directory)?;
+        let repo = repository.gh_repo();
+        let output = run_gh(
+            &[
+                "pr",
+                "list",
+                "--repo",
+                &repo,
+                "--head",
+                head_branch,
+                "--state",
+                "all",
+                // A few, so an open pull request is preferred over a newer closed one.
+                "--limit",
+                "5",
+                "--json",
+                "number,title,state,isDraft,url,statusCheckRollup",
+            ],
+            directory,
+            &Cancel::default(),
+            Some(repository.host.as_str()),
+        )
+        .map_err(|message| GitError::failed("GitHub", message))?;
+        decode_pull_request_status(&output, repository)
+    }
+
     /// Refuses `name` unless it is a usable branch name: not empty, without spaces or control
     /// characters, not starting with `-`, and accepted by `git check-ref-format --branch`. That
     /// check also expands `@{-n}`, so such names are refused before it runs.
@@ -505,11 +569,16 @@ fn optional_text<'a>(entry: &'a Json, key: &str) -> Option<&'a str> {
 
 /// A description without control characters, trimmed, and at most [`DESCRIPTION_LIMIT`] characters.
 fn clean_description(text: &str) -> String {
+    clean_text(text, DESCRIPTION_LIMIT)
+}
+
+/// Text without control characters, trimmed, and at most `limit` characters.
+fn clean_text(text: &str, limit: usize) -> String {
     // Control characters, line breaks among them, become spaces, so words they separated stay
     // apart; runs of whitespace then collapse to one space.
     let spaced: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let words = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    words.chars().take(DESCRIPTION_LIMIT).collect::<String>().trim().to_string()
+    words.chars().take(limit).collect::<String>().trim().to_string()
 }
 
 /// Whether one half of a repository name is valid: ASCII letters, digits, hyphens, underscores,
@@ -563,6 +632,93 @@ pub fn decode_items(json: &str, repository: &GitHubRepository, kind: ItemKind) -
         return Err(unexpected());
     }
     Ok(items)
+}
+
+/// The longest pull request title kept, in characters.
+const PULL_REQUEST_TITLE_LIMIT: usize = 300;
+
+/// Decodes `gh pr list --json number,title,state,isDraft,url,statusCheckRollup` output for
+/// `repository`. Each entry is checked strictly, and its link must be the repository's own pull
+/// request page. An empty list is `None`. Of several pull requests, the first open or draft one
+/// is returned, or else the first listed.
+pub fn decode_pull_request_status(json: &str, repository: &GitHubRepository) -> Result<Option<PullRequestStatus>> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned an unexpected pull request.");
+    let value = parse_json(json).map_err(|_| unexpected())?;
+    let Json::Array(entries) = value else { return Err(unexpected()) };
+    let statuses = entries.iter().map(|entry| decode_pull_request_entry(entry, repository)).collect::<Result<Vec<_>>>()?;
+    let chosen = statuses.iter().position(|status| matches!(status.state, PrState::Open | PrState::Draft)).unwrap_or(0);
+    Ok(statuses.into_iter().nth(chosen))
+}
+
+/// One pull request in `gh pr list` output. Its state must be a known word, its link must name
+/// the same number on the repository's own page, and its checks must all be recognised shapes.
+fn decode_pull_request_entry(entry: &Json, repository: &GitHubRepository) -> Result<PullRequestStatus> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned an unexpected pull request.");
+    let Json::Object(_) = entry else { return Err(unexpected()) };
+    let number = entry.get("number").and_then(Json::as_number).filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n < 9.0e15);
+    let number = number.ok_or_else(unexpected)? as u64;
+    let title = entry.get("title").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let url = entry.get("url").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let expected = format!("{}/{}/pull/{number}", repository.web_base(), repository.slug()).to_ascii_lowercase();
+    if url.to_ascii_lowercase() != expected {
+        return Err(unexpected());
+    }
+    let is_draft = entry.get("isDraft").and_then(Json::as_bool).ok_or_else(unexpected)?;
+    let state = match entry.get("state").and_then(Json::as_str) {
+        Some("OPEN") if is_draft => PrState::Draft,
+        Some("OPEN") => PrState::Open,
+        Some("MERGED") => PrState::Merged,
+        Some("CLOSED") => PrState::Closed,
+        _ => return Err(unexpected()),
+    };
+    let Some(Json::Array(rollup)) = entry.get("statusCheckRollup") else { return Err(unexpected()) };
+    let mut checks = Checks::default();
+    for check in rollup {
+        match check_outcome(check).ok_or_else(unexpected)? {
+            CheckOutcome::Passed => checks.passed += 1,
+            CheckOutcome::Failed => checks.failed += 1,
+            CheckOutcome::Pending => checks.pending += 1,
+        }
+    }
+    Ok(PullRequestStatus { number, title: clean_text(title, PULL_REQUEST_TITLE_LIMIT), state, url: url.to_string(), checks })
+}
+
+/// How one check in a pull request's status rollup stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CheckOutcome {
+    Passed,
+    Failed,
+    Pending,
+}
+
+/// The outcome of a check-run entry (with `status` and `conclusion`) or a commit status entry
+/// (with `state`). A check that has not completed, or has no conclusion yet, is pending. `None`
+/// means the entry has neither shape.
+fn check_outcome(check: &Json) -> Option<CheckOutcome> {
+    let Json::Object(_) = check else { return None };
+    if let Some(state) = check.get("state") {
+        return Some(classify_check(state.as_str()?));
+    }
+    if check.get("status").is_none() && check.get("conclusion").is_none() {
+        return None;
+    }
+    let status = optional_text(check, "status")?;
+    if !status.is_empty() && status != "COMPLETED" {
+        return Some(CheckOutcome::Pending);
+    }
+    match check.get("conclusion") {
+        None | Some(Json::Null) => Some(CheckOutcome::Pending),
+        Some(conclusion) => Some(classify_check(conclusion.as_str()?)),
+    }
+}
+
+/// The outcome for a check conclusion or commit status word. Words not listed count as pending.
+fn classify_check(word: &str) -> CheckOutcome {
+    match word {
+        "SUCCESS" | "NEUTRAL" | "SKIPPED" => CheckOutcome::Passed,
+        "FAILURE" | "CANCELLED" | "TIMED_OUT" | "ACTION_REQUIRED" | "ERROR" | "STARTUP_FAILURE" => CheckOutcome::Failed,
+        _ => CheckOutcome::Pending,
+    }
 }
 
 /// The first `gh` on the search path that is an executable file.
@@ -1310,5 +1466,144 @@ mod tests {
         }
         let error = client.create_pull_request(&repository, "main", "main", "Title", "", false, directory).unwrap_err();
         assert!(error.to_string().contains("must be different"), "{error}");
+    }
+
+    #[test]
+    fn pull_request_status_reads_an_open_pull_request_with_mixed_checks() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[{"number": 12, "title": "Add the status bar", "state": "OPEN", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/12", "statusCheckRollup": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"},
+            {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "NEUTRAL"},
+            {"__typename": "CheckRun", "name": "docs", "status": "COMPLETED", "conclusion": "SKIPPED"},
+            {"__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE"},
+            {"__typename": "CheckRun", "name": "deploy", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
+            {"__typename": "CheckRun", "name": "audit", "status": "IN_PROGRESS", "conclusion": null},
+            {"__typename": "CheckRun", "name": "queued", "status": "QUEUED", "conclusion": ""},
+            {"__typename": "CheckRun", "name": "odd", "status": "COMPLETED", "conclusion": "WHATEVER"}
+        ]}]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.number, 12);
+        assert_eq!(status.title, "Add the status bar");
+        assert_eq!(status.state, PrState::Open);
+        assert_eq!(status.url, "https://github.com/acme/app/pull/12");
+        assert_eq!(status.checks, Checks { passed: 3, failed: 2, pending: 3 });
+    }
+
+    #[test]
+    fn pull_request_status_reads_a_draft_without_checks() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[{"number": 4, "title": "Wip", "state": "OPEN", "isDraft": true,
+            "url": "https://github.com/acme/app/pull/4", "statusCheckRollup": []}]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.state, PrState::Draft);
+        assert_eq!(status.checks, Checks::default());
+    }
+
+    #[test]
+    fn pull_request_status_reads_a_merged_pull_request() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[{"number": 30, "title": "Merged work", "state": "MERGED", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/30", "statusCheckRollup": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}]}]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.state, PrState::Merged);
+        assert_eq!(status.checks, Checks { passed: 1, failed: 0, pending: 0 });
+    }
+
+    #[test]
+    fn pull_request_status_is_none_for_a_branch_with_no_pull_request() {
+        let github = repository("github.com", "acme", "app");
+        assert_eq!(decode_pull_request_status("[]", &github).unwrap(), None);
+        assert!(decode_pull_request_status("{}", &github).is_err(), "an object is not a list");
+    }
+
+    #[test]
+    fn pull_request_status_refuses_a_link_to_another_repository() {
+        let github = repository("github.com", "acme", "app");
+        let other_repository = r#"[{"number": 12, "title": "Fix", "state": "OPEN", "isDraft": false,
+            "url": "https://github.com/acme/other/pull/12", "statusCheckRollup": []}]"#;
+        assert!(decode_pull_request_status(other_repository, &github).is_err());
+        let other_number = r#"[{"number": 12, "title": "Fix", "state": "OPEN", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/13", "statusCheckRollup": []}]"#;
+        assert!(decode_pull_request_status(other_number, &github).is_err(), "the link must name this number");
+        let enterprise = r#"[{"number": 12, "title": "Fix", "state": "OPEN", "isDraft": false,
+            "url": "https://git.example.com/acme/app/pull/12", "statusCheckRollup": []}]"#;
+        assert!(decode_pull_request_status(enterprise, &github).is_err(), "a link on another host");
+    }
+
+    #[test]
+    fn pull_request_status_cleans_a_hostile_title() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[{"number": 9, "title": "Fix\u0007 the\nbar\u0000 \u001b[31m x", "state": "OPEN", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/9", "statusCheckRollup": []}]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.title, "Fix the bar [31m x");
+        assert!(!status.title.chars().any(char::is_control));
+
+        let long = "a".repeat(400);
+        let json = format!(
+            r#"[{{"number": 9, "title": "{long}", "state": "OPEN", "isDraft": false, "url": "https://github.com/acme/app/pull/9", "statusCheckRollup": []}}]"#
+        );
+        let status = decode_pull_request_status(&json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.title.chars().count(), 300);
+    }
+
+    #[test]
+    fn pull_request_status_counts_commit_status_contexts() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[{"number": 5, "title": "Statuses", "state": "OPEN", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/5", "statusCheckRollup": [
+            {"__typename": "StatusContext", "context": "ci/a", "state": "SUCCESS"},
+            {"__typename": "StatusContext", "context": "ci/b", "state": "FAILURE"},
+            {"__typename": "StatusContext", "context": "ci/c", "state": "ERROR"},
+            {"__typename": "StatusContext", "context": "ci/d", "state": "PENDING"},
+            {"__typename": "StatusContext", "context": "ci/e", "state": "EXPECTED"},
+            {"__typename": "StatusContext", "context": "ci/f", "state": "MYSTERY"}
+        ]}]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.checks, Checks { passed: 1, failed: 2, pending: 3 });
+    }
+
+    #[test]
+    fn pull_request_status_prefers_an_open_pull_request() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"[
+            {"number": 20, "title": "Old", "state": "CLOSED", "isDraft": false, "url": "https://github.com/acme/app/pull/20", "statusCheckRollup": []},
+            {"number": 19, "title": "Newer", "state": "OPEN", "isDraft": false, "url": "https://github.com/acme/app/pull/19", "statusCheckRollup": []}
+        ]"#;
+        let status = decode_pull_request_status(json, &github).unwrap().expect("a pull request");
+        assert_eq!(status.number, 19);
+        assert_eq!(status.state, PrState::Open);
+    }
+
+    #[test]
+    fn pull_request_status_refuses_unexpected_entries() {
+        let github = repository("github.com", "acme", "app");
+        let url = "https://github.com/acme/app/pull/3";
+        let refused = [
+            format!(r#"[{{"number": 3, "title": "T", "state": "SOMETHING", "isDraft": false, "url": "{url}", "statusCheckRollup": []}}]"#),
+            format!(r#"[{{"number": 3, "title": "T", "state": "OPEN", "isDraft": false, "url": "{url}"}}]"#),
+            format!(r#"[{{"number": 3, "title": "T", "state": "OPEN", "isDraft": false, "url": "{url}", "statusCheckRollup": {{}}}}]"#),
+            format!(
+                r#"[{{"number": 3, "title": "T", "state": "OPEN", "isDraft": false, "url": "{url}", "statusCheckRollup": [{{"name": "x"}}]}}]"#
+            ),
+            format!(
+                r#"[{{"number": 3, "title": "T", "state": "OPEN", "isDraft": false, "url": "{url}", "statusCheckRollup": [{{"state": 5}}]}}]"#
+            ),
+            format!(r#"[{{"number": 3.5, "title": "T", "state": "OPEN", "isDraft": false, "url": "{url}", "statusCheckRollup": []}}]"#),
+            r#"["not an object"]"#.to_string(),
+        ];
+        for json in refused {
+            assert!(decode_pull_request_status(&json, &github).is_err(), "{json} must be refused");
+        }
+    }
+
+    #[test]
+    fn pull_request_status_refuses_a_branch_name_that_is_not_valid() {
+        let client = GitClient::new();
+        let github = repository("github.com", "acme", "app");
+        let error = client.pull_request_for_branch(&github, "--state=closed", Path::new(".")).unwrap_err();
+        assert!(error.to_string().contains("branch name"), "{error}");
     }
 }

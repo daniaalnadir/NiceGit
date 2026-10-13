@@ -312,6 +312,14 @@ out, the dialog says how to fix that.
 Open in browser instead is the fallback: it opens GitHub's compare page, as before, and creates
 nothing.
 
+The status bar shows the current branch's pull request when its upstream is on a GitHub remote
+and gh is installed and signed in: its number and state (open, draft, merged, or closed), and its
+checks as a count of failing, pending, or passing ones. Clicking it opens the pull request in your
+browser, and hovering shows its title and the check totals. The status is read through gh when a
+repository opens, after fetching, pulling, pushing, publishing, or creating a pull request, and
+every five minutes while NiceGit is focused. Without gh, or when signed out, the status bar shows
+nothing.
+
 Force push… in the current branch's menu replaces the remote branch with yours, for example
 after you rewrite commits that were already pushed. The confirmation lists the remote commits
 it will remove. The push uses a lease: it is refused, and nothing changes, if the remote

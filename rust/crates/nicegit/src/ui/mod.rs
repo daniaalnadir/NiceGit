@@ -25,6 +25,10 @@ use crate::settings::DiffContextSetting;
 use crate::theme;
 use crate::tools::widgets;
 
+/// Room kept at the right of the status bar for the head commit and when the remotes were fetched,
+/// so a long checkout name is shortened before they are pushed out of view.
+const CHECKOUT_RESERVE: f32 = 180.0;
+
 impl NiceGitApp {
     pub fn shortcuts(&mut self, ctx: &egui::Context) {
         let command = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
@@ -405,7 +409,21 @@ impl NiceGitApp {
                 return;
             }
             ui.label(RichText::new(icon::GIT_BRANCH).color(c.muted));
-            ui.label(RichText::new(format!("Current checkout: {}", snapshot.current_branch)).monospace().small().color(c.muted));
+            // The pull request keeps its width; the checkout's name is shortened to fit beside it.
+            let badge = self.pull_request_status().map(|status| crate::ui::pull_request::PrBadge::new(&status, &c));
+            let reserved = badge.as_ref().map_or(0.0, |badge| badge.width(ui) + ui.spacing().item_spacing.x);
+            let checkout_width = (ui.available_width() - reserved - CHECKOUT_RESERVE).max(0.0);
+            let checkout = format!("Current checkout: {}", snapshot.current_branch);
+            ui.scope(|ui| {
+                ui.set_max_width(checkout_width);
+                ui.add(egui::Label::new(RichText::new(&checkout).monospace().small().color(c.muted)).truncate())
+                    .on_hover_text(checkout.as_str());
+            });
+            if let Some(badge) = &badge {
+                if crate::ui::pull_request::show_pull_request_badge(ui, badge) {
+                    crate::ui::changes::open_url(&badge.url);
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(head) = &snapshot.head_hash {
                     ui.label(RichText::new(nicegit_core::models::short(head)).monospace().small().color(c.muted));
