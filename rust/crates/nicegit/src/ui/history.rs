@@ -401,7 +401,9 @@ impl NiceGitApp {
             None => "Working tree".to_string(),
         };
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::SelectableLabel, true, &description));
-        if !ui.is_rect_visible(rect) {
+        // Only rows scrolled out of view are skipped. A frame egui is about to discard reports the
+        // ui as invisible, and skipping its rows there would drop the labels' and rows' open menus.
+        if !rect.intersects(ui.clip_rect()) {
             return;
         }
         let lane_color = theme::graph_color(row.color);
