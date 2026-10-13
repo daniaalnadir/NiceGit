@@ -415,6 +415,8 @@ pub struct NiceGitApp {
     pub dialog: Option<Dialog>,
     pub tools: Vec<Box<dyn ToolWindow>>,
     pub palette: Option<crate::ui::palette::PaletteState>,
+    /// The Go to file finder over the active repository's tracked files, while it is open.
+    pub go_to_file: Option<crate::ui::go_to_file::GoToFile>,
     pub show_settings: bool,
     pub show_shortcuts: bool,
     /// Whether the fetch running now should end by offering to merge or rebase onto the upstream.
@@ -465,6 +467,7 @@ impl NiceGitApp {
             dialog: None,
             tools: Vec::new(),
             palette: None,
+            go_to_file: None,
             show_settings: false,
             show_shortcuts: false,
             integrate_after_fetch: false,
@@ -702,6 +705,7 @@ impl NiceGitApp {
         let quiet = self.busy.is_none()
             && self.dialog.is_none()
             && self.palette.is_none()
+            && self.go_to_file.is_none()
             && !repo.loading
             && !self.has_unsaved_editor()
             && !self.tools.iter().any(|tool| tool.holds_refresh());
@@ -1988,6 +1992,7 @@ impl eframe::App for NiceGitApp {
         self.dialogs(&ctx);
         self.pull_request_window(&ctx);
         self.palette_window(&ctx);
+        self.go_to_file_window(&ctx);
         self.settings_window(&ctx);
         self.shortcuts_window(&ctx);
     }

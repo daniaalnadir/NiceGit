@@ -112,6 +112,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Remove a clean linked worktree, and forget worktrees whose folders were deleted.
 - Command palette (Shift-Command-P) for repository actions, branch switching, and recent
   repositories, with fuzzy matching.
+- Go to file (Command-P, Control-P elsewhere) finds a tracked file by name, with fuzzy matching
+  and file names ranked first. Enter opens its file history, Command-Enter its blame, and
+  Option-Enter (Alt-Enter elsewhere) the built-in editor. Up and Down move through the matches,
+  and Escape closes the finder. The right-click menu also reveals the file or copies its path.
 - Search every branch's history by message, author, or code change (Shift-Command-F),
   including commits not yet loaded in the graph, or paste a commit ID.
 - Interactive rebase from a commit's context menu: drag to reorder, and pick, reword,

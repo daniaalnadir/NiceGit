@@ -59,6 +59,8 @@
   menu, or of every conflicted file at once.
 - Clones go into a default folder, remembered from your first clone or set in Settings, so the
   destination fills itself in.
+- Go to file (Command-P) finds any tracked file by name and opens its history, blame, or
+  the editor.
 
 ## 1.5.0 - Fewer surprises
 
