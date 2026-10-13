@@ -135,7 +135,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   and Back returns to the newer blame. "History of these lines" lists every commit that
   changed a group of consecutive lines from one commit, each with its change to just those
   lines.
-- Rename or remove remotes and edit their fetch URL in Repository Settings.
+- Rename or remove remotes and edit their fetch URL in Repository Settings. A separate push URL
+  can be set, changed, or cleared so pushes use the fetch URL.
 - Push a tag to a remote, or delete it from a remote, from the tag's context menu.
 - Ignore untracked files from the Changes panel: the exact path or its extension in
   `.gitignore`, or only on this computer via `info/exclude`.

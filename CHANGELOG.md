@@ -90,6 +90,8 @@
   it applies.
 - The Merge confirmation can always create a merge commit, or squash a branch's changes into
   the staged changes to commit as one new commit. A squash that would conflict is refused.
+- A remote's push URL can be set, changed, or cleared in Repository Settings, so pushes can go
+  somewhere other than the fetch URL; clearing it makes pushes use the fetch URL again.
 
 ## 1.5.0 - Fewer surprises
 

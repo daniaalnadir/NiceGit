@@ -45,6 +45,16 @@ fn replace_text(harness: &mut App, label: &str, text: &str) {
     harness.run_steps(3);
 }
 
+/// Empties a text field by selecting its text and deleting it.
+fn clear_text(harness: &mut App, label: &str) {
+    harness.get_by_role_and_label(Role::TextInput, label).focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.key_press(Key::Backspace);
+    harness.run_steps(3);
+}
+
 /// A bare repository that stands in for a remote server.
 fn bare_remote() -> tempfile::TempDir {
     let remote = temp_dir();
@@ -210,6 +220,49 @@ fn rename_a_remote_and_change_its_fetch_address_in_settings() {
     assert_eq!(git(path, &["remote", "get-url", "--push", "upstream"]), moved_path, "pushes go to the new address too");
     wait(&mut harness, "the renamed remote in the snapshot", |h| {
         h.state().snapshot().is_some_and(|s| s.remotes.iter().any(|r| r == "upstream") && !s.remotes.iter().any(|r| r == "origin"))
+    });
+}
+
+#[test]
+fn set_and_clear_a_remote_push_url_in_settings() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = bare_remote();
+    let push_remote = bare_remote();
+    let fetch_path = remote.path().to_string_lossy().into_owned();
+    let push_path = push_remote.path().to_string_lossy().into_owned();
+    git(path, &["remote", "add", "origin", &fetch_path]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(path), "Repository settings");
+    wait(&mut harness, "the settings window", |h| shows(h, "  Remotes"));
+    harness.get_by_label_contains("  Remotes").click();
+    wait(&mut harness, "the origin card", |h| h.query_by_label(&format!("{}  Edit", icon::PENCIL_SIMPLE)).is_some());
+    settle(&mut harness);
+    harness.get_by_label(&format!("{}  Edit", icon::PENCIL_SIMPLE)).click();
+    wait(&mut harness, "the edit form", |h| h.query_by_role_and_label(Role::TextInput, "Edit push URL").is_some());
+    settle(&mut harness);
+
+    replace_text(&mut harness, "Edit push URL", &push_path);
+    settle(&mut harness);
+    harness.get_by_label("Save remote").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the push URL on the remote", |_| git(path, &["remote", "get-url", "--push", "origin"]) == push_path);
+    wait(&mut harness, "the push URL on the card", |h| h.query_by_label_contains(&format!("Push: {push_path}")).is_some());
+    assert_eq!(git(path, &["remote", "get-url", "origin"]), fetch_path, "the fetch URL is unchanged");
+
+    harness.get_by_label(&format!("{}  Edit", icon::PENCIL_SIMPLE)).click();
+    wait(&mut harness, "the edit form again", |h| h.query_by_role_and_label(Role::TextInput, "Edit push URL").is_some());
+    settle(&mut harness);
+    clear_text(&mut harness, "Edit push URL");
+    settle(&mut harness);
+    harness.get_by_label("Save remote").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the push URL to fall back to the fetch URL", |_| {
+        git(path, &["remote", "get-url", "--push", "origin"]) == fetch_path
     });
 }
 
