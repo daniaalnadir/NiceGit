@@ -328,13 +328,15 @@ impl GitClient {
 
     /// Starts a rebase onto `target`, a merge, a revert, or a cherry-pick of one commit. A revert
     /// or cherry-pick of a merge needs `mainline`, the parent to keep (1 for the first parent).
-    /// Refuses unless the checkout matches `expected`, nothing is in progress, and the working
-    /// tree is clean.
+    /// A cherry-pick with `record_origin` names the commit it came from, as `git cherry-pick -x`
+    /// does; other operations ignore it. Refuses unless the checkout matches `expected`, nothing is
+    /// in progress, and the working tree is clean.
     pub fn start(
         &self,
         operation: Operation,
         target: &str,
         mainline: Option<usize>,
+        record_origin: bool,
         expected: Expectation,
         directory: &Path,
     ) -> Result<()> {
@@ -370,6 +372,9 @@ impl GitClient {
         }
         if matches!(operation, Operation::Merge | Operation::Revert) {
             arguments.push("--no-edit");
+        }
+        if record_origin && operation == Operation::CherryPick {
+            arguments.push("-x");
         }
         let mainline_text = mainline.map(|parent| parent.to_string());
         if let Some(parent) = mainline_text.as_deref() {

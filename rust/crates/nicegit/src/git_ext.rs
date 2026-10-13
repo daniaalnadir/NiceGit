@@ -11,14 +11,14 @@ use nicegit_core::{Branch, GitClient, Operation, Result};
 /// Rebases the current branch onto `onto`, after confirming both are as displayed.
 pub fn rebase_onto(client: &GitClient, onto: &Branch, branch: &str, head: Option<&str>, directory: &Path) -> Result<()> {
     let expected = Expectation { branch: Some(branch), head, source_branch: Some(onto) };
-    client.start(Operation::Rebase, &onto.tip, None, expected, directory)
+    client.start(Operation::Rebase, &onto.tip, None, false, expected, directory)
 }
 
 /// Reverts one commit; a merge is reverted against its first parent.
 pub fn revert(client: &GitClient, commit: &str, branch: &str, head: Option<&str>, directory: &Path) -> Result<()> {
     let merge = client.commit_details(commit, directory)?.parents.len() > 1;
     let expected = Expectation { branch: Some(branch), head, source_branch: None };
-    client.start(Operation::Revert, commit, merge.then_some(1), expected, directory)
+    client.start(Operation::Revert, commit, merge.then_some(1), false, expected, directory)
 }
 
 /// A sentence describing what merging or rebasing onto `source` would do.

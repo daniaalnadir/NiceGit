@@ -353,8 +353,10 @@ original commits.
 
 Cherry-pick asks for confirmation and lets you choose the baseline parent for a
 merge commit. The destination branch and HEAD are checked before starting. The
-confirmation can also note the original commit in each new message, as `git cherry-pick -x`
-does, which suits backporting a fix; the choice is remembered in Settings.
+confirmation can also note the original commit in each new message, as
+`git cherry-pick -x` does, which suits backporting a fix; the choice is remembered
+in Settings. It applies to a merge commit too, where the parent choice has the
+same checkbox. A revert does not offer it.
 
 The commit graph and branch context menus offer soft, mixed, and hard reset with a confirmation explaining
 the index and working-file effects. Hard reset explicitly warns about losing
