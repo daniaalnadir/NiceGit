@@ -134,7 +134,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   right-click menu compares it with the checked-out branch: the commits only each side has,
   and Changed files… lists what merging the branch would change.
 - Blame a file (working version or at a commit), with author, age tinting, an
-  ignore-whitespace option, and each line's commit change one click away. A line's
+  ignore-whitespace option, and each line's commit change one click away. Commits listed in
+  `.git-blame-ignore-revs` are skipped by default. A line's
   right-click menu blames the file before that line's change ("Blame before this change"),
   and Back returns to the newer blame. "History of these lines" lists every commit that
   changed a group of consecutive lines from one commit, each with its change to just those

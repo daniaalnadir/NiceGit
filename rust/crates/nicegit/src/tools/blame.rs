@@ -7,7 +7,7 @@ use std::path::Path;
 
 use egui::{pos2, vec2, Align, Align2, Color32, CursorIcon, FontId, Layout, Rect, RichText, Sense, Stroke, TextStyle, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::blame::BlameLine;
+use nicegit_core::blame::{BlameLine, BlameReport, IgnoredRevs};
 use nicegit_core::diff::{parse_diff, DiffRequest};
 use nicegit_core::Snapshot;
 
@@ -44,6 +44,11 @@ pub struct BlameWindow {
     /// The window's identity, fixed when it opens, so stepping through history keeps the window.
     identity: String,
     ignore_whitespace: bool,
+    /// Whether blame passes over the commits the repository lists in `.git-blame-ignore-revs`.
+    ignore_revs: bool,
+    /// Whether the repository has a `.git-blame-ignore-revs` file, which decides whether its
+    /// checkbox is shown. Updated with each loaded blame.
+    ignore_list: bool,
     /// A one-based line to highlight and scroll to, such as a content search match.
     focus_line: Option<usize>,
     /// Scrolls to the focus line on the first frame that shows the lines.
@@ -52,7 +57,8 @@ pub struct BlameWindow {
     scroll_line: Option<usize>,
     /// The views that "Blame before this change" stepped back from, newest last.
     history: Vec<View>,
-    lines: Option<Task<nicegit_core::Result<Vec<BlameLine>>>>,
+    /// The blame and whether the repository has an ignore list.
+    lines: Option<Task<nicegit_core::Result<(BlameReport, bool)>>>,
     /// The summary of the revision's commit, shown beside its hash.
     summary: Option<Task<nicegit_core::Result<String>>>,
     /// Each commit's age tint, from 0 (oldest) to 1 (newest), computed once the lines arrive.
@@ -109,6 +115,8 @@ impl BlameWindow {
             revision,
             identity,
             ignore_whitespace: false,
+            ignore_revs: true,
+            ignore_list: false,
             focus_line: None,
             focus_pending: false,
             scroll_line: None,
@@ -132,7 +140,11 @@ impl BlameWindow {
         let path = self.path.clone();
         let revision = self.revision.clone();
         let ignore_whitespace = self.ignore_whitespace;
-        self.lines = Some(query(ctx, repo, move |git, directory| git.blame(&path, revision.as_deref(), ignore_whitespace, directory)));
+        let ignore_revs = self.ignore_revs;
+        self.lines = Some(query(ctx, repo, move |git, directory| {
+            let report = git.blame_report(&path, revision.as_deref(), ignore_whitespace, ignore_revs, directory)?;
+            Ok((report, git.has_blame_ignore_revs(directory)))
+        }));
         self.summary = self.revision.clone().map(|revision| {
             query(ctx, repo, move |git, directory| {
                 Ok(git.commit_message(&revision, directory)?.lines().next().unwrap_or_default().to_string())
@@ -189,6 +201,16 @@ impl BlameWindow {
                 if toggle.changed() {
                     *reload = true;
                 }
+                if self.ignore_list {
+                    let skip = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_revs, "Skip commits in .git-blame-ignore-revs")
+                        .on_hover_text(
+                            "Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as \
+                             reformatting, are attributed to the change before them, as GitHub's blame does.",
+                        );
+                    if skip.changed() {
+                        *reload = true;
+                    }
+                }
             });
         });
     }
@@ -222,7 +244,7 @@ impl ToolWindow for BlameWindow {
         ui.add_space(6.0);
         ui.separator();
 
-        let Self { path, revision, lines, ages, selected, split, focus_line, focus_pending, scroll_line, .. } = self;
+        let Self { path, revision, lines, ages, selected, split, focus_line, focus_pending, scroll_line, ignore_list, .. } = self;
         // A change to the whitespace or context setting reloads the commit's diff.
         let request = cx.diff_request();
         if let Some(current) = selected.as_mut().filter(|current| current.request != request) {
@@ -234,13 +256,21 @@ impl ToolWindow for BlameWindow {
             widgets::loading(ui, "Reading blame");
             return;
         };
-        let lines = match result {
-            Ok(lines) => lines,
+        let (report, has_ignore_list) = match result {
+            Ok(loaded) => loaded,
             Err(error) => {
                 widgets::error(ui, &error.to_string());
                 return;
             }
         };
+        *ignore_list = *has_ignore_list;
+        let lines = &report.lines;
+        if let IgnoredRevs::Unusable(reason) = &report.ignored_revs {
+            let c = theme::of(ui);
+            ui.label(
+                RichText::new(format!("The ignore list could not be used, so every commit is shown: {reason}")).small().color(c.muted),
+            );
+        }
         if lines.is_empty() {
             widgets::empty_state(ui, icon::FILE_TEXT, "This file is empty.");
             return;

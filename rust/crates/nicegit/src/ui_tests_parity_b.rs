@@ -379,6 +379,35 @@ fn blame_ignore_whitespace_gives_the_line_back_to_its_earlier_commit() {
 }
 
 #[test]
+fn blame_skips_the_commits_in_the_ignore_list_until_unticked() {
+    let repo = repository();
+    let path = repo.path();
+    let start = git(path, &["rev-list", "--max-parents=0", "HEAD"]);
+    // "Start the notes" wrote the first line; this commit only puts its words in quotes.
+    commit_file(path, "notes.txt", "\"first\"\nsecond\n", "Quote the notes");
+    let quoted = git(path, &["rev-parse", "HEAD"]);
+    commit_file(path, ".git-blame-ignore-revs", &format!("# Quote the notes\n{quoted}\n"), "List the quoting commit");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Quote the notes").click();
+    wait_for_commit_file(&mut harness, "notes.txt");
+    harness.get_by_label("notes.txt").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Blame at this commit").click();
+    let start_line = format!("{} · Test · \"first\"", &start[..7]);
+    let quoted_line = format!("{} · Test · \"first\"", &quoted[..7]);
+    wait(&mut harness, "the blame lines", |h| shows(h, &start_line));
+    settle(&mut harness);
+    assert!(!shows(&harness, &quoted_line), "the listed commit is skipped by default");
+
+    harness.get_by_role_and_label(Role::CheckBox, "Skip commits in .git-blame-ignore-revs").click();
+    wait(&mut harness, "the blame with every commit", |h| shows(h, &quoted_line));
+    settle(&mut harness);
+    assert!(!shows(&harness, &start_line), "unticking the checkbox shows the listed commit again");
+}
+
+#[test]
 fn clicking_a_blame_line_selects_its_commit_and_shows_its_change() {
     let repo = repository();
     let path = repo.path();
