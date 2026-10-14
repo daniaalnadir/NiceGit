@@ -495,6 +495,152 @@ fn arrow_keys_move_through_the_graph_and_escape_clears() {
     assert_eq!(selected(&harness), None);
 }
 
+/// The hash of the commit whose row is selected, or None when a file or the working tree is.
+fn selected_commit(harness: &Harness<'static, NiceGitApp>) -> Option<String> {
+    match harness.state().repo().map(|r| r.selection.clone()) {
+        Some(crate::app::Selection::Commit { hash, .. }) => Some(hash),
+        _ => None,
+    }
+}
+
+#[test]
+fn go_to_head_selects_the_checkout_commit_from_anywhere() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let parent = git(repo.path(), &["rev-parse", "HEAD~1"]);
+
+    harness.state_mut().select_commit(parent.clone());
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(parent));
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::H);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(head));
+}
+
+#[test]
+fn go_to_head_skips_the_working_tree_row_when_dirty() {
+    let repo = repository();
+    std::fs::write(repo.path().join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    assert!(harness.state().repo().is_some_and(|r| r.dirty()), "the working tree has a row");
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let parent = git(repo.path(), &["rev-parse", "HEAD~1"]);
+
+    harness.state_mut().select_commit(parent);
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::H);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(head), "the commit, not the working tree row");
+}
+
+#[test]
+fn home_and_end_select_the_newest_and_oldest_loaded_commits() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let parent = git(repo.path(), &["rev-parse", "HEAD~1"]);
+
+    harness.key_press(Key::End);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(parent.clone()), "the oldest loaded commit");
+    harness.key_press(Key::Home);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(head), "the newest loaded commit");
+    harness.key_press(Key::End);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(parent));
+}
+
+#[test]
+fn home_selects_the_working_tree_row_when_it_has_changes_as_up_does() {
+    let repo = repository();
+    std::fs::write(repo.path().join("notes.txt"), "changed\n").unwrap();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let parent = git(repo.path(), &["rev-parse", "HEAD~1"]);
+
+    harness.key_press(Key::End);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(parent), "the oldest loaded commit");
+    harness.key_press(Key::Home);
+    settle(&mut harness);
+    assert!(
+        matches!(harness.state().repo().map(|r| &r.selection), Some(crate::app::Selection::WorkingTree)),
+        "Home reaches the working tree row at the top, as Up does"
+    );
+}
+
+#[test]
+fn palette_go_to_upstream_selects_the_upstream_tip() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/app.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", "HEAD~1"]);
+    git(path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let parent = git(path, &["rev-parse", "HEAD~1"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("go to upstream".into()));
+    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    harness.key_press(Key::Enter);
+    idle(&mut harness);
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness), Some(parent));
+    assert!(harness.state().notice.is_none(), "no notice when the upstream is loaded");
+}
+
+#[test]
+fn palette_go_to_upstream_is_disabled_without_an_upstream() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("go to upstream".into()));
+    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    harness.key_press(Key::Enter);
+    settle(&mut harness);
+    // A disabled command cannot be chosen, so the palette stays open and nothing is selected.
+    assert!(harness.state().palette.is_some(), "the disabled command did not run");
+    assert_eq!(selected_commit(&harness), None);
+}
+
+#[test]
+fn go_to_upstream_says_when_its_commit_is_not_loaded() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/app.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", "HEAD~1"]);
+    git(path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    // Only the newest commit is loaded, so the upstream's older commit is left out of the history.
+    if let Some(repo) = harness.state_mut().repo_mut() {
+        repo.history_limit = 1;
+    }
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    idle(&mut harness);
+    wait(&mut harness, "the shortened history", |h| h.state().snapshot().is_some_and(|s| s.commits.len() == 1));
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("go to upstream".into()));
+    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    harness.key_press(Key::Enter);
+    wait(&mut harness, "the notice", |h| {
+        h.state().notice.as_ref().is_some_and(|n| n.text.starts_with("origin/main's latest commit isn't in the loaded history."))
+    });
+    assert_eq!(selected_commit(&harness), None, "the commit is not selected");
+}
+
 /// The smallest window the app allows still lays out every panel; debug builds check widths.
 #[test]
 fn smallest_window_lays_out_every_panel() {

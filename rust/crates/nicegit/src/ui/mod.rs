@@ -43,6 +43,9 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::F))) && self.snapshot().is_some() {
             self.open_tool(Box::new(crate::tools::commit_search::CommitSearchWindow::new()));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&command_shift(Key::H))) && self.snapshot().is_some() {
+            self.go_to_head();
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command_alt(Key::F))) && self.snapshot().is_some() {
             self.open_tool(Box::new(crate::tools::content_search::ContentSearchWindow::new(None)));
         }
@@ -107,11 +110,18 @@ impl NiceGitApp {
                 repo.change_filter.clear();
             }
         }
-        // Arrow keys move through the graph when no text field has focus.
+        // Arrow keys, Home and End move through the graph when no text field has focus.
         let typing = ctx.memory(|m| m.focused().is_some());
         if !typing && self.dialog.is_none() && self.palette.is_none() {
-            let (up, down, escape) =
-                ctx.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown), i.key_pressed(Key::Escape)));
+            let (up, down, home, end, escape) = ctx.input(|i| {
+                (
+                    i.key_pressed(Key::ArrowUp),
+                    i.key_pressed(Key::ArrowDown),
+                    i.key_pressed(Key::Home),
+                    i.key_pressed(Key::End),
+                    i.key_pressed(Key::Escape),
+                )
+            });
             let diff = self.showing_diff();
             let alt = ctx.input(|i| i.modifiers.alt);
             // While a diff is open, Option (Alt) with an arrow opens the previous or next file;
@@ -120,6 +130,9 @@ impl NiceGitApp {
                 self.step_diff_file(if up { -1 } else { 1 });
             } else if (up || down) && !diff {
                 self.move_selection(if up { -1 } else { 1 });
+            }
+            if (home || end) && !diff {
+                self.select_end_of_history(end);
             }
             if escape && diff {
                 self.close_diff();
@@ -130,6 +143,13 @@ impl NiceGitApp {
                 }
             }
         }
+    }
+
+    /// Selects the graph's first row (the working tree, when it has changes, as Up reaches it) or
+    /// its last loaded row, as the Home and End keys do.
+    fn select_end_of_history(&mut self, oldest: bool) {
+        let Some(count) = self.repo().map(|repo| repo.rows.len()).filter(|count| *count > 0) else { return };
+        self.select_row(if oldest { count - 1 } else { 0 });
     }
 
     fn move_selection(&mut self, delta: isize) {
@@ -150,7 +170,13 @@ impl NiceGitApp {
         if Some(next) == current {
             return;
         }
-        match repo.commit_at(next).map(|c| c.hash.clone()) {
+        self.select_row(next);
+    }
+
+    /// Selects the graph row at `index`: its commit, or the working tree for the row above them.
+    fn select_row(&mut self, index: usize) {
+        let Some(repo) = self.repo() else { return };
+        match repo.commit_at(index).map(|c| c.hash.clone()) {
             Some(hash) => self.select_commit(hash),
             None => self.select_working_tree(),
         }

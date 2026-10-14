@@ -22,6 +22,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 (with("Shift-Cmd-F"), "Search the history of every branch"),
                 (with("Shift-Cmd-L"), "Filter the changed files"),
                 (with("Alt-Cmd-F"), "Search file contents"),
+                (with("Shift-Cmd-H"), "Go to the checked-out commit"),
                 ("Ctrl-`".to_string(), "Show or hide the terminal"),
                 (with("Cmd-,"), "Settings"),
                 (with("Cmd-+, Cmd-−"), "Make everything larger or smaller"),
@@ -33,6 +34,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
             "History",
             vec![
                 ("Up, Down".to_string(), "Select the previous or next commit"),
+                ("Home, End".to_string(), "Jump to the top or bottom of the loaded history"),
                 (with("Cmd-click"), "Mark several commits to cherry-pick"),
                 ("Escape".to_string(), "Clear the selection"),
             ],
