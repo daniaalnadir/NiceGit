@@ -21,6 +21,8 @@ pub struct PaletteState {
 #[derive(Clone)]
 enum Run {
     PullRequest(String),
+    /// Opens a GitHub page for the repository, as its full address.
+    OpenGitHub(String),
     Shortcuts,
     Fetch,
     FetchRemote(String),
@@ -44,7 +46,11 @@ enum Run {
     Checkout(Branch),
     Repository(PathBuf),
     ApplyPatch,
-    Identity { name: String, email: String, signing_key: Option<String> },
+    Identity {
+        name: String,
+        email: String,
+        signing_key: Option<String>,
+    },
     Publish,
     Continue(nicegit_core::Operation),
     Abort(nicegit_core::Operation),
@@ -186,6 +192,19 @@ impl NiceGitApp {
                 Run::PullRequest(branch),
             ));
         }
+        // Hidden unless a GitHub remote is chosen, as the pull request command is.
+        if let Some(repository) =
+            snapshot.and_then(|s| crate::git_ext::default_github_repository(s, &self.settings.github_enterprise_hosts))
+        {
+            for (title, glyph, page) in [
+                ("Open repository on GitHub", icon::GITHUB_LOGO, None),
+                ("Open pull requests on GitHub", icon::GIT_PULL_REQUEST, Some("pulls")),
+                ("Open Actions on GitHub", icon::PLAY, Some("actions")),
+            ] {
+                let url = repository.web_url(page);
+                list.push(command(title, &url, glyph, true, Run::OpenGitHub(url.clone())));
+            }
+        }
         if let Some(snapshot) = snapshot {
             if snapshot.upstream.is_none() && snapshot.is_on_branch() && !snapshot.remotes.is_empty() {
                 list.push(command("Publish branch", "Push it to a remote and track it", icon::UPLOAD_SIMPLE, idle, Run::Publish));
@@ -323,6 +342,7 @@ impl NiceGitApp {
                     self.open_pull_request(ctx, &branch);
                 }
             }
+            Run::OpenGitHub(url) => crate::ui::changes::open_url(&url),
             Run::Shortcuts => self.show_shortcuts = true,
             Run::Open => self.choose_folder(),
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),

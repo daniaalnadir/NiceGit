@@ -130,6 +130,29 @@ fn github_remotes(snapshot: &nicegit_core::Snapshot, enterprise_hosts: &[String]
         .collect()
 }
 
+/// The GitHub repository the palette's repository commands open: the current branch's upstream
+/// remote when that is on GitHub, else `origin` when it is, else the only GitHub remote.
+pub fn default_github_repository(
+    snapshot: &nicegit_core::Snapshot,
+    enterprise_hosts: &[String],
+) -> Option<nicegit_core::github::GitHubRepository> {
+    let upstream =
+        snapshot.current().and_then(|branch| branch.upstream.as_deref()).and_then(|upstream| upstream.strip_prefix("refs/remotes/"));
+    if let Some((remote, _)) = upstream.and_then(|upstream| split_remote(snapshot, upstream)) {
+        if let Some(repository) = github_repository_for_remote(snapshot, remote, enterprise_hosts) {
+            return Some(repository);
+        }
+    }
+    if let Some(repository) = github_repository_for_remote(snapshot, "origin", enterprise_hosts) {
+        return Some(repository);
+    }
+    let mut remotes = github_remotes(snapshot, enterprise_hosts).into_iter();
+    match (remotes.next(), remotes.next()) {
+        (Some((_, repository)), None) => Some(repository),
+        _ => None,
+    }
+}
+
 /// GitHub remotes, with the web address of `commit` on each.
 pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str, enterprise_hosts: &[String]) -> Vec<(String, String)> {
     github_remotes(snapshot, enterprise_hosts)

@@ -589,6 +589,24 @@ impl NiceGitApp {
                 ui.ctx().copy_text(address.clone());
             }
         }
+        // The repository's pages, from the remote's address only when it is a GitHub repository.
+        if let Some(repository) = crate::git_ext::github_repository_for_remote(snapshot, remote, &self.settings.github_enterprise_hosts) {
+            ui.menu_button(format!("{}  Open on GitHub", icon::ARROW_SQUARE_OUT), |ui| {
+                let pages = [
+                    (icon::GITHUB_LOGO, "Repository", None),
+                    (icon::GIT_PULL_REQUEST, "Pull requests", Some("pulls")),
+                    (icon::CIRCLE_DASHED, "Issues", Some("issues")),
+                    (icon::PLAY, "Actions", Some("actions")),
+                ];
+                for (glyph, label, page) in pages {
+                    let url = repository.web_url(page);
+                    if ui.button(format!("{glyph}  {label}")).on_hover_text(&url).clicked() {
+                        ui.close();
+                        crate::ui::changes::open_url(&url);
+                    }
+                }
+            });
+        }
         ui.separator();
         if ui.button(format!("{}  Edit in Repository Settings…", icon::GEAR)).clicked() {
             ui.close();

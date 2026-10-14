@@ -691,6 +691,56 @@ fn open_branch_on_github() {
 }
 
 #[test]
+fn a_remote_header_opens_its_pull_requests_on_github() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/widgets.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.get_by_label(&format!("{}  origin", icon::CLOUD)).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open on GitHub").click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, &format!("{}  Pull requests", icon::GIT_PULL_REQUEST)).click();
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec!["https://github.com/acme/widgets/pulls".to_string()]);
+}
+
+#[test]
+fn the_palette_opens_the_repository_on_github() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://github.com/acme/widgets.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
+    wait(&mut harness, "the palette", |h| h.state().palette.is_some());
+    harness.event(egui::Event::Text("open repository on github".into()));
+    harness.step();
+    harness.key_press(Key::Enter);
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec!["https://github.com/acme/widgets".to_string()]);
+}
+
+#[test]
+fn a_remote_that_is_not_on_github_has_no_open_on_github_menu() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "/srv/archive/widgets.git"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label(&format!("{}  origin", icon::CLOUD)).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Copy fetch URL");
+    assert_eq!(harness.query_all(By::new().label_contains("Open on GitHub")).count(), 0, "no GitHub submenu for a local remote");
+}
+
+#[test]
 fn save_a_commit_as_a_patch_and_apply_it_again() {
     let repo = repository();
     let path = repo.path();
