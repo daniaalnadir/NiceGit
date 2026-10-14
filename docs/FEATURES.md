@@ -73,9 +73,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Resize the repositories column and the branches sidebar by dragging their dividers;
   double-click a divider to restore its default width. Widths are remembered.
 - Undo steps back through the last 20 NiceGit actions that moved the current branch (commit,
-  amend, reset, merge, rebase, cherry-pick, revert, or pull) or deleted branches, and Redo
-  steps forward again, from the toolbar or the command palette. The arrow beside Undo lists
-  the steps it will take back.
+  amend, reset, merge, rebase, cherry-pick, revert, or pull), deleted branches, or deleted
+  stashes, and Redo steps forward again, from the toolbar or the command palette. The arrow
+  beside Undo lists the steps it will take back. A restored stash comes back as the newest one.
 - Clean up branches (Repository > Clean Up Branches): delete local branches merged into the
   current branch, and optionally unmerged ones with no recent commits, as one undoable step.
 - Search file contents (Option-Command-F, or "Search files in this commit" in the graph):

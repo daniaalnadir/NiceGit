@@ -37,12 +37,18 @@ pub mod worktrees;
 /// A repository-changing action, run in the background by the app.
 pub type Action = Box<dyn FnOnce(&GitClient, &Path) -> ActionResult + Send>;
 
+/// An action that returns the undo record it made, like the app's `act_with_record`.
+pub type RecordingAction =
+    Box<dyn FnOnce(&GitClient, &Path) -> nicegit_core::Result<(Option<String>, Option<crate::app::Recorded>)> + Send>;
+
 /// What a tool asks the app to do once the current frame is drawn.
 pub enum Request {
     /// Run an action that changes the repository, then refresh. Ignored while another runs.
     Act { label: String, action: Action },
     /// Like `Act`, but the branch move it makes is recorded so Undo can reverse it.
     ActRecording { label: String, title: String, detail: Option<String>, mode: nicegit_core::undo::UndoMode, action: Action },
+    /// Like `Act`, but the action returns the undo record it made, so Undo can reverse it.
+    ActWithRecord { label: String, action: RecordingAction },
     /// Offer `step` through the toolbar's Undo, described by `title` and `detail`.
     RecordUndo { title: String, detail: Option<String>, step: nicegit_core::undo::UndoStep },
     /// Show a message in the status bar.
@@ -98,6 +104,15 @@ impl<'a> Ctx<'a> {
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
         self.requests.push(Request::ActRecording { label: label.into(), title: title.into(), detail, mode, action: Box::new(action) });
+    }
+
+    /// Runs an action that returns its own undo record, such as deleting a stash.
+    pub fn act_with_record(
+        &mut self,
+        label: impl Into<String>,
+        action: impl FnOnce(&GitClient, &Path) -> nicegit_core::Result<(Option<String>, Option<crate::app::Recorded>)> + Send + 'static,
+    ) {
+        self.requests.push(Request::ActWithRecord { label: label.into(), action: Box::new(action) });
     }
 
     pub fn record_undo(&mut self, title: impl Into<String>, detail: Option<String>, step: nicegit_core::undo::UndoStep) {

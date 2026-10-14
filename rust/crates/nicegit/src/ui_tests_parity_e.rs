@@ -329,7 +329,7 @@ fn delete_one_stash_from_the_stashes_window_after_confirming() {
 
     // The newest stash is listed first, so the second row's delete button belongs to "Older work".
     harness.get_all_by_label("Delete stash").nth(1).expect("delete button for the older stash").click();
-    wait(&mut harness, "the delete confirmation", |h| shows(h, "Delete stash@{1} permanently?"));
+    wait(&mut harness, "the delete confirmation", |h| shows(h, "Delete stash@{1}?"));
     settle(&mut harness);
     assert_eq!(git(path, &["stash", "list"]).lines().count(), 2, "nothing is deleted before confirming");
 
@@ -340,6 +340,35 @@ fn delete_one_stash_from_the_stashes_window_after_confirming() {
     assert_eq!(remaining.lines().count(), 1, "one stash is left: {remaining}");
     assert!(remaining.contains("Newer work") && !remaining.contains("Older work"), "the older stash was the one deleted");
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\n", "the working file is untouched");
+}
+
+#[test]
+fn delete_a_stash_from_the_sidebar_menu_then_undo_it() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "changed\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Draft changes"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Draft changes").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Delete…").click();
+    wait(&mut harness, "the delete confirmation", |h| shows(h, "Delete stash@{0}?"));
+    settle(&mut harness);
+    assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "nothing is deleted before confirming");
+
+    harness.get_by_role_and_label(Role::Button, "Delete").click();
+    idle(&mut harness);
+    assert!(git(path, &["stash", "list"]).is_empty(), "the stash is deleted");
+
+    toolbar_button(&mut harness, "Undo");
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    harness.get_all_by_label("Undo").last().expect("confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash is listed again", |_| git(path, &["stash", "list"]).contains("Draft changes"));
+    assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "the stash is back once");
 }
 
 // MARK: Conflict editor

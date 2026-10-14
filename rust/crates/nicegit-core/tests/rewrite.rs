@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 
 use nicegit_core::client::GitClient;
 use nicegit_core::merge_preview::MergeOutcome;
-use nicegit_core::models::{Branch, GitError, Operation, ResetMode, Snapshot, StatusEntry};
+use nicegit_core::models::{Branch, GitError, Operation, ResetMode, Snapshot, Stash, StashOptions, StatusEntry};
 use nicegit_core::rebase::{Expectation, RebaseAction, RebaseOutcome, RebasePlan, RebaseStep};
 use nicegit_core::undo::{branch_move_step, BranchDeletion, UndoMode, UndoStep};
 use tempfile::TempDir;
@@ -1272,4 +1272,95 @@ fn discard_undo_refuses_when_the_file_changed_again() {
     let message = refusal(client().undo_discard(&undo, repo.path()));
     assert!(message.contains("changed after it was discarded"), "{message}");
     assert_eq!(repo.read("a.txt"), "newer\n", "newer work is not overwritten");
+}
+
+// MARK: Undo of stash deletions
+
+/// Saves a stash that changes `a.txt` to `contents`, returning it as the newest listed stash.
+fn stash_listed_as(repo: &Repo, contents: &str, message: &str) -> Stash {
+    repo.write("a.txt", contents);
+    client().save_stash(message, StashOptions::default(), repo.path()).expect("save stash");
+    client().list_stashes(repo.path()).expect("list stashes").into_iter().next().expect("the new stash")
+}
+
+fn listed_hashes(directory: &Path) -> Vec<String> {
+    client().list_stashes(directory).expect("list stashes").into_iter().map(|stash| stash.hash).collect()
+}
+
+#[test]
+fn undo_stash_deletion_lists_the_stash_again_and_redo_drops_it() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    let stash = stash_listed_as(&repo, "changed\n", "Keep this");
+    let deletion = client().drop_stash_keeping_undo(&stash, repo.path()).expect("delete stash");
+    assert!(listed_hashes(repo.path()).is_empty(), "the stash is deleted");
+
+    let redo = client().undo_step(&UndoStep::StashDeletion(deletion), repo.path()).expect("restore stash");
+    let restored = client().list_stashes(repo.path()).expect("list stashes");
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].hash, stash.hash, "the same commit comes back");
+    assert_eq!(restored[0].message, stash.message, "it is listed under the same text");
+
+    client().apply_stash(&restored[0], repo.path()).expect("apply restored stash");
+    assert_eq!(repo.read("a.txt"), "changed\n", "its change applies");
+
+    client().undo_step(&redo, repo.path()).expect("delete again");
+    assert!(listed_hashes(repo.path()).is_empty(), "redo deletes it again");
+}
+
+#[test]
+fn undo_stash_deletion_returns_the_older_stash_as_the_newest_and_keeps_the_other() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    let older = stash_listed_as(&repo, "older\n", "Older work");
+    let newer = stash_listed_as(&repo, "newer\n", "Newer work");
+    let deletion = client().drop_stash_keeping_undo(&older, repo.path()).expect("delete older stash");
+    assert_eq!(listed_hashes(repo.path()), vec![newer.hash.clone()]);
+
+    client().undo_step(&UndoStep::StashDeletion(deletion), repo.path()).expect("restore older stash");
+    let listed = client().list_stashes(repo.path()).expect("list stashes");
+    assert_eq!(listed.iter().map(|stash| stash.hash.as_str()).collect::<Vec<_>>(), [older.hash.as_str(), newer.hash.as_str()]);
+    assert_eq!(listed[0].message, older.message, "the older stash is the newest now");
+    assert_eq!(listed[1].message, newer.message, "the other stash is undisturbed");
+}
+
+#[test]
+fn undo_stash_deletion_refuses_while_the_stash_is_listed() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    let stash = stash_listed_as(&repo, "changed\n", "Keep this");
+    let deletion = client().drop_stash_keeping_undo(&stash, repo.path()).expect("delete stash");
+    client().undo_step(&UndoStep::StashDeletion(deletion.clone()), repo.path()).expect("restore stash");
+
+    let message = refusal(client().undo_step(&UndoStep::StashDeletion(deletion), repo.path()));
+    assert!(message.contains("already in the stash list"), "{message}");
+    assert_eq!(listed_hashes(repo.path()), [stash.hash], "the listed stash is untouched");
+}
+
+#[test]
+fn undo_stash_deletion_refuses_once_the_stash_commit_is_pruned() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    let stash = stash_listed_as(&repo, "changed\n", "Keep this");
+    let deletion = client().drop_stash_keeping_undo(&stash, repo.path()).expect("delete stash");
+    repo.git(&["reflog", "expire", "--expire=now", "--all"]);
+    repo.git(&["gc", "--prune=now", "-q"]);
+
+    let message = refusal(client().undo_step(&UndoStep::StashDeletion(deletion), repo.path()));
+    assert!(message.contains("no longer in this repository"), "{message}");
+    assert!(listed_hashes(repo.path()).is_empty());
+}
+
+#[test]
+fn redo_stash_deletion_refuses_when_the_restored_stash_is_no_longer_listed() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    let stash = stash_listed_as(&repo, "changed\n", "Keep this");
+    let deletion = client().drop_stash_keeping_undo(&stash, repo.path()).expect("delete stash");
+    let redo = client().undo_step(&UndoStep::StashDeletion(deletion), repo.path()).expect("restore stash");
+    repo.git(&["stash", "drop", "-q"]);
+
+    let message = refusal(client().undo_step(&redo, repo.path()));
+    assert!(message.contains("no longer in the stash list"), "{message}");
+    assert!(listed_hashes(repo.path()).is_empty());
 }

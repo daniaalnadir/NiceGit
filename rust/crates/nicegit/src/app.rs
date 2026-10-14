@@ -2111,6 +2111,7 @@ impl NiceGitApp {
     pub fn handle(&mut self, request: Request) {
         match request {
             Request::Act { label, action } => self.act(&label, action),
+            Request::ActWithRecord { label, action } => self.act_with_record(&label, action),
             Request::ActRecording { label, title, detail, mode, action } => {
                 self.act_recording_mode_detail(&label, &title, detail, mode, action)
             }
