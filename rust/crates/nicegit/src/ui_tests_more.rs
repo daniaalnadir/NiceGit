@@ -171,8 +171,6 @@ fn a_click_on_a_branch_label_selects_its_commit() {
     let mut harness = open(path);
     loaded(&mut harness);
 
-    harness.get_by_label("Branch label feature").hover();
-    harness.step();
     harness.get_by_label("Branch label feature").click();
     settle(&mut harness);
     assert!(
@@ -182,15 +180,29 @@ fn a_click_on_a_branch_label_selects_its_commit() {
 }
 
 #[test]
+fn a_right_click_on_a_label_right_after_selecting_it_keeps_the_menu_open() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The right click lands before the commit's details arrive. Their arrival shows the inspector
+    // for the first time, which makes egui discard a frame, and the menu must survive that frame.
+    harness.get_by_label("Branch label feature").hover();
+    harness.step();
+    harness.get_by_label("Branch label feature").click();
+    harness.get_by_label("Branch label feature").click_secondary();
+    harness.run_steps(20);
+    assert!(shows(&harness, "Hide in graph"), "the label's menu stays open after the right click");
+}
+
+#[test]
 fn hide_a_branch_from_its_graph_label_and_the_current_branch_cannot_be_hidden() {
     let repo = repository_with_feature_commit();
     let path = repo.path();
     let mut harness = open(path);
     loaded(&mut harness);
 
-    // The pointer must reach the label before a click, as it does for a person.
-    harness.get_by_label("Branch label feature").hover();
-    harness.step();
     harness.get_by_label("Branch label feature").click_secondary();
     wait(&mut harness, "the label's menu", |h| shows(h, "Hide in graph"));
     harness.get_by_label_contains("Hide in graph").hover();
