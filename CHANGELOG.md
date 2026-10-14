@@ -105,6 +105,24 @@
   URL, or open its settings; the command palette also has a Fetch for each remote.
 - Deleting a stash can be undone from the toolbar while NiceGit is open; the stash comes back
   as the newest one. Before, a deleted stash could not be recovered from NiceGit.
+- The commit inspector shows the Git notes attached to a commit, such as review or CI
+  annotations, in a box below its message.
+- A branch's right-click menu has Compare with the checked-out branch, listing the commits
+  only each side has and the files that merging the branch would change.
+- Go to HEAD (Shift-Command-H) selects the checked-out commit from anywhere, even after scrolling
+  far down the graph; Home and End jump to the top and bottom of the loaded history, and the
+  command palette has Go to upstream.
+- Blame skips the commits listed in `.git-blame-ignore-revs` by default, so a reformatting
+  commit does not take the lines it only reformatted. A checkbox shows every commit instead.
+- New repository… asks for the folder, the first branch's name, and whether to add a README and
+  a first commit; a folder that is already a repository is refused, not reinitialized, so you
+  can open it instead.
+- A folder in the Changes panel's tree has a right-click menu that stages, unstages, or
+  discards every file in it, or copies its path.
+- Open a repository's home, pull requests, issues, or Actions page on GitHub from a GitHub
+  remote's sidebar menu, or from the command palette.
+- A commit's right-click menu and the inspector's … menu have a Copy submenu: the commit ID,
+  its short ID, subject, full message, or author.
 
 ## 1.5.0 - Fewer surprises
 
