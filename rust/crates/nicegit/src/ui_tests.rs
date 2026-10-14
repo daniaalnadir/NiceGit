@@ -708,6 +708,41 @@ fn clone_a_repository_through_its_dialog() {
 }
 
 #[test]
+fn create_a_repository_through_its_dialog() {
+    let source = repository();
+    let parent = temp_dir();
+    let folder = parent.path().join("notes");
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(source.path()), "New repository");
+    wait(&mut harness, "the new repository dialog", |h| h.state().dialog.is_some());
+    type_into(&mut harness, "Folder", &folder.display().to_string());
+    // The branch starts as Git's default; the test replaces it with its own name.
+    let role = egui::accesskit::Role::TextInput;
+    harness.get_by_role_and_label(role, "Initial branch").focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_role_and_label(role, "Initial branch").type_text("trunk");
+    harness.step();
+    // The first commit needs a Git identity, which a new repository's own settings cannot
+    // provide yet; the core tests cover it, so the window is tested without one.
+    harness.get_by_label("Make a first commit").click();
+    harness.step();
+    harness.get_by_label("Create").click();
+    wait(&mut harness, "the new repository to open", |h| {
+        h.state().repo().and_then(|r| r.snapshot.as_ref()).is_some_and(|s| s.current_branch == "trunk") && h.state().busy.is_none()
+    });
+
+    assert_eq!(git(&folder, &["symbolic-ref", "HEAD"]), "refs/heads/trunk");
+    assert_eq!(std::fs::read_to_string(folder.join("README.md")).unwrap(), "# notes\n");
+    assert!(git(&folder, &["status", "--porcelain"]).contains("?? README.md"), "the README waits to be committed");
+    assert_eq!(harness.state().repos.len(), 2, "the new repository opens in a new tab");
+    assert!(harness.state().notice.as_ref().is_some_and(|n| n.text == "Created repository notes."));
+}
+
+#[test]
 fn create_and_remove_a_worktree_from_the_interface() {
     let repo = repository();
     let parent = temp_dir();

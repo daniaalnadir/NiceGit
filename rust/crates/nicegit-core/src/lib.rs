@@ -35,5 +35,5 @@ pub mod tracked;
 pub mod undo;
 pub mod worktree;
 
-pub use client::GitClient;
+pub use client::{GitClient, NewRepository};
 pub use models::*;

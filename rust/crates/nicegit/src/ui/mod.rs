@@ -353,14 +353,10 @@ impl NiceGitApp {
         });
     }
 
+    /// Opens the New repository dialog, with Git's default first branch name.
     pub fn create_repository(&mut self) {
-        if let Some(folder) = crate::file_dialog::pick_folder("Choose a folder for the new repository") {
-            let path = folder.clone();
-            match nicegit_core::GitClient::new().initialize(&path) {
-                Ok(()) => self.open(folder),
-                Err(error) => self.notify(error.to_string(), true),
-            }
-        }
+        let initial_branch = nicegit_core::GitClient::new().default_initial_branch();
+        self.dialog = Some(dialogs::Dialog::new_repository(initial_branch));
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {

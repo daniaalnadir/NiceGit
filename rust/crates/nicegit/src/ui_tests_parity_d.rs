@@ -66,13 +66,20 @@ fn bare_remote() -> tempfile::TempDir {
 fn create_a_repository_from_the_empty_window() {
     let parent = temp_dir();
     let folder = parent.path().join("fresh-project");
-    std::fs::create_dir(&folder).unwrap();
     let mut harness = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_eframe(|cc| NiceGitApp::new(cc, None));
     settle(&mut harness);
     assert!(harness.state().repos.is_empty(), "no repository is open at first");
 
-    crate::file_dialog::answer_next(&folder);
     harness.get_by_label_contains("New repository").click();
+    wait(&mut harness, "the new repository dialog", |h| h.state().dialog.is_some());
+    // Choose… fills in the folder, which does not exist yet; Create makes it.
+    crate::file_dialog::answer_next(&folder);
+    harness.get_by_role_and_label(Role::Button, "Choose…").click();
+    harness.step();
+    // Without a first commit, as the first commit needs a Git identity; the core tests cover it.
+    harness.get_by_label("Make a first commit").click();
+    harness.step();
+    harness.get_by_label("Create").click();
     wait(&mut harness, "the new repository to open", |h| h.state().snapshot().is_some() && h.state().busy.is_none());
     assert!(folder.join(".git").is_dir(), "Git initialised the chosen folder");
     assert_eq!(git(&folder, &["rev-parse", "--is-inside-work-tree"]), "true");
