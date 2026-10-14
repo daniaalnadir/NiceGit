@@ -39,7 +39,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Filter local branches, remote branches, and tags by name in the sidebar.
 - See commit history with a parent-linked branch and merge graph.
 - See the working tree connected to its actual HEAD in the graph, even when another branch has newer commits.
-- Browse changed files as an expandable folder tree or a flat path list.
+- Browse changed files as an expandable folder tree or a flat path list. A folder's right-click
+  menu stages, unstages, or discards everything in it.
 - Load older history and search loaded commits by message, author, hash, or reference.
 - Choose which branches the graph shows from the "Branches shown" menu in the history header:
   all branches (the default), local branches only, or the current branch and its upstream. A
