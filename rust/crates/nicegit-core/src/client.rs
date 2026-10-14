@@ -521,6 +521,18 @@ impl GitClient {
         self.run(&["add", "--", path], directory).map(drop)
     }
 
+    /// Stages several paths in one Git process, each as `stage` stages one. A deleted path stages
+    /// its removal. The runner sets literal pathspecs for `add`, so a name with glob characters
+    /// selects only itself.
+    pub fn stage_paths(&self, paths: &[String], directory: &Path) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut arguments = vec!["add", "--"];
+        arguments.extend(paths.iter().map(String::as_str));
+        self.run(&arguments, directory).map(drop)
+    }
+
     pub fn stage_all(&self, directory: &Path) -> Result<()> {
         self.run(&["add", "--all"], directory).map(drop)
     }

@@ -757,6 +757,139 @@ fn stage_all_with_a_filter_still_stages_everything() {
     assert!(git(path, &["diff", "--name-only"]).is_empty(), "nothing is left unstaged");
 }
 
+/// Commits `src/a.txt` and `docs/x.md`, then changes both and adds an untracked `src/new.txt`.
+fn changed_folders(dir: &Path) {
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("docs")).unwrap();
+    std::fs::write(dir.join("src/a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("docs/x.md"), "x\n").unwrap();
+    git(dir, &["add", "--", "src/a.txt", "docs/x.md"]);
+    git(dir, &["commit", "-q", "-m", "Add the folders"]);
+    std::fs::write(dir.join("src/a.txt"), "changed\n").unwrap();
+    std::fs::write(dir.join("docs/x.md"), "changed\n").unwrap();
+    std::fs::write(dir.join("src/new.txt"), "new\n").unwrap();
+}
+
+/// The label of a folder's header in the tree view.
+fn folder_header(name: &str) -> String {
+    format!("{}  {name}", icon::FOLDER)
+}
+
+#[test]
+fn folder_menu_stages_and_unstages_every_file_in_the_folder() {
+    let repo = repository();
+    let path = repo.path();
+    changed_folders(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (3)"));
+    harness.get_by_label("Tree").click();
+    settle(&mut harness);
+    wait(&mut harness, "the folder tree", |h| h.query_by_label(&folder_header("src")).is_some());
+
+    harness.get_by_label(&folder_header("src")).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Stage folder").click();
+    idle(&mut harness);
+    assert_eq!(git(path, &["diff", "--cached", "--name-only"]), "src/a.txt\nsrc/new.txt", "both files in the folder are staged");
+    assert_eq!(git(path, &["diff", "--name-only"]), "docs/x.md", "the other folder is not staged");
+    assert!(shows(&harness, "Staged files (2)"), "the staged list counts the folder's files");
+
+    wait(&mut harness, "the staged folder", |h| h.query_by_label(&folder_header("src")).is_some());
+    harness.get_by_label(&folder_header("src")).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Unstage folder").click();
+    idle(&mut harness);
+    assert!(git(path, &["diff", "--cached", "--name-only"]).is_empty(), "nothing is staged");
+    assert!(path.join("src/new.txt").exists(), "the untracked file is kept");
+    assert!(shows(&harness, "Unstaged files (3)"), "every file is unstaged again");
+}
+
+#[test]
+fn folder_menu_discards_only_its_folder() {
+    let repo = repository();
+    let path = repo.path();
+    changed_folders(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (3)"));
+    harness.get_by_label("Tree").click();
+    settle(&mut harness);
+    wait(&mut harness, "the folder tree", |h| h.query_by_label(&folder_header("src")).is_some());
+
+    harness.get_by_label(&folder_header("src")).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Discard folder changes").click();
+    wait(&mut harness, "the discard confirmation", |h| h.state().dialog.is_some());
+    assert!(shows(&harness, "Discard changes in src?"), "the title names the folder");
+    assert!(shows(&harness, "Staged and unstaged changes to 2 file(s) are lost"), "the text counts the folder's files");
+    harness.get_by_label("Discard").click();
+    idle(&mut harness);
+    assert_eq!(std::fs::read_to_string(path.join("src/a.txt")).unwrap(), "a\n", "the modified file is restored");
+    assert!(!path.join("src/new.txt").exists(), "the untracked file is deleted");
+    assert_eq!(std::fs::read_to_string(path.join("docs/x.md")).unwrap(), "changed\n", "the other folder keeps its change");
+    assert_eq!(git(path, &["diff", "--name-only"]), "docs/x.md");
+    assert!(shows(&harness, "Unstaged files (1)"));
+}
+
+#[test]
+fn folder_menu_under_a_filter_acts_only_on_the_shown_files() {
+    let repo = repository();
+    let path = repo.path();
+    changed_folders(path);
+    // The filter field appears only with more than five changes, so three more join the others.
+    for file in ["other/one.txt", "other/two.txt", "other/three.txt"] {
+        write_changed_file(path, file);
+    }
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (6)"));
+    harness.get_by_label("Tree").click();
+    settle(&mut harness);
+    type_into(&mut harness, "Filter changed files", "a.txt");
+    wait(&mut harness, "the filtered tree", |h| shows(h, "Unstaged files (1 of 6)"));
+
+    harness.get_by_label(&folder_header("src")).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Discard folder changes").click();
+    wait(&mut harness, "the discard confirmation", |h| h.state().dialog.is_some());
+    assert!(shows(&harness, "Staged and unstaged changes to 1 file(s) are lost"), "only the shown file is counted");
+    assert!(shows(&harness, "Only files shown by the filter are included"), "the confirmation says so");
+    harness.get_by_label("Discard").click();
+    idle(&mut harness);
+    assert_eq!(std::fs::read_to_string(path.join("src/a.txt")).unwrap(), "a\n");
+    assert!(path.join("src/new.txt").exists(), "a file hidden by the filter is left alone");
+    assert_eq!(git(path, &["diff", "--name-only"]), "docs/x.md", "the other folder keeps its change");
+}
+
+#[test]
+fn folder_menu_copies_the_folder_path_with_a_trailing_slash() {
+    let repo = repository();
+    let path = repo.path();
+    changed_folders(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the changed files", |h| shows(h, "Unstaged files (3)"));
+    harness.get_by_label("Tree").click();
+    settle(&mut harness);
+    wait(&mut harness, "the folder tree", |h| h.query_by_label(&folder_header("docs")).is_some());
+
+    harness.get_by_label(&folder_header("docs")).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Copy folder path").click();
+    let mut copied = None;
+    let start = Instant::now();
+    while copied.is_none() && start.elapsed() < Duration::from_secs(10) {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+    }
+    assert_eq!(copied.as_deref(), Some("docs/"), "the folder's path is copied with a trailing slash");
+}
+
 #[test]
 fn filter_field_hidden_with_few_changes() {
     let repo = repository();

@@ -62,6 +62,15 @@ impl Folder {
     fn count(&self) -> usize {
         self.files.len() + self.folders.values().map(Folder::count).sum::<usize>()
     }
+
+    /// Every file under this folder, in its subfolders too.
+    fn entries(&self) -> Vec<StatusEntry> {
+        let mut entries = self.files.clone();
+        for folder in self.folders.values() {
+            entries.extend(folder.entries());
+        }
+        entries
+    }
 }
 
 impl NiceGitApp {
@@ -220,7 +229,7 @@ impl NiceGitApp {
                 } else if unstaged.is_empty() {
                     ui.label(RichText::new("   No unstaged changes").small().color(c.muted));
                 } else if tree {
-                    self.folder_rows(ui, &Folder::build(&unstaged), false, idle, &snapshot, 0);
+                    self.folder_rows(ui, &Folder::build(&unstaged), "", false, idle, &snapshot, 0);
                 } else {
                     for entry in &unstaged {
                         self.change_row(ui, entry, false, idle, &snapshot, entry.path.clone());
@@ -270,7 +279,7 @@ impl NiceGitApp {
                 } else if staged.is_empty() {
                     ui.label(RichText::new("   Stage files to include them in the next commit").small().color(c.muted));
                 } else if tree {
-                    self.folder_rows(ui, &Folder::build(&staged), true, idle, &snapshot, 0);
+                    self.folder_rows(ui, &Folder::build(&staged), "", true, idle, &snapshot, 0);
                 } else {
                     for entry in &staged {
                         self.change_row(ui, entry, true, idle, &snapshot, entry.path.clone());
@@ -280,10 +289,13 @@ impl NiceGitApp {
         });
     }
 
-    fn folder_rows(&mut self, ui: &mut Ui, folder: &Folder, staged: bool, idle: bool, snapshot: &Snapshot, depth: usize) {
+    /// `prefix` is the repository-relative path of `folder`, empty at the top of the tree.
+    #[allow(clippy::too_many_arguments)]
+    fn folder_rows(&mut self, ui: &mut Ui, folder: &Folder, prefix: &str, staged: bool, idle: bool, snapshot: &Snapshot, depth: usize) {
         let c = theme::of(ui);
         let filtering = self.repo().is_some_and(|r| !r.change_filter.trim().is_empty());
         for (name, child) in &folder.folders {
+            let path = if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
             // While filtering, folders open so their matches show. That uses its own open state, so
             // the folder's saved state is left as the user set it.
             let id = ui.make_persistent_id(("folder", staged, depth, name, filtering));
@@ -293,13 +305,70 @@ impl NiceGitApp {
             }
             state
                 .show_header(ui, |ui| {
-                    ui.label(RichText::new(format!("{}  {name}", icon::FOLDER)).color(c.muted));
-                    ui.label(RichText::new(child.count().to_string()).small().color(c.muted));
+                    let row = ui.horizontal(|ui| {
+                        ui.label(RichText::new(format!("{}  {name}", icon::FOLDER)).color(c.muted));
+                        ui.label(RichText::new(child.count().to_string()).small().color(c.muted));
+                    });
+                    // The whole row opens the menu, not only the arrow that opens the folder.
+                    let response = ui.interact(row.response.rect, id.with("menu"), egui::Sense::click());
+                    response.context_menu(|ui| self.folder_menu(ui, child, &path, staged, idle));
                 })
-                .body(|ui| self.folder_rows(ui, child, staged, idle, snapshot, depth + 1));
+                .body(|ui| self.folder_rows(ui, child, &path, staged, idle, snapshot, depth + 1));
         }
         for entry in &folder.files {
             self.change_row(ui, entry, staged, idle, snapshot, entry.file_name().to_string());
+        }
+    }
+
+    /// The menu on a folder header. It acts on the files this list shows under the folder, in its
+    /// subfolders too, so a filter limits it to the matches.
+    fn folder_menu(&mut self, ui: &mut Ui, folder: &Folder, path: &str, staged: bool, idle: bool) {
+        ui.set_min_width(230.0);
+        let entries = folder.entries();
+        let filtering = self.repo().is_some_and(|r| !r.change_filter.trim().is_empty());
+        let scope = if filtering { " Only files shown by the filter are included." } else { "" };
+        if staged {
+            let count = entries.len();
+            let noun = if count == 1 { "file" } else { "files" };
+            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  Unstage folder", icon::MINUS_CIRCLE))).clicked() {
+                ui.close();
+                let folder_path = path.to_string();
+                self.act("Unstage folder", move |client, repo| {
+                    for entry in &entries {
+                        client.unstage(entry, repo)?;
+                    }
+                    Ok(Some(format!("Unstaged {count} {noun} in {folder_path}.")))
+                });
+            }
+        } else {
+            // Conflicted files are left out, as their row leaves out Stage: staging one would mark
+            // its conflicts resolved.
+            let stageable: Vec<String> = entries.iter().filter(|e| e.kind != StatusKind::Conflicted).map(|e| e.path.clone()).collect();
+            let count = stageable.len();
+            let noun = if count == 1 { "file" } else { "files" };
+            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  Stage folder", icon::PLUS_CIRCLE))).clicked() {
+                ui.close();
+                let folder_path = path.to_string();
+                self.act("Stage folder", move |client, repo| {
+                    client.stage_paths(&stageable, repo).map(|_| Some(format!("Staged {count} {noun} in {folder_path}.")))
+                });
+            }
+            let discardable: Vec<StatusEntry> = entries.into_iter().filter(|e| e.kind != StatusKind::Conflicted).collect();
+            if ui
+                .add_enabled(idle && !discardable.is_empty(), egui::Button::new(format!("{}  Discard folder changes…", icon::TRASH)))
+                .clicked()
+            {
+                ui.close();
+                let text = format!(
+                    "Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}",
+                    discardable.len()
+                );
+                self.confirm(format!("Discard changes in {path}?"), text, "Discard", Pending::DiscardAll(discardable));
+            }
+        }
+        if ui.button(format!("{}  Copy folder path", icon::COPY)).clicked() {
+            ui.close();
+            ui.ctx().copy_text(format!("{path}/"));
         }
     }
 

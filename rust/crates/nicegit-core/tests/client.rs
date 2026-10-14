@@ -242,6 +242,46 @@ fn stage_and_unstage_one_file() {
 }
 
 #[test]
+fn stage_paths_stages_modified_untracked_and_deleted_files_in_one_call() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.commit("gone.txt", "bye\n", "Second");
+    repo.commit("kept.txt", "kept\n", "Third");
+    repo.write("a.txt", "two\n");
+    repo.write("new.txt", "new\n");
+    fs::remove_file(repo.path().join("gone.txt")).expect("delete file");
+
+    let paths = ["a.txt", "new.txt", "gone.txt"].map(String::from);
+    client().stage_paths(&paths, repo.path()).expect("stage paths");
+
+    let staged = repo.git(&["diff", "--cached", "--name-status"]);
+    assert!(staged.contains("M\ta.txt"), "the modified file is staged: {staged}");
+    assert!(staged.contains("A\tnew.txt"), "the untracked file is staged: {staged}");
+    assert!(staged.contains("D\tgone.txt"), "the deletion is staged: {staged}");
+    assert!(repo.git(&["diff", "--name-only"]).trim().is_empty(), "nothing is left unstaged");
+    assert!(!repo.path().join("gone.txt").exists(), "the deleted file stays deleted");
+}
+
+// Windows file names cannot contain `*`, so the glob names are only possible elsewhere.
+#[cfg(not(windows))]
+#[test]
+fn stage_paths_with_glob_characters_stages_only_the_named_file() {
+    let repo = Repo::new();
+    repo.commit("base.txt", "base\n", "First");
+    repo.write("ab.txt", "ab\n");
+    repo.write("a*.txt", "star\n");
+    repo.write("#[cfg(not(windows))].txt", "brackets\n");
+
+    client().stage_paths(&["a*.txt".to_string()], repo.path()).expect("stage the glob-named file");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]).trim(), "a*.txt", "ab.txt is not matched by a*.txt");
+
+    client().stage_paths(&["#[cfg(not(windows))].txt".to_string()], repo.path()).expect("stage the bracket-named file");
+    let staged = repo.git(&["diff", "--cached", "--name-only"]);
+    assert!(staged.lines().any(|line| line == "#[cfg(not(windows))].txt"), "{staged}");
+    assert!(!staged.lines().any(|line| line == "ab.txt"), "{staged}");
+}
+
+#[test]
 fn stage_all_and_unstage_all() {
     let repo = Repo::new();
     repo.commit("a.txt", "one\n", "First");
