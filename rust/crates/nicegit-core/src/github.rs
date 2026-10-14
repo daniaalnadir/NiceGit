@@ -97,6 +97,16 @@ impl GitHubRepository {
         format!("https://{}", self.host)
     }
 
+    /// The address of one of the repository's web pages, such as `pulls` or `actions`, or its
+    /// home page for `None`. Built from the parsed host, owner, and name, so a credential or port
+    /// in the remote address never appears.
+    pub fn web_url(&self, page: Option<&str>) -> String {
+        match page {
+            Some(page) => format!("{}/{}/{page}", self.web_base(), self.slug()),
+            None => format!("{}/{}", self.web_base(), self.slug()),
+        }
+    }
+
     /// The repository as `gh --repo` names it, with its host: `host/owner/name`.
     pub fn gh_repo(&self) -> String {
         format!("{}/{}", self.host, self.slug())
@@ -1308,6 +1318,29 @@ mod tests {
         let public = repository("github.com", "acme", "app");
         assert_eq!(public.web_base(), "https://github.com");
         assert_eq!(public.gh_repo(), "github.com/acme/app");
+    }
+
+    #[test]
+    fn web_url_builds_home_and_section_pages_from_the_parsed_repository() {
+        let public = GitHubRepository::parse("https://github.com/acme/widgets.git").unwrap();
+        assert_eq!(public.web_url(None), "https://github.com/acme/widgets");
+        assert_eq!(public.web_url(Some("pulls")), "https://github.com/acme/widgets/pulls");
+        assert_eq!(public.web_url(Some("issues")), "https://github.com/acme/widgets/issues");
+        assert_eq!(public.web_url(Some("actions")), "https://github.com/acme/widgets/actions");
+        let dotted = GitHubRepository::parse("git@github.com:acme-labs/my.repo-2.git").unwrap();
+        assert_eq!(dotted.web_url(None), "https://github.com/acme-labs/my.repo-2");
+        assert_eq!(dotted.web_url(Some("actions")), "https://github.com/acme-labs/my.repo-2/actions");
+    }
+
+    #[test]
+    fn web_url_on_an_enterprise_host_drops_credentials_and_ports_from_the_remote() {
+        let listed = hosts(&["Git.Example.com"]);
+        let enterprise = GitHubRepository::parse_with_hosts("https://octo@GIT.example.com/acme/app.git", &listed).unwrap();
+        assert_eq!(enterprise.web_url(None), "https://git.example.com/acme/app");
+        assert_eq!(enterprise.web_url(Some("pulls")), "https://git.example.com/acme/app/pulls");
+        assert_eq!(enterprise.web_url(Some("issues")), "https://git.example.com/acme/app/issues");
+        assert_eq!(enterprise.web_url(Some("actions")), "https://git.example.com/acme/app/actions");
+        assert_eq!(repository("git.example.com", "acme", "app").web_url(None), "https://git.example.com/acme/app");
     }
 
     #[test]

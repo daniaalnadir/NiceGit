@@ -309,6 +309,10 @@ in Settings); creating a link neither publishes the commit nor verifies that it 
 exists on the remote. Commits, branches, and the files in a commit can also be opened on
 GitHub from their menus; with several GitHub remotes, you choose which one. Opening does not check that the commit or branch
 has been pushed.
+A GitHub remote's right-click menu in the sidebar has an Open on GitHub submenu for the
+repository's home page, pull requests, issues, and Actions. The command palette opens the
+repository, its pull requests, and its Actions: from the current branch's upstream remote when
+it is on GitHub, else `origin`, else the only GitHub remote.
 
 Create pull request… in a branch's menu, or the command palette's Create pull request on GitHub
 entry, opens a dialog for a local branch whose upstream is on a GitHub remote. NiceGit creates the
