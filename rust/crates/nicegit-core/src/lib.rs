@@ -5,6 +5,7 @@
 
 pub mod bisect;
 pub mod blame;
+pub mod branch_compare;
 pub mod cleanup;
 pub mod client;
 pub mod compare;

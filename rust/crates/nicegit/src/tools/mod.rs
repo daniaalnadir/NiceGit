@@ -14,6 +14,7 @@ pub mod archive;
 pub mod bisect;
 pub mod blame;
 pub mod branch_cleanup;
+pub mod branch_compare;
 pub mod commit_search;
 pub mod compare;
 pub mod conflict;
