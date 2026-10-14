@@ -257,6 +257,9 @@ pub struct Repo {
     /// The files of the selected stash, with that stash's hash, once listed or when listing failed.
     pub stash_files: Option<(String, Result<Vec<nicegit_core::StashFile>, String>)>,
     pub details: Option<Task<nicegit_core::Result<nicegit_core::client::CommitDetails>>>,
+    /// A commit's message read in the background for the commit menu's Copy submenu, copied
+    /// once it arrives.
+    pub message_copy: Option<Task<nicegit_core::Result<nicegit_core::client::CommitDetails>>>,
     pub diff: Option<DiffContent>,
     pub diff_loading: bool,
     pub diff_generation: u64,
@@ -422,6 +425,7 @@ impl Repo {
             commit_files: Vec::new(),
             stash_files: None,
             details: None,
+            message_copy: None,
             diff: None,
             diff_loading: false,
             diff_generation: 0,
@@ -1473,6 +1477,27 @@ impl NiceGitApp {
         self.repos[index].template_read = Some((key, task));
     }
 
+    /// Copies each commit message that the commit menu asked for once it has been read. A read
+    /// still pending when its repository is closed is dropped with that repository.
+    fn receive_message_copies(&mut self, ctx: &egui::Context) {
+        let mut results = Vec::new();
+        for repo in &mut self.repos {
+            let Some(task) = repo.message_copy.as_mut() else { continue };
+            let Some(result) = task.get() else { continue };
+            results.push(result.clone().map_err(|e| e.to_string()));
+            repo.message_copy = None;
+        }
+        for result in results {
+            match result {
+                Ok(details) => {
+                    ctx.copy_text(details.message);
+                    self.notify("Copied the commit message.", false);
+                }
+                Err(error) => self.notify(format!("Could not read the commit message: {error}"), true),
+            }
+        }
+    }
+
     /// Fills each repository's empty draft with its commit template once the template has been
     /// read. A read for a checkout the repository has since left is dropped, and so is one for an
     /// amend, which fills the draft from HEAD instead.
@@ -2346,6 +2371,7 @@ impl eframe::App for NiceGitApp {
         self.fit_to_monitor(&ctx);
         self.receive();
         self.receive_templates();
+        self.receive_message_copies(&ctx);
         self.finish_clone();
         self.shortcuts(&ctx);
         self.drop_folders(&ctx);

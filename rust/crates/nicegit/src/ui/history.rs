@@ -2,13 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use egui::{Color32, FontId, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::{Branch, Commit, Snapshot, StatusEntry, StatusKind};
+use nicegit_core::{Branch, Commit, GitClient, Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::graph_view::{self, Node};
 use crate::settings::HistoryScope;
 use crate::theme;
-use crate::tools::{self, widgets};
+use crate::tools::{self, widgets, Task};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 use crate::ui::history_columns::{self, Column};
 
@@ -836,10 +836,29 @@ impl NiceGitApp {
             self.open_tool(Box::new(tools::bisect::BisectWindow::start_from(commit.hash.clone())));
         }
         ui.separator();
-        if ui.button(format!("{}  Copy commit ID", icon::HASH)).clicked() {
-            ui.close();
-            ui.ctx().copy_text(commit.hash.clone());
-        }
+        ui.menu_button(format!("{}  Copy", icon::COPY), |ui| {
+            if ui.button("Commit ID").clicked() {
+                ui.close();
+                ui.ctx().copy_text(commit.hash.clone());
+            }
+            // The short ID the graph shows, which Git lengthens in large repositories.
+            if ui.button("Short commit ID").clicked() {
+                ui.close();
+                ui.ctx().copy_text(commit.short_hash.clone());
+            }
+            if ui.button("Subject").clicked() {
+                ui.close();
+                ui.ctx().copy_text(commit.subject.clone());
+            }
+            if ui.button("Message").clicked() {
+                ui.close();
+                self.copy_commit_message(ui.ctx(), commit);
+            }
+            if ui.button("Author").clicked() {
+                ui.close();
+                ui.ctx().copy_text(format!("{} <{}>", commit.author_name, commit.author_email));
+            }
+        });
         crate::git_ext::github_open_menu(
             ui,
             "Open on GitHub",
@@ -847,10 +866,6 @@ impl NiceGitApp {
             crate::git_ext::PUSHED_COMMIT_NOTE,
         );
         crate::git_ext::github_link_menu(ui, snapshot, &commit.hash, &self.settings.github_enterprise_hosts);
-        if ui.button(format!("{}  Copy subject", icon::COPY)).clicked() {
-            ui.close();
-            ui.ctx().copy_text(commit.subject.clone());
-        }
         if ui.button(format!("{}  Save as patch…", icon::FLOPPY_DISK)).clicked() {
             ui.close();
             self.export_patch(commit);
@@ -859,6 +874,23 @@ impl NiceGitApp {
             ui.close();
             self.export_zip(commit);
         }
+    }
+
+    /// Copies a commit's full message. The inspector's details are used when they are already
+    /// read for this commit; otherwise they are read in the background, and copied when they arrive.
+    fn copy_commit_message(&mut self, ctx: &egui::Context, commit: &Commit) {
+        let Some(repo) = self.repos.get_mut(self.active) else { return };
+        let loaded = match &repo.selection {
+            Selection::Commit { hash, .. } if *hash == commit.hash => repo.details.as_mut().and_then(|task| task.get()),
+            _ => None,
+        };
+        if let Some(Ok(details)) = loaded {
+            ctx.copy_text(details.message.clone());
+            self.notify("Copied the commit message.", false);
+            return;
+        }
+        let (path, hash) = (repo.path.clone(), commit.hash.clone());
+        repo.message_copy = Some(Task::spawn(ctx, move || GitClient::new().commit_details(&hash, &path)));
     }
 
     fn export_zip(&mut self, commit: &Commit) {
