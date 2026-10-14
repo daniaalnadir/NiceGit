@@ -35,6 +35,8 @@ enum Run {
     Terminal,
     Settings,
     GoToFile,
+    GoToHead,
+    GoToUpstream,
     Open,
     Clone,
     NewRepository,
@@ -136,6 +138,23 @@ impl NiceGitApp {
             command("Search history", "Shift-Ctrl/Cmd-F · every branch", icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
             command("Search file contents", "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
             command("Go to file…", "Find a tracked file by name", icon::FILE, has, Run::GoToFile),
+            command(
+                "Go to HEAD",
+                "Select the checked-out commit in the history",
+                icon::GIT_COMMIT,
+                snapshot.is_some_and(|s| s.head_hash.is_some()),
+                Run::GoToHead,
+            ),
+            command(
+                "Go to upstream",
+                &match snapshot.and_then(|s| s.upstream.as_deref()) {
+                    Some(upstream) => format!("Select {upstream}'s latest commit"),
+                    None => "Select the upstream's latest commit".into(),
+                },
+                icon::CLOUD,
+                snapshot.is_some_and(|s| s.upstream.is_some()),
+                Run::GoToUpstream,
+            ),
             command(
                 "Recover lost work",
                 "Commits from resets, rebases, and deleted branches",
@@ -295,6 +314,8 @@ impl NiceGitApp {
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
             Run::GoToFile => self.open_go_to_file(ctx),
+            Run::GoToHead => self.go_to_head(),
+            Run::GoToUpstream => self.go_to_upstream(),
             Run::PullRequest(name) => {
                 let branch =
                     self.snapshot().and_then(|s| s.branches.iter().find(|b| !b.is_remote && b.is_current && b.name == name).cloned());

@@ -93,7 +93,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose
   content has not been downloaded, and track or untrack patterns.
 - Move through the commit graph with the Up and Down arrow keys; Escape clears the
-  selection.
+  selection. Home and End jump to the top and bottom of the loaded history, and Go to HEAD
+  (Shift-Command-H) selects the checked-out commit from anywhere; the command palette also
+  has Go to upstream, which selects the current branch's upstream commit when it is loaded.
 - Drag a branch (from the sidebar or a graph label) onto the current branch in the sidebar
   to merge it in or rebase onto it, after confirming.
 - Command-click commits in the graph to select several, then cherry-pick them together,

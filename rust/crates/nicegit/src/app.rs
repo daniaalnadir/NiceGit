@@ -1745,6 +1745,32 @@ impl NiceGitApp {
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, request, &path));
     }
 
+    /// Selects the checkout's own commit, wherever it is in the history. An unborn checkout has
+    /// no commit, so nothing happens.
+    pub fn go_to_head(&mut self) {
+        let Some(head) = self.snapshot().and_then(|s| s.head_hash.clone()) else { return };
+        self.select_commit(head);
+    }
+
+    /// Selects the current branch's upstream tip, when that commit is among the loaded history.
+    pub fn go_to_upstream(&mut self) {
+        let Some(snapshot) = self.snapshot() else { return };
+        let Some(upstream) = snapshot.upstream.clone() else { return };
+        let Some(tip) = self.upstream_branch().map(|branch| branch.tip) else {
+            self.notify(format!("{upstream} isn't among this repository's branches, so its latest commit is unknown."), true);
+            return;
+        };
+        let loaded = snapshot.commits.iter().any(|commit| commit.hash == tip);
+        if loaded {
+            self.select_commit(tip);
+        } else {
+            self.notify(
+                format!("{upstream}'s latest commit isn't in the loaded history. Load older history or search all history to find it."),
+                false,
+            );
+        }
+    }
+
     pub fn select_commit_file(&mut self, hash: String, file: Option<String>) {
         let request = self.diff_request();
         let Some((generation, path)) = self.start_diff() else { return };
