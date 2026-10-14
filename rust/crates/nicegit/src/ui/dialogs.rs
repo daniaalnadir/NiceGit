@@ -252,6 +252,14 @@ pub enum Dialog {
         branch: String,
         head: String,
     },
+    /// Making a repository in `folder`, with its first branch, and whether to add a README and
+    /// a first commit.
+    NewRepository {
+        folder: String,
+        branch: String,
+        readme: bool,
+        first_commit: bool,
+    },
 }
 
 impl Dialog {
@@ -277,6 +285,11 @@ impl Dialog {
             "Destination folder",
             InputKind::Clone(CloneDestination::default()),
         )
+    }
+
+    /// The New repository dialog, with its first branch prefilled with `initial_branch`.
+    pub fn new_repository(initial_branch: String) -> Self {
+        Dialog::NewRepository { folder: String::new(), branch: initial_branch, readme: true, first_commit: true }
     }
 
     /// The New tag dialog for `target`, capturing the snapshot's remotes and push addresses now.
@@ -718,6 +731,62 @@ impl NiceGitApp {
                         }
                     });
                 }
+                Dialog::NewRepository { folder, branch, readme, first_commit } => {
+                    ui.heading("New repository");
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Folder").color(c.muted));
+                    let folder_field = ui
+                        .horizontal(|ui| {
+                            let width = ui.available_width() - 90.0;
+                            let field = ui.add(egui::TextEdit::singleline(folder).desired_width(width));
+                            if ui.button("Choose…").clicked() {
+                                if let Some(picked) = crate::file_dialog::pick_folder("Choose a folder for the new repository") {
+                                    *folder = picked.display().to_string();
+                                }
+                            }
+                            field
+                        })
+                        .inner;
+                    folder_field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Folder"));
+                    if ui.memory(|m| m.focused().is_none()) {
+                        folder_field.request_focus();
+                    }
+                    ui.label(RichText::new("The folder is created if it does not exist.").small().color(c.muted));
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("Initial branch").color(c.muted));
+                    let branch_field = widgets::text_field(ui, branch, "");
+                    branch_field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Initial branch"));
+                    // The name is checked as it is typed, as the branch dialogs check theirs.
+                    let problem = crate::git_ext::ref_name_problem(branch.trim());
+                    if let Some(problem) = problem {
+                        ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    ui.add_space(8.0);
+                    widgets::checkbox(ui, true, readme, "Add a README").on_hover_text(
+                        "A README.md with the folder's name as its heading. An existing README is kept as it is.",
+                    );
+                    widgets::checkbox(ui, true, first_commit, "Make a first commit").on_hover_text(
+                        "Commits the README as “Initial commit”, or an empty commit when there is no README.",
+                    );
+                    // The dialog's Create waits for the built-in editor's unsaved text, as the
+                    // other actions that change the repository do.
+                    let editing = self.has_unsaved_editor();
+                    if editing {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                    }
+                    ui.add_space(16.0);
+                    let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                    let ready = !folder.trim().is_empty() && !branch.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none();
+                    ui.horizontal(|ui| {
+                        if widgets::primary_button(ui, "Create", ready).clicked() || (enter && ready) {
+                            run = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                }
             }
         });
         if modal.should_close() && !picker_open {
@@ -766,6 +835,9 @@ impl NiceGitApp {
                     self.act_recording_detail("Edit message", "Edit message", crate::app::summary_of(&message), move |client, path| {
                         client.amend_message(&message, &branch, &head, path).map(|_| Some("Updated the commit message.".into()))
                     });
+                }
+                Dialog::NewRepository { folder, branch, readme, first_commit } => {
+                    self.create_new_repository(folder, branch, readme, first_commit);
                 }
                 Dialog::Publish { remote } => {
                     if let Some(snapshot) = self.snapshot().cloned() {
@@ -955,6 +1027,34 @@ impl NiceGitApp {
                     client.undo_last_commit(&branch, &head, path).map(|_| Some("Undid the last commit. Its changes are staged.".into()))
                 })
             }
+        }
+    }
+
+    /// Makes the repository the New repository dialog describes, then opens it. Nothing opens
+    /// when Git refuses, and a missing identity notice opens the repository it was made in, so
+    /// its Set identity button acts on that repository.
+    fn create_new_repository(&mut self, folder: String, branch: String, readme: bool, first_commit: bool) {
+        if self.busy.is_some() || self.has_unsaved_editor() {
+            return;
+        }
+        let path = std::path::PathBuf::from(folder.trim());
+        let options = nicegit_core::NewRepository { initial_branch: branch.trim().to_string(), readme, first_commit };
+        match nicegit_core::GitClient::new().create_repository(&path, &options) {
+            Ok(()) => {
+                let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+                self.open(path);
+                self.notify(format!("Created repository {name}."), false);
+            }
+            Err(error) if crate::app::needs_identity(&error.to_string()) => {
+                self.open(path);
+                self.notice = Some(crate::app::Notice {
+                    text: "The repository was created, but Git needs your name and email before it can make the first commit.".into(),
+                    is_error: true,
+                    action: Some(crate::app::NoticeAction::SetIdentity),
+                    detail: Some(error.to_string()),
+                });
+            }
+            Err(error) => self.notify(error.to_string(), true),
         }
     }
 

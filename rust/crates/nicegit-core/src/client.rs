@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::diff::DiffRequest;
@@ -79,6 +79,42 @@ fn validate_archive_prefix(prefix: &str) -> Result<()> {
     }
 }
 
+/// How a new repository is made by `GitClient::create_repository`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NewRepository {
+    /// The first branch's name, which must be a valid branch name.
+    pub initial_branch: String,
+    /// Whether to add a README.md named after the folder. An existing README is kept as it is.
+    pub readme: bool,
+    /// Whether to commit as "Initial commit": the README when there is one, else an empty commit.
+    pub first_commit: bool,
+}
+
+/// Writes `# <folder name>` to `readme` unless a file or link already has that name.
+fn write_readme(readme: &Path, directory: &Path) -> Result<()> {
+    // `symlink_metadata` also sees a dangling link, which writing through would create its target.
+    if std::fs::symlink_metadata(readme).is_ok() {
+        return Ok(());
+    }
+    let name = directory.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| "Repository".into());
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(readme)
+        .map_err(|error| GitError::failed("create repository", error.to_string()))?;
+    file.write_all(format!("# {name}\n").as_bytes()).map_err(|error| GitError::failed("create repository", error.to_string()))
+}
+
+/// The error for a step that failed after the repository was already created, so the message
+/// says the repository exists. Git's own words are kept, so a missing identity is still recognized.
+fn created_but(step: &str, error: GitError) -> GitError {
+    let reason = match error {
+        GitError::CommandFailed { message, .. } => message,
+        other => other.to_string(),
+    };
+    GitError::failed("create repository", format!("The repository was created, but {step}: {reason}"))
+}
+
 /// Runs Git commands for one or more repositories. Every method takes the checkout it acts on,
 /// and every action that changes files or refs first confirms the checkout it was chosen for.
 #[derive(Clone, Debug, Default)]
@@ -144,8 +180,45 @@ impl GitClient {
         Ok(PathBuf::from(output))
     }
 
+    /// The first branch's name a new repository gets unless one is chosen: Git's `init.defaultBranch`, else `main`.
+    pub fn default_initial_branch(&self) -> String {
+        self.try_trimmed(&["config", "--get", "init.defaultBranch"], &std::env::temp_dir()).unwrap_or_else(|| "main".to_string())
+    }
+
+    /// Makes an empty repository with Git's default first branch, and no README or commit.
     pub fn initialize(&self, directory: &Path) -> Result<()> {
-        self.run(&["init", "--", &directory.to_string_lossy()], directory.parent().unwrap_or(directory))?;
+        let initial_branch = self.default_initial_branch();
+        self.create_repository(directory, &NewRepository { initial_branch, readme: false, first_commit: false })
+    }
+
+    /// Makes a repository in `directory`, creating the folder if needed. Refuses a folder that is
+    /// already in a repository, so it is never silently reinitialized, and checks the branch name
+    /// before anything is created. A failure after the repository exists says so in its message.
+    pub fn create_repository(&self, directory: &Path, options: &NewRepository) -> Result<()> {
+        // A folder that does not exist yet cannot be asked about, so its nearest existing parent is.
+        let existing = directory.ancestors().find(|path| path.is_dir()).unwrap_or(Path::new("."));
+        let inside = self.try_trimmed(&["rev-parse", "--is-inside-work-tree"], existing).as_deref() == Some("true");
+        if inside || directory.join(".git").exists() {
+            return Err(GitError::failed("create repository", "This folder is already in a Git repository. Open it instead."));
+        }
+        let branch = options.initial_branch.trim();
+        if branch.is_empty() {
+            return Err(GitError::EmptyBranchName);
+        }
+        self.run(&["check-ref-format", "--branch", branch], existing)?;
+        std::fs::create_dir_all(directory).map_err(|error| GitError::failed("create repository", error.to_string()))?;
+        self.run(&["init", &format!("--initial-branch={branch}"), "--", "."], directory)?;
+        if options.readme {
+            write_readme(&directory.join("README.md"), directory).map_err(|error| created_but("its README could not be written", error))?;
+        }
+        if options.first_commit {
+            let committed = if options.readme {
+                self.run(&["add", "--", "README.md"], directory).and_then(|_| self.run(&["commit", "-m", "Initial commit"], directory))
+            } else {
+                self.run(&["commit", "--allow-empty", "-m", "Initial commit"], directory)
+            };
+            committed.map_err(|error| created_but("the first commit could not be made", error))?;
+        }
         Ok(())
     }
 
