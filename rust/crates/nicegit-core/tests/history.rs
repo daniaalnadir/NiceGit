@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
+use nicegit_core::blame::IgnoredRevs;
 use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::file_history::FileVersion;
 use nicegit_core::models::GitError;
@@ -125,7 +126,7 @@ fn blame_attributes_each_line_to_the_commit_that_wrote_it() {
     repo.write("notes.txt", "one\n2\nthree\n");
     let second = repo.commit_as("Bob", "bob@example.com", "Second");
 
-    let lines = client().blame("notes.txt", None, false, repo.path()).expect("blame");
+    let lines = client().blame("notes.txt", None, false, false, repo.path()).expect("blame");
     assert_eq!(lines.len(), 3);
     assert_eq!(lines[0].number, 1);
     assert_eq!(lines[0].commit.author_name, "Ann");
@@ -145,7 +146,7 @@ fn blame_at_a_revision_ignores_later_changes() {
     repo.write("unrelated.txt", "x\n");
     let first = repo.commit_as("Ann", "ann@example.com", "Unrelated");
     // The file did not exist at the first commit, so blaming it there is an error.
-    let missing = error_text(client().blame("notes.txt", Some(&first), false, repo.path()));
+    let missing = error_text(client().blame("notes.txt", Some(&first), false, false, repo.path()));
     assert!(!missing.is_empty());
 
     repo.write("notes.txt", "shared\n");
@@ -153,7 +154,7 @@ fn blame_at_a_revision_ignores_later_changes() {
     repo.write("notes.txt", "shared\nlater\n");
     repo.commit_as("Bob", "bob@example.com", "Append");
 
-    let at_revision = client().blame("notes.txt", Some(&created), false, repo.path()).expect("blame at revision");
+    let at_revision = client().blame("notes.txt", Some(&created), false, false, repo.path()).expect("blame at revision");
     assert_eq!(at_revision.len(), 1);
     assert_eq!(at_revision[0].commit.hash, created);
     assert_eq!(at_revision[0].content, "shared");
@@ -167,9 +168,9 @@ fn blame_ignoring_whitespace_keeps_the_earlier_author() {
     repo.write("code.rs", "value  =  1\n");
     repo.commit_as("Bob", "bob@example.com", "Reformat");
 
-    let plain = client().blame("code.rs", None, false, repo.path()).expect("blame");
+    let plain = client().blame("code.rs", None, false, false, repo.path()).expect("blame");
     assert_eq!(plain[0].commit.author_name, "Bob");
-    let ignoring = client().blame("code.rs", None, true, repo.path()).expect("blame -w");
+    let ignoring = client().blame("code.rs", None, true, false, repo.path()).expect("blame -w");
     assert_eq!(ignoring[0].commit.hash, original);
     assert_eq!(ignoring[0].commit.author_name, "Ann");
 }
@@ -180,7 +181,7 @@ fn blame_of_crlf_file_splits_every_line() {
     repo.write_bytes("windows.txt", b"alpha\r\nbeta\r\ngamma\r\n");
     repo.commit_as("Ann", "ann@example.com", "Windows file");
 
-    let lines = client().blame("windows.txt", None, false, repo.path()).expect("blame");
+    let lines = client().blame("windows.txt", None, false, false, repo.path()).expect("blame");
     assert_eq!(lines.len(), 3, "CRLF endings must not merge the lines");
     assert_eq!(lines.iter().map(|line| line.number).collect::<Vec<_>>(), vec![1, 2, 3]);
     assert_eq!(lines[0].content, "alpha\r");
@@ -194,7 +195,7 @@ fn blame_marks_unsaved_lines_as_uncommitted() {
     repo.commit("draft.txt", "committed\n", "Draft");
     repo.write("draft.txt", "committed\nlocal edit\n");
 
-    let lines = client().blame("draft.txt", None, false, repo.path()).expect("blame working file");
+    let lines = client().blame("draft.txt", None, false, false, repo.path()).expect("blame working file");
     assert_eq!(lines.len(), 2);
     assert!(!lines[0].commit.is_uncommitted());
     assert!(lines[1].commit.is_uncommitted());
@@ -206,7 +207,7 @@ fn blame_refuses_binary_files() {
     repo.write_bytes("data.bin", b"ab\0cd\n");
     repo.commit_as("Ann", "ann@example.com", "Binary");
 
-    let message = error_text(client().blame("data.bin", None, false, repo.path()));
+    let message = error_text(client().blame("data.bin", None, false, false, repo.path()));
     assert!(message.contains("binary"), "unexpected message: {message}");
 }
 
@@ -240,10 +241,10 @@ fn blame_before_a_change_names_the_earlier_commit() {
     repo.write("notes.txt", "First line.\nsecond\n");
     let reformatted = repo.commit_as("Bob", "bob@example.com", "Tidy the first line");
 
-    let at_head = client().blame("notes.txt", None, false, repo.path()).expect("blame at HEAD");
+    let at_head = client().blame("notes.txt", None, false, false, repo.path()).expect("blame at HEAD");
     assert_eq!(at_head[0].commit.hash, reformatted);
     let parent = client().first_parent(&at_head[0].commit.hash, repo.path()).expect("parent").expect("a parent");
-    let before = client().blame("notes.txt", Some(&parent), false, repo.path()).expect("blame before the change");
+    let before = client().blame("notes.txt", Some(&parent), false, false, repo.path()).expect("blame before the change");
     assert_eq!(before[0].commit.hash, added);
     assert_eq!(before[0].commit.author_name, "Ann");
     assert_eq!(before[0].content, "first line");
@@ -260,13 +261,13 @@ fn blame_before_a_rename_uses_the_old_path() {
     let changed = repo.commit_as("Cy", "cy@example.com", "Change alpha");
 
     // The line's commit is the change after the rename, so its path is the new name.
-    let at_head = client().blame("new.txt", None, false, repo.path()).expect("blame at HEAD");
+    let at_head = client().blame("new.txt", None, false, false, repo.path()).expect("blame at HEAD");
     assert_eq!(at_head[0].commit.hash, changed);
     assert_eq!(at_head[0].commit.path, "new.txt");
     let parent = client().first_parent(&at_head[0].commit.hash, repo.path()).expect("parent").expect("a parent");
     assert_eq!(parent, renamed);
 
-    let before = client().blame(&at_head[0].commit.path, Some(&parent), false, repo.path()).expect("blame before the change");
+    let before = client().blame(&at_head[0].commit.path, Some(&parent), false, false, repo.path()).expect("blame before the change");
     assert_eq!(before[0].commit.hash, added, "the line was written under the old name");
     assert_eq!(before[0].commit.path, "old.txt");
 }
@@ -283,16 +284,90 @@ fn blame_names_the_previous_version_even_across_a_rename_in_the_same_commit() {
     repo.write("new.txt", &format!("ALPHA\n{rest}"));
     let both = repo.commit_as("Bob", "bob@example.com", "Rename and change alpha");
 
-    let at_head = client().blame("new.txt", None, false, repo.path()).expect("blame at HEAD");
+    let at_head = client().blame("new.txt", None, false, false, repo.path()).expect("blame at HEAD");
     assert_eq!(at_head[0].commit.hash, both);
     let (revision, path) = at_head[0].commit.previous.clone().expect("Git names the earlier version");
     assert_eq!(revision, added);
     assert_eq!(path, "old.txt", "the earlier version is under the old name");
-    let before = client().blame(&path, Some(&revision), false, repo.path()).expect("blame before the change");
+    let before = client().blame(&path, Some(&revision), false, false, repo.path()).expect("blame before the change");
     assert_eq!(before[0].commit.hash, added);
 
     // The commit that added the file has no earlier version of it.
     assert_eq!(before[0].commit.previous, None);
+}
+
+/// Adds two commits: "Add value" writes `value = 'x'`, and "Use double quotes" changes it to
+/// `value = "x"`. Returns the hashes of both.
+fn quote_change_history(repo: &Repo, relative: &str) -> (String, String) {
+    repo.write(relative, "value = 'x'\n");
+    let original = repo.commit_as("Ann", "ann@example.com", "Add value");
+    repo.write(relative, "value = \"x\"\n");
+    let quoted = repo.commit_as("Bob", "bob@example.com", "Use double quotes");
+    (original, quoted)
+}
+
+#[test]
+fn blame_skipping_listed_commits_keeps_the_author_before_them() {
+    let repo = Repo::new();
+    let (original, quoted) = quote_change_history(&repo, "code.rs");
+    repo.write(".git-blame-ignore-revs", &format!("# Quote style\n{quoted}\n"));
+    repo.commit_as("Bob", "bob@example.com", "List the quote change");
+
+    let report = client().blame_report("code.rs", None, false, true, repo.path()).expect("blame skipping the list");
+    assert_eq!(report.ignored_revs, IgnoredRevs::Applied);
+    assert_eq!(report.lines[0].commit.hash, original);
+    assert_eq!(report.lines[0].commit.author_name, "Ann");
+
+    let lines = client().blame("code.rs", None, false, true, repo.path()).expect("blame skipping the list");
+    assert_eq!(lines, report.lines);
+    let plain = client().blame("code.rs", None, false, false, repo.path()).expect("blame");
+    assert_eq!(plain[0].commit.hash, quoted, "without skipping, the quote change keeps the line");
+}
+
+#[test]
+fn blame_without_an_ignore_list_reports_no_file() {
+    let repo = Repo::new();
+    let (_, quoted) = quote_change_history(&repo, "code.rs");
+
+    let report = client().blame_report("code.rs", None, false, true, repo.path()).expect("blame");
+    assert_eq!(report.ignored_revs, IgnoredRevs::NoFile);
+    assert_eq!(report.lines[0].commit.hash, quoted, "with no list, true behaves like false");
+    assert!(!client().has_blame_ignore_revs(repo.path()));
+
+    let not_requested = client().blame_report("code.rs", None, false, false, repo.path()).expect("blame");
+    assert_eq!(not_requested.ignored_revs, IgnoredRevs::NotRequested);
+}
+
+#[test]
+fn blame_with_an_unusable_ignore_list_still_returns_every_commit() {
+    let repo = Repo::new();
+    let (_, quoted) = quote_change_history(&repo, "code.rs");
+    repo.write(".git-blame-ignore-revs", "# Quote style\nno-such-commit\n");
+    repo.commit_as("Bob", "bob@example.com", "List a missing commit");
+    assert!(client().has_blame_ignore_revs(repo.path()));
+
+    let report = client().blame_report("code.rs", None, false, true, repo.path()).expect("blame with a broken list");
+    match &report.ignored_revs {
+        IgnoredRevs::Unusable(reason) => assert!(reason.contains("no-such-commit"), "unexpected reason: {reason}"),
+        other => panic!("expected an unusable list, got {other:?}"),
+    }
+    assert_eq!(report.lines[0].commit.hash, quoted);
+    let plain = client().blame("code.rs", None, false, false, repo.path()).expect("blame");
+    assert_eq!(report.lines, plain);
+}
+
+#[test]
+fn blame_from_a_subfolder_finds_the_ignore_list_at_the_root() {
+    let repo = Repo::new();
+    let (original, quoted) = quote_change_history(&repo, "sub/code.rs");
+    repo.write(".git-blame-ignore-revs", &format!("{quoted}\n"));
+    repo.commit_as("Bob", "bob@example.com", "List the quote change");
+
+    let subfolder = repo.path().join("sub");
+    assert!(client().has_blame_ignore_revs(&subfolder), "the list is at the root, not in the subfolder");
+    let report = client().blame_report("code.rs", None, false, true, &subfolder).expect("blame from the subfolder");
+    assert_eq!(report.ignored_revs, IgnoredRevs::Applied);
+    assert_eq!(report.lines[0].commit.hash, original);
 }
 
 // MARK: Line history
@@ -344,7 +419,7 @@ fn line_history_from_a_working_copy_blame_uses_the_commits_own_line_numbers() {
     edited.extend(lines.iter().cloned());
     repo.write("notes.txt", &file_text(&edited));
 
-    let blame = client().blame("notes.txt", None, false, repo.path()).expect("blame the working file");
+    let blame = client().blame("notes.txt", None, false, false, repo.path()).expect("blame the working file");
     let line = blame.iter().find(|line| line.content == "B changed three").expect("the changed line");
     assert_eq!(line.number, 8, "shown below the five new lines");
     assert_eq!(line.original_number, 3, "the line's number in its own commit");

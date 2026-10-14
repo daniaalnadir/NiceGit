@@ -130,7 +130,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Compare any commit with the working files, or two commits with each other (mark one,
   then compare from another), with a changed-file list and per-file diffs.
 - Blame a file (working version or at a commit), with author, age tinting, an
-  ignore-whitespace option, and each line's commit change one click away. A line's
+  ignore-whitespace option, and each line's commit change one click away. Commits listed in
+  `.git-blame-ignore-revs` are skipped by default. A line's
   right-click menu blames the file before that line's change ("Blame before this change"),
   and Back returns to the newer blame. "History of these lines" lists every commit that
   changed a group of consecutive lines from one commit, each with its change to just those

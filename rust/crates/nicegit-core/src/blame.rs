@@ -1,11 +1,15 @@
 //! Line-by-line authorship (`git blame --porcelain`).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::client::GitClient;
 use crate::models::{GitError, Result};
 use crate::runner::{self, RunOptions};
+
+/// The file at the repository root that lists commits blame should pass over, one object name
+/// per line. Lines starting with `#` are comments.
+pub const BLAME_IGNORE_REVS_FILE: &str = ".git-blame-ignore-revs";
 
 /// The commit that last changed a group of blamed lines.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +49,26 @@ pub struct BlameLine {
     /// The line's text without its newline. A CRLF file keeps the carriage return.
     pub content: String,
     pub commit: BlameCommit,
+}
+
+/// Blamed lines, with what became of the repository's ignore list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlameReport {
+    pub lines: Vec<BlameLine>,
+    pub ignored_revs: IgnoredRevs,
+}
+
+/// How `.git-blame-ignore-revs` was used for a blame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IgnoredRevs {
+    /// The caller did not ask for the ignore list.
+    NotRequested,
+    /// The caller asked, but the repository has no ignore list.
+    NoFile,
+    /// Git blamed the lines past the listed commits.
+    Applied,
+    /// Git could not use the list, so every commit is blamed. Holds Git's reason.
+    Unusable(String),
 }
 
 /// Parses `git blame --porcelain` output. Commit details appear only on a commit's first group,
@@ -142,26 +166,77 @@ pub fn unquote(value: &str) -> String {
 impl GitClient {
     /// Blames each line of `path` at `revision`, or in the working file when `revision` is `None`.
     /// With `ignore_whitespace`, lines moved past whitespace-only changes keep their earlier author.
-    pub fn blame(&self, path: &str, revision: Option<&str>, ignore_whitespace: bool, directory: &Path) -> Result<Vec<BlameLine>> {
+    /// With `ignore_revs`, lines changed by the commits in the repository's ignore list keep the
+    /// author of the change before them. See `blame_report` for how the list was used.
+    pub fn blame(
+        &self,
+        path: &str,
+        revision: Option<&str>,
+        ignore_whitespace: bool,
+        ignore_revs: bool,
+        directory: &Path,
+    ) -> Result<Vec<BlameLine>> {
+        Ok(self.blame_report(path, revision, ignore_whitespace, ignore_revs, directory)?.lines)
+    }
+
+    /// Like `blame`, and also reports how the ignore list was used. A list that names an object
+    /// Git does not have makes Git fail, so the blame runs again without the list and reports
+    /// Git's reason as `IgnoredRevs::Unusable`.
+    pub fn blame_report(
+        &self,
+        path: &str,
+        revision: Option<&str>,
+        ignore_whitespace: bool,
+        ignore_revs: bool,
+        directory: &Path,
+    ) -> Result<BlameReport> {
         let commit = match revision {
             // Blame parses its own arguments, so pass a resolved object ID rather than user text.
             Some(revision) => Some(self.resolve_commit(revision, directory)?),
             None => None,
         };
-        let mut arguments = vec!["blame", "--porcelain", "--no-progress"];
-        if ignore_whitespace {
-            arguments.push("-w");
-        }
-        if let Some(commit) = &commit {
-            arguments.push(commit);
-        }
-        arguments.extend(["--", path]);
+        let ignore_file = if ignore_revs { self.blame_ignore_file(directory)? } else { None };
+        let ignore_argument = ignore_file.as_ref().map(|file| file.to_string_lossy().into_owned());
         let options = RunOptions { env: &[("GIT_LITERAL_PATHSPECS", "1")], ..self.options() };
-        let output = runner::run_bytes(&arguments, directory, &options)?;
+        let blame = |ignore: Option<&str>| {
+            let mut arguments = vec!["blame", "--porcelain", "--no-progress"];
+            if ignore_whitespace {
+                arguments.push("-w");
+            }
+            if let Some(file) = ignore {
+                arguments.extend(["--ignore-revs-file", file]);
+            }
+            if let Some(commit) = &commit {
+                arguments.push(commit);
+            }
+            arguments.extend(["--", path]);
+            runner::run_bytes(&arguments, directory, &options)
+        };
+        let (output, ignored_revs) = match (blame(ignore_argument.as_deref()), ignore_argument) {
+            (Ok(output), Some(_)) => (output, IgnoredRevs::Applied),
+            (Ok(output), None) => (output, if ignore_revs { IgnoredRevs::NoFile } else { IgnoredRevs::NotRequested }),
+            (Err(GitError::CommandFailed { message, .. }), Some(_)) => {
+                let reason = message.strip_prefix("fatal: ").unwrap_or(&message).to_string();
+                (blame(None)?, IgnoredRevs::Unusable(reason))
+            }
+            (Err(error), _) => return Err(error),
+        };
         if output.contains(&0) {
             return Err(GitError::failed("blame", "This file is binary, so it has no lines to blame."));
         }
-        Ok(parse_blame(&output))
+        Ok(BlameReport { lines: parse_blame(&output), ignored_revs })
+    }
+
+    /// The repository's ignore list for blame, when the file exists at the repository root.
+    fn blame_ignore_file(&self, directory: &Path) -> Result<Option<PathBuf>> {
+        let file = self.repository_root(directory)?.join(BLAME_IGNORE_REVS_FILE);
+        Ok(file.is_file().then_some(file))
+    }
+
+    /// Whether the repository has a `.git-blame-ignore-revs` file at its root. Errors, such as a
+    /// folder outside any repository, count as no file.
+    pub fn has_blame_ignore_revs(&self, directory: &Path) -> bool {
+        matches!(self.blame_ignore_file(directory), Ok(Some(_)))
     }
 
     /// The first parent of `revision`, or `None` for a root commit.
