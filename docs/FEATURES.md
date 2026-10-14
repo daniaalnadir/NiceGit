@@ -376,6 +376,11 @@ Download ZIP does. Submodule contents are not included, and files marked
 `export-ignore` in `.gitattributes` are left out. The archive does not change the
 repository.
 
+A commit's right-click menu, and the inspector's … menu, has a Copy submenu with the full
+commit ID, the short ID the graph shows, the subject, the full message (subject and body),
+and the author as `Name <email>`. Copying the message reads it first when the commit is not
+selected, and a notice confirms when it is on the clipboard.
+
 The Changes panel saves uncommitted work as a `.patch` file: the staged or unstaged
 changes from a section's icon button, or one changed file from its right-click menu.
 The unstaged export includes untracked files, and a section's button covers every file

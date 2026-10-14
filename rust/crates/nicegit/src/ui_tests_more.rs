@@ -642,7 +642,7 @@ fn github_item_is_left_out_without_a_github_remote() {
 
     harness.get_by_label("Add a second line").click_secondary();
     settle(&mut harness);
-    assert!(has_label(&harness, "Copy commit ID"), "the commit's menu is open");
+    assert!(has_label(&harness, "Save as patch"), "the commit's menu is open");
     assert!(!shows(&harness, "Open on GitHub"), "a remote off github.com gives no link");
 }
 
@@ -2376,6 +2376,121 @@ fn the_open_diff_can_be_copied() {
     std::fs::write(path.join("copied.patch"), &copied).unwrap();
     git(path, &["apply", "copied.patch"]);
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nchanged\n");
+}
+
+/// Opens a commit's menu from the graph, with its Copy submenu open.
+fn open_copy_menu(harness: &mut App, subject: &str) {
+    // The subject is also the inspector's heading once the commit is selected, so the graph row is asked for by role.
+    harness.get_by_role_and_label(Role::Button, subject).click_secondary();
+    settle(harness);
+    harness.get_by_label_contains(&format!("{}  Copy", icon::COPY)).click();
+    settle(harness);
+}
+
+/// The text copied in the frame the interface last ran.
+fn copied_in_last_frame(harness: &mut App) -> Vec<String> {
+    harness
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            egui::OutputCommand::CopyText(text) => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A commit whose message has a body, made on top of the checkout.
+fn commit_with_body(path: &Path) -> &'static str {
+    git(path, &["commit", "-q", "--allow-empty", "-m", "Explain the change", "-m", "Body line one\nBody line two"]);
+    "Explain the change\n\nBody line one\nBody line two"
+}
+
+#[test]
+fn copy_the_short_id_and_author_from_the_commit_menu() {
+    let repo = repository();
+    let path = repo.path();
+    let short = git(path, &["rev-parse", "--short", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    open_copy_menu(&mut harness, "Add a second line");
+    harness.get_by_role_and_label(Role::Button, "Short commit ID").click();
+    harness.step();
+    assert_eq!(copied_in_last_frame(&mut harness), vec![short], "the short ID is what the graph shows");
+
+    open_copy_menu(&mut harness, "Add a second line");
+    harness.get_by_role_and_label(Role::Button, "Author").click();
+    harness.step();
+    assert_eq!(copied_in_last_frame(&mut harness), vec!["Test <test@example.invalid>".to_string()]);
+}
+
+#[test]
+fn copy_a_commits_message_read_in_the_background() {
+    let repo = repository();
+    let path = repo.path();
+    let message = commit_with_body(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The commit is not selected, so its message is read in the background and copied when it arrives.
+    open_copy_menu(&mut harness, "Explain the change");
+    harness.get_by_role_and_label(Role::Button, "Message").click();
+    let start = Instant::now();
+    let mut copied = Vec::new();
+    while copied.is_empty() {
+        harness.step();
+        copied = copied_in_last_frame(&mut harness);
+        assert!(start.elapsed() < Duration::from_secs(30), "the message was never copied");
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(copied, vec![message.to_string()]);
+    assert_eq!(harness.state().notice.as_ref().map(|n| n.text.as_str()), Some("Copied the commit message."));
+    assert!(harness.state().repo().is_some_and(|r| r.message_copy.is_none()), "the read is finished");
+}
+
+#[test]
+fn copy_a_selected_commits_message_at_once() {
+    let repo = repository();
+    let path = repo.path();
+    let message = commit_with_body(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Explain the change").click();
+    wait(&mut harness, "the commit's details", |h| {
+        h.state().repo().is_some_and(|r| r.details.as_ref().is_some_and(|task| task.peek().is_some()))
+    });
+    settle(&mut harness);
+
+    // Its details are already in the inspector, so the message is copied in the next frame.
+    open_copy_menu(&mut harness, "Explain the change");
+    harness.get_by_role_and_label(Role::Button, "Message").click();
+    harness.step();
+    assert_eq!(copied_in_last_frame(&mut harness), vec![message.to_string()]);
+    assert!(harness.state().repo().is_some_and(|r| r.message_copy.is_none()), "nothing was read in the background");
+}
+
+#[test]
+fn copy_the_message_from_the_inspector_menu() {
+    let repo = repository();
+    let path = repo.path();
+    let message = commit_with_body(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Explain the change").click();
+    wait(&mut harness, "the commit's details", |h| {
+        h.state().repo().is_some_and(|r| r.details.as_ref().is_some_and(|task| task.peek().is_some()))
+    });
+    settle(&mut harness);
+
+    harness.get_by_label(icon::DOTS_THREE).click();
+    settle(&mut harness);
+    harness.get_by_label_contains(&format!("{}  Copy", icon::COPY)).click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Message").click();
+    harness.step();
+    assert_eq!(copied_in_last_frame(&mut harness), vec![message.to_string()]);
 }
 
 #[test]
