@@ -98,6 +98,9 @@ pub struct CommitDetails {
     pub author_date: String,
     pub committer: String,
     pub committer_date: String,
+    /// The commit's notes as `git show` displays them under the default notes ref (`core.notesRef`
+    /// and `notes.displayRef` are respected), trimmed; empty when there are none.
+    pub notes: String,
     pub message: String,
 }
 
@@ -627,14 +630,18 @@ impl GitClient {
                 "--no-patch",
                 "--no-color",
                 "--date=format:%e %b %Y, %H:%M",
-                "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%ad%x1f%cn%x1f%cd%x1f%B",
+                "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%ad%x1f%cn%x1f%cd%x1f%N%x00%B",
                 hash,
                 "--",
             ],
             directory,
         )?;
+        // Notes come before the message, separated by NUL: neither notes nor a message can contain one.
         let fields: Vec<&str> = output.splitn(8, '\u{1f}').collect();
-        let [hash, parents, author, email, author_date, committer, committer_date, message] = fields[..] else {
+        let [hash, parents, author, email, author_date, committer, committer_date, notes_and_message] = fields[..] else {
+            return Err(GitError::failed("show", "Git returned commit details in an unexpected format."));
+        };
+        let Some((notes, message)) = notes_and_message.split_once('\0') else {
             return Err(GitError::failed("show", "Git returned commit details in an unexpected format."));
         };
         Ok(CommitDetails {
@@ -645,6 +652,7 @@ impl GitClient {
             author_date: author_date.trim().to_string(),
             committer: committer.to_string(),
             committer_date: committer_date.trim().to_string(),
+            notes: notes.trim().to_string(),
             message: message.trim_end().to_string(),
         })
     }

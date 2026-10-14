@@ -1,6 +1,6 @@
-//! Integration tests for bisect, commit comparison, file versions, commit and tag signatures, the
-//! refs that contain a commit, and GitHub remotes and items. Repository tests run against temporary repositories; GitHub tests never
-//! touch the network.
+//! Integration tests for bisect, commit comparison, file versions, commit details and notes, commit
+//! and tag signatures, the refs that contain a commit, and GitHub remotes and items. Repository
+//! tests run against temporary repositories; GitHub tests never touch the network.
 
 use std::fs;
 use std::io::Write;
@@ -275,6 +275,56 @@ fn file_bytes_at_returns_binary_content_from_commits_and_working_files() {
     assert_eq!(client.file_bytes_at(None, "images/my pic.png", repo.path()).unwrap(), None);
 
     assert!(client.file_bytes_at(None, "../outside.png", repo.path()).is_err());
+}
+
+// MARK: Commit details
+
+#[test]
+fn commit_details_shows_notes_and_leaves_the_message_unchanged() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    let commit = repo.commit("Subject line\n\nBody paragraph.");
+    repo.git(&["notes", "add", "-m", "Reviewed-by: Sam"]);
+    let details = client.commit_details(&commit, repo.path()).unwrap();
+    assert_eq!(details.notes, "Reviewed-by: Sam");
+    assert_eq!(details.message, "Subject line\n\nBody paragraph.");
+}
+
+#[test]
+fn commit_details_has_no_notes_without_any() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    let commit = repo.commit("plain");
+    let details = client.commit_details(&commit, repo.path()).unwrap();
+    assert_eq!(details.notes, "");
+    assert_eq!(details.message, "plain");
+}
+
+#[test]
+fn commit_details_keeps_separator_characters_in_message_and_multiline_notes() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    let commit = repo.commit("Split\u{1f}subject\n\nBody");
+    repo.git(&["notes", "add", "-m", "Ticket\u{1f}42\n\nSecond paragraph"]);
+    let details = client.commit_details(&commit, repo.path()).unwrap();
+    assert_eq!(details.message, "Split\u{1f}subject\n\nBody");
+    assert_eq!(details.notes, "Ticket\u{1f}42\n\nSecond paragraph");
+}
+
+#[test]
+fn commit_details_shows_notes_from_the_configured_notes_ref_only() {
+    let repo = Repo::new();
+    let client = GitClient::new();
+    repo.write("a.txt", "a\n");
+    let commit = repo.commit("reviewed");
+    repo.git(&["notes", "add", "-m", "Reviewed-by: Sam"]);
+    repo.git(&["notes", "--ref=review", "add", "-m", "Checked by CI"]);
+    repo.git(&["config", "core.notesRef", "refs/notes/review"]);
+    let details = client.commit_details(&commit, repo.path()).unwrap();
+    assert_eq!(details.notes, "Checked by CI");
 }
 
 // MARK: Signatures
