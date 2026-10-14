@@ -694,6 +694,12 @@ impl NiceGitApp {
             ui.close();
             self.open_tool(Box::new(tools::reset::ResetWindow::new(branch.tip.clone(), branch.subject.clone(), snapshot)));
         }
+        if !branch.is_current && snapshot.head_hash.is_some() && ui.button(format!("{}  Compare with {current}…", icon::GIT_DIFF)).clicked()
+        {
+            ui.close();
+            let other = branch.display_name();
+            self.open_tool(Box::new(tools::branch_compare::BranchCompareWindow::new(other, branch.tip.clone(), current.clone())));
+        }
         ui.separator();
         if ui.add_enabled(idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
             ui.close();

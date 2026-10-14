@@ -128,7 +128,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   Edit stops the rebase after that commit so you can change its files; Continue folds in
   what you have staged. A row whose choice is not Pick says what that choice does.
 - Compare any commit with the working files, or two commits with each other (mark one,
-  then compare from another), with a changed-file list and per-file diffs.
+  then compare from another), with a changed-file list and per-file diffs. A branch's
+  right-click menu compares it with the checked-out branch: the commits only each side has,
+  and Changed files… lists what merging the branch would change.
 - Blame a file (working version or at a commit), with author, age tinting, an
   ignore-whitespace option, and each line's commit change one click away. A line's
   right-click menu blames the file before that line's change ("Blame before this change"),

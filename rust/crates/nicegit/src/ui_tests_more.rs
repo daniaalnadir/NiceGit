@@ -335,6 +335,31 @@ fn compare_shows_both_versions_of_a_changed_image() {
 }
 
 #[test]
+fn compare_a_branch_with_the_current_branch_from_its_menu() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    commit_file(path, "main.txt", b"on main\n", "Work on main");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_all_by_label("feature").next().expect("feature row").hover();
+    harness.step();
+    harness.get_all_by_label("feature").next().expect("feature row").click_secondary();
+    wait(&mut harness, "the sidebar menu", |h| shows(h, "Compare with main"));
+    harness.get_by_label_contains("Compare with main").hover();
+    harness.step();
+    harness.get_by_label_contains("Compare with main").click();
+    wait(&mut harness, "the comparison", |h| shows(h, "1 commit on feature that main does not have"));
+    // The fixture's own "Add a second line" is on main too, so main has two commits of its own.
+    assert!(shows(&harness, "2 commits on main that feature does not have"), "main's commits are counted on their side");
+
+    harness.get_by_label_contains("Changed files").hover();
+    harness.step();
+    harness.get_by_label_contains("Changed files").click();
+    wait(&mut harness, "the files merging feature would change", |h| h.query_by_role_and_label(Role::Button, "side.txt").is_some());
+}
+
+#[test]
 fn edit_and_save_a_working_file_in_the_built_in_editor() {
     let repo = repository();
     let path = repo.path();
