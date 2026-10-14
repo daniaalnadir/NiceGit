@@ -400,6 +400,27 @@ fn inspector_shows(harness: &App, subject: &str) -> bool {
 }
 
 #[test]
+fn inspector_shows_the_git_notes_attached_to_a_commit() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["notes", "add", "-m", "Deployed to staging", "HEAD~1"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("Start the notes").click();
+    wait(&mut harness, "the noted commit to be selected", |h| inspector_shows(h, "Start the notes"));
+    wait(&mut harness, "the inspector to show the notes", |h| {
+        h.query_by_label("Notes").is_some() && h.query_by_label("Deployed to staging").is_some()
+    });
+
+    // A commit without notes has no Notes box.
+    harness.get_by_label("Add a second line").click();
+    wait(&mut harness, "the commit without notes to be selected", |h| inspector_shows(h, "Add a second line"));
+    assert!(harness.query_by_label("Deployed to staging").is_none(), "the earlier commit's notes are no longer shown");
+    assert!(harness.query_by_label("Notes").is_none(), "a commit without notes shows no Notes box");
+}
+
+#[test]
 fn history_scope_hides_other_branches() {
     let repo = repository();
     let path = repo.path();

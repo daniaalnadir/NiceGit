@@ -73,6 +73,18 @@ impl NiceGitApp {
                             ui.add_space(4.0);
                             ui.label(RichText::new(body.as_str()).color(ui.visuals().text_color().gamma_multiply(0.85)));
                         }
+                        if !details.notes.is_empty() {
+                            ui.add_space(10.0);
+                            // A tinted box sets the notes apart from the message above them.
+                            egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
+                                ui,
+                                |ui| {
+                                    ui.label(RichText::new("Notes").small().color(c.muted));
+                                    ui.add_space(2.0);
+                                    ui.label(details.notes.as_str());
+                                },
+                            );
+                        }
                         ui.add_space(10.0);
                         if let Some(commit) = &summary {
                             if !commit.refs.is_empty() {
