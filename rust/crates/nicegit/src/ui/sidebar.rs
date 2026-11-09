@@ -589,17 +589,21 @@ impl NiceGitApp {
                 ui.ctx().copy_text(address.clone());
             }
         }
-        // The repository's pages, from the remote's address only when it is a GitHub repository.
-        if let Some(repository) = crate::git_ext::github_repository_for_remote(snapshot, remote, &self.settings.github_enterprise_hosts) {
-            ui.menu_button(format!("{}  Open on GitHub", icon::ARROW_SQUARE_OUT), |ui| {
-                let pages = [
-                    (icon::GITHUB_LOGO, "Repository", None),
-                    (icon::GIT_PULL_REQUEST, "Pull requests", Some("pulls")),
-                    (icon::CIRCLE_DASHED, "Issues", Some("issues")),
-                    (icon::PLAY, "Actions", Some("actions")),
+        // The repository's pages, from the remote's address only when it is on a supported host.
+        if let Some(repository) = crate::git_ext::hosted_repository_for_remote(snapshot, remote, self.settings.listed_hosts()) {
+            ui.menu_button(format!("{}  Open on {}", icon::ARROW_SQUARE_OUT, repository.kind.name()), |ui| {
+                let mut pages = vec![
+                    (crate::git_ext::host_glyph(repository.kind), "Repository", repository.home_url()),
+                    (icon::GIT_PULL_REQUEST, crate::git_ext::pull_request_label(repository.kind), repository.pull_requests_url()),
                 ];
-                for (glyph, label, page) in pages {
-                    let url = repository.web_url(page);
+                // Issues and Actions are GitHub pages; the other hosts' pages are not listed here.
+                if let Some(url) = repository.github_page_url("issues") {
+                    pages.push((icon::CIRCLE_DASHED, "Issues", url));
+                }
+                if let Some(url) = repository.github_page_url("actions") {
+                    pages.push((icon::PLAY, "Actions", url));
+                }
+                for (glyph, label, url) in pages {
                     if ui.button(format!("{glyph}  {label}")).on_hover_text(&url).clicked() {
                         ui.close();
                         crate::ui::changes::open_url(&url);
@@ -635,11 +639,11 @@ impl NiceGitApp {
                 self.open_pull_request(&context, branch);
             }
         }
-        if let Some(link) = crate::git_ext::github_branch_link(snapshot, branch, &self.settings.github_enterprise_hosts) {
-            let button = ui.button(format!("{}  Open branch on GitHub", icon::ARROW_SQUARE_OUT)).on_hover_text(&link);
-            if button.clicked() {
+        if let Some(link) = crate::git_ext::hosted_branch_link(snapshot, branch, self.settings.listed_hosts()) {
+            let text = format!("{}  Open branch on {}", icon::ARROW_SQUARE_OUT, link.host.name());
+            if ui.button(text).on_hover_text(&link.url).clicked() {
                 ui.close();
-                crate::ui::changes::open_url(&link);
+                crate::ui::changes::open_url(&link.url);
             }
         }
         if branch.is_current {
@@ -851,7 +855,7 @@ impl NiceGitApp {
             ui.close();
             ui.ctx().copy_text(branch.tip.clone());
         }
-        crate::git_ext::github_link_menu(ui, snapshot, &branch.tip, &self.settings.github_enterprise_hosts);
+        crate::git_ext::commit_link_menu(ui, snapshot, &branch.tip, self.settings.listed_hosts());
     }
 
     pub fn request_merge(&mut self, source: Branch) {

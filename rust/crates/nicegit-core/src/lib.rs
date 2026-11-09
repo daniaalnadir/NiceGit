@@ -16,6 +16,7 @@ pub mod file_history;
 pub mod gitflow;
 pub mod github;
 pub mod graph;
+pub mod hosting;
 pub mod inline;
 pub mod lfs;
 pub mod line_counts;

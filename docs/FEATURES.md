@@ -303,7 +303,9 @@ loaded titles/authors/numbers, refresh, cancellation, links to GitHub, and loadi
 1,000 items in batches of 100. Counts reflect loaded items, not a server-side total.
 GitHub Enterprise Server hosts can be listed in Settings, and their remotes then work like
 github.com remotes, including gh-based lists that use your `gh auth login --hostname` sign-in.
-Other hosting providers aren't supported.
+Pull requests and issues are GitHub-only. Remotes on GitLab (gitlab.com, and self-hosted
+servers listed under GitLab in Settings) and Bitbucket (bitbucket.org) get browser links only,
+as described below; NiceGit makes no API calls for them and stores no token.
 
 Branch context menus provide checkout, fetch, current-branch pull/push, selected-branch
 push to an explicit same-named remote branch with confirmation, an upstream
@@ -312,16 +314,20 @@ worktree creation, branch creation at the selected tip without switching checkou
 merge/rebase, safe local rename/delete, deleting a remote branch from its remote
 (checked against the tip shown and the remote's address, and refused if the remote moved
 since your last fetch), and copying the branch name or full commit SHA. They do not yet reproduce every GitKraken action.
-The Copy GitHub commit link submenu uses an explicitly selected remote and a full
-commit hash. Only GitHub remotes are supported (github.com, and the Enterprise hosts listed
-in Settings); creating a link neither publishes the commit nor verifies that it already
-exists on the remote. Commits, branches, and the files in a commit can also be opened on
-GitHub from their menus; with several GitHub remotes, you choose which one. Opening does not check that the commit or branch
-has been pushed.
-A GitHub remote's right-click menu in the sidebar has an Open on GitHub submenu for the
-repository's home page, pull requests, issues, and Actions. The command palette opens the
-repository, its pull requests, and its Actions: from the current branch's upstream remote when
-it is on GitHub, else `origin`, else the only GitHub remote.
+The Copy commit link submenu (named Copy GitHub commit link when every remote is on GitHub)
+uses an explicitly selected remote and a full commit hash. Remotes on github.com, gitlab.com,
+bitbucket.org, and the GitHub Enterprise and GitLab hosts listed in Settings are supported;
+creating a link neither publishes the commit nor verifies that it already exists on the remote.
+Commits, branches, and the files in a commit can also be opened on the remote's host from their
+menus (Open on GitHub, Open on GitLab, or Open on Bitbucket; Open in browser when your remotes
+are on different hosts). With several remotes, you choose which one. Opening does not check
+that the commit or branch has been pushed. GitLab links use GitLab's `/-/` pages, and Bitbucket
+links use its commits, branch, and source pages.
+A remote on one of these hosts has an Open on <host> submenu in the sidebar's right-click menu:
+the repository's home page and its pull requests (merge requests on GitLab), plus issues and
+Actions on GitHub. The command palette opens the repository and its pull or merge requests (and
+Actions on GitHub): from the current branch's upstream remote when it is on a supported host,
+else `origin`, else the only such remote.
 
 Create pull request… in a branch's menu, or the command palette's Create pull request on GitHub
 entry, opens a dialog for a local branch whose upstream is on a GitHub remote. NiceGit creates the
