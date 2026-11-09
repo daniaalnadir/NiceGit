@@ -45,6 +45,59 @@ fn stash_left_expected(before: &[StatusEntry], after: &[StatusEntry], options: S
     })
 }
 
+/// Why a staged-only stash must not run, or `None` when it may. Git cannot take only the staged
+/// part of a file that also has unstaged changes: it fails and can leave a stash behind. So such a
+/// file is refused before Git runs, and so is a stash with nothing staged.
+fn staged_only_refusal(status: &[StatusEntry]) -> Option<String> {
+    if status.iter().any(|entry| entry.kind == StatusKind::Conflicted) {
+        return Some("Resolve the conflicted files before stashing.".to_string());
+    }
+    if let Some(entry) =
+        status.iter().find(|entry| entry.kind != StatusKind::Untracked && entry.index_status != ' ' && entry.work_tree_status != ' ')
+    {
+        return Some(format!(
+            "“{}” has staged and unstaged changes. Git cannot stash only its staged part, so stage or unstage the rest of it first.",
+            entry.path
+        ));
+    }
+    if !status.iter().any(|entry| entry.kind != StatusKind::Untracked && entry.index_status != ' ') {
+        return Some("There are no staged changes to stash.".to_string());
+    }
+    None
+}
+
+/// Whether the status after `git stash push --staged` is what that leaves: nothing staged, and
+/// the unstaged and untracked entries exactly as they were before.
+fn staged_stash_left_expected(before: &[StatusEntry], after: &[StatusEntry]) -> bool {
+    let unstaged = |entries: &[StatusEntry]| {
+        let mut signatures: Vec<(String, Option<String>, char, bool)> = entries
+            .iter()
+            .filter(|entry| entry.work_tree_status != ' ' || entry.kind == StatusKind::Untracked)
+            .map(|entry| (entry.path.clone(), entry.original_path.clone(), entry.work_tree_status, entry.kind == StatusKind::Untracked))
+            .collect();
+        signatures.sort();
+        signatures
+    };
+    after.iter().all(|entry| entry.kind == StatusKind::Untracked || entry.index_status == ' ') && unstaged(before) == unstaged(after)
+}
+
+/// The reason in a Git command's error, without the wrapper that names the command.
+fn command_reason(error: GitError) -> String {
+    match error {
+        GitError::CommandFailed { message, .. } => message,
+        other => other.to_string(),
+    }
+}
+
+/// The error for a rename that stopped at `step`. The stash list may then hold an extra entry,
+/// so the message asks for Stashes to be checked.
+fn rename_failed(error: GitError, step: &str) -> GitError {
+    GitError::failed(
+        "rename stash",
+        format!("Git could not rename the stash while {step}. Check Stashes before continuing. {}", command_reason(error)),
+    )
+}
+
 /// Whether `value` is a full object ID, as Git prints them: 40 hex digits, or 64 for SHA-256.
 fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -1409,25 +1462,55 @@ impl GitClient {
 
     /// Saves the working changes that `options` take, and confirms that Git left only what they keep.
     pub fn save_stash(&self, message: &str, options: StashOptions, directory: &Path) -> Result<()> {
+        if options.staged_only && (options.keep_index || options.include_untracked) {
+            return Err(GitError::failed("stash", "Stashing only staged changes cannot keep the index or include untracked files."));
+        }
         self.require_finished_operation("stash", directory)?;
         let before = self.load_status(directory)?;
+        if options.staged_only {
+            if let Some(problem) = staged_only_refusal(&before) {
+                return Err(GitError::failed("stash", problem));
+            }
+        }
         let previous = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "refs/stash"], directory);
         let message =
             if message.trim().is_empty() { format!("WIP on {}", self.current_branch(directory)) } else { message.trim().to_string() };
         let mut arguments = vec!["stash", "push"];
-        if options.include_untracked {
-            arguments.push("--include-untracked");
-        }
-        if options.keep_index {
-            arguments.push("--keep-index");
+        if options.staged_only {
+            arguments.push("--staged");
+        } else {
+            if options.include_untracked {
+                arguments.push("--include-untracked");
+            }
+            if options.keep_index {
+                arguments.push("--keep-index");
+            }
         }
         arguments.extend(["-m", &message]);
-        self.run(&arguments, directory)?;
+        let pushed = self.run(&arguments, directory);
         let saved = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "refs/stash"], directory);
-        let Some(saved) = saved.filter(|saved| Some(saved) != previous.as_ref()) else {
+        let saved = saved.filter(|saved| Some(saved) != previous.as_ref());
+        if let Err(error) = pushed {
+            // Git can save a stash and then fail, as it does for some partly staged files.
+            return Err(match saved {
+                Some(saved) => GitError::failed(
+                    "stash",
+                    format!(
+                        "Git saved stash {} and then stopped. Check your files and Stashes before continuing. {}",
+                        &saved[..12.min(saved.len())],
+                        command_reason(error)
+                    ),
+                ),
+                None => error,
+            });
+        }
+        let Some(saved) = saved else {
             return Err(GitError::failed("stash", "Git did not save any changes. Check any dirty submodules."));
         };
-        if !stash_left_expected(&before, &self.load_status(directory)?, options) {
+        let after = self.load_status(directory)?;
+        let left_expected =
+            if options.staged_only { staged_stash_left_expected(&before, &after) } else { stash_left_expected(&before, &after, options) };
+        if !left_expected {
             return Err(GitError::failed(
                 "stash",
                 format!(
@@ -1437,6 +1520,80 @@ impl GitClient {
             ));
         }
         Ok(())
+    }
+
+    /// Renames a stash without changing its commit, so its object ID stays the same. Git stores
+    /// the commit again under the new message, which puts it at the top of the list, and then the
+    /// old entry is dropped. A stash already at the top cannot be stored again in place, because
+    /// Git does nothing for a commit that is already the top entry. So it first gives way to a
+    /// placeholder for its parent commit, which is dropped with the old entry.
+    pub fn rename_stash(&self, stash: &Stash, new_message: &str, directory: &Path) -> Result<()> {
+        const COMMAND: &str = "rename stash";
+        let name = new_message.trim();
+        if name.is_empty() {
+            return Err(GitError::failed(COMMAND, "Enter a name for the stash."));
+        }
+        if name.chars().any(char::is_control) {
+            return Err(GitError::failed(COMMAND, "A stash name must be a single line."));
+        }
+        let listed = self.require_listed_stash(stash, COMMAND, directory)?;
+        if listed.message == name {
+            return Ok(());
+        }
+        let entries = self.list_stashes(directory)?;
+        if entries.iter().filter(|entry| entry.hash == listed.hash).count() != 1 {
+            return Err(GitError::failed(COMMAND, "This stash is listed more than once. Refresh the repository, then rename it."));
+        }
+        let top = listed.reference == "stash@{0}";
+        let placeholder = if top { Some(self.resolve_commit(&format!("{}^1", listed.hash), directory)?) } else { None };
+        if let Some(parent) = &placeholder {
+            if entries.iter().any(|entry| &entry.hash == parent) {
+                return Err(GitError::failed(COMMAND, "The stash's parent commit is also a stash, so it cannot be renamed here."));
+            }
+            // `stash store` takes only stash-like commits, so the placeholder is set with `update-ref`.
+            // It checks the stash is still the top entry, so a stash that moved is not replaced.
+            self.run(&["update-ref", "-m", name, "refs/stash", parent, &listed.hash], directory)
+                .map_err(|error| rename_failed(error, "moving it aside"))?;
+        }
+        self.run(&["stash", "store", "-m", name, &listed.hash], directory).map_err(|error| rename_failed(error, "storing it again"))?;
+        if let Some(parent) = &placeholder {
+            self.drop_entry_below_top(parent, directory)?;
+        }
+        self.drop_entry_below_top(&listed.hash, directory)?;
+
+        let all = self.list_stashes(directory)?;
+        let renamed: Vec<&Stash> = all.iter().filter(|entry| entry.hash == listed.hash).collect();
+        let at_top = renamed.first().is_some_and(|entry| entry.reference == "stash@{0}" && entry.message == name);
+        let placeholder_left = placeholder.as_ref().is_some_and(|parent| all.iter().any(|entry| &entry.hash == parent));
+        if renamed.len() != 1 || !at_top || placeholder_left {
+            return Err(GitError::failed(
+                COMMAND,
+                "The stash was renamed, but the stash list is not as expected. Check Stashes before continuing.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Drops the one entry for `hash` that is not the top of the stash list. Git can list the same
+    /// commit twice after a rename, and only the entry that was not renamed is removed.
+    fn drop_entry_below_top(&self, hash: &str, directory: &Path) -> Result<()> {
+        let below: Vec<Stash> =
+            self.list_stashes(directory)?.into_iter().filter(|entry| entry.hash == hash && entry.reference != "stash@{0}").collect();
+        let [entry] = below.as_slice() else {
+            return Err(GitError::failed(
+                "rename stash",
+                "The stash was stored again, but its old entry could not be found. Check Stashes before continuing.",
+            ));
+        };
+        // `stash drop` refuses the placeholder, which is not stash-like, so the entry is removed the
+        // way `stash drop` removes one: from the reflog, without moving the top unless it is the top.
+        let reflog_entry = format!("refs/{}", entry.reference);
+        self.run(&["reflog", "delete", "--updateref", "--rewrite", &reflog_entry], directory).map(drop).map_err(|error| {
+            GitError::failed(
+                "rename stash",
+                format!("The stash was renamed, but its old entry could not be removed. Delete the older entry. {}", command_reason(error)),
+            )
+        })
     }
 
     pub(crate) fn require_listed_stash(&self, stash: &Stash, command: &str, directory: &Path) -> Result<Stash> {
@@ -1871,9 +2028,59 @@ mod tests {
         StatusEntry { path: path.into(), original_path: None, kind, index_status: index, work_tree_status: work }
     }
 
-    const DEFAULT: StashOptions = StashOptions { keep_index: false, include_untracked: true };
-    const KEEP_INDEX: StashOptions = StashOptions { keep_index: true, include_untracked: true };
-    const TRACKED_ONLY: StashOptions = StashOptions { keep_index: false, include_untracked: false };
+    const DEFAULT: StashOptions = StashOptions { keep_index: false, include_untracked: true, staged_only: false };
+    const KEEP_INDEX: StashOptions = StashOptions { keep_index: true, include_untracked: true, staged_only: false };
+    const TRACKED_ONLY: StashOptions = StashOptions { keep_index: false, include_untracked: false, staged_only: false };
+
+    #[test]
+    fn staged_only_leaves_unstaged_and_untracked_entries_unchanged() {
+        let before = [status("a.txt", 'M', ' '), status("b.txt", ' ', 'M'), status("new.txt", '?', '?')];
+        let after = [status("b.txt", ' ', 'M'), status("new.txt", '?', '?')];
+        assert!(staged_stash_left_expected(&before, &after));
+    }
+
+    #[test]
+    fn staged_only_with_a_staged_entry_left_is_unexpected() {
+        let before = [status("a.txt", 'M', ' ')];
+        assert!(!staged_stash_left_expected(&before, &[status("a.txt", 'M', ' ')]));
+    }
+
+    #[test]
+    fn staged_only_with_an_unstaged_entry_that_changed_is_unexpected() {
+        let before = [status("b.txt", ' ', 'M')];
+        assert!(!staged_stash_left_expected(&before, &[]));
+        assert!(!staged_stash_left_expected(&before, &[status("b.txt", ' ', 'D')]));
+    }
+
+    #[test]
+    fn staged_only_refuses_a_file_with_both_staged_and_unstaged_changes() {
+        let problem = staged_only_refusal(&[status("a.txt", 'M', 'M')]).expect("refused");
+        assert!(problem.contains("a.txt") && problem.contains("staged and unstaged"), "{problem}");
+        assert!(staged_only_refusal(&[status("a.txt", 'A', 'M')]).is_some(), "an added file with later edits is refused too");
+    }
+
+    #[test]
+    fn staged_only_accepts_separate_staged_and_unstaged_files() {
+        assert_eq!(staged_only_refusal(&[status("a.txt", 'M', ' '), status("b.txt", ' ', 'M'), status("new.txt", '?', '?')]), None);
+    }
+
+    #[test]
+    fn staged_only_refuses_when_nothing_is_staged() {
+        assert_eq!(staged_only_refusal(&[status("b.txt", ' ', 'M')]).as_deref(), Some("There are no staged changes to stash."));
+        assert!(staged_only_refusal(&[]).is_some());
+    }
+
+    #[test]
+    fn staged_only_refuses_conflicted_files() {
+        let conflicted = StatusEntry {
+            path: "merge.txt".into(),
+            original_path: None,
+            kind: StatusKind::Conflicted,
+            index_status: 'U',
+            work_tree_status: 'U',
+        };
+        assert!(staged_only_refusal(&[conflicted]).expect("refused").contains("conflicted"));
+    }
 
     #[test]
     fn a_clean_tree_after_the_default_stash_is_expected() {

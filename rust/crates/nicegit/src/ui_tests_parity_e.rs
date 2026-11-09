@@ -312,6 +312,64 @@ fn stash_dialog_can_keep_staged_changes_in_place() {
 }
 
 #[test]
+fn stash_dialog_can_stash_only_the_staged_changes() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "one\n", "Add another file");
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nstaged\n").unwrap();
+    git(path, &["add", "--", "notes.txt"]);
+    std::fs::write(path.join("other.txt"), "two\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    toolbar_button(&mut harness, "Stash");
+    wait(&mut harness, "the stash dialog", |h| h.state().dialog.is_some());
+    harness.get_by_role_and_label(Role::CheckBox, "Stash only staged changes").click();
+    settle(&mut harness);
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+    wait(&mut harness, "the stash", |_| !git(path, &["stash", "list"]).is_empty());
+
+    assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "one stash was made");
+    assert!(git(path, &["diff", "--cached", "--name-only"]).is_empty(), "the staged change was stashed");
+    assert_eq!(git(path, &["diff", "--name-only"]), "other.txt", "the unstaged change stays in the working files");
+    assert_eq!(std::fs::read_to_string(path.join("other.txt")).unwrap(), "two\n", "its content is unchanged");
+}
+
+#[test]
+fn rename_a_stash_from_the_sidebar_menu() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "older\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Older work"]);
+    std::fs::write(path.join("notes.txt"), "newer\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Newer work"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("Older work").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Rename…").click();
+    wait(&mut harness, "the rename dialog", |h| h.state().dialog.is_some());
+    harness.get_by_role_and_label(Role::TextInput, "New name").focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "New name").type_text("Renamed work");
+    harness.run_steps(3);
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+
+    wait(&mut harness, "the renamed stash", |_| git(path, &["stash", "list", "--format=%gs"]).starts_with("Renamed work"));
+    assert_eq!(
+        git(path, &["stash", "list", "--format=%gs"]).lines().collect::<Vec<_>>(),
+        vec!["Renamed work", "On main: Newer work"],
+        "the renamed stash moved to the top and the other is unchanged"
+    );
+    wait(&mut harness, "the sidebar to show the new name", |h| shows(h, "Renamed work") && !shows(h, "Older work"));
+}
+
+#[test]
 fn delete_one_stash_from_the_stashes_window_after_confirming() {
     let repo = repository();
     let path = repo.path();

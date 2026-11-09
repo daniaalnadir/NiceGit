@@ -10,7 +10,7 @@ use nicegit_core::client::GitClient;
 use nicegit_core::models::{Branch, GitError, Operation, Snapshot, StashOptions, StatusEntry, StatusKind};
 use tempfile::TempDir;
 
-const DEFAULT_STASH: StashOptions = StashOptions { keep_index: false, include_untracked: true };
+const DEFAULT_STASH: StashOptions = StashOptions { keep_index: false, include_untracked: true, staged_only: false };
 
 // MARK: Helpers
 

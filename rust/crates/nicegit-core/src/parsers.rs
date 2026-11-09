@@ -8,7 +8,10 @@ pub const BRANCH_FORMAT: &str = "%(refname)%09%(HEAD)%09%(objectname)%09%(conten
 pub const LOG_FORMAT: &str =
     "%H%x1f%h%x1f%P%x1f%(decorate:prefix=,suffix=,separator=%x1d,pointer=%x1c,tag=tag: )%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e";
 
-pub const STASH_FORMAT: &str = "%H%x09%gd%x09%s";
+/// The stash list's fields: the commit, its reference, and its reflog message. The message is the
+/// reflog's, not the commit's subject, because `git stash store -m` changes only the reflog, which
+/// is how a stash is renamed without changing its commit.
+pub const STASH_FORMAT: &str = "%H%x09%gd%x09%gs";
 
 fn entry(path: String, original: Option<String>, x: char, y: char, conflicted: bool) -> StatusEntry {
     let kind = if conflicted {

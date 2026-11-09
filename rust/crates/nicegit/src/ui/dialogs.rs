@@ -158,6 +158,9 @@ pub enum InputKind {
         default_remote: Option<String>,
     },
     SaveStash,
+    /// Renaming a stash. The stash is captured when the dialog opens, and the new name is stored
+    /// against its commit, so the rename applies to the stash that was shown.
+    RenameStash(Stash),
     /// Cloning. The destination follows the address until the person edits it or chooses one.
     Clone(CloneDestination),
 }
@@ -518,15 +521,29 @@ impl NiceGitApp {
                             .color(c.muted),
                         );
                     }
-                    // A stash's options sit under its message, and are remembered in Settings.
+                    if matches!(kind, InputKind::RenameStash(_)) {
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new("The stash keeps its changes. Once renamed, it moves to the top of the list.")
+                                .small()
+                                .color(c.muted),
+                        );
+                    }
+                    // A stash's options sit under its message, and are remembered in Settings. Staged-only
+                    // takes neither of the other two choices, so they are unavailable while it is ticked.
                     if matches!(kind, InputKind::SaveStash) {
                         ui.add_space(6.0);
-                        widgets::checkbox(ui, true, &mut self.settings.stash_include_untracked, "Include untracked files").on_hover_text(
+                        let staged_only = self.settings.stash_staged_only;
+                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_include_untracked, "Include untracked files").on_hover_text(
                             "New files that Git does not track yet are saved in the stash and removed from the folder.",
                         );
-                        widgets::checkbox(ui, true, &mut self.settings.stash_keep_index, "Keep staged changes").on_hover_text(
+                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_keep_index, "Keep staged changes").on_hover_text(
                             "Staged changes stay staged and in your files, and only unstaged changes leave your files. \
                              The stash still holds a copy of the staged changes, as Git's --keep-index does.",
+                        );
+                        widgets::checkbox(ui, true, &mut self.settings.stash_staged_only, "Stash only staged changes").on_hover_text(
+                            "Saves the staged changes only. Unstaged and untracked changes stay in your files. \
+                             A file with both staged and unstaged changes must be staged or unstaged in full first.",
                         );
                     }
                     let mut show_second = second_label.is_some();
@@ -1103,12 +1120,22 @@ impl NiceGitApp {
                 }
             }),
             InputKind::SaveStash => {
-                let options =
-                    StashOptions { keep_index: self.settings.stash_keep_index, include_untracked: self.settings.stash_include_untracked };
+                let options = if self.settings.stash_staged_only {
+                    StashOptions { keep_index: false, include_untracked: false, staged_only: true }
+                } else {
+                    StashOptions {
+                        keep_index: self.settings.stash_keep_index,
+                        include_untracked: self.settings.stash_include_untracked,
+                        staged_only: false,
+                    }
+                };
                 self.act("Stash", move |client, path| {
                     client.save_stash(&value, options, path).map(|_| Some("Saved your changes in a stash.".into()))
                 })
             }
+            InputKind::RenameStash(stash) => self.act("Rename stash", move |client, path| {
+                client.rename_stash(&stash, &value, path).map(|()| Some("Renamed the stash. It is at the top of the list.".into()))
+            }),
             InputKind::Clone(_) => {
                 let destination = std::path::PathBuf::from(second.trim());
                 let source = value.trim().to_string();

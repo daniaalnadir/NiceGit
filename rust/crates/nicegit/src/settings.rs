@@ -243,6 +243,10 @@ pub struct Settings {
     /// Whether saving a stash also takes untracked files. On by default, as it always was.
     #[serde(default = "default_true")]
     pub stash_include_untracked: bool,
+    /// Whether saving a stash takes only the staged changes. The other two stash choices are
+    /// unavailable while it is on, since Git's `--staged` takes neither.
+    #[serde(default)]
+    pub stash_staged_only: bool,
     /// Whether a cherry-pick notes the original commit in each new commit's message, as
     /// `git cherry-pick -x` does.
     #[serde(default)]
@@ -282,6 +286,7 @@ impl Default for Settings {
             clone_folder: None,
             stash_keep_index: false,
             stash_include_untracked: true,
+            stash_staged_only: false,
             cherry_pick_record_origin: false,
             hidden_branches: BTreeMap::new(),
         }

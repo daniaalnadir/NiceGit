@@ -60,6 +60,8 @@ pub enum Request {
     OpenRepository(PathBuf),
     /// Open another tool window.
     Open(Box<dyn ToolWindow>),
+    /// Show a dialog over the window, such as the name for a stash being renamed.
+    Dialog(Box<crate::ui::dialogs::Dialog>),
     /// Reload the repository.
     Refresh,
 }
@@ -134,6 +136,10 @@ impl<'a> Ctx<'a> {
 
     pub fn open(&mut self, tool: Box<dyn ToolWindow>) {
         self.requests.push(Request::Open(tool));
+    }
+
+    pub fn open_dialog(&mut self, dialog: crate::ui::dialogs::Dialog) {
+        self.requests.push(Request::Dialog(Box::new(dialog)));
     }
 
     pub fn refresh(&mut self) {
