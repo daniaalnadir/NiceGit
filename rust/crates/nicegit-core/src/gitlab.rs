@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::client::GitClient;
 use crate::github::{self, clean_text, run_program, Cancel, Checks, PrState, PullRequestStatus};
-use crate::json::{parse_json, Json};
 use crate::hosting::{Host, HostedRepository};
+use crate::json::{parse_json, Json};
 use crate::models::{GitError, Result};
 
 const SERVICE: &str = "GitLab";

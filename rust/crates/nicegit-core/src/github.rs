@@ -7,8 +7,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::client::GitClient;
-use crate::json::{parse_json, Json};
 use crate::hosting::Host;
+use crate::json::{parse_json, Json};
 use crate::models::{GitError, Result};
 use crate::rebase::Scratch;
 use crate::runner;
