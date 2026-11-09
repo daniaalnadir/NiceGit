@@ -270,6 +270,18 @@ pub enum Dialog {
         readme: bool,
         first_commit: bool,
     },
+    /// Checking out a GitHub pull request as a local branch named `local`. The remote's fetch
+    /// addresses and the checkout's branch and HEAD are captured when the dialog opens.
+    CheckOutPullRequest {
+        remote: String,
+        number: u64,
+        title: String,
+        author: String,
+        local: String,
+        fetch_addresses: Vec<String>,
+        branch: String,
+        head: Option<String>,
+    },
 }
 
 impl Dialog {
@@ -300,6 +312,23 @@ impl Dialog {
     /// The New repository dialog, with its first branch prefilled with `initial_branch`.
     pub fn new_repository(initial_branch: String) -> Self {
         Dialog::NewRepository { folder: String::new(), branch: initial_branch, readme: true, first_commit: true }
+    }
+
+    /// The Check out pull request dialog for pull request `number` on `remote`, with the local
+    /// branch named by default from its title. The snapshot's checkout and remote address are
+    /// captured now, so the checkout refuses if either has changed since.
+    pub fn check_out_pull_request(remote: String, number: u64, title: String, author: String, snapshot: &Snapshot) -> Self {
+        let local = nicegit_core::github::pull_request_branch_name(number, &title);
+        Dialog::CheckOutPullRequest {
+            fetch_addresses: snapshot.remote_fetch_addresses.get(&remote).cloned().unwrap_or_default(),
+            remote,
+            number,
+            title,
+            author,
+            local,
+            branch: snapshot.current_branch.clone(),
+            head: snapshot.head_hash.clone(),
+        }
     }
 
     /// The New tag dialog for `target`, capturing the snapshot's remotes and push addresses now.
@@ -839,6 +868,50 @@ impl NiceGitApp {
                         }
                     });
                 }
+                Dialog::CheckOutPullRequest { remote, number, title, author, local, .. } => {
+                    ui.heading(format!("Check out pull request #{number}"));
+                    ui.add_space(8.0);
+                    ui.add(egui::Label::new(RichText::new(title.as_str()).strong()).wrap());
+                    let by = if author.is_empty() { "by an unknown author".to_string() } else { format!("by {author}") };
+                    ui.label(RichText::new(by).small().color(c.muted));
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Local branch").color(c.muted));
+                    let field = widgets::text_field(ui, local, "");
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Local branch"));
+                    // The name is checked as it is typed, as the branch dialogs check theirs.
+                    let problem = crate::git_ext::ref_name_problem(local.trim());
+                    if let Some(problem) = problem {
+                        ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(format!(
+                            "Fetches pull request #{number} from {remote} into this new branch, then switches to it. \
+                             The branch gets no upstream, because the pull request may come from a fork. \
+                             An existing branch with this name is used only if it already points at the pull request."
+                        ))
+                        .small()
+                        .color(c.muted),
+                    );
+                    // The Check out button waits for the built-in editor's unsaved text, as the
+                    // other actions that change the checkout do.
+                    let editing = self.has_unsaved_editor();
+                    if editing {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                    }
+                    ui.add_space(16.0);
+                    let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                    let ready = !local.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none();
+                    ui.horizontal(|ui| {
+                        if widgets::primary_button(ui, "Check out", ready).clicked() || (enter && ready) {
+                            run = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                }
             }
         });
         if modal.should_close() && !picker_open {
@@ -890,6 +963,15 @@ impl NiceGitApp {
                 }
                 Dialog::NewRepository { folder, branch, readme, first_commit } => {
                     self.create_new_repository(folder, branch, readme, first_commit);
+                }
+                Dialog::CheckOutPullRequest { remote, number, local, fetch_addresses, branch, head, .. } => {
+                    let local = local.trim().to_string();
+                    let notice = format!("Checked out pull request #{number} as {local}.");
+                    self.act(&format!("Check out pull request #{number}"), move |client, path| {
+                        client
+                            .checkout_pull_request(&remote, number, &local, &fetch_addresses, &branch, head.as_deref(), path)
+                            .map(|_| Some(notice))
+                    });
                 }
                 Dialog::Publish { remote } => {
                     if let Some(snapshot) = self.snapshot().cloned() {

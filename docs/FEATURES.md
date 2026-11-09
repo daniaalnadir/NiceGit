@@ -334,6 +334,12 @@ loaded titles/authors/numbers, refresh, cancellation, links to GitHub, and loadi
 1,000 items in batches of 100. Counts reflect loaded items, not a server-side total.
 GitHub Enterprise Server hosts can be listed in Settings, and their remotes then work like
 github.com remotes, including gh-based lists that use your `gh auth login --hostname` sign-in.
+A pull request's right-click menu has Check out locally…, which fetches the pull request into a
+new local branch and switches to it. The dialog suggests `pr/<number>-<title>` and lets you
+change it, and the name is checked as you type. The branch is created at the pull request's head
+and gets no upstream, since the pull request may come from a fork. Checkout needs a clean working
+tree, and it is refused if the remote's address has changed or if a branch with that name already
+exists and points elsewhere. Nothing is stashed.
 Pull requests and issues are GitHub-only. Remotes on GitLab (gitlab.com, and self-hosted
 servers listed under GitLab in Settings) and Bitbucket (bitbucket.org) get browser links only,
 as described below; NiceGit makes no API calls for them and stores no token.

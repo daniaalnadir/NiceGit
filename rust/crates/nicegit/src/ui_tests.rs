@@ -932,6 +932,58 @@ fn github_pull_requests_and_issues_load_from_github() {
     });
 }
 
+/// A pull request row's menu opens Check out locally with the default branch name, and the
+/// dialog's button fetches the pull request into that branch and switches to it.
+#[test]
+fn check_out_a_pull_request_from_its_row() {
+    let repo = repository();
+    // origin keeps the pull request's head under refs/pull/7/head, as GitHub does.
+    let origin = temp_dir();
+    git(origin.path(), &["init", "-q", "--bare", "-b", "main"]);
+    let origin_path = origin.path().to_str().expect("UTF-8 temp path").to_string();
+    git(repo.path(), &["remote", "add", "origin", &origin_path]);
+    git(repo.path(), &["push", "-q", "origin", "main"]);
+    git(repo.path(), &["switch", "-q", "-c", "pull-request-work"]);
+    std::fs::write(repo.path().join("review.txt"), "reviewed\n").unwrap();
+    git(repo.path(), &["add", "review.txt"]);
+    git(repo.path(), &["commit", "-q", "-m", "Add the review file"]);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    git(repo.path(), &["push", "-q", "origin", "HEAD:refs/pull/7/head"]);
+    git(repo.path(), &["switch", "-q", "main"]);
+    git(repo.path(), &["branch", "-q", "-D", "pull-request-work"]);
+
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let item = nicegit_core::github::GitHubItem {
+        number: 7,
+        title: "Add the review file".into(),
+        url: "https://github.com/acme/app/pull/7".into(),
+        author: Some("octocat".into()),
+        state: Some("OPEN".into()),
+        is_draft: false,
+        labels: Vec::new(),
+    };
+    harness.state_mut().repos[0].github[0] = Some(crate::ui::github_section::GitHubList::loaded("origin", vec![item]));
+    harness.get_by_label_contains("PULL REQUESTS").click();
+    settle(&mut harness);
+
+    harness.get_by_label_contains("#7  Add the review file").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Check out locally").click();
+    wait(
+        &mut harness,
+        "the check out dialog",
+        |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::CheckOutPullRequest { local, .. }) if local == "pr/7-add-the-review-file"),
+    );
+    settle(&mut harness);
+    harness.get_by_label("Check out").click();
+    idle(&mut harness);
+
+    assert_eq!(git(repo.path(), &["symbolic-ref", "--short", "HEAD"]), "pr/7-add-the-review-file");
+    assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), head, "the branch is at the pull request's head");
+    assert!(repo.path().join("review.txt").exists());
+}
+
 #[test]
 fn double_clicking_a_panel_edge_restores_its_width() {
     use egui::containers::panel::PanelState;

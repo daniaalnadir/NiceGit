@@ -24,6 +24,12 @@ pub struct GitHubList {
 }
 
 impl GitHubList {
+    /// A list that is already loaded with `items`, for tests that do not reach GitHub.
+    #[cfg(test)]
+    pub(crate) fn loaded(remote: &str, items: Vec<GitHubItem>) -> Self {
+        GitHubList { remote: remote.to_string(), limit: PAGE, items, error: None, cancel: Cancel::default(), task: None }
+    }
+
     fn is_loading(&mut self) -> bool {
         self.task.as_mut().is_some_and(|task| task.is_pending())
     }
@@ -71,6 +77,21 @@ impl NiceGitApp {
         repo.github[slot(kind)] = Some(GitHubList { remote, limit, items, error: None, cancel, task: Some(task) });
     }
 
+    /// Opens the Check out pull request dialog for `item` on `remote`. Nothing runs until the
+    /// dialog's button is pressed, and that action refuses if the checkout or remote has changed.
+    fn open_check_out_pull_request(&mut self, snapshot: &Snapshot, remote: String, item: GitHubItem) {
+        if self.busy.is_some() {
+            self.notify("Wait for the current Git action to finish before checking out a pull request.", true);
+            return;
+        }
+        if snapshot.operation.is_some() {
+            self.notify("Finish or abort the current Git operation before checking out a pull request.", true);
+            return;
+        }
+        let author = item.author.unwrap_or_default();
+        self.dialog = Some(crate::ui::dialogs::Dialog::check_out_pull_request(remote, item.number, item.title, author, snapshot));
+    }
+
     pub fn github_section(&mut self, ui: &mut Ui, snapshot: &Snapshot, kind: ItemKind) {
         let c = theme::of(ui);
         let (id, glyph, title) = match kind {
@@ -84,6 +105,8 @@ impl NiceGitApp {
         let mut load: Option<(String, usize)> = None;
         let mut cancel = false;
         let mut window: Option<String> = None;
+        // A pull request's "Check out locally…" asks for the dialog, which opens once the list is drawn.
+        let mut check_out: Option<(String, GitHubItem)> = None;
         let hosts = self.settings.github_enterprise_hosts.clone();
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
@@ -162,6 +185,10 @@ impl NiceGitApp {
                         ui.close();
                         ui.ctx().copy_text(item.url.clone());
                     }
+                    if kind == ItemKind::PullRequest && ui.button(format!("{}  Check out locally…", icon::GIT_BRANCH)).clicked() {
+                        ui.close();
+                        check_out = Some((list.remote.clone(), item.clone()));
+                    }
                 });
             }
             if !loading && list.items.len() >= list.limit && list.limit < MAXIMUM {
@@ -180,6 +207,9 @@ impl NiceGitApp {
         }
         if let Some((remote, limit)) = load {
             self.load_github(kind, remote, limit);
+        }
+        if let Some((remote, item)) = check_out {
+            self.open_check_out_pull_request(snapshot, remote, item);
         }
         if let Some(remote) = window {
             let tool = match kind {
