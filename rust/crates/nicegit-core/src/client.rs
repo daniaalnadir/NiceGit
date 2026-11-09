@@ -350,6 +350,21 @@ impl GitClient {
         }
     }
 
+    /// The revisions of a walk that shows one branch alone: the branch's commit, then HEAD, which
+    /// is always shown. The branch is resolved to its object ID first. `None` when `reference` is
+    /// not a local or remote-tracking branch, or no longer resolves to a commit.
+    fn solo_revisions(&self, reference: &str, root: &Path) -> Option<Vec<String>> {
+        if !(reference.starts_with("refs/heads/") || reference.starts_with("refs/remotes/")) {
+            return None;
+        }
+        let tip = self.resolve_commit(reference, root).ok().filter(|tip| is_object_id(tip))?;
+        let mut revisions = vec![tip];
+        if self.head(root).is_some() {
+            revisions.push("HEAD".to_string());
+        }
+        Some(revisions)
+    }
+
     /// Reads the repository's state. Independent reads run at the same time, so a refresh takes
     /// about as long as its slowest command.
     pub fn load_snapshot(&self, selected: &Path, history_limit: usize) -> Result<Snapshot> {
@@ -371,13 +386,31 @@ impl GitClient {
         scope: HistoryScope,
         hidden: &[String],
     ) -> Result<Snapshot> {
+        self.load_snapshot_solo(selected, history_limit, scope, hidden, None)
+    }
+
+    /// Like `load_snapshot_filtered`, but when `solo` names a local or remote-tracking branch that
+    /// still exists, the history is only that branch's commits and HEAD's. `scope` and `hidden` are
+    /// then ignored. A `solo` that does not resolve to a commit is ignored, and the history is
+    /// loaded as `scope` and `hidden` say.
+    pub fn load_snapshot_solo(
+        &self,
+        selected: &Path,
+        history_limit: usize,
+        scope: HistoryScope,
+        hidden: &[String],
+        solo: Option<&str>,
+    ) -> Result<Snapshot> {
         let root = self.repository_root(selected)?;
         let limit = history_limit.max(1);
         let log_format = format!("--pretty=format:{LOG_FORMAT}");
         let branch_format = format!("--format={BRANCH_FORMAT}");
         let stash_format = format!("--format={STASH_FORMAT}");
         let count = (limit + 1).to_string();
-        let revisions = self.history_revisions(scope, &root, hidden);
+        let revisions = match solo.and_then(|reference| self.solo_revisions(reference, &root)) {
+            Some(revisions) => revisions,
+            None => self.history_revisions(scope, &root, hidden),
+        };
         let mut log = vec!["log"];
         log.extend(revisions.iter().map(String::as_str));
         log.extend(["--topo-order", "--decorate=short", "--date=relative", "-n", count.as_str(), log_format.as_str(), "--"]);

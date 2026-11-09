@@ -116,10 +116,14 @@ impl NiceGitApp {
         // A scope change is applied after the frame, once nothing borrows the repository.
         let mut scope_change: Option<HistoryScope> = None;
         let mut show_hidden = false;
+        let mut clear_solo = false;
         let idle = self.idle();
         let shown = self.settings.history_scope;
+        // A branch shown alone replaces the scope and the hidden branches, so their notes wait. A
+        // solo branch that no longer exists is ignored, as the history ignores it.
+        let solo = self.solo_branch().and_then(|reference| snapshot.branches.iter().find(|b| b.full_ref() == reference).cloned());
         let hidden = self.hidden_branches();
-        let hidden_count = if hidden.is_empty() {
+        let hidden_count = if hidden.is_empty() || solo.is_some() {
             0
         } else {
             snapshot.branches.iter().filter(|b| !b.is_detached() && hidden.contains(&b.full_ref())).count()
@@ -129,7 +133,9 @@ impl NiceGitApp {
                 ui.label(RichText::new("Commit history").size(16.0).strong());
                 ui.add_space(8.0);
                 let mut scope = shown;
-                ui.add_enabled_ui(idle, |ui| {
+                // While a branch is shown alone the scope does not apply, so its menu waits.
+                let can_scope = idle && solo.is_none();
+                ui.add_enabled_ui(can_scope, |ui| {
                     let response = egui::ComboBox::from_id_salt("history-scope")
                         .width(130.0)
                         .selected_text(scope_title(scope))
@@ -139,8 +145,8 @@ impl NiceGitApp {
                             }
                         })
                         .response;
-                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, idle, "Branches shown"));
-                    response.on_hover_text("Which branches the graph includes");
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, can_scope, "Branches shown"));
+                    response.on_hover_text("Which branches the graph includes").on_disabled_hover_text("Show all branches to choose which the graph includes");
                 });
                 if scope != shown {
                     scope_change = Some(scope);
@@ -150,7 +156,15 @@ impl NiceGitApp {
                     ui.label(RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted));
                 });
             });
-            if shown != HistoryScope::All {
+            if let Some(branch) = &solo {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("Showing only {}.", branch.display_name())).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new("Show all")).clicked() {
+                        clear_solo = true;
+                    }
+                });
+            }
+            if shown != HistoryScope::All && solo.is_none() {
                 ui.horizontal(|ui| {
                     let what = match shown {
                         HistoryScope::Current => "Showing the current branch and its upstream.",
@@ -294,6 +308,9 @@ impl NiceGitApp {
         }
         if show_hidden {
             self.show_all_branches();
+        }
+        if clear_solo {
+            self.set_solo_branch(None);
         }
 
         // Column headers, which resize the columns and choose which are shown.

@@ -51,7 +51,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   history still covers every branch. Individual branches can also be hidden from the graph
   from their right-click menu, in the sidebar or on the graph's branch label. Commits that
   other shown branches reach still appear, and hidden branches are remembered for each
-  repository.
+  repository. "Show only this branch" in the same menus shows one branch and HEAD alone,
+  ignoring the branches menu and hidden branches; the note above the graph names it, with a
+  link back to the whole graph. The choice is remembered for each repository.
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.

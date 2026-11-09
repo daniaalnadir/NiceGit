@@ -57,11 +57,22 @@ impl Worker {
         });
     }
 
-    /// `hidden` names the branches the graph leaves out, as full ref names (see `load_snapshot_filtered`).
-    pub fn load(&self, generation: u64, path: PathBuf, deliberate: bool, history_limit: usize, scope: HistoryScope, hidden: Vec<String>) {
+    /// `hidden` names the branches the graph leaves out, as full ref names, and `solo` the one it
+    /// shows alone (see `load_snapshot_solo`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn load(
+        &self,
+        generation: u64,
+        path: PathBuf,
+        deliberate: bool,
+        history_limit: usize,
+        scope: HistoryScope,
+        hidden: Vec<String>,
+        solo: Option<String>,
+    ) {
         self.spawn(move || {
             let client = if deliberate { GitClient::deliberate() } else { GitClient::new() };
-            let snapshot = client.load_snapshot_filtered(&path, history_limit, scope, &hidden);
+            let snapshot = client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref());
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
     }
@@ -69,6 +80,7 @@ impl Worker {
     /// Refreshes the working-tree status of `previous` and keeps the rest, when the checkout is
     /// unchanged (see `GitClient::quick_snapshot`). Otherwise, and when the quick read fails, it
     /// loads everything; a real failure then surfaces from that full load.
+    #[allow(clippy::too_many_arguments)]
     pub fn quick_load(
         &self,
         generation: u64,
@@ -77,13 +89,14 @@ impl Worker {
         history_limit: usize,
         scope: HistoryScope,
         hidden: Vec<String>,
+        solo: Option<String>,
     ) {
         self.spawn(move || {
             let client = GitClient::new();
             let quick = client.quick_snapshot(&previous, &path).ok().flatten();
             let snapshot = match quick {
                 Some(snapshot) => Ok(snapshot),
-                None => client.load_snapshot_filtered(&path, history_limit, scope, &hidden),
+                None => client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref()),
             };
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
@@ -99,12 +112,13 @@ impl Worker {
         history_limit: usize,
         scope: HistoryScope,
         hidden: Vec<String>,
+        solo: Option<String>,
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
         self.spawn(move || {
             let client = GitClient::new();
             let result = action(&client, &path);
-            let snapshot = client.load_snapshot_filtered(&path, history_limit, scope, &hidden);
+            let snapshot = client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref());
             Message::Loaded { generation, path, action: Some((label, result)), snapshot: Box::new(snapshot) }
         });
     }

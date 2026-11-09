@@ -810,6 +810,23 @@ impl NiceGitApp {
         self.load(true);
     }
 
+    /// The full ref name of the branch the active repository's commit graph shows alone, if any.
+    pub fn solo_branch(&self) -> Option<String> {
+        self.repos.get(self.active).and_then(|repo| self.settings.solo_branch_of(&repo.path))
+    }
+
+    /// Shows only `reference`'s branch in the active repository's commit graph, or, with `None`,
+    /// shows the whole graph again. Then reloads the history, as hiding a branch does.
+    pub fn set_solo_branch(&mut self, reference: Option<String>) {
+        if self.busy.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let folder = repo.path.clone();
+        self.settings.set_solo_branch(&folder, reference);
+        self.load(true);
+    }
+
     /// Shows every branch hidden from the active repository's commit graph, then reloads the history.
     pub fn show_all_branches(&mut self) {
         if self.busy.is_some() {
@@ -850,6 +867,7 @@ impl NiceGitApp {
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
         let hidden = self.settings.hidden_branches_of(&repo.path);
+        let solo = self.settings.solo_branch_of(&repo.path);
         let path = repo.path.clone();
         let previous = if quick { repo.snapshot.clone() } else { None };
         // Any load started now reads the checkout as it is, so changes noticed before it are covered.
@@ -860,14 +878,14 @@ impl NiceGitApp {
                 {
                     self.quick_loads += 1;
                 }
-                self.worker.quick_load(self.generation, path, previous, limit, scope, hidden);
+                self.worker.quick_load(self.generation, path, previous, limit, scope, hidden, solo);
             }
             None => {
                 #[cfg(test)]
                 {
                     self.full_loads += 1;
                 }
-                self.worker.load(self.generation, path, deliberate, limit, scope, hidden);
+                self.worker.load(self.generation, path, deliberate, limit, scope, hidden, solo);
             }
         }
     }
@@ -955,7 +973,8 @@ impl NiceGitApp {
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
         let hidden = self.settings.hidden_branches_of(&repo.path);
-        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, action);
+        let solo = self.settings.solo_branch_of(&repo.path);
+        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, solo, action);
     }
 
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a
