@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
 use nicegit_core::diff::{DiffContext, DiffRequest};
+use nicegit_core::external::ExternalTools;
 use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
@@ -34,6 +35,12 @@ pub mod submodules;
 pub mod terminal;
 pub mod widgets;
 pub mod worktrees;
+
+/// Shown on a disabled diff tool item when no diff tool is configured.
+pub const DIFF_TOOL_HINT: &str = "No diff tool is set. Set one with `git config --global diff.tool <name>`.";
+
+/// Shown on a disabled merge tool item when no merge tool is configured.
+pub const MERGE_TOOL_HINT: &str = "No merge tool is set. Set one with `git config --global merge.tool <name>`.";
 
 /// A repository-changing action, run in the background by the app.
 pub type Action = Box<dyn FnOnce(&GitClient, &Path) -> ActionResult + Send>;
@@ -64,6 +71,8 @@ pub enum Request {
     Dialog(Box<crate::ui::dialogs::Dialog>),
     /// Reload the repository.
     Refresh,
+    /// Open a conflicted file, by its path, in the configured merge tool.
+    OpenMergeTool(String),
 }
 
 /// What a tool sees of the app each frame.
@@ -80,11 +89,27 @@ pub struct Ctx<'a> {
     requests: &'a mut Vec<Request>,
     /// Unchanged lines shown around each change, following the app setting.
     pub diff_context: DiffContext,
+    /// The diff and merge tools the repository's configuration names, as last read.
+    pub external: ExternalTools,
 }
 
 impl<'a> Ctx<'a> {
     pub fn new(repo: &'a Path, snapshot: &'a Snapshot, idle: bool, requests: &'a mut Vec<Request>) -> Self {
-        Self { repo, snapshot, idle, ignore_whitespace: false, requests, diff_context: DiffContext::default() }
+        Self {
+            repo,
+            snapshot,
+            idle,
+            ignore_whitespace: false,
+            requests,
+            diff_context: DiffContext::default(),
+            external: ExternalTools::default(),
+        }
+    }
+
+    /// Opens a conflicted file in the configured merge tool. The app refuses while an action runs
+    /// or the editor has unsaved text.
+    pub fn open_merge_tool(&mut self, path: impl Into<String>) {
+        self.requests.push(Request::OpenMergeTool(path.into()));
     }
 
     /// The diff options the app settings ask for: whitespace and context.
@@ -163,6 +188,12 @@ pub trait ToolWindow {
     /// True while the tool holds edits that would be lost, such as unsaved text in an editor.
     /// The app then refuses actions that could rewrite working files.
     fn has_unsaved_changes(&self) -> bool {
+        false
+    }
+    /// True while the tool holds unsaved text for the file at `path`, such as a conflict editor's
+    /// result. A merge tool for that file refuses to open while it is set. Unlike
+    /// `has_unsaved_changes`, this does not block the tool's own saves, which are actions.
+    fn has_unsaved_text_for(&self, _path: &str) -> bool {
         false
     }
     /// True while the tool shows something the user is reviewing, as the Mac app's sheets for

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -10,8 +10,22 @@ use crate::models::{GitError, Result};
 /// Commands that receive user-selected paths. Literal pathspecs stop a filename containing
 /// glob characters from selecting other files. `stash` is excluded because it runs Git
 /// internally with its own pathspecs, and `check-ignore` rejects literal pathspec magic.
-const LITERAL_PATHSPEC_COMMANDS: &[&str] =
-    &["add", "clean", "diff", "show", "diff-tree", "restore", "rm", "checkout", "ls-files", "ls-tree", "log", "status"];
+const LITERAL_PATHSPEC_COMMANDS: &[&str] = &[
+    "add",
+    "clean",
+    "diff",
+    "show",
+    "diff-tree",
+    "restore",
+    "rm",
+    "checkout",
+    "ls-files",
+    "ls-tree",
+    "log",
+    "status",
+    "difftool",
+    "mergetool",
+];
 
 /// Inherited variables that would redirect Git to another repository or override options
 /// NiceGit passes explicitly. `GIT_DIFF_OPTS` overrides requested diff context.
@@ -137,6 +151,24 @@ pub fn run_reporting(arguments: &[&str], directory: &Path, options: &RunOptions)
 
 /// Starts Git with NiceGit's environment and waits for it to finish.
 fn output_of(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Output> {
+    let mut command = configured_command(arguments, directory, options)?;
+    // `output` reads both pipes while waiting, so a large output cannot block Git, and it waits
+    // on the process itself rather than polling.
+    command.output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+}
+
+/// Starts Git with NiceGit's environment without waiting for it, and with no standard streams. The
+/// caller must wait for the child, or it is left unreaped. For tools that open a window, such as
+/// `git difftool`, which must not hold up the caller.
+pub fn spawn(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Child> {
+    let mut command = configured_command(arguments, directory, options)?;
+    command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+}
+
+/// A Git command with NiceGit's environment: inherited repository variables removed, prompts and
+/// editors disabled, optional index locks skipped, and literal pathspecs for path commands.
+fn configured_command(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Command> {
     let git = git_executable().ok_or(GitError::GitNotFound)?;
     let mut command = Command::new(git);
     command.args(arguments).current_dir(directory).stdin(Stdio::null());
@@ -165,9 +197,7 @@ fn output_of(arguments: &[&str], directory: &Path, options: &RunOptions) -> Resu
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    // `output` reads both pipes while waiting, so a large output cannot block Git, and it waits
-    // on the process itself rather than polling.
-    command.output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+    Ok(command)
 }
 
 pub fn run(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<String> {

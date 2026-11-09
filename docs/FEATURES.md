@@ -57,6 +57,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.
+- Open a changed file in the diff tool Git is set to use (`diff.tool`) from its Changes panel menu, as `git difftool` does. The tool opens beside NiceGit, which does not wait for it. Without one, the item is disabled and says how to set one.
 - Search diffs with previous/next matching-line navigation and Command-F.
 - Select a commit to inspect its metadata, changed files, and patches in a persistent side panel. The inspector also lists the branches that contain the commit, the first tag that includes it, and any Git notes attached to the commit.
 - Read the complete commit message, including multiline descriptions, in the inspector.
@@ -217,6 +218,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Resolve whole-file conflicts by keeping either side or deleting the file, including binary files.
 - Take either side of a conflicted file from its right-click menu in the Changes panel, or of
   every conflicted file at once from the Resolve all menu beside Continue and Abort.
+- Resolve a conflicted file in the merge tool Git is set to use (`merge.tool`), from its Changes panel menu or the conflict editor. NiceGit refreshes when the tool closes, and it refuses while the built-in editor has unsaved text. Without a merge tool, the item is disabled and says how to set one.
 
 ## Run
 

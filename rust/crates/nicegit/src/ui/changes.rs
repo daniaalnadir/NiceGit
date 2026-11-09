@@ -529,9 +529,24 @@ impl NiceGitApp {
     fn change_menu(&mut self, ui: &mut Ui, entry: &StatusEntry, staged: bool, idle: bool, snapshot: &Snapshot) {
         ui.set_min_width(230.0);
         let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
+        let external = self.active_external_tools();
         if entry.kind == StatusKind::Conflicted && ui.button(format!("{}  Resolve conflict…", icon::GIT_DIFF)).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::conflict::ConflictWindow::new(entry.path.clone())));
+        }
+        if entry.kind == StatusKind::Conflicted {
+            match &external.merge {
+                Some(name) => {
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Resolve in {name}", icon::GIT_DIFF))).clicked() {
+                        ui.close();
+                        self.open_in_merge_tool(&entry.path, ui.ctx());
+                    }
+                }
+                None => {
+                    ui.add_enabled(false, egui::Button::new(format!("{}  Resolve in merge tool", icon::GIT_DIFF)))
+                        .on_disabled_hover_text(tools::MERGE_TOOL_HINT);
+                }
+            }
         }
         // Taking one side of the file, while an operation has stopped with conflicts.
         if entry.kind == StatusKind::Conflicted && snapshot.operation.is_some() {
@@ -574,6 +589,21 @@ impl NiceGitApp {
         if !staged && entry.kind != StatusKind::Deleted && ui.button(format!("{}  Edit file", icon::PENCIL_SIMPLE)).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::editor::EditorWindow::new(repo_path.clone(), entry.path.clone())));
+        }
+        // A tracked file's change opens in the configured diff tool, on the side the row shows.
+        if entry.kind != StatusKind::Untracked && entry.kind != StatusKind::Conflicted {
+            match &external.diff {
+                Some(name) => {
+                    if ui.button(format!("{}  Open in {name}", icon::GIT_DIFF)).clicked() {
+                        ui.close();
+                        self.open_in_diff_tool(&entry.path, staged);
+                    }
+                }
+                None => {
+                    ui.add_enabled(false, egui::Button::new(format!("{}  Open in diff tool", icon::GIT_DIFF)))
+                        .on_disabled_hover_text(tools::DIFF_TOOL_HINT);
+                }
+            }
         }
         if ui.add_enabled(idle && snapshot.operation.is_none(), egui::Button::new(format!("{}  Stash this file…", icon::ARCHIVE))).clicked()
         {

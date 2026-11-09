@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
-use std::sync::mpsc::Receiver;
+use std::process::ExitStatus;
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nicegit_core::diff::DiffRequest;
+use nicegit_core::external::ExternalTools;
 use nicegit_core::graph::{layout, layout_with_working_tree, GraphRow};
 use nicegit_core::models::short;
 use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
@@ -330,6 +332,8 @@ pub struct Repo {
     pub submodules: Option<Task<Vec<nicegit_core::submodule::Submodule>>>,
     /// Lines added and removed in each changed file, read after each refresh.
     pub line_counts: Option<Task<Option<nicegit_core::line_counts::LineCounts>>>,
+    /// The diff and merge tools the configuration names, read on deliberate loads and the first load.
+    pub external_tools: Option<Task<ExternalTools>>,
     /// Both versions of an image file whose change is open, read alongside its diff.
     pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
     /// The open image's versions, uploaded for drawing once read.
@@ -486,6 +490,7 @@ impl Repo {
             bisect: None,
             submodules: None,
             line_counts: None,
+            external_tools: None,
             change_filter: String::new(),
             commit_line_counts: None,
             lfs_paths: std::collections::HashMap::new(),
@@ -551,6 +556,9 @@ pub struct NiceGitApp {
     /// Whether the saved interface size has been applied since launch.
     pub(crate) zoom_applied: bool,
     pub git_missing: bool,
+    /// The repository path and exit channel of a merge tool that was opened and has not closed yet.
+    /// It carries the tool's exit status, or nothing if the tool never started.
+    pub merge_tool_exit: Option<(String, Receiver<std::io::Result<ExitStatus>>)>,
     generation: u64,
     was_focused: bool,
     /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
@@ -621,6 +629,7 @@ impl NiceGitApp {
             notice: None,
             dialog: None,
             tools: Vec::new(),
+            merge_tool_exit: None,
             palette: None,
             go_to_file: None,
             show_settings: false,
@@ -921,6 +930,15 @@ impl NiceGitApp {
         let hidden = self.settings.hidden_branches_of(&repo.path);
         let solo = self.settings.solo_branch_of(&repo.path);
         let path = repo.path.clone();
+        // The tools are read on deliberate loads and on the first load, not on every watched change,
+        // so an automatic refresh does not start another Git process.
+        if deliberate || repo.external_tools.is_none() {
+            let previous = repo.external_tools.take().and_then(|mut task| task.get().cloned());
+            let tools_path = path.clone();
+            let context = self.worker.context.clone();
+            repo.external_tools =
+                Some(Task::spawn_with(&context, previous, move || GitClient::new().configured_tools(&tools_path).unwrap_or_default()));
+        }
         let previous = if quick { repo.snapshot.clone() } else { None };
         // Any load started now reads the checkout as it is, so changes noticed before it are covered.
         self.watched_git_change = false;
@@ -2281,10 +2299,87 @@ impl NiceGitApp {
         self.tools.iter().any(|tool| tool.has_unsaved_changes())
     }
 
+    /// The diff and merge tools configured for the active repository, as last read. Empty until the
+    /// first read arrives, so menus offer no tool until then.
+    pub fn active_external_tools(&mut self) -> ExternalTools {
+        self.repos
+            .get_mut(self.active)
+            .and_then(|repo| repo.external_tools.as_mut())
+            .and_then(|task| task.get().cloned())
+            .unwrap_or_default()
+    }
+
+    /// Opens a changed file in the configured diff tool. The tool runs beside NiceGit, and nothing
+    /// in the repository changes, so this does not wait for an action to finish.
+    pub fn open_in_diff_tool(&mut self, path: &str, staged: bool) {
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let directory = repo.path.clone();
+        if let Err(error) = GitClient::new().open_in_difftool(path, staged, &directory) {
+            self.notify(error.to_string(), true);
+        }
+    }
+
+    /// Opens a conflicted file in the configured merge tool. It runs as an action, which refuses
+    /// while another runs or the editor has unsaved text, and it starts the tool without waiting, so
+    /// the action ends at once. When the tool closes, the repository is reread (see `poll_merge_tool`).
+    pub fn open_in_merge_tool(&mut self, path: &str, ctx: &egui::Context) {
+        if self.busy.is_some() {
+            self.notify("Wait for the current action to finish.", true);
+            return;
+        }
+        if self.has_unsaved_editor() || self.tools.iter().any(|tool| tool.has_unsaved_text_for(path)) {
+            self.notify("Save or close the file you are editing before opening the merge tool.", true);
+            return;
+        }
+        if self.merge_tool_exit.is_some() {
+            self.notify("A merge tool is already open. Close it first.", true);
+            return;
+        }
+        let (sender, receiver) = channel();
+        self.merge_tool_exit = Some((path.to_string(), receiver));
+        let file = path.to_string();
+        let ctx = ctx.clone();
+        let notice = format!("Opened the merge tool for {path}.");
+        self.act(&format!("Resolve {path} in merge tool"), move |client, repo| {
+            client.open_in_mergetool(&file, repo, move |status| {
+                // The sender is dropped with this closure, so a tool that never started is seen as closed.
+                let _ = sender.send(status);
+                ctx.request_repaint();
+            })?;
+            Ok(Some(notice))
+        });
+    }
+
+    /// Once the merge tool has closed, rereads the repository, since the tool may have resolved the
+    /// conflict. A conflict editor for that file holds the old text, so it closes unless it has
+    /// unsaved edits. Waits for any running action first, so the reread is not refused.
+    fn poll_merge_tool(&mut self) {
+        if self.busy.is_some() {
+            return;
+        }
+        let Some((_, receiver)) = self.merge_tool_exit.as_ref() else { return };
+        let outcome = match receiver.try_recv() {
+            Ok(status) => Some(status),
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        let Some((path, _)) = self.merge_tool_exit.take() else { return };
+        let editor_id = format!("conflict:{path}");
+        self.tools.retain(|tool| tool.id() != editor_id || tool.has_unsaved_text_for(&path));
+        self.load(false);
+        match outcome {
+            Some(Ok(status)) if status.success() => self.notify(format!("Closed the merge tool for {path}."), false),
+            Some(Ok(_)) => self.notify(format!("The merge tool for {path} exited without resolving it."), false),
+            Some(Err(error)) => self.notify(format!("Could not wait for the merge tool: {error}"), true),
+            None => {}
+        }
+    }
+
     fn tool_windows(&mut self, ctx: &egui::Context) {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let external = self.active_external_tools();
         let request = self.diff_request();
         let mut requests = Vec::new();
         let mut closed = Vec::new();
@@ -2317,6 +2412,7 @@ impl NiceGitApp {
                     let mut cx = Ctx::new(&path, &snapshot, idle, &mut requests);
                     cx.ignore_whitespace = request.ignore_whitespace;
                     cx.diff_context = request.context;
+                    cx.external = external.clone();
                     tool.ui(ui, &mut cx);
                 });
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {
@@ -2353,6 +2449,10 @@ impl NiceGitApp {
             Request::OpenRepository(path) => self.open(path),
             Request::Open(tool) => self.open_tool(tool),
             Request::Dialog(dialog) => self.dialog = Some(*dialog),
+            Request::OpenMergeTool(path) => {
+                let context = self.worker.context.clone();
+                self.open_in_merge_tool(&path, &context);
+            }
             Request::Refresh => self.load(true),
         }
     }
@@ -2592,6 +2692,7 @@ impl eframe::App for NiceGitApp {
         self.keep_zoom(&ctx);
         self.fit_to_monitor(&ctx);
         self.receive();
+        self.poll_merge_tool();
         self.receive_templates();
         self.receive_message_copies(&ctx);
         self.finish_clone();

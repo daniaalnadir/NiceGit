@@ -12,6 +12,7 @@ pub mod compare;
 pub mod conflict;
 pub mod containing;
 pub mod diff;
+pub mod external;
 pub mod file_history;
 pub mod gitflow;
 pub mod github;
