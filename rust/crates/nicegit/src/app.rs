@@ -309,6 +309,9 @@ pub struct Repo {
     pub skip_hooks: bool,
     pub commit_filter: String,
     pub branch_filter: String,
+    /// Local branches chosen with Command/Ctrl-click in the sidebar, as shown when chosen, for deleting
+    /// several at once. Cleared by a plain click, Escape, or a deletion.
+    pub selected_branches: Vec<Branch>,
     /// Text that narrows the Add trailers menu's list of co-authors. Not saved.
     pub trailer_filter: String,
     /// The Git name and email, read while the Add trailers menu is open and cleared when it closes.
@@ -473,6 +476,7 @@ impl Repo {
             skip_hooks: false,
             commit_filter: String::new(),
             branch_filter: String::new(),
+            selected_branches: Vec::new(),
             trailer_filter: String::new(),
             trailer_identity: None,
             undo: Vec::new(),
@@ -1097,6 +1101,21 @@ impl NiceGitApp {
             let (message, record) = action(client, path)?;
             *slot.lock().unwrap_or_else(|p| p.into_inner()) = record;
             Ok(message)
+        });
+    }
+
+    /// Like `act_with_record`, for an action whose record is kept even when the action fails after
+    /// some of its work succeeded, such as deleting several branches that stopped partway.
+    pub fn act_with_outcome_record(
+        &mut self,
+        label: &str,
+        action: impl FnOnce(&GitClient, &Path) -> (ActionResult, Option<Recorded>) + Send + 'static,
+    ) {
+        let slot = self.recorded.clone();
+        self.act(label, move |client, path| {
+            let (result, record) = action(client, path);
+            *slot.lock().unwrap_or_else(|p| p.into_inner()) = record;
+            result
         });
     }
 

@@ -23,6 +23,10 @@ pub enum Pending {
         branch: Branch,
         force: bool,
     },
+    /// Several local branches chosen together, each with whether it was shown as unmerged.
+    DeleteBranches {
+        branches: Vec<(Branch, bool)>,
+    },
     DeleteTag {
         name: String,
         tip: String,
@@ -385,6 +389,7 @@ impl Pending {
             Pending::Discard(_)
                 | Pending::DiscardAll(_)
                 | Pending::DeleteBranch { .. }
+                | Pending::DeleteBranches { .. }
                 | Pending::DeleteTag { .. }
                 | Pending::DeleteRemoteBranch { .. }
                 | Pending::DropStash(_)
@@ -1040,6 +1045,31 @@ impl NiceGitApp {
                     let entry = crate::app::HistoryEntry { title: "Delete branch".into(), detail: Some(name.clone()), step };
                     Ok((Some(format!("Deleted branch {name}.")), Some(crate::app::Recorded::Step(entry))))
                 })
+            }
+            Pending::DeleteBranches { branches } => {
+                let count = branches.len();
+                let detail = branches.iter().map(|(branch, _)| branch.name.as_str()).collect::<Vec<_>>().join(", ");
+                if let Some(repo) = self.repo_mut() {
+                    repo.selected_branches.clear();
+                }
+                self.act_with_outcome_record("Delete branches", move |client, path| {
+                    let report = client.delete_selected_branches_keeping_undo(&branches, path);
+                    let deleted = report.deleted.len();
+                    let record = (deleted > 0).then(|| {
+                        let step = nicegit_core::undo::UndoStep::BranchDeletions(report.deleted.clone());
+                        crate::app::Recorded::Step(crate::app::HistoryEntry { title: "Delete branches".into(), detail: Some(detail), step })
+                    });
+                    let noun = if count == 1 { "branch" } else { "branches" };
+                    let result = match report.failure {
+                        None => Ok(Some(format!("Deleted {deleted} {noun}. Undo restores them."))),
+                        Some(error) if deleted == 0 => Err(GitError::failed("delete branches", format!("Nothing was deleted. {error}"))),
+                        Some(error) => Err(GitError::failed(
+                            "delete branches",
+                            format!("Deleted {deleted} of {count} {noun} before stopping. Undo restores those. {error}"),
+                        )),
+                    };
+                    (result, record)
+                });
             }
             Pending::DeleteTag { name, tip } => self
                 .act("Delete tag", move |client, path| client.delete_tag(&name, &tip, path).map(|_| Some(format!("Deleted tag {name}.")))),

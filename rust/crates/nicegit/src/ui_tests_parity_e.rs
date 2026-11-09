@@ -432,6 +432,89 @@ fn delete_a_stash_from_the_sidebar_menu_then_undo_it() {
     assert_eq!(git(path, &["stash", "list"]).lines().count(), 1, "the stash is back once");
 }
 
+/// A repository with two branches merged into main, one unmerged branch, and one branch left alone.
+fn branches_to_delete() -> tempfile::TempDir {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["branch", "tidy-one"]);
+    git(path, &["branch", "tidy-two"]);
+    git(path, &["branch", "keep-me"]);
+    git(path, &["switch", "-q", "-c", "tidy-wip"]);
+    commit_file(path, "wip.txt", "unfinished\n", "Start unfinished work");
+    git(path, &["switch", "-q", "main"]);
+    repo
+}
+
+#[test]
+fn delete_several_branches_chosen_in_the_sidebar_then_undo_them() {
+    let repo = branches_to_delete();
+    let path = repo.path();
+    let tips = git(path, &["rev-parse", "tidy-one", "tidy-two", "tidy-wip"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // Command-click chooses branches; nothing is deleted until the confirmation is accepted.
+    harness.get_by_label("tidy-one").click_modifiers(Modifiers::COMMAND);
+    settle(&mut harness);
+    harness.get_by_label("tidy-two").click_modifiers(Modifiers::COMMAND);
+    settle(&mut harness);
+    harness.get_by_label("tidy-wip").click_modifiers(Modifiers::COMMAND);
+    settle(&mut harness);
+
+    harness.get_by_label("tidy-wip").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Delete 3 branches").click();
+    wait(&mut harness, "the delete confirmation", |h| shows(h, "Delete 3 branches?"));
+    settle(&mut harness);
+    assert!(shows(&harness, "Not merged into main: tidy-wip"), "the unmerged branch is named");
+    assert_eq!(git(path, &["branch", "--list", "tidy-*"]).lines().count(), 3, "nothing is deleted before confirming");
+
+    harness.get_by_role_and_label(Role::Button, "Delete branches").click();
+    idle(&mut harness);
+    let remaining = git(path, &["branch", "--list"]);
+    assert!(!remaining.contains("tidy-"), "all three branches are deleted: {remaining}");
+    assert!(remaining.contains("keep-me"), "an unselected branch is kept: {remaining}");
+
+    toolbar_button(&mut harness, "Undo");
+    wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    harness.get_all_by_label("Undo").last().expect("confirm button").click();
+    idle(&mut harness);
+    wait(&mut harness, "the branches are restored", |_| git(path, &["branch", "--list", "tidy-*"]).lines().count() == 3);
+    let restored = git(path, &["rev-parse", "tidy-one", "tidy-two", "tidy-wip"]);
+    assert_eq!(restored, tips, "each branch is back at the tip it had");
+}
+
+#[test]
+fn a_moved_branch_stops_the_deletion_before_anything_is_deleted() {
+    let repo = branches_to_delete();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("tidy-one").click_modifiers(Modifiers::COMMAND);
+    settle(&mut harness);
+    harness.get_by_label("tidy-two").click_modifiers(Modifiers::COMMAND);
+    settle(&mut harness);
+
+    // Another client moves one selected branch after it was shown.
+    git(path, &["update-ref", "refs/heads/tidy-two", "HEAD~1"]);
+
+    harness.get_by_label("tidy-two").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Delete 2 branches").click();
+    wait(&mut harness, "the delete confirmation", |h| shows(h, "Delete 2 branches?"));
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Delete branches").click();
+    idle(&mut harness);
+
+    let notice = harness.state().notice.as_ref().map(|n| (n.text.clone(), n.is_error)).expect("a notice");
+    assert!(notice.1, "the deletion is reported as failed");
+    assert!(notice.0.contains("Nothing was deleted"), "the notice says nothing was deleted: {}", notice.0);
+    let remaining = git(path, &["branch", "--list", "tidy-*"]);
+    assert_eq!(remaining.lines().count(), 3, "no branch is deleted when one has moved: {remaining}");
+}
+
 // MARK: Conflict editor
 
 /// Feature changes line two of `notes.txt`; main changes it too, so merging conflicts.
