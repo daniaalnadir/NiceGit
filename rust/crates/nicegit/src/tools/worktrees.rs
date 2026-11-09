@@ -179,7 +179,7 @@ impl WorktreesWindow {
                     idle,
                     egui::TextEdit::singleline(&mut self.parent).hint_text("Type a path or choose a folder").desired_width(260.0),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Parent folder"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Parent folder"));
             });
             ui.end_row();
 

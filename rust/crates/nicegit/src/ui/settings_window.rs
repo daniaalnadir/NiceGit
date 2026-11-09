@@ -8,7 +8,7 @@ impl NiceGitApp {
     pub fn settings_window(&mut self, ctx: &egui::Context) {
         // The GitHub Enterprise text is a draft: it is kept while the window is open, and read
         // again from the saved hosts the next time the window opens.
-        let draft_id = egui::Id::new("github_enterprise_draft");
+        let draft_id = egui::Id::unique("github_enterprise_draft");
         if !self.show_settings {
             ctx.data_mut(|data| data.remove::<String>(draft_id));
             return;
@@ -79,7 +79,7 @@ impl NiceGitApp {
                     let field = ui.add(
                         egui::TextEdit::singleline(&mut self.settings.external_editor).hint_text("code, zed, subl…").desired_width(180.0),
                     );
-                    field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "External editor"));
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "External editor"));
                 })
                 .response
                 .on_hover_text(
@@ -143,7 +143,7 @@ impl NiceGitApp {
                         .desired_rows(3)
                         .desired_width(f32::INFINITY),
                 );
-                field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "GitHub Enterprise hosts"));
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "GitHub Enterprise hosts"));
                 let (valid, invalid) = crate::settings::parse_enterprise_hosts(&draft);
                 // Only valid hostnames are saved; the rest stay in the box, named below.
                 if valid != self.settings.github_enterprise_hosts {

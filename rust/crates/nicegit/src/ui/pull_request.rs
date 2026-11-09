@@ -297,7 +297,7 @@ impl PullRequestDialog {
         let gh_blocked = matches!(self.lookup, Lookup::Done(Ok(BaseLookup::NotInstalled | BaseLookup::SignedOut(_))));
         let can_create = !creating && !gh_blocked && !self.title.trim().is_empty() && !self.base.trim().is_empty();
         let mut action = Action::None;
-        let modal = egui::Modal::new(egui::Id::new("pull-request")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("pull-request")).show(ctx, |ui| {
             ui.set_width(480.0);
             let c = theme::of(ui);
             let base_text = self.base.trim();
@@ -324,7 +324,7 @@ impl PullRequestDialog {
                 }
             });
             let response = ui.add(egui::TextEdit::singleline(&mut self.base).hint_text("main").desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Base branch"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Base branch"));
             if response.changed() {
                 self.base_edited = true;
             }
@@ -351,7 +351,7 @@ impl PullRequestDialog {
 
             ui.label(RichText::new("Title").color(c.muted));
             let response = ui.add(egui::TextEdit::singleline(&mut self.title).desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Title"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Title"));
             if response.changed() {
                 self.title_edited = true;
             }
@@ -359,7 +359,7 @@ impl PullRequestDialog {
 
             ui.label(RichText::new("Body").color(c.muted));
             let response = ui.add(egui::TextEdit::multiline(&mut self.body).desired_rows(8).desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Body"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Body"));
             if response.changed() {
                 self.body_edited = true;
             }

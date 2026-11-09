@@ -429,7 +429,7 @@ impl NiceGitApp {
         if let Some(snapshot) = self.snapshot() {
             snapshot_commits = snapshot.commits.iter().map(|c| (c.hash.clone(), c.subject.clone())).collect();
         }
-        let modal = egui::Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("dialog")).show(ctx, |ui| {
             ui.set_width(440.0);
             let c = theme::of(ui);
             match &mut dialog {
@@ -477,7 +477,7 @@ impl NiceGitApp {
                                 let pick = ui
                                     .button(format!("{}  From GitHub…", icon::GITHUB_LOGO))
                                     .on_hover_text("Choose one of your GitHub repositories");
-                                pick.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose a GitHub repository"));
+                                pick.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Choose a GitHub repository"));
                                 if pick.clicked() {
                                     open_picker = true;
                                 }
@@ -490,7 +490,7 @@ impl NiceGitApp {
                         widgets::text_field(ui, value, "")
                     };
                     let first_label = label.clone();
-                    first.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &first_label));
+                    first.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, &first_label));
                     if ui.memory(|m| m.focused().is_none()) {
                         first.request_focus();
                     }
@@ -557,7 +557,7 @@ impl NiceGitApp {
                             ui.horizontal(|ui| {
                                 let mut ticked = push.is_some();
                                 widgets::checkbox(ui, true, &mut ticked, "Push to")
-                                    .widget_info(move || egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, ticked, "Push to remote"));
+                                    .widget_info(move || egui::WidgetInfo::selected(egui::Role::CheckBox, true, ticked, "Push to remote"));
                                 // Ticking the box chooses the default remote; the picker only changes it while ticked.
                                 let mut chosen = push.clone().or_else(|| default_remote.clone()).unwrap_or_default();
                                 if let [only] = remotes.as_slice() {
@@ -592,11 +592,11 @@ impl NiceGitApp {
                             let width = ui.available_width() - if browse { 90.0 } else { 0.0 };
                             if matches!(kind, InputKind::CreateTag { .. }) {
                                 ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width))
-                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Tag message"));
+                                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Tag message"));
                             } else {
                                 let second_name = second_label.clone();
                                 let response = ui.add(egui::TextEdit::singleline(second).desired_width(width));
-                                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, &second_name));
+                                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, &second_name));
                                 edited_destination = response.changed();
                             }
                             if browse && ui.button("Choose…").clicked() {
@@ -747,7 +747,7 @@ impl NiceGitApp {
                             field
                         })
                         .inner;
-                    folder_field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Folder"));
+                    folder_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Folder"));
                     if ui.memory(|m| m.focused().is_none()) {
                         folder_field.request_focus();
                     }
@@ -755,7 +755,7 @@ impl NiceGitApp {
                     ui.add_space(6.0);
                     ui.label(RichText::new("Initial branch").color(c.muted));
                     let branch_field = widgets::text_field(ui, branch, "");
-                    branch_field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Initial branch"));
+                    branch_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Initial branch"));
                     // The name is checked as it is typed, as the branch dialogs check theirs.
                     let problem = crate::git_ext::ref_name_problem(branch.trim());
                     if let Some(problem) = problem {

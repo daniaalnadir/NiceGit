@@ -250,7 +250,7 @@ impl ReflogWindow {
         let mut close = false;
         let title = format!("Create branch at {short_hash}");
         egui::Window::new(title)
-            .id(ui.id().with("create_branch"))
+            .id(ui.scope_id().with("create_branch"))
             .collapsible(false)
             .resizable(false)
             .default_width(360.0)
@@ -259,7 +259,7 @@ impl ReflogWindow {
                 ui.label(RichText::new("The branch keeps this commit and its history. Your current checkout does not change.").small());
                 ui.add_space(6.0);
                 widgets::text_field(ui, &mut self.branch_name, "Branch name")
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Branch name"));
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Branch name"));
                 ui.add_space(8.0);
                 let name = self.branch_name.trim().to_string();
                 ui.horizontal(|ui| {

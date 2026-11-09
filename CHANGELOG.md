@@ -123,6 +123,7 @@
   remote's sidebar menu, or from the command palette.
 - A commit's right-click menu and the inspector's … menu have a Copy submenu: the commit ID,
   its short ID, subject, full message, or author.
+- Built with egui 0.37. Panel widths return to their defaults once after updating.
 
 ## 1.5.0 - Fewer surprises
 

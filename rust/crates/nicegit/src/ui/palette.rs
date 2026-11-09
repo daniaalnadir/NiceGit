@@ -288,7 +288,7 @@ impl NiceGitApp {
         let profiles: Vec<tools::repository_settings::StoredProfile> = self
             .worker
             .context
-            .data_mut(|data| data.get_persisted(egui::Id::new(tools::repository_settings::PROFILES_KEY)))
+            .data_mut(|data| data.get_persisted(egui::Id::unique(tools::repository_settings::PROFILES_KEY)))
             .unwrap_or_default();
         for profile in profiles {
             let detail = if profile.signing_key.is_some() { format!("{} · signs commits", profile.email) } else { profile.email.clone() };
@@ -454,7 +454,7 @@ impl NiceGitApp {
         state.selection = state.selection.min(matches.len().saturating_sub(1));
         let mut chosen: Option<Run> = None;
         let mut close = false;
-        let modal = egui::Modal::new(egui::Id::new("palette")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("palette")).show(ctx, |ui| {
             let c = theme::of(ui);
             ui.set_width(580.0);
             ui.horizontal(|ui| {

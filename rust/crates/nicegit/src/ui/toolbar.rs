@@ -149,7 +149,7 @@ fn badge(ui: &Ui, rect: egui::Rect, count: usize, style: ToolStyle) {
 fn menu_caret(ui: &mut Ui, label: &str, hover: &str) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(CARET_WIDTH, 44.0), egui::Sense::click());
     let response = response.on_hover_text(hover);
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{label} options")));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{label} options")));
     if ui.is_rect_visible(rect) {
         if response.hovered() {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
@@ -168,7 +168,7 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
     let response =
         if style == ToolStyle::Compact { response.on_hover_text(format!("{label}: {tooltip}")) } else { response.on_hover_text(tooltip) };
     // Screen readers and UI tests find the button by its label.
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, label));
     if ui.is_rect_visible(rect) {
         if enabled && response.hovered() {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
@@ -456,9 +456,7 @@ impl NiceGitApp {
                         }
                     }
                 });
-                more.response
-                    .on_hover_text("More actions")
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "More"));
+                more.response.on_hover_text("More actions").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "More"));
             }
         });
 

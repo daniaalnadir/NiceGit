@@ -165,7 +165,7 @@ fn double_clicking_the_repositories_edge_restores_its_width() {
     let mut harness = open(repo.path());
     loaded(&mut harness);
     settle(&mut harness);
-    let id = egui::Id::new("repositories");
+    let id = crate::app::panel_id(&harness.ctx, "repositories");
     let width = |h: &App| PanelState::load(&h.ctx, id).map(|s| s.size().x).unwrap_or_default();
     let default = settled_width(&mut harness, id);
 

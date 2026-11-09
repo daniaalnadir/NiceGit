@@ -340,7 +340,7 @@ impl NiceGitApp {
 
     /// A commit's signature status, loaded once per commit and cached in egui memory.
     fn signature_for(&mut self, hash: &str, ctx: &egui::Context) -> Option<(String, egui::Color32, String)> {
-        let id = egui::Id::new(("signature", hash.to_string()));
+        let id = egui::Id::unique(("signature", hash.to_string()));
         let repo = self.repo()?.path.clone();
         let dark = ctx.theme() == egui::Theme::Dark;
         let c = theme::colors(dark);
@@ -367,7 +367,7 @@ impl NiceGitApp {
     /// memory. The cache also keys on the snapshot's branches and tags, so a moved branch or a new
     /// tag loads again while an unrelated repaint does not run Git.
     fn containing_for(&self, hash: &str, snapshot: &Snapshot, ctx: &egui::Context) -> Option<Option<ContainingRefs>> {
-        let id = egui::Id::new(("containing", hash.to_string()));
+        let id = egui::Id::unique(("containing", hash.to_string()));
         let repo = self.repo()?.path.clone();
         let key = refs_fingerprint(snapshot);
         let cached: Option<(u64, ContainingCell)> = ctx.data(|d| d.get_temp(id));

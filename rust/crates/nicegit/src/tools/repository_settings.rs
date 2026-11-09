@@ -158,11 +158,11 @@ impl RepositorySettingsWindow {
             return;
         }
         self.profiles_loaded = true;
-        self.profiles = ctx.data_mut(|data| data.get_persisted::<Vec<StoredProfile>>(egui::Id::new(PROFILES_KEY))).unwrap_or_default();
+        self.profiles = ctx.data_mut(|data| data.get_persisted::<Vec<StoredProfile>>(egui::Id::unique(PROFILES_KEY))).unwrap_or_default();
     }
 
     fn save_profiles(&self, ctx: &Context) {
-        ctx.data_mut(|data| data.insert_persisted(egui::Id::new(PROFILES_KEY), self.profiles.clone()));
+        ctx.data_mut(|data| data.insert_persisted(egui::Id::unique(PROFILES_KEY), self.profiles.clone()));
     }
 
     fn header(&mut self, ui: &mut Ui, cx: &Ctx) {
@@ -200,11 +200,11 @@ impl RepositorySettingsWindow {
         egui::Grid::new("repository_identity_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
             ui.label("Name");
             ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.name).hint_text("Ada Lovelace").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Name"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Name"));
             ui.end_row();
             ui.label("Email");
             ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.email).hint_text("ada@example.com").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Email"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Email"));
             ui.end_row();
         });
         if let Some(error) = self.identity_error.clone() {
@@ -353,7 +353,7 @@ impl RepositorySettingsWindow {
         egui::Grid::new("add_remote_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
             ui.label("Name");
             ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.new_remote_name).hint_text("origin").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Remote name"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Remote name"));
             ui.end_row();
             ui.label("URL");
             ui.add_enabled(
@@ -362,7 +362,7 @@ impl RepositorySettingsWindow {
                     .hint_text("https://example.com/repo.git or /path/to/repo.git")
                     .desired_width(320.0),
             )
-            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Remote URL"));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Remote URL"));
             ui.end_row();
         });
         ui.add_space(8.0);
@@ -400,11 +400,11 @@ impl RepositorySettingsWindow {
                 egui::Grid::new(("edit_remote", name)).num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                     ui.label("Name");
                     ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.name).desired_width(320.0))
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit remote name"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit remote name"));
                     ui.end_row();
                     ui.label("Fetch URL");
                     ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.address).desired_width(320.0))
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit fetch URL"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit fetch URL"));
                     ui.end_row();
                     ui.label("Push URL");
                     if edit.push_editable {
@@ -412,7 +412,7 @@ impl RepositorySettingsWindow {
                             idle,
                             egui::TextEdit::singleline(&mut edit.push).hint_text("Same as fetch URL").desired_width(320.0),
                         )
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, idle, "Edit push URL"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit push URL"));
                     } else {
                         ui.add(
                             egui::Label::new(

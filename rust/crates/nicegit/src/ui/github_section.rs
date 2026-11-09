@@ -118,7 +118,7 @@ impl NiceGitApp {
                 ui.label(RichText::new(header).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, "Open with filters and closed items", true);
-                    open_window.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Open GitHub window"));
+                    open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Open GitHub window"));
                     if open_window.clicked() {
                         window = Some(list.remote.clone());
                     }

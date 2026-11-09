@@ -204,12 +204,29 @@ pub fn install_fonts(ctx: &egui::Context) {
     let mut strong = vec!["inter-semibold".to_string()];
     strong.extend(fallbacks);
     fonts.families.insert(strong_family(), strong);
-    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+    add_phosphor_fonts(&mut fonts);
     // Icons in strong text resolve from Phosphor too.
     if let Some(strong) = fonts.families.get_mut(&strong_family()) {
         strong.insert(1, "phosphor".into());
     }
     ctx.set_fonts(fonts);
+}
+
+/// Registers the Phosphor icon font the same way `egui_phosphor::add_to_fonts` does: the data
+/// goes under "phosphor", a `FontFamily::Name("phosphor")` is registered, and "phosphor" is
+/// inserted second in the proportional family. egui-phosphor 0.14 is still built against
+/// egui 0.36, so its `add_to_fonts` cannot take our `FontDefinitions`; only its font bytes
+/// are used here.
+fn add_phosphor_fonts(fonts: &mut egui::FontDefinitions) {
+    let bytes = egui_phosphor::Variant::Regular.font_bytes();
+    fonts.font_data.insert("phosphor".into(), egui::FontData::from_static(bytes).into());
+    let mut keys = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    keys.insert(keys.len().min(1), "phosphor".into());
+    fonts.families.insert(FontFamily::Name("phosphor".into()), keys);
+    if let Some(proportional) = fonts.families.get_mut(&FontFamily::Proportional) {
+        let at = proportional.len().min(1);
+        proportional.insert(at, "phosphor".into());
+    }
 }
 
 fn visuals(dark: bool) -> Visuals {

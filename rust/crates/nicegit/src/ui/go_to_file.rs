@@ -140,7 +140,7 @@ impl NiceGitApp {
         let alt = if cfg!(target_os = "macos") { "Option" } else { "Alt" };
         let mut chosen: Option<(String, Open)> = None;
         let mut close = false;
-        let modal = egui::Modal::new(egui::Id::new("go_to_file")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("go_to_file")).show(ctx, |ui| {
             let c = theme::of(ui);
             ui.set_width(580.0);
             ui.horizontal(|ui| {

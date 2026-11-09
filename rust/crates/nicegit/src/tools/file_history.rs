@@ -271,7 +271,7 @@ fn confirm_restore(ui: &mut Ui, cx: &mut Ctx, restore: &mut Option<PendingRestor
     let Some(pending) = restore.as_ref() else { return };
     let idle = cx.idle;
     let mut decision = None;
-    let response = egui::Modal::new(Id::new(("file-history-restore", pending.path.as_str()))).show(ui.ctx(), |ui| {
+    let response = egui::Modal::new(Id::unique(("file-history-restore", pending.path.as_str()))).show(ui.ctx(), |ui| {
         ui.set_width(440.0);
         let title = if pending.removes_file { format!("Delete {}?", pending.path) } else { format!("Restore {}?", pending.path) };
         ui.label(RichText::new(title).strong().size(16.0));
@@ -358,6 +358,6 @@ pub fn result_row(
         painter.text(pos2(rect.left() + 14.0, rect.top() + 46.0), Align2::LEFT_TOP, extra, FontId::monospace(10.5), c.muted);
     }
     // Described for screen readers and UI tests as the title and detail together.
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{title} · {detail}")));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{title} · {detail}")));
     response.on_hover_cursor(CursorIcon::PointingHand)
 }

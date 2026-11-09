@@ -822,7 +822,7 @@ impl NiceGitApp {
             })
             .response
             .on_hover_text("How many unchanged lines to show around each change")
-            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Context lines"));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Context lines"));
         if context != self.settings.diff_context {
             self.settings.diff_context = context;
             self.reload_diff();
@@ -937,17 +937,18 @@ enum PanelEdge {
 fn restore_on_double_click(ctx: &egui::Context, edges: &[(&str, PanelEdge)]) {
     let now = ctx.input(|i| i.time);
     for (id, _) in edges {
-        let handle = egui::Id::new(*id).with("__resize");
+        let handle = crate::app::panel_id(ctx, id).with("__resize");
         let Some(response) = ctx.read_response(handle) else { continue };
         if !response.clicked() && !response.double_clicked() {
             continue;
         }
         // Two clicks on the same edge in quick succession count as a double-click.
-        let last_click = egui::Id::new(("panel_edge_click", *id));
+        let last_click = egui::Id::unique(("panel_edge_click", *id));
         let previous: Option<f64> = ctx.data(|d| d.get_temp(last_click));
         if response.double_clicked() || previous.is_some_and(|at| now - at <= 0.6) {
+            let panel = crate::app::panel_id(ctx, id);
             ctx.data_mut(|data| {
-                data.remove::<egui::containers::panel::PanelState>(egui::Id::new(*id));
+                data.remove::<egui::containers::panel::PanelState>(panel);
                 data.remove::<f64>(last_click);
             });
             ctx.request_repaint();

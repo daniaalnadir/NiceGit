@@ -460,7 +460,7 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
     let described = if uncommitted { "Uncommitted".to_string() } else { commit.short_hash().to_string() };
     let author_text = if uncommitted { "Your working changes" } else { commit.author_name.as_str() };
     response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{described} · {author_text} · {}", displayed(&line.content)))
+        egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{described} · {author_text} · {}", displayed(&line.content)))
     });
     let tooltip = if uncommitted {
         "Not committed yet".to_string()

@@ -96,13 +96,15 @@ fn diff_loaded(harness: &App) -> bool {
 
 /// The current width of a panel, as egui remembers it.
 fn panel_width(harness: &App, panel: &str) -> f32 {
-    egui::containers::panel::PanelState::load(&harness.ctx, egui::Id::new(panel)).map(|state| state.size().x).unwrap_or_default()
+    egui::containers::panel::PanelState::load(&harness.ctx, crate::app::panel_id(&harness.ctx, panel))
+        .map(|state| state.size().x)
+        .unwrap_or_default()
 }
 
 /// Drags a panel's edge by `dx` points with the pointer, as a person does. `right_edge` picks the
 /// edge a right-hand or left-hand panel is resized from.
 fn drag_panel_edge(harness: &mut App, panel: &str, right_edge: bool, dx: f32) {
-    let state = egui::containers::panel::PanelState::load(&harness.ctx, egui::Id::new(panel)).expect("panel shown");
+    let state = egui::containers::panel::PanelState::load(&harness.ctx, crate::app::panel_id(&harness.ctx, panel)).expect("panel shown");
     let edge = if right_edge { state.outer_rect.right_center() } else { state.outer_rect.left_center() };
     let press = |down: bool, pos: egui::Pos2| egui::Event::PointerButton {
         pos,
@@ -944,7 +946,9 @@ fn escape_after_selecting_a_commit_clears_the_selection_not_the_filter() {
     wait(&mut harness, "the filtered list", |h| shows(h, "Unstaged files (1 of 6)"));
 
     // Selecting a commit shows the inspector in place of the Changes panel, so the field loses focus.
-    harness.get_by_label_contains("Add a second line").click();
+    // The commit's row is the button named by its subject; the accessibility tree also has a node
+    // that carries the row's short ID with the subject.
+    harness.get_by_role_and_label(Role::Button, "Add a second line").click();
     wait(&mut harness, "the commit to be selected", |h| {
         matches!(h.state().repo().map(|r| &r.selection), Some(crate::app::Selection::Commit { .. }))
     });

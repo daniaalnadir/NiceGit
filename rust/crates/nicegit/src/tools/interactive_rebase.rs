@@ -275,7 +275,7 @@ impl InteractiveRebaseWindow {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     if idle {
-                        ui.dnd_drag_source(Id::new(("interactive-rebase-row", entry.commit.hash.as_str())), DraggedRow(index), |ui| {
+                        ui.dnd_drag_source(Id::unique(("interactive-rebase-row", entry.commit.hash.as_str())), DraggedRow(index), |ui| {
                             ui.label(RichText::new(icon::DOTS_SIX_VERTICAL).color(c.muted));
                         })
                         .response
@@ -302,7 +302,7 @@ impl InteractiveRebaseWindow {
                         })
                         .response
                         .widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, idle, format!("Action for {}", entry.commit.subject))
+                            egui::WidgetInfo::labeled(egui::Role::ComboBox, idle, format!("Action for {}", entry.commit.subject))
                         });
                     widgets::hash_label(ui, &entry.commit.hash);
                     let subject = RichText::new(&entry.commit.subject);
@@ -334,7 +334,7 @@ impl InteractiveRebaseWindow {
                             .hint_text("New commit message"),
                     );
                     message.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, format!("Message for {}", entry.commit.subject))
+                        egui::WidgetInfo::labeled(egui::Role::TextInput, true, format!("Message for {}", entry.commit.subject))
                     });
                     if focus == Some(entry.commit.hash.as_str()) {
                         message.request_focus();

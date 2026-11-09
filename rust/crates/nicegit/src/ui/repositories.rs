@@ -86,8 +86,7 @@ impl NiceGitApp {
                                                     .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
                                                     .on_hover_text("Close tab");
                                                 let name = format!("Close {}", repo.name());
-                                                close_button
-                                                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+                                                close_button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                                                 if close_button.clicked() {
                                                     close = Some(index);
                                                 }

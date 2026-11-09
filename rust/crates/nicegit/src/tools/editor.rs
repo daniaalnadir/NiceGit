@@ -163,7 +163,7 @@ impl ToolWindow for EditorWindow {
                                 .lock_focus(true)
                                 .layouter(&mut layouter),
                         )
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "File contents"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "File contents"));
                     });
                 });
         });
