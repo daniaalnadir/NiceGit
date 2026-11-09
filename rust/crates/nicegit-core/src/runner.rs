@@ -97,7 +97,8 @@ pub fn git_executable() -> Option<PathBuf> {
     Some(path)
 }
 
-fn is_executable(path: &Path) -> bool {
+/// Whether `path` is a file Git would run as a hook or program.
+pub(crate) fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

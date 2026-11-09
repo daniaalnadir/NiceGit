@@ -715,6 +715,23 @@ impl NiceGitApp {
                         repo.trailer_identity = None;
                     }
                     menu.on_hover_text("Add trailers").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Add trailers"));
+                    // Commit options. Kept open while toggled, like the trailers menu.
+                    let gear = if repo.skip_hooks { c.accent } else { c.muted };
+                    let options = egui::containers::menu::MenuButton::new(RichText::new(icon::GEAR_SIX).color(gear))
+                        .config(
+                            egui::containers::menu::MenuConfig::new()
+                                .close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside),
+                        )
+                        .ui(ui, |ui| {
+                            ui.checkbox(&mut repo.skip_hooks, "Skip Git hooks").on_hover_text(
+                                "Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when \
+                                 committing and pushing. Resets after each commit.",
+                            );
+                        })
+                        .0;
+                    options
+                        .on_hover_text("Commit options")
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Commit options"));
                 });
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
@@ -777,6 +794,11 @@ impl NiceGitApp {
             .inner
             .on_hover_text("Ctrl/Cmd-Enter")
             .clicked();
+        if self.repos[self.active].skip_hooks {
+            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
+                ui.label(RichText::new("Git hooks are skipped for this commit").small().color(c.muted));
+            });
+        }
         if clicked {
             self.commit();
         }
@@ -810,7 +832,11 @@ impl NiceGitApp {
             let push = ui
                 .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add_enabled(enabled, button))
                 .inner
-                .on_hover_text(format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)"));
+                .on_hover_text(if self.repos[self.active].skip_hooks {
+                    format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.")
+                } else {
+                    format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)")
+                });
             if push.clicked() {
                 self.commit_and_push();
             }
