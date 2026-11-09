@@ -176,6 +176,8 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Stage, unstage, and commit changes.
 - Create and checkout local branches.
 - Rename branches and delete merged branches from their context menu.
+- Command-click local branches in the sidebar to select several, then delete them together
+  from the context menu. Escape clears the selection; the current branch cannot be chosen.
 - Create local tags from commits, inspect their targets, and delete local tags.
 - Create local tracking branches from remote branches.
 - Publish new branches to a chosen remote and set their upstream.
@@ -289,6 +291,11 @@ at their old commits with their upstream settings, and only if no branch has tak
 Branch clean-up never lists the current branch or branches checked out in other worktrees,
 selects merged branches only by default, and deletes unmerged ones only after a separate
 choice, each atomically against the tip that was listed.
+
+Deleting several selected branches is one undo step. Its confirmation names them and says which
+are not merged into the current branch. Nothing is deleted if the checkout has an operation in
+progress or any selected branch has moved since it was selected; otherwise a failure stops the
+rest and Undo restores the branches already deleted.
 
 Merge previews use Git's in-memory merge and never change files, the index, or refs.
 Automatic refresh waits about a second after the last change, skips changes NiceGit's own

@@ -180,6 +180,17 @@ impl NiceGitApp {
         let other_worktrees = GitClient::branches_in_other_worktrees(snapshot);
         let hidden_refs = self.hidden_branches();
 
+        // A branch that became current, was deleted, or is not listed any more leaves the selection.
+        if let Some(repo) = self.repos.get_mut(self.active) {
+            repo.selected_branches
+                .retain(|selected| snapshot.branches.iter().any(|b| !b.is_remote && !b.is_current && b.name == selected.name));
+        }
+        // Escape clears the branch selection unless a dialog or the palette has the key.
+        if self.dialog.is_none() && self.palette.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.clear_branch_selection();
+        }
+        let selected_ids: Vec<String> = self.repo().map(|r| r.selected_branches.iter().map(Branch::id).collect()).unwrap_or_default();
+
         let locals: Vec<Branch> = snapshot.branches.iter().filter(|b| !b.is_remote && matches(&b.name)).cloned().collect();
         let tracking = self.repos[self.active].branch_tracking.as_mut().and_then(|task| task.get()).cloned().flatten().unwrap_or_default();
         section(ui, "local", icon::LAPTOP, "Local", locals.len(), true, |ui| {
@@ -219,7 +230,8 @@ impl NiceGitApp {
                 };
                 let hidden = hidden_refs.contains(&branch.full_ref());
                 let marker = hidden.then(|| RichText::new(icon::EYE_SLASH).color(c.muted));
-                let response = row(ui, glyph, color, text, trailing, marker, false);
+                let is_selected = selected_ids.contains(&branch.id());
+                let response = row(ui, glyph, color, text, trailing, marker, is_selected);
                 let response = response.on_hover_text(format!(
                     "{}  {}{}{tracking_note}{}",
                     short(&branch.tip),
@@ -239,7 +251,13 @@ impl NiceGitApp {
                     self.checkout(branch.clone());
                 }
                 if response.clicked() {
-                    self.select_commit(branch.tip.clone());
+                    // Command-click (Ctrl-click elsewhere) chooses branches for deleting together; a plain click clears them.
+                    if ui.input(|i| i.modifiers.command) {
+                        self.toggle_branch_selection(branch);
+                    } else {
+                        self.clear_branch_selection();
+                        self.select_commit(branch.tip.clone());
+                    }
                 }
                 response.context_menu(|ui| self.branch_menu(ui, branch, snapshot, can_switch && !in_other));
             }
@@ -287,6 +305,7 @@ impl NiceGitApp {
                                 self.checkout(branch.clone());
                             }
                             if response.clicked() {
+                                self.clear_branch_selection();
                                 self.select_commit(branch.tip.clone());
                             }
                             response.context_menu(|ui| self.branch_menu(ui, branch, snapshot, can_switch));
@@ -643,9 +662,76 @@ impl NiceGitApp {
         }
     }
 
+    /// Adds or removes a local branch from the deletion selection. The current branch cannot be chosen.
+    fn toggle_branch_selection(&mut self, branch: &Branch) {
+        if branch.is_current {
+            self.notify("The current branch cannot be selected for deletion.", false);
+            return;
+        }
+        let Some(repo) = self.repos.get_mut(self.active) else { return };
+        match repo.selected_branches.iter().position(|selected| selected.id() == branch.id()) {
+            Some(index) => {
+                repo.selected_branches.remove(index);
+            }
+            None => repo.selected_branches.push(branch.clone()),
+        }
+    }
+
+    fn clear_branch_selection(&mut self) {
+        if let Some(repo) = self.repos.get_mut(self.active) {
+            repo.selected_branches.clear();
+        }
+    }
+
+    /// The selected branches with whether each is unmerged into the current branch, as the snapshot
+    /// shows them now. The tip kept is the one shown when the branch was selected, so a moved branch is
+    /// refused when the deletion runs.
+    fn deletable_selection(&self, snapshot: &Snapshot) -> Vec<(Branch, bool)> {
+        let Some(repo) = self.repo() else { return Vec::new() };
+        repo.selected_branches
+            .iter()
+            .filter_map(|selected| {
+                let listed = snapshot.branches.iter().find(|b| !b.is_remote && !b.is_current && b.name == selected.name)?;
+                Some((selected.clone(), !Self::branch_is_merged(listed, snapshot)))
+            })
+            .collect()
+    }
+
+    /// Confirms deleting every selected branch. Each is named, unmerged ones are called out, and Undo is
+    /// explained.
+    fn request_delete_selected_branches(&mut self, snapshot: &Snapshot) {
+        let branches = self.deletable_selection(snapshot);
+        if branches.is_empty() {
+            return;
+        }
+        let names = |list: Vec<&str>| {
+            let shown = list.iter().take(15).copied().collect::<Vec<_>>().join(", ");
+            match list.len().saturating_sub(15) {
+                0 => shown,
+                more => format!("{shown}, and {more} more"),
+            }
+        };
+        let all: Vec<&str> = branches.iter().map(|(branch, _)| branch.name.as_str()).collect();
+        let unmerged: Vec<&str> = branches.iter().filter(|(_, unmerged)| *unmerged).map(|(branch, _)| branch.name.as_str()).collect();
+        let mut message = format!("Deletes {}.", names(all));
+        if !unmerged.is_empty() {
+            message.push_str(&format!(
+                " Not merged into {}: {}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.",
+                snapshot.current_branch,
+                names(unmerged)
+            ));
+        }
+        message.push_str(" Undo restores them at their tips until you take another undoable action.");
+        let count = branches.len();
+        self.confirm(format!("Delete {count} branches?"), message, "Delete branches", Pending::DeleteBranches { branches });
+    }
+
     pub fn branch_menu(&mut self, ui: &mut Ui, branch: &Branch, snapshot: &Snapshot, can_switch: bool) {
         let idle = self.idle();
         let current = snapshot.current_branch.clone();
+        // With two or more branches selected, the menu of one of them deletes the whole selection.
+        let deletable = if branch.is_remote { Vec::new() } else { self.deletable_selection(snapshot) };
+        let multi_delete = deletable.len() >= 2 && deletable.iter().any(|(selected, _)| selected.name == branch.name);
         if !branch.is_current && ui.add_enabled(can_switch, egui::Button::new(format!("{}  Check out", icon::CHECK))).clicked() {
             ui.close();
             self.checkout(branch.clone());
@@ -838,7 +924,18 @@ impl NiceGitApp {
                     InputKind::RenameBranch(branch.clone()),
                 ));
             }
-            if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
+            if multi_delete {
+                if ui
+                    .add_enabled(
+                        idle && snapshot.operation.is_none(),
+                        egui::Button::new(format!("{}  Delete {} branches…", icon::TRASH, deletable.len())),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    self.request_delete_selected_branches(snapshot);
+                }
+            } else if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
                 ui.close();
                 let merged = Self::branch_is_merged(branch, snapshot);
                 // Like the Mac app, this is Git's safe delete: an unmerged branch is refused.

@@ -42,6 +42,13 @@ pub struct BranchDeletion {
     pub upstream_merge: Option<String>,
 }
 
+/// The outcome of deleting several branches: those deleted, and the failure that stopped the rest.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SelectedBranchDeletions {
+    pub deleted: Vec<BranchDeletion>,
+    pub failure: Option<GitError>,
+}
+
 /// A deleted stash, with what is needed to put it back: its commit and the text it was listed under.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StashDeletion {
@@ -162,6 +169,44 @@ impl GitClient {
         };
         self.delete_branch(branch, force, directory)?;
         Ok(deletion)
+    }
+
+    /// Deletes the selected local branches as one action. Each entry is a branch as shown when it
+    /// was selected, with whether it was shown as unmerged; unmerged ones are deleted atomically
+    /// against that tip. Nothing is deleted unless the checkout is idle, is on none of the branches,
+    /// and every branch still points to the tip shown. Otherwise it stops at the first failure and
+    /// keeps the deletions already made, so Undo can restore exactly those.
+    pub fn delete_selected_branches_keeping_undo(&self, branches: &[(Branch, bool)], directory: &Path) -> SelectedBranchDeletions {
+        let mut report = SelectedBranchDeletions::default();
+        if let Err(error) = self.check_selected_branches(branches, directory) {
+            report.failure = Some(error);
+            return report;
+        }
+        for (branch, unmerged) in branches {
+            match self.delete_branch_keeping_undo(branch, *unmerged, directory) {
+                Ok(deletion) => report.deleted.push(deletion),
+                Err(error) => {
+                    report.failure = Some(error);
+                    break;
+                }
+            }
+        }
+        report
+    }
+
+    /// Checks everything a multi-branch deletion depends on before the first branch is deleted.
+    fn check_selected_branches(&self, branches: &[(Branch, bool)], directory: &Path) -> Result<()> {
+        let state = self.checkout_state(directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed("delete branches", "A Git operation is in progress, so the branches were not deleted."));
+        }
+        for (branch, _) in branches {
+            if branch.is_current || branch.name == state.current_branch {
+                return Err(GitError::failed("delete branches", format!("{} is checked out, so it cannot be deleted.", branch.name)));
+            }
+            self.require_branch_tip(&branch.name, &branch.tip, directory)?;
+        }
+        Ok(())
     }
 
     /// Recreates a deleted branch at its old tip. The all-zero old value makes the update fail
