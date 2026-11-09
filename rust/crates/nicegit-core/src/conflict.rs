@@ -140,7 +140,7 @@ impl GitClient {
         Ok(stages.any(|found| found == stage))
     }
 
-    fn require_conflict(&self, path: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn require_conflict(&self, path: &str, directory: &Path) -> Result<()> {
         let conflicted =
             self.load_status_for(directory, &[path])?.iter().any(|entry| entry.path == path && entry.kind == StatusKind::Conflicted);
         if conflicted {

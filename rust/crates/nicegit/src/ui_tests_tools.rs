@@ -598,3 +598,134 @@ fn a_gitlab_merge_request_says_how_to_fix_a_missing_glab() {
     assert!(harness.query_by_label_contains("glab auth login --hostname gitlab.com").is_some(), "and how to sign in once it is installed");
     assert!(harness.query_by_label_contains("Create merge request").is_some(), "the dialog is for a merge request");
 }
+
+// MARK: External diff and merge tools
+
+/// Whether a Changes panel row for `file` is on screen.
+fn change_row_shown(harness: &App, file: &str) -> bool {
+    harness.query_by_label(file).is_some()
+}
+
+/// Whether the menu item whose label contains `text` is disabled.
+fn menu_item_disabled(harness: &App, text: &str) -> bool {
+    harness.get_by_label_contains(text).accesskit_node().is_disabled()
+}
+
+/// Opens the Changes panel menu for `file`, once its row is on screen.
+fn open_change_menu(harness: &mut App, file: &str) {
+    wait(harness, "the row for the file", |h| change_row_shown(h, file));
+    harness.get_by_label(file).click_secondary();
+    settle(harness);
+}
+
+#[cfg(unix)]
+#[test]
+fn changes_menu_opens_a_changed_file_in_the_configured_diff_tool() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\n").unwrap();
+    // The fake tool records the working file it was given, so the test can see what was opened.
+    let scratch = temp_dir();
+    let out = scratch.path().join("recorded.txt");
+    let command = format!("printf '%s\\n' \"$REMOTE\" > '{}'", out.display());
+    git(path, &["config", "diff.tool", "fake"]);
+    git(path, &["config", "difftool.fake.cmd", command.as_str()]);
+
+    let mut harness = open(path);
+    loaded(&mut harness);
+    open_change_menu(&mut harness, "notes.txt");
+    wait(&mut harness, "the diff tool item", |h| shows(h, "Open in fake"));
+    assert!(!menu_item_disabled(&harness, "Open in fake"), "the item is enabled once a tool is set");
+
+    harness.get_by_label_contains("Open in fake").click();
+    wait(&mut harness, "the diff tool to run", |_| out.exists());
+    let recorded = std::fs::read_to_string(&out).unwrap();
+    assert!(recorded.contains("notes.txt"), "the tool was given the changed file: {recorded}");
+}
+
+#[test]
+fn changes_menu_disables_the_diff_tool_item_when_none_is_set() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "first\nsecond\nthird\n").unwrap();
+    // An empty value in the repository overrides a diff tool set globally, so the test does not
+    // depend on the machine's own configuration.
+    git(path, &["config", "diff.tool", ""]);
+
+    let mut harness = open(path);
+    loaded(&mut harness);
+    open_change_menu(&mut harness, "notes.txt");
+    wait(&mut harness, "the diff tool item", |h| shows(h, "Open in diff tool"));
+    assert!(menu_item_disabled(&harness, "Open in diff tool"), "the item is disabled without a tool");
+}
+
+#[test]
+fn saving_a_copied_version_in_the_conflict_editor_resolves_the_file() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    std::fs::write(path.join("notes.txt"), "first\nfrom feature\n").unwrap();
+    git(path, &["commit", "-qam", "Change notes on feature"]);
+    git(path, &["switch", "-q", "main"]);
+    let merge = Command::new("git").args(["merge", "--no-edit", "feature"]).current_dir(path).output().unwrap();
+    assert!(!merge.status.success(), "the merge conflicts");
+
+    let mut harness = open(path);
+    loaded(&mut harness);
+    open_change_menu(&mut harness, "notes.txt");
+    wait(&mut harness, "the resolve item", |h| shows(h, "Resolve conflict…"));
+    // The row's icon button has the same label; the menu item is drawn after it, so it comes last.
+    let matches = harness.query_all_by_label_contains("Resolve conflict…").count();
+    harness.get_all_by_label_contains("Resolve conflict…").nth(matches - 1).expect("the menu item").click();
+    wait(&mut harness, "the conflict editor", |h| h.state().tools.iter().any(|t| t.id().starts_with("conflict:")));
+    wait(&mut harness, "the versions to load", |h| shows(h, "Copy into result"));
+    settle(&mut harness);
+
+    // Copying the current version leaves the result with edits, so saving runs with unsaved text.
+    // The current version is the second of the three copy buttons.
+    harness.get_all_by_label("Copy into result").nth(1).expect("the current version's copy button").click();
+    wait(&mut harness, "the copy confirmation", |h| shows(h, "Replace the result with the current version?"));
+    harness.get_by_label("Use version").click();
+    settle(&mut harness);
+    wait(&mut harness, "the save button to be enabled", |h| {
+        h.query_by_label("Save and mark resolved").is_some_and(|button| !button.accesskit_node().is_disabled())
+    });
+    harness.get_by_label("Save and mark resolved").click();
+    wait(&mut harness, "the conflict to be resolved", |h| {
+        h.state().snapshot().is_some_and(|s| !s.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted))
+    });
+    idle(&mut harness);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "first\nsecond\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn resolve_in_the_merge_tool_resolves_the_conflict() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    std::fs::write(path.join("notes.txt"), "first\nfrom feature\n").unwrap();
+    git(path, &["commit", "-qam", "Change notes on feature"]);
+    git(path, &["switch", "-q", "main"]);
+    let merge = std::process::Command::new("git").args(["merge", "--no-edit", "feature"]).current_dir(path).output().unwrap();
+    assert!(!merge.status.success(), "the merge conflicts");
+
+    // The fake merge tool writes the result, and trustExitCode lets Git mark the file resolved.
+    git(path, &["config", "merge.tool", "fake"]);
+    git(path, &["config", "mergetool.fake.cmd", "printf 'resolved\\n' > \"$MERGED\""]);
+    git(path, &["config", "mergetool.fake.trustExitCode", "true"]);
+    git(path, &["config", "mergetool.keepBackup", "false"]);
+
+    let mut harness = open(path);
+    loaded(&mut harness);
+    open_change_menu(&mut harness, "notes.txt");
+    wait(&mut harness, "the merge tool item", |h| shows(h, "Resolve in fake"));
+    assert!(!menu_item_disabled(&harness, "Resolve in fake"), "the item is enabled once a tool is set");
+
+    harness.get_by_label_contains("Resolve in fake").click();
+    wait(&mut harness, "the conflict to be resolved", |h| {
+        h.state().snapshot().is_some_and(|s| !s.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted))
+    });
+    idle(&mut harness);
+    assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "resolved\n");
+}

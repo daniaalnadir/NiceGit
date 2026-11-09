@@ -80,6 +80,11 @@ impl ConflictWindow {
             close_requested: false,
         }
     }
+
+    /// Whether the result differs from the text the file had when it was read.
+    fn edited(&self) -> bool {
+        self.document.as_ref().is_some_and(|document| self.result != document.content)
+    }
 }
 
 impl ToolWindow for ConflictWindow {
@@ -116,7 +121,29 @@ impl ToolWindow for ConflictWindow {
             }
         }
 
-        ui.label(RichText::new(&self.path).strong());
+        let editing = self.edited();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&self.path).strong());
+            if self.document.is_some() {
+                match cx.external.merge.clone() {
+                    Some(tool) => {
+                        let enabled = cx.idle && !editing;
+                        let hover = if editing { "Save or discard the result first." } else { "Wait for the current action." };
+                        if ui
+                            .add_enabled(enabled, egui::Button::new(format!("{}  Resolve in {tool}", egui_phosphor::regular::GIT_DIFF)))
+                            .on_disabled_hover_text(hover)
+                            .clicked()
+                        {
+                            cx.open_merge_tool(self.path.clone());
+                        }
+                    }
+                    None => {
+                        ui.add_enabled(false, egui::Button::new("Resolve in merge tool"))
+                            .on_disabled_hover_text(crate::tools::MERGE_TOOL_HINT);
+                    }
+                }
+            }
+        });
         if let Some(error) = &self.load_error {
             widgets::error(ui, error);
             return;
@@ -278,6 +305,12 @@ impl ToolWindow for ConflictWindow {
 
     fn wants_close(&self) -> bool {
         self.close_requested || self.resolved.load(Ordering::SeqCst)
+    }
+
+    /// The result differs from the file as it was read, so editing would be lost. Saving is an
+    /// action, which `has_unsaved_changes` would refuse, so only the merge tool checks this.
+    fn has_unsaved_text_for(&self, path: &str) -> bool {
+        path == self.path && self.edited()
     }
 }
 
