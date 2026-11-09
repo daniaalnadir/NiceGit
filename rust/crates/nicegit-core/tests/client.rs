@@ -1732,6 +1732,149 @@ fn fetch_remote_refuses_changed_address_and_fetches_nothing() {
     assert_eq!(repo.git(&["rev-parse", "refs/remotes/upstream/main"]).trim(), first, "nothing was fetched");
 }
 
+// MARK: Pull request checkout
+
+/// A published repository whose `origin` is a bare remote, with `main` at `first`.
+fn repo_with_origin() -> (TempDir, Repo, String) {
+    let origin = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(origin.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    (origin, repo, first)
+}
+
+/// Makes a commit in a clone of `origin` and pushes it to `refs/pull/7/head`, where GitHub keeps
+/// a pull request's head. The local repository does not have the commit.
+fn pull_request_seven(origin: &Path) -> String {
+    let workspace = tempfile::tempdir().expect("create workspace");
+    git(workspace.path(), &["clone", "--quiet", &path_string(origin), "clone"]);
+    let clone = workspace.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("pr.txt"), "from the pull request\n").expect("write file");
+    git(&clone, &["add", "--", "pr.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Add the pull request file"]);
+    let head = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
+    git(&clone, &["push", "--quiet", "origin", "HEAD:refs/pull/7/head"]);
+    head
+}
+
+#[test]
+fn checkout_pull_request_creates_the_branch_at_the_pull_request_head_and_switches() {
+    let (origin, repo, _first) = repo_with_origin();
+    let head = pull_request_seven(origin.path());
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+
+    client()
+        .checkout_pull_request("origin", 7, "pr/7-add-the-file", &expected, "main", before.head_hash.as_deref(), repo.path())
+        .expect("check out pull request");
+
+    assert_eq!(repo.git(&["rev-parse", "refs/heads/pr/7-add-the-file"]).trim(), head, "the branch is at the pull request's head");
+    assert_eq!(repo.git(&["symbolic-ref", "--short", "HEAD"]).trim(), "pr/7-add-the-file", "the checkout switched");
+    assert!(repo.path().join("pr.txt").exists(), "the pull request's files are in the working tree");
+    assert!(
+        !git_output(repo.path(), &["config", "--get", "branch.pr/7-add-the-file.merge"]).status.success(),
+        "no upstream is set, since the pull request may come from a fork"
+    );
+}
+
+#[test]
+fn checkout_pull_request_switches_to_an_existing_branch_at_the_same_head() {
+    let (origin, repo, _first) = repo_with_origin();
+    let head = pull_request_seven(origin.path());
+    // The branch is made from the pull request first, then the checkout moves away from it.
+    repo.git(&["fetch", "-q", "origin", "refs/pull/7/head:refs/heads/pr/7-same"]);
+    assert_eq!(repo.git(&["rev-parse", "refs/heads/pr/7-same"]).trim(), head);
+    repo.git(&["switch", "-q", "main"]);
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+
+    client()
+        .checkout_pull_request("origin", 7, "pr/7-same", &expected, "main", before.head_hash.as_deref(), repo.path())
+        .expect("check out pull request");
+
+    assert_eq!(repo.git(&["symbolic-ref", "--short", "HEAD"]).trim(), "pr/7-same");
+}
+
+#[test]
+fn checkout_pull_request_refuses_an_existing_branch_elsewhere_and_changes_nothing() {
+    let (origin, repo, first) = repo_with_origin();
+    pull_request_seven(origin.path());
+    repo.git(&["branch", "pr/7-taken", &first]);
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+
+    let message =
+        error_text(client().checkout_pull_request("origin", 7, "pr/7-taken", &expected, "main", before.head_hash.as_deref(), repo.path()));
+
+    assert!(message.contains("already exists"), "{message}");
+    assert_eq!(repo.git(&["rev-parse", "refs/heads/pr/7-taken"]).trim(), first, "the existing branch did not move");
+    assert_eq!(repo.git(&["symbolic-ref", "--short", "HEAD"]).trim(), "main", "the checkout did not move");
+}
+
+#[test]
+fn checkout_pull_request_refuses_a_dirty_working_tree() {
+    let (origin, repo, _first) = repo_with_origin();
+    pull_request_seven(origin.path());
+    repo.write("a.txt", "changed\n");
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+
+    let message =
+        error_text(client().checkout_pull_request("origin", 7, "pr/7-dirty", &expected, "main", before.head_hash.as_deref(), repo.path()));
+
+    assert!(message.contains("Commit, stash, or discard"), "{message}");
+    assert!(!branch_exists(repo.path(), "pr/7-dirty"), "no branch was created");
+    assert_eq!(fs::read_to_string(repo.path().join("a.txt")).expect("read file"), "changed\n", "the change is kept");
+}
+
+#[test]
+fn checkout_pull_request_refuses_a_changed_fetch_address_and_fetches_nothing() {
+    let (origin, repo, _first) = repo_with_origin();
+    pull_request_seven(origin.path());
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+    let moved = bare_remote();
+    repo.git(&["remote", "set-url", "origin", &path_string(moved.path())]);
+
+    let message =
+        error_text(client().checkout_pull_request("origin", 7, "pr/7-moved", &expected, "main", before.head_hash.as_deref(), repo.path()));
+
+    assert!(message.contains("remote address changed"), "{message}");
+    assert!(!branch_exists(repo.path(), "pr/7-moved"), "nothing was fetched");
+}
+
+#[test]
+fn checkout_pull_request_refuses_a_checkout_that_changed_after_it_was_shown() {
+    let (origin, repo, first) = repo_with_origin();
+    pull_request_seven(origin.path());
+    let before = snapshot(repo.path());
+    let expected = before.remote_fetch_addresses["origin"].clone();
+    repo.git(&["switch", "-q", "-c", "elsewhere", &first]);
+
+    let message =
+        error_text(client().checkout_pull_request("origin", 7, "pr/7-late", &expected, "main", before.head_hash.as_deref(), repo.path()));
+
+    assert!(message.contains("changed"), "{message}");
+    assert!(!branch_exists(repo.path(), "pr/7-late"), "nothing was fetched");
+}
+
+#[test]
+fn pull_request_branch_names_are_valid_branch_names() {
+    use nicegit_core::github::pull_request_branch_name;
+    assert_eq!(pull_request_branch_name(7, "Add a login page!"), "pr/7-add-a-login-page");
+    assert_eq!(pull_request_branch_name(12, "ünïcode *** "), "pr/12-n-code");
+    assert_eq!(pull_request_branch_name(3, "!!!"), "pr/3", "a title without letters or digits leaves the number");
+    let long = pull_request_branch_name(9, &"word ".repeat(30));
+    assert!(long.len() <= "pr/9-".len() + 40, "the slug is at most 40 characters: {long}");
+    for name in [pull_request_branch_name(7, "Fix: the .lock/ and ~ thing"), long] {
+        assert!(!name.ends_with('-'), "{name}");
+        let reference = format!("refs/heads/{name}");
+        assert!(git_output(Path::new("."), &["check-ref-format", &reference]).status.success(), "{name} is a valid ref");
+    }
+}
+
 // MARK: History scope
 
 /// The commit hashes in a snapshot's history, newest first.

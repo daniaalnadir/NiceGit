@@ -1,6 +1,7 @@
 //! GitHub pull requests and issues for a GitHub remote (github.com or a GitHub Enterprise Server
 //! host), read through the `gh` command-line tool. NiceGit never stores a token; `gh` keeps its own sign-in.
 
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -442,6 +443,97 @@ impl GitClient {
             return Err(GitError::failed("GitHub", "The branch name is not valid."));
         }
         Ok(())
+    }
+
+    /// Fetches pull request `number` from `remote` into the local branch `local_name` and switches
+    /// to it. The fetch reads `refs/pull/<number>/head`, which GitHub keeps for every pull request,
+    /// including ones from forks. No upstream is set, because the pull request's branch may not be
+    /// on `remote`.
+    ///
+    /// Refused unless the checkout is still `expected_branch` at `expected_head`, no Git operation
+    /// is unfinished, the working tree is clean (changes are never stashed here), and `remote` still
+    /// has the fetch addresses that were displayed. An existing `local_name` is switched to only
+    /// when it already points at the pull request's head; otherwise the call is refused, so a
+    /// different name can be chosen. The checkout is checked again after the network step.
+    #[allow(clippy::too_many_arguments)]
+    pub fn checkout_pull_request(
+        &self,
+        remote: &str,
+        number: u64,
+        local_name: &str,
+        expected_fetch_addresses: &[String],
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        directory: &Path,
+    ) -> Result<()> {
+        const COMMAND: &str = "check out pull request";
+        if remote.is_empty() || remote.starts_with('-') {
+            return Err(GitError::failed(COMMAND, "Choose a remote first."));
+        }
+        if number == 0 {
+            return Err(GitError::failed(COMMAND, "The pull request number is not valid."));
+        }
+        let local_name = local_name.trim();
+        self.require_checkout(expected_branch, expected_head, COMMAND, directory)?;
+        self.require_finished_operation(COMMAND, directory)?;
+        if !self.load_status(directory)?.is_empty() {
+            return Err(GitError::failed(
+                COMMAND,
+                "Commit, stash, or discard your changes before checking out a pull request. Nothing was changed.",
+            ));
+        }
+        let expected = BTreeMap::from([(remote.to_string(), expected_fetch_addresses.to_vec())]);
+        self.require_remote_addresses(&expected, remote, false, COMMAND, directory)?;
+        self.check_branch_name(local_name, directory)?;
+
+        let source = format!("refs/pull/{number}/head");
+        let reference = format!("refs/heads/{local_name}");
+        if self.try_trimmed(&["rev-parse", "--verify", "--quiet", &reference], directory).is_some() {
+            // The existing branch is used only when it already holds the pull request's head. Fetching
+            // into FETCH_HEAD alone leaves the branch as it is.
+            self.run(&["fetch", "--no-tags", "--", remote, &source], directory)?;
+            let fetched = self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", "FETCH_HEAD^{commit}"], directory)?;
+            let existing = self.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &reference], directory)?;
+            if existing != fetched {
+                return Err(GitError::failed(
+                    COMMAND,
+                    format!(
+                        "A branch named {local_name} already exists and does not point at pull request #{number}. Choose another name."
+                    ),
+                ));
+            }
+        } else {
+            // Fetching into a new local branch creates it at the pull request's head, without an upstream.
+            self.run(&["fetch", "--no-tags", "--", remote, &format!("{source}:{reference}")], directory)?;
+        }
+        // Another client may switch checkouts during the network step.
+        self.require_checkout(expected_branch, expected_head, COMMAND, directory)?;
+        self.run(&["switch", "--no-overwrite-ignore", "--", local_name], directory).map(drop)
+    }
+}
+
+/// The local branch a pull request is checked out to by default: `pr/<number>-<slug>`, where the
+/// slug is the title's ASCII letters and digits, lowercased and joined by hyphens, at most 40
+/// characters. Every result is a valid branch name, and the name is `pr/<number>` when the title
+/// has no such characters.
+pub fn pull_request_branch_name(number: u64, title: &str) -> String {
+    const SLUG_LIMIT: usize = 40;
+    let mut slug = String::new();
+    for character in title.chars() {
+        if slug.len() >= SLUG_LIMIT {
+            break;
+        }
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_end_matches('-');
+    if slug.is_empty() {
+        format!("pr/{number}")
+    } else {
+        format!("pr/{number}-{slug}")
     }
 }
 
