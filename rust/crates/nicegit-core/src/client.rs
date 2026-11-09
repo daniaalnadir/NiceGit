@@ -625,11 +625,44 @@ impl GitClient {
     // MARK: Commits
 
     pub fn commit(&self, message: &str, directory: &Path) -> Result<()> {
+        self.commit_with_options(message, false, directory)
+    }
+
+    /// Commits the staged changes. With `skip_hooks`, `--no-verify` leaves out the pre-commit and
+    /// commit-msg hooks. A commit a hook refuses is `GitError::HookRejected`.
+    pub fn commit_with_options(&self, message: &str, skip_hooks: bool, directory: &Path) -> Result<()> {
         let message = message.trim();
         if message.is_empty() {
             return Err(GitError::EmptyCommitMessage);
         }
-        self.run(&["commit", "--quiet", "-m", message], directory).map(drop)
+        let mut arguments = vec!["commit", "--quiet"];
+        if skip_hooks {
+            arguments.push("--no-verify");
+        }
+        arguments.extend(["-m", message]);
+        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
+    }
+
+    /// Reports a failed commit as a hook's refusal when hooks ran and a `pre-commit` or
+    /// `commit-msg` hook is installed, unless Git's own checks explain the failure. Git prints the
+    /// hook's output on failure, so the message is kept whole.
+    fn refusal_by_hook(&self, error: GitError, skip_hooks: bool, directory: &Path) -> GitError {
+        match error {
+            GitError::CommandFailed { command, message }
+                if !skip_hooks && !is_own_commit_refusal(&message) && self.commit_hooks_installed(directory) =>
+            {
+                GitError::HookRejected { command, output: message }
+            }
+            other => other,
+        }
+    }
+
+    /// Whether a `pre-commit` or `commit-msg` hook is installed where Git looks for hooks, which
+    /// honours `core.hooksPath`.
+    fn commit_hooks_installed(&self, directory: &Path) -> bool {
+        let Ok(output) = self.run(&["rev-parse", "--git-path", "hooks"], directory) else { return false };
+        let hooks = directory.join(runner::strip_line_terminator(output));
+        ["pre-commit", "commit-msg"].iter().any(|name| runner::is_executable(&hooks.join(name)))
     }
 
     /// The message in the file `commit.template` names, cleaned up as `git commit` cleans a
@@ -692,6 +725,18 @@ impl GitClient {
 
     /// Replaces the last commit with one that also contains the staged changes.
     pub fn amend(&self, message: &str, expected_branch: &str, expected_head: &str, directory: &Path) -> Result<()> {
+        self.amend_with_options(message, expected_branch, expected_head, false, directory)
+    }
+
+    /// Like `amend`, with `skip_hooks` leaving out the pre-commit and commit-msg hooks.
+    pub fn amend_with_options(
+        &self,
+        message: &str,
+        expected_branch: &str,
+        expected_head: &str,
+        skip_hooks: bool,
+        directory: &Path,
+    ) -> Result<()> {
         let message = message.trim();
         if message.is_empty() {
             return Err(GitError::EmptyCommitMessage);
@@ -700,7 +745,12 @@ impl GitClient {
         if state.operation.is_some() {
             return Err(GitError::failed("amend commit", "Finish or abort the current Git operation before amending."));
         }
-        self.run(&["commit", "--quiet", "--amend", "--message", message], directory).map(drop)
+        let mut arguments = vec!["commit", "--quiet", "--amend"];
+        if skip_hooks {
+            arguments.push("--no-verify");
+        }
+        arguments.extend(["--message", message]);
+        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
     /// The commit HEAD points to, if any.
@@ -1230,10 +1280,20 @@ impl GitClient {
     /// Pushes only the current branch to its upstream, with an explicit refspec and without
     /// mirroring or following tags, whatever the user's push settings.
     pub fn push(&self, snapshot: &Snapshot, directory: &Path) -> Result<()> {
+        self.push_with_options(snapshot, false, directory)
+    }
+
+    /// Like `push`, with `skip_hooks` leaving out the pre-push hook.
+    pub fn push_with_options(&self, snapshot: &Snapshot, skip_hooks: bool, directory: &Path) -> Result<()> {
         let (remote, upstream, head) = self.push_target(snapshot, "push", directory)?;
         let mirror = format!("remote.{remote}.mirror=false");
         let refspec = format!("{head}:{upstream}");
-        self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", &remote, &refspec], directory).map(drop)
+        let mut arguments = vec!["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no"];
+        if skip_hooks {
+            arguments.push("--no-verify");
+        }
+        arguments.extend(["--", &remote, &refspec]);
+        self.run(&arguments, directory).map(drop)
     }
 
     /// The checks every push runs before it sends anything: the checkout is still the one
@@ -1323,6 +1383,11 @@ impl GitClient {
     /// `snapshot` and the branch has an upstream; pushes only the commit just made, on top of
     /// that HEAD. If the push fails, the commit stays and the error says so.
     pub fn commit_and_push(&self, message: &str, snapshot: &Snapshot, directory: &Path) -> Result<()> {
+        self.commit_and_push_with_options(message, snapshot, false, directory)
+    }
+
+    /// Like `commit_and_push`, with `skip_hooks` leaving out the commit's hooks and the pre-push hook.
+    pub fn commit_and_push_with_options(&self, message: &str, snapshot: &Snapshot, skip_hooks: bool, directory: &Path) -> Result<()> {
         const COMMAND: &str = "commit and push";
         let branch = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).unwrap_or_default();
         let head = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD"], directory);
@@ -1332,7 +1397,7 @@ impl GitClient {
         if snapshot.upstream.is_none() {
             return Err(GitError::failed(COMMAND, "Publish the branch before pushing commits to it."));
         }
-        self.commit(message, directory)?;
+        self.commit_with_options(message, skip_hooks, directory)?;
         let committed = self.run_trimmed(&["rev-parse", "--verify", "HEAD"], directory)?;
         let parent = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD^"], directory);
         let still_here = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).ok() == Some(branch);
@@ -1341,7 +1406,7 @@ impl GitClient {
         }
         let mut committed_snapshot = snapshot.clone();
         committed_snapshot.head_hash = Some(committed);
-        self.push(&committed_snapshot, directory)
+        self.push_with_options(&committed_snapshot, skip_hooks, directory)
             .map_err(|error| GitError::failed(COMMAND, format!("The commit was made, but pushing it failed: {error}")))
     }
 
@@ -1854,6 +1919,26 @@ pub fn operation_in(git_directory: &Path) -> Option<Operation> {
         Some("revert") => Some(Operation::Revert),
         _ => None,
     })
+}
+
+/// Git's own reasons to refuse a commit, which no hook causes: nothing to commit, no identity,
+/// unmerged files, a lock on the index, or a signing failure.
+fn is_own_commit_refusal(message: &str) -> bool {
+    [
+        "nothing to commit",
+        "nothing added to commit",
+        "no changes added to commit",
+        "Please tell me who you are",
+        "Author identity unknown",
+        "unable to auto-detect email address",
+        "empty ident name",
+        "Aborting commit due to empty commit message",
+        "unmerged files",
+        "index.lock",
+        "failed to sign",
+    ]
+    .iter()
+    .any(|sign| message.contains(sign))
 }
 
 #[cfg(test)]

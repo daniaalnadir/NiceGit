@@ -374,6 +374,7 @@ impl NiceGitApp {
                 // rather than pushing them out of view; the whole message is in its tooltip.
                 let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
                 let mut open_link: Option<String> = None;
+                let mut retry_commit: Option<crate::app::HookRetry> = None;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
                     if action == Some(crate::app::NoticeAction::Stash) {
@@ -391,6 +392,14 @@ impl NiceGitApp {
                     if let Some(crate::app::NoticeAction::OpenUrl(url)) = &action {
                         if ui.button("Open").on_hover_text(url.as_str()).clicked() {
                             open_link = Some(url.clone());
+                        }
+                    }
+                    if let Some(crate::app::NoticeAction::CommitWithoutHooks(retry)) = &action {
+                        let button = ui
+                            .add_enabled(self.idle(), egui::Button::new("Commit without hooks"))
+                            .on_hover_text("Make the same commit again with Git hooks skipped");
+                        if button.clicked() {
+                            retry_commit = Some(retry.clone());
                         }
                     }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -422,6 +431,10 @@ impl NiceGitApp {
                 }
                 if pull {
                     self.integrate_upstream();
+                }
+                if let Some(retry) = retry_commit {
+                    self.notice = None;
+                    self.commit_without_hooks(retry);
                 }
                 return;
             }

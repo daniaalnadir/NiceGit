@@ -310,7 +310,15 @@ pub struct CheckoutState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GitError {
-    CommandFailed { command: String, message: String },
+    CommandFailed {
+        command: String,
+        message: String,
+    },
+    /// A commit hook refused the commit. `output` is what Git printed, including the hook's own words.
+    HookRejected {
+        command: String,
+        output: String,
+    },
     EmptyBranchName,
     EmptyCommitMessage,
     GitNotFound,
@@ -326,6 +334,7 @@ impl fmt::Display for GitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             GitError::CommandFailed { command, message } => write!(f, "Git could not run `{command}`: {message}"),
+            GitError::HookRejected { command, output } => write!(f, "A Git hook refused `{command}`: {output}"),
             GitError::EmptyBranchName => write!(f, "Branch name cannot be empty."),
             GitError::EmptyCommitMessage => write!(f, "Commit message cannot be empty."),
             GitError::GitNotFound => write!(f, "Git was not found. Install Git and make sure it is on your PATH."),

@@ -3249,3 +3249,67 @@ fn trailers_menu_leaves_out_the_current_user() {
     assert!(harness.query_all_by_label("Co-authored-by: Test <test@example.invalid>").next().is_none());
     assert!(harness.query_all_by_label("Signed-off-by: Test <test@example.invalid>").next().is_some());
 }
+
+/// Installs a `pre-commit` hook under the repository's `.git/hooks` that refuses every commit.
+#[cfg(unix)]
+fn refusing_pre_commit_hook(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let hook = path.join(".git").join("hooks").join("pre-commit");
+    std::fs::write(&hook, "#!/bin/sh\necho 'lint: trailing space' >&2\nexit 1\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_hook_that_stops_the_commit_can_be_skipped_from_its_notice() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "hooked\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    refusing_pre_commit_hook(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Hooked commit");
+
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+    wait(&mut harness, "the hook's notice", |h| has_label(h, "Commit without hooks"));
+    assert!(shows(&harness, "A Git hook stopped the commit."));
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "Add a second line", "nothing was committed");
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Hooked commit", "the message is back in the box");
+
+    harness.get_by_label("Commit without hooks").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Hooked commit");
+    assert!(!has_label(&harness, "Commit without hooks"), "the notice is gone once the commit is made");
+}
+
+#[cfg(unix)]
+#[test]
+fn commit_options_skip_hooks_for_one_commit_only() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "skipped\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    refusing_pre_commit_hook(path);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Skip the hook");
+
+    harness.get_by_label("Commit options").click();
+    settle(&mut harness);
+    harness.get_by_label("Skip Git hooks").click();
+    settle(&mut harness);
+    assert!(harness.state().repo().unwrap().skip_hooks);
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+    assert!(shows(&harness, "Git hooks are skipped for this commit"));
+
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Skip the hook");
+    assert!(!harness.state().repo().unwrap().skip_hooks, "the option resets after the commit");
+    assert!(!shows(&harness, "Git hooks are skipped for this commit"));
+}

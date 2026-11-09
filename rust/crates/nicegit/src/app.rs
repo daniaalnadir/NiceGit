@@ -96,6 +96,25 @@ pub enum NoticeAction {
     Stash,
     /// Open this web address in the browser. Only `https://` addresses open.
     OpenUrl(String),
+    /// Make the commit again with Git hooks skipped, after a hook stopped it.
+    CommitWithoutHooks(HookRetry),
+}
+
+/// Which commit a Git hook stopped, so it can be made again with hooks skipped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HookCommit {
+    Commit,
+    Amend,
+    CommitAndPush,
+}
+
+/// The branch and HEAD a stopped commit was made on. Nothing was committed, so the retry must
+/// find the checkout unchanged before it commits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HookRetry {
+    pub kind: HookCommit,
+    pub branch: String,
+    pub head: Option<String>,
 }
 
 /// Whether Git stopped because uncommitted changes would be overwritten.
@@ -285,6 +304,9 @@ pub struct Repo {
     pub sent_draft: Option<Draft>,
     pub draft_key: Option<String>,
     pub amend: bool,
+    /// Whether the next commit, amend, or push skips Git hooks. Set from the commit box's options
+    /// menu and cleared once a commit is sent, so it is not remembered between commits.
+    pub skip_hooks: bool,
     pub commit_filter: String,
     pub branch_filter: String,
     /// Text that narrows the Add trailers menu's list of co-authors. Not saved.
@@ -445,6 +467,7 @@ impl Repo {
             sent_draft: None,
             draft_key: None,
             amend: false,
+            skip_hooks: false,
             commit_filter: String::new(),
             branch_filter: String::new(),
             trailer_filter: String::new(),
@@ -1103,6 +1126,29 @@ impl NiceGitApp {
                         match result {
                             Ok(Some(text)) => self.record_result(index, &text),
                             Ok(None) => {}
+                            // A hook refused the commit, so nothing was made. The notice offers the same commit
+                            // again with hooks skipped, for the checkout the commit was made on.
+                            Err(GitError::HookRejected { output, .. })
+                                if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") =>
+                            {
+                                action_failed = true;
+                                let kind = match label.as_str() {
+                                    "Amend" => HookCommit::Amend,
+                                    "Commit and push" => HookCommit::CommitAndPush,
+                                    _ => HookCommit::Commit,
+                                };
+                                let retry = self.repos[index].snapshot.as_ref().map(|s| HookRetry {
+                                    kind,
+                                    branch: s.current_branch.clone(),
+                                    head: s.head_hash.clone(),
+                                });
+                                self.notice = Some(Notice {
+                                    text: "A Git hook stopped the commit.".into(),
+                                    is_error: true,
+                                    action: retry.map(NoticeAction::CommitWithoutHooks),
+                                    detail: Some(output),
+                                });
+                            }
                             // The tag was created before its push failed, so the notice must say so
                             // rather than be mapped to a generic remote explanation.
                             Err(error) if label == "Create tag" && error.to_string().contains("but could not push it to") => {
@@ -1916,16 +1962,59 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let Some(repo) = self.repo() else { return };
         let message = repo.draft.message();
+        let skip = repo.skip_hooks;
         if repo.amend {
             let Some(head) = snapshot.head_hash.clone() else { return };
             let branch = snapshot.current_branch.clone();
             self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
-                client.amend(&message, &branch, &head, path).map(|_| Some("Amended the last commit.".into()))
+                client.amend_with_options(&message, &branch, &head, skip, path).map(|_| Some("Amended the last commit.".into()))
             });
         } else {
             self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
-                client.commit(&message, path).map(|_| None)
+                client.commit_with_options(&message, skip, path).map(|_| None)
             });
+        }
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.amend = false;
+                repo.skip_hooks = false;
+            }
+            self.save_draft();
+        }
+    }
+
+    /// Makes a commit that a Git hook stopped, again with hooks skipped, as the notice offers.
+    /// Refused when the branch or HEAD changed since the commit stopped, so it lands only on the
+    /// checkout the notice described.
+    pub fn commit_without_hooks(&mut self, retry: HookRetry) {
+        if !self.idle() {
+            return;
+        }
+        let Some(snapshot) = self.snapshot().cloned() else { return };
+        if snapshot.current_branch != retry.branch || snapshot.head_hash != retry.head {
+            self.notify("The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again.", true);
+            return;
+        }
+        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        match retry.kind {
+            HookCommit::Commit => {
+                self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
+                    client.commit_with_options(&message, true, path).map(|_| None)
+                });
+            }
+            HookCommit::Amend => {
+                let Some(head) = retry.head.clone() else { return };
+                let branch = retry.branch.clone();
+                self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
+                    client.amend_with_options(&message, &branch, &head, true, path).map(|_| Some("Amended the last commit.".into()))
+                });
+            }
+            HookCommit::CommitAndPush => {
+                self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
+                    client.commit_and_push_with_options(&message, &snapshot, true, path).map(|_| Some("Committed and pushed.".into()))
+                });
+            }
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
@@ -1954,15 +2043,18 @@ impl NiceGitApp {
         if !self.can_stage_all_and_commit() {
             return;
         }
-        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        let Some((message, skip)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks)) else { return };
         let count = self.snapshot().map_or(0, |s| s.status.len());
         self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
             client.stage_all(path)?;
-            client.commit(&message, path).map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
+            client
+                .commit_with_options(&message, skip, path)
+                .map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.skip_hooks = false;
             }
             self.save_draft();
         }
@@ -1974,13 +2066,14 @@ impl NiceGitApp {
             return;
         }
         let Some(snapshot) = self.snapshot().cloned() else { return };
-        let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        let Some((message, skip)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks)) else { return };
         self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
-            client.commit_and_push(&message, &snapshot, path).map(|_| Some("Committed and pushed.".into()))
+            client.commit_and_push_with_options(&message, &snapshot, skip, path).map(|_| Some("Committed and pushed.".into()))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.skip_hooks = false;
             }
             self.save_draft();
         }

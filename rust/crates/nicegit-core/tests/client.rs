@@ -406,6 +406,111 @@ fn commit_rejects_empty_message_and_adds_history() {
     assert!(snap.status.is_empty());
 }
 
+/// Writes an executable hook under the repository's `.git/hooks`, running `script` under `sh`.
+#[cfg(unix)]
+fn install_hook(directory: &Path, name: &str, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let hooks = directory.join(".git").join("hooks");
+    fs::create_dir_all(&hooks).expect("create hooks folder");
+    let file = hooks.join(name);
+    fs::write(&file, format!("#!/bin/sh\n{script}\n")).expect("write hook");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).expect("make hook executable");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failing_pre_commit_hook_blocks_the_commit_until_hooks_are_skipped() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    install_hook(repo.path(), "pre-commit", "echo 'lint failed: trailing space' >&2\nexit 1");
+    repo.write("b.txt", "two\n");
+    client().stage("b.txt", repo.path()).expect("stage");
+
+    match client().commit("Second", repo.path()) {
+        Err(GitError::HookRejected { output, .. }) => assert!(output.contains("lint failed: trailing space"), "{output}"),
+        other => panic!("expected a hook refusal, got {other:?}"),
+    }
+    assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]).trim(), "1", "nothing was committed");
+
+    client().commit_with_options("Second", true, repo.path()).expect("commit with hooks skipped");
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Second");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failing_commit_msg_hook_blocks_the_commit_and_amend_until_hooks_are_skipped() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    install_hook(repo.path(), "commit-msg", "grep -q '^Ticket:' \"$1\" || { echo 'the message needs a Ticket line' >&2; exit 1; }");
+    repo.write("b.txt", "two\n");
+    client().stage("b.txt", repo.path()).expect("stage");
+
+    match client().commit("Second", repo.path()) {
+        Err(GitError::HookRejected { output, .. }) => assert!(output.contains("needs a Ticket line"), "{output}"),
+        other => panic!("expected a hook refusal, got {other:?}"),
+    }
+    match client().amend_with_options("Amended", "main", &first, false, repo.path()) {
+        Err(GitError::HookRejected { .. }) => {}
+        other => panic!("expected a hook refusal from amend, got {other:?}"),
+    }
+    assert_eq!(repo.head(), first, "the refused amend did not move HEAD");
+
+    client().amend_with_options("Amended", "main", &first, true, repo.path()).expect("amend with hooks skipped");
+    assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Amended");
+    assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]).trim(), "1");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_hook_under_core_hooks_path_is_found() {
+    use std::os::unix::fs::PermissionsExt;
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.write(".githooks/pre-commit", "#!/bin/sh\necho 'from hooksPath' >&2\nexit 1\n");
+    fs::set_permissions(repo.path().join(".githooks/pre-commit"), fs::Permissions::from_mode(0o755)).expect("make hook executable");
+    repo.git(&["config", "core.hooksPath", ".githooks"]);
+    repo.write("b.txt", "two\n");
+    client().stage("b.txt", repo.path()).expect("stage");
+
+    match client().commit("Second", repo.path()) {
+        Err(GitError::HookRejected { output, .. }) => assert!(output.contains("from hooksPath"), "{output}"),
+        other => panic!("expected a hook refusal, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_commit_refused_by_git_itself_is_not_reported_as_a_hook() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    // Nothing is staged, so Git refuses on its own, whether or not hooks exist.
+    match client().commit("Second", repo.path()) {
+        Err(GitError::CommandFailed { .. }) => {}
+        other => panic!("expected Git's own refusal, got {other:?}"),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn commit_and_push_skipping_hooks_also_skips_the_pre_push_hook() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    install_hook(repo.path(), "pre-push", "echo 'no pushing today' >&2\nexit 1");
+
+    repo.write("a.txt", "two\n");
+    repo.git(&["add", "a.txt"]);
+    let error = error_text(client().commit_and_push("Second", &snapshot(repo.path()), repo.path()));
+    assert!(error.contains("The commit was made, but pushing it failed"), "{error}");
+
+    repo.write("b.txt", "three\n");
+    repo.git(&["add", "b.txt"]);
+    client().commit_and_push_with_options("Third", &snapshot(repo.path()), true, repo.path()).expect("commit and push, skipping hooks");
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), head.trim());
+}
+
 #[test]
 fn undo_last_commit_keeps_changes_staged() {
     let repo = Repo::new();

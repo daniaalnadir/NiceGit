@@ -65,6 +65,12 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Add trailers from the commit box's menu: Signed-off-by from your Git identity, and
   Co-authored-by from recent authors (the current user and bots left out). The menu edits
   the description text, so the exact lines show before you commit.
+- Skip Git hooks for a commit from the commit box's options menu (the gear beside Add
+  trailers). The note under the Commit button shows while it is on, and it resets after each
+  commit. Skipping passes `--no-verify` to the commit, amend, or Commit and push, and also
+  skips the pre-push hook for Commit and push. When a pre-commit or commit-msg hook stops a
+  commit, the notice shows Git's output and offers Commit without hooks, which makes the same
+  commit once with hooks skipped if the branch and HEAD have not changed.
 - An empty commit message starts from the repository's commit.template, with comment
   lines removed. As with Git, an unedited template cannot be committed.
 - Show diffs side by side (old left, new right, long lines wrapped) or in one column; the
