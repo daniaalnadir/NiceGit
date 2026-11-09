@@ -160,9 +160,23 @@ pub fn lease_was_refused(error: &str) -> bool {
 pub enum Selection {
     None,
     WorkingTree,
-    Change { entry: StatusEntry, staged: bool },
-    Commit { hash: String, file: Option<String> },
-    Stash { hash: String, file: Option<String> },
+    Change {
+        entry: StatusEntry,
+        staged: bool,
+    },
+    Commit {
+        hash: String,
+        file: Option<String>,
+    },
+    /// A file as it was at a commit, shown read-only from the commit inspector's All files view.
+    CommitFile {
+        hash: String,
+        path: String,
+    },
+    Stash {
+        hash: String,
+        file: Option<String>,
+    },
 }
 
 /// An action that can be undone, with the words to describe it.
@@ -260,6 +274,14 @@ fn push_capped(stack: &mut Vec<HistoryEntry>, entry: HistoryEntry) {
 
 pub type RecordSlot = Arc<Mutex<Option<Recorded>>>;
 
+/// A commit's tree for the All files view: listed once in the background, then indexed for the
+/// folder tree when the listing arrives.
+pub struct CommitTree {
+    pub hash: String,
+    pub listing: Task<nicegit_core::Result<nicegit_core::commit_tree::TreeListing>>,
+    pub index: Option<Arc<crate::ui::commit_tree::TreeIndex>>,
+}
+
 /// One open repository tab.
 pub struct Repo {
     pub path: PathBuf,
@@ -342,6 +364,12 @@ pub struct Repo {
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
     /// Lines added and removed in each file of the selected commit, with that commit's hash.
     pub commit_line_counts: Option<(String, Task<Option<FileLineCounts>>)>,
+    /// Whether the commit inspector lists every file in the commit's tree rather than its changes.
+    pub inspector_all_files: bool,
+    /// The tree of the commit the All files view last showed, listed once in the background.
+    pub commit_tree: Option<CommitTree>,
+    /// The file shown in place of the history, read in the background.
+    pub commit_contents: Option<Task<nicegit_core::Result<nicegit_core::commit_tree::FileView>>>,
     /// Whether each path is stored with Git LFS, read when its file menu first opens. Cleared on
     /// each repository refresh, since a change to `.gitattributes` changes the answer.
     pub lfs_paths: std::collections::HashMap<String, Task<nicegit_core::Result<bool>>>,
@@ -493,6 +521,9 @@ impl Repo {
             external_tools: None,
             change_filter: String::new(),
             commit_line_counts: None,
+            inspector_all_files: false,
+            commit_tree: None,
+            commit_contents: None,
             lfs_paths: std::collections::HashMap::new(),
             branch_tracking: None,
             image_preview: None,
@@ -1416,6 +1447,10 @@ impl NiceGitApp {
                     }
                     repo.stash_files = Some((hash, result.map_err(|error| error.to_string())));
                 }
+                Message::FileSaved { result } => match result {
+                    Ok(name) => self.notify(format!("Saved {name}."), false),
+                    Err(error) => self.notify(error.to_string(), true),
+                },
             }
         }
     }
@@ -1489,7 +1524,7 @@ impl NiceGitApp {
             Selection::Change { entry, staged } => {
                 snapshot.status.iter().any(|e| e == entry && (if *staged { e.is_staged() } else { e.is_unstaged() }))
             }
-            Selection::Commit { hash, .. } => snapshot.commits.iter().any(|c| &c.hash == hash),
+            Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } => snapshot.commits.iter().any(|c| &c.hash == hash),
             Selection::Stash { hash, .. } => snapshot.stashes.iter().any(|s| &s.hash == hash),
         };
         repo.marked.retain(|hash| snapshot.commits.iter().any(|c| &c.hash == hash));
@@ -1683,6 +1718,7 @@ impl NiceGitApp {
         repo.diff_options.selected.clear();
         repo.commit_files.clear();
         repo.stash_files = None;
+        repo.commit_contents = None;
         repo.diff_generation = next_id();
         repo.diff_loading = false;
     }
@@ -1711,7 +1747,10 @@ impl NiceGitApp {
     /// Whether a file's diff is open. It fills the main area in place of the history.
     pub fn showing_diff(&self) -> bool {
         self.repo().is_some_and(|r| {
-            matches!(r.selection, Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. })
+            matches!(
+                r.selection,
+                Selection::Change { .. } | Selection::Stash { .. } | Selection::Commit { file: Some(_), .. } | Selection::CommitFile { .. }
+            )
         })
     }
 
@@ -1813,7 +1852,7 @@ impl NiceGitApp {
     /// it came from selected.
     pub fn close_diff(&mut self) {
         match self.repo().map(|r| r.selection.clone()) {
-            Some(Selection::Commit { hash, file: Some(_) }) => self.select_commit(hash),
+            Some(Selection::Commit { hash, file: Some(_) }) | Some(Selection::CommitFile { hash, .. }) => self.select_commit(hash),
             Some(Selection::Stash { hash, file: Some(_) }) => {
                 if let Some(stash) = self.stash_for(&hash) {
                     self.select_stash_file(stash, None);
@@ -1947,6 +1986,57 @@ impl NiceGitApp {
             });
         }
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, file.as_deref(), request, &path));
+    }
+
+    /// Lists the selected commit's tree in the background for the All files view, unless it is
+    /// already listed or listing. The listing is kept for the commit until another one is shown.
+    pub fn ensure_commit_tree(&mut self, hash: &str) {
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repos.get_mut(self.active) else { return };
+        if repo.commit_tree.as_ref().is_some_and(|tree| tree.hash == hash) {
+            return;
+        }
+        let (directory, listed) = (repo.path.clone(), hash.to_string());
+        let listing = Task::spawn(&context, move || GitClient::new().commit_tree(&listed, &directory));
+        repo.commit_tree = Some(CommitTree { hash: hash.to_string(), listing, index: None });
+    }
+
+    /// Discards the commit's tree listing so a failed one is listed again.
+    pub fn relist_commit_tree(&mut self) {
+        if let Some(repo) = self.repo_mut() {
+            repo.commit_tree = None;
+        }
+    }
+
+    /// Shows one file as it was at a commit, in place of the history. The file is read in the
+    /// background. A large file is read only when `open_anyway` is set. Its object is taken from
+    /// the commit's listing, so the file must be listed there.
+    pub fn select_commit_contents(&mut self, hash: String, path: String, open_anyway: bool) {
+        let Some(entry) = self.repo_mut().and_then(|repo| listed_entry(repo, &hash, &path)) else {
+            self.notify("That file is not listed for this commit. Select the commit again.", true);
+            return;
+        };
+        let context = self.worker.context.clone();
+        let Some(repo) = self.repo_mut() else { return };
+        // A file read in the background takes the diff's place, so a diff still loading is dropped.
+        repo.diff_generation = next_id();
+        repo.diff_loading = false;
+        repo.selection = Selection::CommitFile { hash, path };
+        repo.commit_contents = Some(if entry.submodule {
+            Task::ready(Ok(nicegit_core::commit_tree::FileView::Submodule(entry.object)))
+        } else {
+            let (directory, object) = (repo.path.clone(), entry.object.clone());
+            Task::spawn(&context, move || GitClient::new().file_view(&object, open_anyway, &directory))
+        });
+    }
+
+    /// Asks where to save a file as it was at a commit, then writes it there in the background.
+    pub fn save_commit_file_copy(&mut self, hash: &str, path: &str) {
+        let Some(repo) = self.repo() else { return };
+        let directory = repo.path.clone();
+        let name = Path::new(path).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
+        let Some(destination) = crate::file_dialog::save_file("Save a copy", &name) else { return };
+        self.worker.save_copy(directory, hash.to_string(), path.to_string(), destination);
     }
 
     /// Selects a stash from the sidebar: its whole diff, with its files listed in the inspector.
@@ -2671,6 +2761,13 @@ impl NiceGitApp {
 }
 
 /// Windows' canonical paths start with `\\?\`, which Git and users do not expect.
+/// The entry at `path` in the listing of commit `hash`, once that listing has arrived.
+fn listed_entry(repo: &mut Repo, hash: &str, path: &str) -> Option<nicegit_core::commit_tree::TreeEntry> {
+    let tree = repo.commit_tree.as_mut().filter(|tree| tree.hash == hash)?;
+    let listing = tree.listing.get()?.as_ref().ok()?;
+    listing.entries.iter().find(|entry| entry.path == path).cloned()
+}
+
 fn strip_verbatim(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     match text.strip_prefix(r"\\?\") {
