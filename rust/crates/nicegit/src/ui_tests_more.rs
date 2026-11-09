@@ -14,6 +14,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::diff::DiffLineKind;
 
 use crate::app::NiceGitApp;
+use crate::settings::Workspace;
 use crate::ui_tests::*;
 
 type App = Harness<'static, NiceGitApp>;
@@ -3418,4 +3419,91 @@ fn commit_options_skip_hooks_for_one_commit_only() {
     wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Skip the hook");
     assert!(!harness.state().repo().unwrap().skip_hooks, "the option resets after the commit");
     assert!(!shows(&harness, "Git hooks are skipped for this commit"));
+}
+
+#[test]
+fn saving_the_open_tabs_as_a_workspace_through_the_menu_keeps_tab_order() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    loaded(&mut harness);
+
+    harness.get_by_role_and_label(Role::Button, "Workspaces").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Save open tabs as workspace").click();
+    wait(&mut harness, "the workspace name field", |h| h.query_by_role_and_label(Role::TextInput, "Workspace name").is_some());
+    type_into(&mut harness, "Workspace name", "Client work");
+    wait(&mut harness, "the OK button", |h| h.query_by_label("OK").is_some());
+    harness.get_by_label("OK").click();
+    idle(&mut harness);
+
+    let saved = harness.state().settings.workspaces.clone();
+    assert_eq!(saved.len(), 1, "one workspace is saved");
+    assert_eq!(saved[0].name, "Client work");
+    assert_eq!(saved[0].repositories.len(), 2);
+    assert!(same_folder(&saved[0].repositories[0], first.path()), "the first tab is first");
+    assert!(same_folder(&saved[0].repositories[1], second.path()), "the second tab is second");
+}
+
+#[test]
+fn opening_a_workspace_skips_open_tabs_and_reports_a_missing_folder() {
+    let first = repository();
+    let second = repository();
+    let gone = first.path().join("no-longer-here");
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_path = harness.state().repos[0].path.clone();
+    let second_path = std::fs::canonicalize(second.path()).unwrap();
+    harness
+        .state_mut()
+        .settings
+        .workspaces
+        .push(Workspace { name: "Client work".into(), repositories: vec![first_path.clone(), second_path, gone.clone()] });
+
+    harness.get_by_role_and_label(Role::Button, "Workspaces").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open workspace").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Client work").click();
+    wait(&mut harness, "the workspace's second repository to open", |h| h.state().repos.len() == 2);
+    idle(&mut harness);
+
+    assert!(same_folder(&harness.state().repos[0].path, first.path()), "the open tab stays first");
+    assert!(same_folder(&harness.state().repos[1].path, second.path()), "the missing folder is not a tab");
+    let notice = harness.state().notice.as_ref().map(|n| n.text.clone()).unwrap_or_default();
+    assert!(notice.contains("1 missing folder"), "one notice names the missing folder: {notice}");
+    assert!(first.path().exists() && second.path().exists(), "no folder on disk changes");
+}
+
+#[test]
+fn managing_workspaces_renames_and_deletes_them_and_leaves_folders_alone() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let repo_path = harness.state().repos[0].path.clone();
+    harness.state_mut().settings.workspaces.push(Workspace { name: "Client work".into(), repositories: vec![repo_path] });
+
+    harness.get_by_role_and_label(Role::Button, "Workspaces").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Manage workspaces").click();
+    wait(&mut harness, "the rename button", |h| h.query_by_label("Rename Client work").is_some());
+    harness.get_by_label("Rename Client work").click();
+    wait(&mut harness, "the name field", |h| h.query_by_role_and_label(Role::TextInput, "Name of Client work").is_some());
+    harness.get_by_role_and_label(Role::TextInput, "Name of Client work").focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Name of Client work").type_text("Clients");
+    harness.step();
+    harness.get_by_label("Rename").click();
+    wait(&mut harness, "the rename", |h| h.state().settings.workspaces.first().is_some_and(|w| w.name == "Clients"));
+
+    harness.get_by_label("Delete Clients").click();
+    wait(&mut harness, "the delete confirmation", |h| h.query_by_label("Delete").is_some());
+    harness.get_by_label("Delete").click();
+    wait(&mut harness, "the workspace to be deleted", |h| h.state().settings.workspaces.is_empty());
+    assert!(repo.path().exists(), "deleting a workspace leaves its folder on disk");
+    assert_eq!(harness.state().repos.len(), 1, "and its open tab stays open");
 }

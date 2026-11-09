@@ -538,6 +538,10 @@ pub struct NiceGitApp {
     pub go_to_file: Option<crate::ui::go_to_file::GoToFile>,
     pub show_settings: bool,
     pub show_shortcuts: bool,
+    /// The Manage workspaces window, while it is open.
+    pub show_workspaces: bool,
+    /// The workspace being renamed in Manage workspaces, as its name now and the name typed so far.
+    pub workspace_rename: Option<(String, String)>,
     /// Whether the fetch running now should end by offering to merge or rebase onto the upstream.
     pub integrate_after_fetch: bool,
     /// Whether the saved interface size has been applied since launch.
@@ -615,6 +619,8 @@ impl NiceGitApp {
             go_to_file: None,
             show_settings: false,
             show_shortcuts: false,
+            show_workspaces: false,
+            workspace_rename: None,
             integrate_after_fetch: false,
             zoom_applied: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
@@ -2581,6 +2587,7 @@ impl eframe::App for NiceGitApp {
         self.palette_window(&ctx);
         self.go_to_file_window(&ctx);
         self.settings_window(&ctx);
+        self.workspaces_window(&ctx);
         self.shortcuts_window(&ctx);
     }
 

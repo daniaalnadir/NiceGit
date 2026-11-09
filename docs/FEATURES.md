@@ -324,6 +324,13 @@ drafts. Closing the active tab selects a neighbour; closing the last tab returns
 to the repository picker. Open tabs and the last active repository restore on
 launch; closing a tab removes it from the saved session.
 
+Workspaces group repositories that open together. The Workspaces menu in the
+repositories column saves the open tabs, in tab order, under a name; opening a
+workspace adds its folders as tabs, skipping those already open and reporting
+missing folders in one notice. Manage workspaces renames or deletes saved
+workspaces, asking first before a delete; neither touches folders on disk. The
+command palette lists each as Open workspace, followed by its name.
+
 The repository sidebar includes a repository switcher and collapsible Local,
 Remote, Worktrees, Tags, Stashes, Pull Requests, and Issues sections. Counts for
 local Git data come from the repository. Pull Requests and Issues load open items

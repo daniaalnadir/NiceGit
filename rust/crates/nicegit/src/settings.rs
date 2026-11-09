@@ -230,6 +230,14 @@ fn same_trailer(line: &str, trailer: &str) -> bool {
     }
 }
 
+/// A named group of repositories that open together, as GitKraken's workspaces do. The folders
+/// are kept in tab order and are never changed on disk by saving, opening, or deleting one.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Workspace {
+    pub name: String,
+    pub repositories: Vec<PathBuf>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -302,6 +310,9 @@ pub struct Settings {
     /// a full ref name, as `hidden_branches` holds them.
     #[serde(default)]
     pub solo_branch: BTreeMap<String, String>,
+    /// Saved workspaces, in the order they were saved.
+    #[serde(default)]
+    pub workspaces: Vec<Workspace>,
 }
 
 fn default_true() -> bool {
@@ -339,6 +350,7 @@ impl Default for Settings {
             cherry_pick_record_origin: false,
             hidden_branches: BTreeMap::new(),
             solo_branch: BTreeMap::new(),
+            workspaces: Vec::new(),
         }
     }
 }
@@ -434,9 +446,9 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_enterprise_hosts, parse_gitlab_hosts, Draft, Settings, STORAGE_KEY};
+    use super::{parse_enterprise_hosts, parse_gitlab_hosts, Draft, Settings, Workspace, STORAGE_KEY};
     use eframe::Storage;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     /// Saved state held in memory, as the platform's storage holds it between launches.
     #[derive(Default)]
@@ -542,6 +554,35 @@ mod tests {
         eframe::set_value(&mut storage, STORAGE_KEY, &settings);
         let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
         assert!(loaded.cherry_pick_record_origin);
+    }
+
+    #[test]
+    fn workspaces_round_trip_with_their_repositories_in_tab_order() {
+        let settings = Settings {
+            workspaces: vec![
+                Workspace { name: "Client work".into(), repositories: vec!["/work/api".into(), "/work/web".into()] },
+                Workspace { name: "Scratch".into(), repositories: vec!["/tmp/play".into()] },
+            ],
+            ..Settings::default()
+        };
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert_eq!(loaded.workspaces, settings.workspaces);
+        assert_eq!(loaded.workspaces[0].repositories, [PathBuf::from("/work/api"), PathBuf::from("/work/web")]);
+    }
+
+    #[test]
+    fn settings_saved_before_workspaces_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // An empty list is written as `workspaces:[]`; an older file has no such field.
+        let older = saved.replacen(",workspaces:[]", "", 1);
+        assert_ne!(older, saved, "the field is in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.workspaces.is_empty());
     }
 
     #[test]
