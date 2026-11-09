@@ -60,6 +60,15 @@ pub enum PushUrlChange {
     Clear,
 }
 
+/// The local tags a remote lacks, and the names of those it has at a different object.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TagsToPush {
+    /// Each tag's name and the object ID of its tag ref, as read from the local repository.
+    pub missing: Vec<(String, String)>,
+    /// Tags the remote already has at a different object. They are reported, never pushed.
+    pub conflicting: Vec<String>,
+}
+
 /// The addresses one remote was shown with, in the shape `require_remote_addresses` compares.
 fn expected_addresses_for(remote: &str, addresses: &[String]) -> BTreeMap<String, Vec<String>> {
     BTreeMap::from([(remote.to_string(), addresses.to_vec())])
@@ -277,6 +286,54 @@ impl GitClient {
         let mirror = format!("remote.{remote}.mirror=false");
         let refspec = format!("{reference}:{reference}");
         self.run(&["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote, &refspec], directory).map(drop)
+    }
+
+    /// The local tags that `remote` lacks, read from the remote now. Tags the remote already has
+    /// at the same object are left out; tags it has at a different object are listed as
+    /// `conflicting` and are never pushed. Object IDs are those of the tag refs themselves.
+    pub fn tags_missing_on_remote(&self, remote: &str, expected_push_addresses: &[String], directory: &Path) -> Result<TagsToPush> {
+        const COMMAND: &str = "push tags";
+        self.require_remote_addresses(&expected_addresses_for(remote, expected_push_addresses), remote, true, COMMAND, directory)?;
+        let listed = self.run(&["ls-remote", "--tags", "--refs", "--", remote], directory)?;
+        let mut on_remote = BTreeMap::new();
+        for line in listed.lines() {
+            let Some((oid, reference)) = line.split_once('\t') else { continue };
+            if let Some(name) = reference.strip_prefix("refs/tags/") {
+                on_remote.insert(name.to_string(), oid.to_string());
+            }
+        }
+        let local = self.run(&["for-each-ref", "--format=%(objectname) %(refname)", "refs/tags"], directory)?;
+        let mut tags = TagsToPush::default();
+        for line in local.lines() {
+            let Some((oid, reference)) = line.split_once(' ') else { continue };
+            let Some(name) = reference.strip_prefix("refs/tags/") else { continue };
+            match on_remote.get(name) {
+                None => tags.missing.push((name.to_string(), oid.to_string())),
+                Some(remote_oid) if remote_oid != oid => tags.conflicting.push(name.to_string()),
+                Some(_) => {}
+            }
+        }
+        Ok(tags)
+    }
+
+    /// Pushes the listed tags to a remote, each only while the local tag still points to the
+    /// object it was listed with. Explicit refspecs are used, and no force, so a tag the remote
+    /// has meanwhile is refused rather than replaced.
+    pub fn push_tags(&self, remote: &str, tags: &[(String, String)], expected_push_addresses: &[String], directory: &Path) -> Result<()> {
+        const COMMAND: &str = "push tags";
+        if tags.is_empty() {
+            return Err(GitError::failed(COMMAND, "Select the tags to push."));
+        }
+        let mut refspecs = Vec::with_capacity(tags.len());
+        for (name, expected_tip) in tags {
+            let reference = self.require_tag_tip(name, expected_tip, COMMAND, directory)?;
+            refspecs.push(format!("{reference}:{reference}"));
+        }
+        self.require_remote_addresses(&expected_addresses_for(remote, expected_push_addresses), remote, true, COMMAND, directory)?;
+        let mirror = format!("remote.{remote}.mirror=false");
+        let mut arguments = vec!["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote];
+        arguments.extend(refspecs.iter().map(String::as_str));
+        self.run(&arguments, directory).map(drop)
     }
 
     /// Deletes a tag from a remote, but only while the remote still has the object shown locally.
