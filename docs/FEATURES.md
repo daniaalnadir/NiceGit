@@ -111,6 +111,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - See submodules in the sidebar with their state (not checked out, at the recorded commit,
   or on another commit, and whether they have uncommitted changes); open one, or check out
   its recorded commit.
+- Manage submodules in the Submodules window (toolbar or command palette): add one from a
+  URL at a path inside the repository, optionally on a branch; update all to their recorded
+  commits; sync their URLs from .gitmodules; or remove one. Adding and removing stage the
+  .gitmodules and gitlink changes for commit. Removal deletes the checkout, keeps the module's
+  Git data in .git/modules, and is refused while the checkout has uncommitted or ignored files.
 - See whether a commit's GPG or SSH signature is verified, untrusted, bad, or cannot be
   checked on this computer, in the commit inspector.
 - Hide whitespace-only changes in any diff; the choice is remembered.

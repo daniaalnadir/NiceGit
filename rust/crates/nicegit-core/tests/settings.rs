@@ -8,7 +8,7 @@ use std::process::{Command, Output};
 use nicegit_core::client::GitClient;
 use nicegit_core::models::{Branch, GitError, Snapshot, Worktree};
 use nicegit_core::settings::{ignore_pattern, IgnoreRule, IgnoreScope, PushUrlChange};
-use nicegit_core::submodule::SubmoduleState;
+use nicegit_core::submodule::{submodule_path_problem, SubmoduleState};
 use tempfile::TempDir;
 
 // MARK: Helpers
@@ -1006,6 +1006,195 @@ fn submodule_states_follow_local_changes_and_checkouts() {
     let restored = client().submodules(repo.path()).expect("list restored");
     assert_eq!(restored[0].state, SubmoduleState::AtRecordedCommit);
     assert_eq!(git(&sub, &["rev-parse", "HEAD"]).trim(), recorded);
+}
+
+#[test]
+fn submodule_path_problem_refuses_paths_outside_the_work_tree_or_taken() {
+    let repo = Repo::new();
+    repo.write("taken/file.txt", "taken\n");
+    let root = repo.path();
+
+    assert!(submodule_path_problem(root, "").is_some());
+    assert!(submodule_path_problem(root, "../escape").is_some());
+    assert!(submodule_path_problem(root, "lib/../../escape").is_some());
+    assert!(submodule_path_problem(root, ".git/modules/x").is_some());
+    assert!(submodule_path_problem(root, "taken").is_some(), "an existing folder is refused");
+    assert!(submodule_path_problem(root, "lib/new").is_none());
+    let absolute = root.join("absolute-target");
+    assert!(submodule_path_problem(root, &path_string(&absolute)).is_some(), "absolute paths are refused");
+}
+
+/// A `git daemon` serving one repository over `git://` on a free local port until it is dropped.
+/// Git refuses the `file` transport for submodule clones, and a `-c` option on the test's own
+/// commands cannot reach the clones Git starts itself, so these tests serve sources over `git://`.
+#[cfg(not(windows))]
+struct GitDaemon {
+    child: std::process::Child,
+}
+
+#[cfg(not(windows))]
+impl GitDaemon {
+    /// Serves `repo` and returns the daemon with the `git://` URL of that repository, or `None`
+    /// when this machine's Git has no daemon or it does not start listening.
+    fn serve(repo: &Path) -> Option<(Self, String)> {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").expect("bind free port").local_addr().expect("address").port();
+        let base = repo.parent().expect("parent folder");
+        let name = repo.file_name().expect("folder name").to_string_lossy().into_owned();
+        let child = Command::new("git")
+            .args([
+                "daemon",
+                "--reuseaddr",
+                "--export-all",
+                "--listen=127.0.0.1",
+                &format!("--port={port}"),
+                &format!("--base-path={}", base.display()),
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok()?;
+        // Dropping the daemon stops it, whether or not it came up.
+        let daemon = Self { child };
+        for _ in 0..500 {
+            if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                return Some((daemon, format!("git://127.0.0.1:{port}/{name}")));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        None
+    }
+}
+
+#[cfg(not(windows))]
+impl Drop for GitDaemon {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn add_submodule_stages_the_gitmodules_entry_and_gitlink() {
+    let source = Repo::new();
+    source.commit("lib.txt", "lib\n", "Library first");
+    let Some((_daemon, url)) = GitDaemon::serve(source.path()) else {
+        eprintln!("git daemon is not available on this machine; skipping");
+        return;
+    };
+    let repo = Repo::new();
+    repo.commit("main.txt", "main\n", "Main");
+
+    client().add_submodule(&url, "vendor/lib", Some("main"), repo.path()).expect("add submodule");
+
+    let listed = client().submodules(repo.path()).expect("list submodules");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].path, "vendor/lib");
+    assert_eq!(listed[0].state, SubmoduleState::AtRecordedCommit);
+    let staged = repo.git(&["diff", "--cached", "--name-only", "-z"]);
+    assert!(staged.contains(".gitmodules") && staged.contains("vendor/lib"), "staged: {staged:?}");
+    let gitmodules = repo.read(".gitmodules");
+    assert!(gitmodules.contains("path = vendor/lib"), "{gitmodules}");
+    assert!(gitmodules.contains("branch = main"), "{gitmodules}");
+}
+
+#[test]
+fn add_submodule_keeps_git_file_transport_protection_by_default() {
+    let source = Repo::new();
+    source.commit("lib.txt", "lib\n", "Library first");
+    let repo = Repo::new();
+    repo.commit("main.txt", "main\n", "Main");
+
+    let error = client().add_submodule(&path_string(source.path()), "lib", None, repo.path());
+    assert!(error.is_err(), "a local-path clone is refused without the repository's own opt-in");
+    assert!(client().submodules(repo.path()).expect("list").is_empty());
+    assert!(!repo.path().join("lib").exists());
+}
+
+#[test]
+fn add_submodule_refuses_bad_branches_and_urls_before_running_git() {
+    let repo = Repo::new();
+    repo.commit("main.txt", "main\n", "Main");
+    assert!(client().add_submodule("", "lib", None, repo.path()).is_err());
+    assert!(client().add_submodule("-oProxyCommand=x", "lib", None, repo.path()).is_err());
+    assert!(client().add_submodule("https://example.com/lib.git", "lib", Some("-bad"), repo.path()).is_err());
+    assert!(client().add_submodule("https://example.com/lib.git", "lib", Some("bad..name"), repo.path()).is_err());
+    assert!(client().add_submodule("https://example.com/lib.git", "../lib", None, repo.path()).is_err());
+    assert_eq!(repo.git(&["status", "--porcelain"]), "", "nothing was staged");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn update_submodules_initialises_a_clone_at_the_recorded_commit() {
+    let source = Repo::new();
+    source.commit("sub.txt", "sub one\n", "Sub first");
+    let Some((_daemon, url)) = GitDaemon::serve(source.path()) else {
+        eprintln!("git daemon is not available on this machine; skipping");
+        return;
+    };
+    let repo = Repo::new();
+    repo.commit("main.txt", "main\n", "Main");
+    client().add_submodule(&url, "sub", None, repo.path()).expect("add submodule");
+    repo.git(&["commit", "--quiet", "-m", "Add submodule"]);
+    let recorded = client().submodules(repo.path()).expect("list")[0].recorded_commit.clone();
+
+    let parent = tempfile::tempdir().expect("create parent");
+    let clone = parent.path().join("clone");
+    git(parent.path(), &["clone", "--quiet", &path_string(repo.path()), &path_string(&clone)]);
+    configure(&clone);
+    assert_eq!(client().submodules(&clone).expect("list clone")[0].state, SubmoduleState::NotCheckedOut);
+
+    client().update_submodules(&clone).expect("update submodules");
+
+    let listed = client().submodules(&clone).expect("list updated");
+    assert_eq!(listed[0].state, SubmoduleState::AtRecordedCommit);
+    assert_eq!(git(&clone.join("sub"), &["rev-parse", "HEAD"]).trim(), recorded);
+}
+
+#[test]
+fn sync_submodules_copies_a_changed_url_into_the_checkout() {
+    let (repo, _source) = superproject_with_submodule();
+    let moved = "https://example.com/moved/sub.git";
+    git(repo.path(), &["config", "-f", ".gitmodules", "submodule.sub.url", moved]);
+
+    client().sync_submodules(repo.path()).expect("sync submodules");
+
+    assert_eq!(git(repo.path(), &["config", "--get", "submodule.sub.url"]).trim(), moved);
+    assert_eq!(git(&repo.path().join("sub"), &["config", "--get", "remote.origin.url"]).trim(), moved);
+}
+
+#[test]
+fn remove_submodule_drops_its_entry_and_keeps_its_git_data() {
+    let (repo, _source) = superproject_with_submodule();
+
+    client().remove_submodule("sub", repo.path()).expect("remove submodule");
+
+    assert!(client().submodules(repo.path()).expect("list").is_empty());
+    assert!(!repo.path().join("sub").exists(), "the checkout is deleted");
+    assert!(!repo.git(&["ls-files", "-s"]).contains("160000"), "the gitlink is removed from the index");
+    assert!(!repo.read(".gitmodules").contains("submodule \"sub\""), "the .gitmodules entry is removed");
+    assert!(repo.path().join(".git").join("modules").join("sub").is_dir(), "the module's Git data is kept");
+}
+
+#[test]
+fn remove_submodule_refuses_uncommitted_and_ignored_files() {
+    let (repo, _source) = superproject_with_submodule();
+    let sub = repo.path().join("sub");
+
+    repo.write("sub/scratch.txt", "scratch\n");
+    assert!(client().remove_submodule("sub", repo.path()).is_err(), "untracked files refuse the removal");
+    assert!(sub.join("scratch.txt").exists());
+    fs::remove_file(sub.join("scratch.txt")).expect("remove scratch file");
+
+    let exclude = git(&sub, &["rev-parse", "--git-path", "info/exclude"]);
+    let exclude = sub.join(exclude.trim());
+    fs::create_dir_all(exclude.parent().expect("exclude folder")).expect("create info folder");
+    fs::write(&exclude, "*.log\n").expect("write exclude");
+    repo.write("sub/cache.log", "ignored\n");
+    assert!(client().remove_submodule("sub", repo.path()).is_err(), "ignored files refuse the removal");
+    assert!(sub.join("cache.log").exists());
+    assert_eq!(client().submodules(repo.path()).expect("list").len(), 1, "the submodule is still registered");
 }
 
 #[test]

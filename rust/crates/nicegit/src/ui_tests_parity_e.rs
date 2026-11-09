@@ -567,6 +567,40 @@ fn open_a_submodule_as_a_repository_tab_from_its_window() {
     assert_eq!(harness.state().snapshot().map(|s| s.name.clone()).as_deref(), Some("library"));
 }
 
+#[test]
+fn the_add_submodule_form_explains_a_bad_path_and_disables_add() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(path), "Submodules");
+    let toggle = format!("{}  Add submodule…", icon::PLUS);
+    wait(&mut harness, "the add button", |h| {
+        h.query_by_role_and_label(Role::Button, &toggle).is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, &toggle).click_accesskit();
+    settle(&mut harness);
+    type_into(&mut harness, "Repository URL", "https://example.com/library.git");
+    type_into(&mut harness, "Path", "../escape");
+    settle(&mut harness);
+
+    let submit = format!("{}  Add submodule", icon::PLUS);
+    assert!(shows(&harness, "must stay inside the repository"), "the bad path is explained");
+    assert!(harness.get_by_role_and_label(Role::Button, &submit).accesskit_node().is_disabled(), "Add is disabled for a bad path");
+
+    harness.get_by_role_and_label(Role::TextInput, "Path").focus();
+    harness.step();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Path").type_text("vendor/library");
+    harness.step();
+    settle(&mut harness);
+
+    assert!(!shows(&harness, "must stay inside the repository"), "the explanation clears for a good path");
+    assert!(!harness.get_by_role_and_label(Role::Button, &submit).accesskit_node().is_disabled(), "Add is enabled for a good path");
+}
+
 // MARK: Diff context
 
 /// Whether the open diff shows a line with exactly this text.

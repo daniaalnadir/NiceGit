@@ -444,6 +444,11 @@ impl NiceGitApp {
         if !submodules.is_empty() {
             section(ui, "submodules", icon::PACKAGE, "Submodules", submodules.len(), false, |ui| {
                 use nicegit_core::submodule::SubmoduleState;
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  Update all", icon::ARROWS_CLOCKWISE)).small()).clicked() {
+                    self.act("Update all submodules", |client, repo| {
+                        client.update_submodules(repo).map(|_| Some("Checked out every submodule at its recorded commit.".to_string()))
+                    });
+                }
                 for submodule in &submodules {
                     let (state, color) = match &submodule.state {
                         SubmoduleState::NotCheckedOut => ("not checked out".to_string(), c.muted),
