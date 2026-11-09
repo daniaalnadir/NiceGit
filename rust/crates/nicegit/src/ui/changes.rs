@@ -451,6 +451,39 @@ impl NiceGitApp {
         response.context_menu(|ui| self.change_menu(ui, entry, staged, idle, snapshot));
     }
 
+    /// Lock and unlock items for a file that Git LFS stores. Shown only for such files.
+    pub(crate) fn lfs_menu_items(&mut self, ui: &mut Ui, path: &str, idle: bool) {
+        if !self.uses_lfs(ui.ctx(), path) {
+            return;
+        }
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  Lock file (LFS)", icon::LOCK_SIMPLE))).clicked() {
+            ui.close();
+            let path = path.to_string();
+            self.act("Lock file", move |client, repo| client.lock(&path, repo).map(|_| Some(format!("Locked {path} with Git LFS."))));
+        }
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  Unlock file (LFS)", icon::LOCK_SIMPLE_OPEN))).clicked() {
+            ui.close();
+            let path = path.to_string();
+            self.act("Unlock file", move |client, repo| {
+                let target = nicegit_core::lfs::LockTarget::Path(path.clone());
+                client.unlock(&target, false, repo).map(|()| Some(format!("Unlocked {path}.")))
+            });
+        }
+    }
+
+    /// Whether `path` is stored with Git LFS. The check runs in the background once per path and
+    /// is kept until the repository next refreshes; until it answers, the path counts as not LFS.
+    pub(crate) fn uses_lfs(&mut self, ctx: &egui::Context, path: &str) -> bool {
+        let repo = &mut self.repos[self.active];
+        if !repo.lfs_paths.contains_key(path) {
+            let directory = repo.path.clone();
+            let checked = path.to_string();
+            let task = tools::query(ctx, &directory, move |client, dir| client.uses_lfs(&checked, dir));
+            repo.lfs_paths.insert(path.to_string(), task);
+        }
+        matches!(repo.lfs_paths.get_mut(path).and_then(|task| task.get()), Some(Ok(true)))
+    }
+
     pub(crate) fn confirm_discard(&mut self, entry: StatusEntry) {
         // Renames, conflicts, folders, and submodules are discarded without a saved copy.
         let undoable = entry.original_path.is_none()
@@ -566,6 +599,7 @@ impl NiceGitApp {
             let name = format!("{}.patch", entry.file_name());
             self.save_working_patch(staged, Some(paths), true, &name);
         }
+        self.lfs_menu_items(ui, &entry.path, idle);
         if entry.kind == StatusKind::Untracked {
             ui.menu_button(format!("{}  Ignore", icon::EYE_SLASH), |ui| {
                 use nicegit_core::settings::{IgnoreRule, IgnoreScope};

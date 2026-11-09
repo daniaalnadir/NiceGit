@@ -313,6 +313,9 @@ pub struct Repo {
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
     /// Lines added and removed in each file of the selected commit, with that commit's hash.
     pub commit_line_counts: Option<(String, Task<Option<FileLineCounts>>)>,
+    /// Whether each path is stored with Git LFS, read when its file menu first opens. Cleared on
+    /// each repository refresh, since a change to `.gitattributes` changes the answer.
+    pub lfs_paths: std::collections::HashMap<String, Task<nicegit_core::Result<bool>>>,
     /// Text that narrows the Changes panel's lists to matching paths.
     pub change_filter: String,
     /// Pull requests and issues loaded into the sidebar, in that order.
@@ -458,6 +461,7 @@ impl Repo {
             line_counts: None,
             change_filter: String::new(),
             commit_line_counts: None,
+            lfs_paths: std::collections::HashMap::new(),
             branch_tracking: None,
             image_preview: None,
             image_textures: None,
@@ -1395,6 +1399,7 @@ impl NiceGitApp {
             .tag_details
             .retain(|name, (tip, _)| snapshot.tag_tips.get(name).is_some_and(|current| current.as_str() == tip.as_str()));
         let tracking = tracking_key(&snapshot);
+        self.repos[index].lfs_paths.clear();
         self.repos[index].snapshot = Some(snapshot);
         // The pull request is read for a new branch, and whenever a read is due.
         if branch_changed || self.repos[index].pr_checked_at.is_none() {

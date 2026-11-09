@@ -331,6 +331,7 @@ impl NiceGitApp {
                 );
             }
         }
+        self.lfs_menu_items(ui, path, idle);
         ui.separator();
         if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
             ui.close();
