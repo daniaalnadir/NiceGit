@@ -652,6 +652,23 @@ fn open_commit_on_github() {
 }
 
 #[test]
+fn open_commit_on_gitlab() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "git@gitlab.com:octo/group/notes.git"]);
+    let hash = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    clear_opened_urls();
+
+    harness.get_by_label("Add a second line").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Open on GitLab").click();
+    settle(&mut harness);
+    assert_eq!(opened_urls(), vec![format!("https://gitlab.com/octo/group/notes/-/commit/{hash}")]);
+}
+
+#[test]
 fn open_file_on_github_from_the_inspector() {
     let repo = repository();
     let path = repo.path();

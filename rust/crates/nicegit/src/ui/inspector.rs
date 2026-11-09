@@ -296,10 +296,10 @@ impl NiceGitApp {
         }
         // A file deleted in this commit does not exist at it, so there is no page to open.
         if !status.starts_with('D') {
-            crate::git_ext::github_open_menu(
+            crate::git_ext::web_open_menu(
                 ui,
-                "Open file on GitHub",
-                crate::git_ext::github_file_links(&snapshot, hash, path, &self.settings.github_enterprise_hosts),
+                "Open file",
+                crate::git_ext::hosted_file_links(&snapshot, hash, path, self.settings.listed_hosts()),
                 crate::git_ext::PUSHED_COMMIT_NOTE,
             );
         }

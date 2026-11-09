@@ -122,41 +122,9 @@ impl GitHubRepository {
     /// `enterprise_hosts` (compared without regard to case). Other hosts, ports, passwords,
     /// queries, and fragments are refused.
     pub fn parse_with_hosts(address: &str, enterprise_hosts: &[String]) -> Result<Self> {
-        let address = address.trim();
         let unsupported = || GitError::failed("GitHub", "This remote is not a supported GitHub repository address.");
-        let (host, path) = if let Some((scheme, rest)) = address.split_once("://") {
-            if !(scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("ssh")) {
-                return Err(unsupported());
-            }
-            let (authority, path) = match rest.find('/') {
-                Some(index) => (&rest[..index], &rest[index..]),
-                None => (rest, ""),
-            };
-            if path.contains('?') || path.contains('#') || authority.contains('?') || authority.contains('#') {
-                return Err(unsupported());
-            }
-            let host = match authority.rsplit_once('@') {
-                Some((userinfo, host)) => {
-                    // A user name is allowed; a password is not.
-                    if userinfo.contains(':') {
-                        return Err(unsupported());
-                    }
-                    host
-                }
-                None => authority,
-            };
-            (host, path)
-        } else {
-            // scp-like form: [user@]host:path. A local path such as /srv/repo has no host match.
-            let Some((host_part, path)) = address.split_once(':') else { return Err(unsupported()) };
-            let host = host_part.rsplit_once('@').map(|(_, host)| host).unwrap_or(host_part);
-            (host, path)
-        };
-        // A port, or any other colon, is refused before the host is compared.
-        if host.is_empty() || host.contains(':') {
-            return Err(unsupported());
-        }
-        let host = host.to_ascii_lowercase();
+        // The address is split as every hosting service splits it; see `hosting::split_address`.
+        let (host, path) = crate::hosting::split_address(address).ok_or_else(unsupported)?;
         let known = host == "github.com" || enterprise_hosts.iter().any(|listed| listed.eq_ignore_ascii_case(&host));
         if !known {
             return Err(GitError::failed("GitHub", "This remote is not on github.com or a GitHub Enterprise host listed in Settings."));

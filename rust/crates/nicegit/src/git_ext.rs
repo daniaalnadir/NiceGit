@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use nicegit_core::client::ForcePushPreview;
+use nicegit_core::hosting::{encode_path, Host, HostedRepository, ListedHosts};
 use nicegit_core::merge_preview::MergeOutcome;
 use nicegit_core::rebase::Expectation;
 use nicegit_core::signature::SignatureStatus;
@@ -111,7 +112,8 @@ pub struct SignatureSummary {
 }
 
 /// The GitHub repository behind a remote's first fetch address, when that address is on github.com
-/// or one of `enterprise_hosts`.
+/// or one of the GitHub Enterprise `enterprise_hosts`. Pull requests go through the GitHub CLI, so
+/// only GitHub counts.
 pub fn github_repository_for_remote(
     snapshot: &nicegit_core::Snapshot,
     remote: &str,
@@ -121,57 +123,58 @@ pub fn github_repository_for_remote(
     nicegit_core::github::GitHubRepository::parse_with_hosts(address, enterprise_hosts).ok()
 }
 
-/// GitHub remotes, each with its repository.
-fn github_remotes(snapshot: &nicegit_core::Snapshot, enterprise_hosts: &[String]) -> Vec<(String, nicegit_core::github::GitHubRepository)> {
-    snapshot
-        .remotes
-        .iter()
-        .filter_map(|remote| Some((remote.clone(), github_repository_for_remote(snapshot, remote, enterprise_hosts)?)))
-        .collect()
+/// The repository behind a remote's first fetch address, on GitHub, GitLab, or Bitbucket.
+pub fn hosted_repository_for_remote(snapshot: &nicegit_core::Snapshot, remote: &str, hosts: ListedHosts) -> Option<HostedRepository> {
+    let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
+    HostedRepository::parse(address, hosts).ok()
 }
 
-/// The GitHub repository the palette's repository commands open: the current branch's upstream
-/// remote when that is on GitHub, else `origin` when it is, else the only GitHub remote.
-pub fn default_github_repository(
-    snapshot: &nicegit_core::Snapshot,
-    enterprise_hosts: &[String],
-) -> Option<nicegit_core::github::GitHubRepository> {
+/// Remotes on a supported host, each with its repository.
+fn hosted_remotes(snapshot: &nicegit_core::Snapshot, hosts: ListedHosts) -> Vec<(String, HostedRepository)> {
+    snapshot.remotes.iter().filter_map(|remote| Some((remote.clone(), hosted_repository_for_remote(snapshot, remote, hosts)?))).collect()
+}
+
+/// The repository the palette's repository commands open: the current branch's upstream remote
+/// when that is on a supported host, else `origin` when it is, else the only such remote.
+pub fn default_hosted_repository(snapshot: &nicegit_core::Snapshot, hosts: ListedHosts) -> Option<HostedRepository> {
     let upstream =
         snapshot.current().and_then(|branch| branch.upstream.as_deref()).and_then(|upstream| upstream.strip_prefix("refs/remotes/"));
     if let Some((remote, _)) = upstream.and_then(|upstream| split_remote(snapshot, upstream)) {
-        if let Some(repository) = github_repository_for_remote(snapshot, remote, enterprise_hosts) {
+        if let Some(repository) = hosted_repository_for_remote(snapshot, remote, hosts) {
             return Some(repository);
         }
     }
-    if let Some(repository) = github_repository_for_remote(snapshot, "origin", enterprise_hosts) {
+    if let Some(repository) = hosted_repository_for_remote(snapshot, "origin", hosts) {
         return Some(repository);
     }
-    let mut remotes = github_remotes(snapshot, enterprise_hosts).into_iter();
+    let mut remotes = hosted_remotes(snapshot, hosts).into_iter();
     match (remotes.next(), remotes.next()) {
         (Some((_, repository)), None) => Some(repository),
         _ => None,
     }
 }
 
-/// GitHub remotes, with the web address of `commit` on each.
-pub fn github_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str, enterprise_hosts: &[String]) -> Vec<(String, String)> {
-    github_remotes(snapshot, enterprise_hosts)
+/// A web address on one remote's host, with the remote it belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WebLink {
+    pub remote: String,
+    pub url: String,
+    pub host: Host,
+}
+
+/// Remotes on a supported host, with the web address of `commit` on each.
+pub fn hosted_commit_links(snapshot: &nicegit_core::Snapshot, commit: &str, hosts: ListedHosts) -> Vec<WebLink> {
+    hosted_remotes(snapshot, hosts)
         .into_iter()
-        .map(|(remote, repository)| (remote, format!("{}/{}/commit/{commit}", repository.web_base(), repository.slug())))
+        .map(|(remote, repository)| WebLink { remote, url: repository.commit_url(commit), host: repository.kind })
         .collect()
 }
 
-/// GitHub remotes, with the web address of `path` as it was in `commit` on each.
-pub fn github_file_links(
-    snapshot: &nicegit_core::Snapshot,
-    commit: &str,
-    path: &str,
-    enterprise_hosts: &[String],
-) -> Vec<(String, String)> {
-    let path = encode_path(path);
-    github_remotes(snapshot, enterprise_hosts)
+/// Remotes on a supported host, with the web address of `path` as it was in `commit` on each.
+pub fn hosted_file_links(snapshot: &nicegit_core::Snapshot, commit: &str, path: &str, hosts: ListedHosts) -> Vec<WebLink> {
+    hosted_remotes(snapshot, hosts)
         .into_iter()
-        .map(|(remote, repository)| (remote, format!("{}/{}/blob/{commit}/{path}", repository.web_base(), repository.slug())))
+        .map(|(remote, repository)| WebLink { remote, url: repository.file_url(commit, path), host: repository.kind })
         .collect()
 }
 
@@ -182,17 +185,17 @@ fn split_remote<'a>(snapshot: &nicegit_core::Snapshot, path: &'a str) -> Option<
     Some((&path[..remote.len()], &path[remote.len() + 1..]))
 }
 
-/// The GitHub page for a branch. A remote-tracking branch links to itself on its remote; a
-/// local branch links to its upstream when that is a branch on a GitHub remote.
-pub fn github_branch_link(snapshot: &nicegit_core::Snapshot, branch: &nicegit_core::Branch, enterprise_hosts: &[String]) -> Option<String> {
+/// The web page for a branch. A remote-tracking branch links to itself on its remote; a local
+/// branch links to its upstream when that is a branch on a supported remote.
+pub fn hosted_branch_link(snapshot: &nicegit_core::Snapshot, branch: &nicegit_core::Branch, hosts: ListedHosts) -> Option<WebLink> {
     let path = if branch.is_remote {
         branch.name.strip_prefix("remotes/").unwrap_or(&branch.name)
     } else {
         branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?
     };
     let (remote, remote_branch) = split_remote(snapshot, path)?;
-    let repository = github_repository_for_remote(snapshot, remote, enterprise_hosts)?;
-    Some(format!("{}/{}/tree/{}", repository.web_base(), repository.slug(), encode_path(remote_branch)))
+    let repository = hosted_repository_for_remote(snapshot, remote, hosts)?;
+    Some(WebLink { remote: remote.to_string(), url: repository.branch_url(remote_branch), host: repository.kind })
 }
 
 /// Why Git would refuse `name` as a branch or tag name, following `git check-ref-format`, so a
@@ -268,57 +271,89 @@ pub fn github_pull_request_link(
     Some(format!("{}/{}/compare/{}?expand=1", target.repository.web_base(), target.repository.slug(), encode_path(&target.remote_branch)))
 }
 
-/// Percent-encodes a branch name for a URL path, keeping its slashes.
-fn encode_path(text: &str) -> String {
-    let mut encoded = String::new();
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => encoded.push(byte as char),
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
+/// The host whose glyph names the links, when they all share one host.
+fn single_host(links: &[WebLink]) -> Option<Host> {
+    let first = links.first()?.host;
+    links.iter().all(|link| link.host == first).then_some(first)
 }
 
-/// A submenu for copying a commit's GitHub link, choosing the remote explicitly. Making a link
+/// The icon for a host: GitHub's and GitLab's logos, and a branch for Bitbucket, which has no logo here.
+pub fn host_glyph(host: Host) -> &'static str {
+    match host {
+        Host::GitHub => egui_phosphor::regular::GITHUB_LOGO,
+        Host::GitLab => egui_phosphor::regular::GITLAB_LOGO,
+        Host::Bitbucket => egui_phosphor::regular::GIT_BRANCH,
+    }
+}
+
+/// What a host calls its pull requests: merge requests on GitLab.
+pub fn pull_request_label(host: Host) -> &'static str {
+    match host {
+        Host::GitLab => "Merge requests",
+        Host::GitHub | Host::Bitbucket => "Pull requests",
+    }
+}
+
+/// The label of an item that opens pages on the remotes' hosts: it names the host when every link
+/// is on one, as in "Open on GitLab", and says "in browser" when the remotes differ.
+pub fn open_label(action: &str, links: &[WebLink]) -> String {
+    match single_host(links) {
+        Some(host) => format!("{action} on {}", host.name()),
+        None => format!("{action} in browser"),
+    }
+}
+
+/// The label of the menu that copies a commit's link: "Copy GitHub commit link" when every remote
+/// is on GitHub, else "Copy commit link".
+pub fn copy_commit_link_label(links: &[WebLink]) -> String {
+    match single_host(links) {
+        Some(host) => format!("Copy {} commit link", host.name()),
+        None => "Copy commit link".to_string(),
+    }
+}
+
+/// A submenu for copying a commit's link, choosing the remote explicitly. Making a link
 /// neither publishes the commit nor checks that the remote has it.
-pub fn github_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, commit: &str, enterprise_hosts: &[String]) {
-    let links = github_commit_links(snapshot, commit, enterprise_hosts);
+pub fn commit_link_menu(ui: &mut egui::Ui, snapshot: &nicegit_core::Snapshot, commit: &str, hosts: ListedHosts) {
+    let links = hosted_commit_links(snapshot, commit, hosts);
     if links.is_empty() {
         return;
     }
-    ui.menu_button(format!("{}  Copy GitHub commit link", egui_phosphor::regular::GITHUB_LOGO), |ui| {
-        for (remote, url) in links {
-            if ui.button(remote).on_hover_text(&url).clicked() {
+    let glyph = single_host(&links).map_or(egui_phosphor::regular::LINK, host_glyph);
+    let text = format!("{glyph}  {}", copy_commit_link_label(&links));
+    ui.menu_button(text, |ui| {
+        for link in links {
+            if ui.button(link.remote.as_str()).on_hover_text(&link.url).clicked() {
                 ui.close();
-                ui.ctx().copy_text(url);
+                ui.ctx().copy_text(link.url);
             }
         }
     });
 }
 
 /// Hover text for an item that opens a commit's page, which exists only once the commit is pushed.
-pub const PUSHED_COMMIT_NOTE: &str = "\nThe commit must be on GitHub for this page to exist.";
+pub const PUSHED_COMMIT_NOTE: &str = "\nThe commit must be pushed to the remote for this page to exist.";
 
-/// An item that opens a github.com page. With one github.com remote it is a plain button; with
-/// several, a submenu lists each remote. Nothing is shown without one. `note` is added to each
-/// item's hover text under its address.
-pub fn github_open_menu(ui: &mut egui::Ui, label: &str, links: Vec<(String, String)>, note: &str) {
-    let text = format!("{}  {label}", egui_phosphor::regular::ARROW_SQUARE_OUT);
+/// An item that opens a page on a supported host. With one remote it is a plain button; with
+/// several, a submenu lists each remote. Nothing is shown without one. `action` names the item,
+/// such as "Open" or "Open file", and `note` is added to each item's hover text under its address.
+pub fn web_open_menu(ui: &mut egui::Ui, action: &str, links: Vec<WebLink>, note: &str) {
+    let glyph = single_host(&links).map_or(egui_phosphor::regular::LINK, host_glyph);
+    let text = format!("{glyph}  {}", open_label(action, &links));
     match links.as_slice() {
         [] => {}
-        [(_, url)] => {
-            if ui.button(text).on_hover_text(format!("{url}{note}")).clicked() {
+        [link] => {
+            if ui.button(text).on_hover_text(format!("{}{note}", link.url)).clicked() {
                 ui.close();
-                crate::ui::changes::open_url(url);
+                crate::ui::changes::open_url(&link.url);
             }
         }
         _ => {
             ui.menu_button(text, |ui| {
-                for (remote, url) in &links {
-                    if ui.button(remote.as_str()).on_hover_text(format!("{url}{note}")).clicked() {
+                for link in &links {
+                    if ui.button(link.remote.as_str()).on_hover_text(format!("{}{note}", link.url)).clicked() {
                         ui.close();
-                        crate::ui::changes::open_url(url);
+                        crate::ui::changes::open_url(&link.url);
                     }
                 }
             });
@@ -392,9 +427,10 @@ mod force_push_message_tests {
 
 #[cfg(test)]
 mod tests {
+    use nicegit_core::hosting::{Host, ListedHosts};
     use nicegit_core::signature::{CommitSignature, SignatureStatus};
 
-    use super::summarize_signature;
+    use super::{summarize_signature, WebLink};
 
     fn signed(status: SignatureStatus, problem: Option<&str>) -> CommitSignature {
         CommitSignature { status, signer: "Riley <riley@example.com>".into(), key: "SHA256:abc".into(), problem: problem.map(String::from) }
@@ -507,6 +543,11 @@ mod tests {
         list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
     }
 
+    /// The remote and address of each link, as the pairs `pairs` builds.
+    fn urls(links: Vec<WebLink>) -> Vec<(String, String)> {
+        links.into_iter().map(|link| (link.remote, link.url)).collect()
+    }
+
     fn remote_branch_named(name: &str) -> nicegit_core::Branch {
         nicegit_core::Branch {
             name: format!("remotes/{name}"),
@@ -530,122 +571,191 @@ mod tests {
     }
 
     #[test]
-    fn github_commit_links_accept_scp_and_https_addresses() {
+    fn hosted_commit_links_accept_scp_and_https_addresses() {
         let expected = pairs(&[("origin", "https://github.com/owner/repo/commit/abc123")]);
         let scp = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
         let https = with_remotes(&[("origin", "https://github.com/owner/repo")]);
-        assert_eq!(super::github_commit_links(&scp, "abc123", &[]), expected);
-        assert_eq!(super::github_commit_links(&https, "abc123", &[]), expected);
+        assert_eq!(urls(super::hosted_commit_links(&scp, "abc123", ListedHosts::default())), expected);
+        assert_eq!(urls(super::hosted_commit_links(&https, "abc123", ListedHosts::default())), expected);
     }
 
     #[test]
-    fn github_links_skip_remotes_that_are_not_on_github() {
+    fn hosted_links_skip_remotes_that_are_not_on_a_supported_host() {
         let snapshot = with_remotes(&[("mirror", "https://example.com/owner/repo.git")]);
-        assert!(super::github_commit_links(&snapshot, "abc123", &[]).is_empty());
-        assert!(super::github_file_links(&snapshot, "abc123", "a.txt", &[]).is_empty());
-        assert_eq!(super::github_branch_link(&snapshot, &remote_branch_named("mirror/main"), &[]), None);
+        assert!(super::hosted_commit_links(&snapshot, "abc123", ListedHosts::default()).is_empty());
+        assert!(super::hosted_file_links(&snapshot, "abc123", "a.txt", ListedHosts::default()).is_empty());
+        assert_eq!(super::hosted_branch_link(&snapshot, &remote_branch_named("mirror/main"), ListedHosts::default()), None);
     }
 
     #[test]
-    fn github_commit_links_list_each_github_remote() {
+    fn hosted_commit_links_list_each_remote_on_a_supported_host() {
         let snapshot = with_remotes(&[
             ("origin", "git@github.com:owner/repo.git"),
             ("mirror", "https://example.com/owner/repo.git"),
             ("fork", "https://github.com/me/repo"),
+            ("gitlab", "git@gitlab.com:group/sub/proj.git"),
+            ("bitbucket", "https://bitbucket.org/team/tool"),
         ]);
         assert_eq!(
-            super::github_commit_links(&snapshot, "abc123", &[]),
-            pairs(&[("origin", "https://github.com/owner/repo/commit/abc123"), ("fork", "https://github.com/me/repo/commit/abc123"),])
+            urls(super::hosted_commit_links(&snapshot, "abc123", ListedHosts::default())),
+            pairs(&[
+                ("origin", "https://github.com/owner/repo/commit/abc123"),
+                ("fork", "https://github.com/me/repo/commit/abc123"),
+                ("gitlab", "https://gitlab.com/group/sub/proj/-/commit/abc123"),
+                ("bitbucket", "https://bitbucket.org/team/tool/commits/abc123"),
+            ])
         );
     }
 
     #[test]
-    fn github_branch_links_use_the_remote_branch_on_its_remote() {
-        let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
+    fn branch_links_use_the_remote_branch_on_its_remote_for_each_host() {
+        let snapshot = with_remotes(&[
+            ("origin", "git@github.com:owner/repo.git"),
+            ("gitlab", "https://gitlab.com/group/sub/proj"),
+            ("bitbucket", "git@bitbucket.org:team/tool.git"),
+        ]);
+        let link = |name: &str| super::hosted_branch_link(&snapshot, &remote_branch_named(name), ListedHosts::default());
         assert_eq!(
-            super::github_branch_link(&snapshot, &remote_branch_named("origin/feature/x"), &[]).as_deref(),
-            Some("https://github.com/owner/repo/tree/feature/x")
+            link("origin/feature/x").map(|l| (l.url, l.host)),
+            Some(("https://github.com/owner/repo/tree/feature/x".into(), Host::GitHub))
         );
+        assert_eq!(link("gitlab/feature/x").map(|l| l.url).as_deref(), Some("https://gitlab.com/group/sub/proj/-/tree/feature/x"));
+        assert_eq!(link("bitbucket/topic").map(|l| l.url).as_deref(), Some("https://bitbucket.org/team/tool/branch/topic"));
     }
 
     #[test]
-    fn github_branch_links_pick_the_longest_remote_name() {
+    fn branch_links_pick_the_longest_remote_name() {
         let snapshot = with_remotes(&[("team", "https://github.com/one/app"), ("team/fork", "https://github.com/two/app")]);
-        assert_eq!(
-            super::github_branch_link(&snapshot, &remote_branch_named("team/fork/topic"), &[]).as_deref(),
-            Some("https://github.com/two/app/tree/topic")
-        );
-        assert_eq!(
-            super::github_branch_link(&snapshot, &remote_branch_named("team/topic"), &[]).as_deref(),
-            Some("https://github.com/one/app/tree/topic")
-        );
+        let link = |name: &str| super::hosted_branch_link(&snapshot, &remote_branch_named(name), ListedHosts::default()).map(|l| l.url);
+        assert_eq!(link("team/fork/topic").as_deref(), Some("https://github.com/two/app/tree/topic"));
+        assert_eq!(link("team/topic").as_deref(), Some("https://github.com/one/app/tree/topic"));
     }
 
     #[test]
-    fn github_branch_link_encodes_the_upstream_branch() {
+    fn branch_link_encodes_the_upstream_branch() {
         let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
         let branch = local_branch_with_upstream(Some("refs/remotes/origin/my#branch"));
-        assert_eq!(super::github_branch_link(&snapshot, &branch, &[]).as_deref(), Some("https://github.com/owner/repo/tree/my%23branch"));
+        assert_eq!(
+            super::hosted_branch_link(&snapshot, &branch, ListedHosts::default()).map(|l| l.url).as_deref(),
+            Some("https://github.com/owner/repo/tree/my%23branch")
+        );
     }
 
     #[test]
-    fn github_branch_link_needs_a_github_upstream() {
+    fn branch_link_needs_a_hosted_upstream() {
         let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
-        assert_eq!(super::github_branch_link(&snapshot, &local_branch_with_upstream(None), &[]), None, "no upstream");
+        assert_eq!(super::hosted_branch_link(&snapshot, &local_branch_with_upstream(None), ListedHosts::default()), None, "no upstream");
         assert_eq!(
-            super::github_branch_link(&snapshot, &local_branch_with_upstream(Some("refs/heads/main")), &[]),
+            super::hosted_branch_link(&snapshot, &local_branch_with_upstream(Some("refs/heads/main")), ListedHosts::default()),
             None,
             "a local upstream has no remote"
         );
     }
 
     #[test]
-    fn github_file_links_encode_the_path_and_keep_its_slashes() {
+    fn file_links_encode_the_path_and_keep_its_slashes() {
         let snapshot = with_remotes(&[("origin", "git@github.com:owner/repo.git")]);
         assert_eq!(
-            super::github_file_links(&snapshot, "abc123", "dir/a b#c.txt", &[]),
+            urls(super::hosted_file_links(&snapshot, "abc123", "dir/a b#c.txt", ListedHosts::default())),
             pairs(&[("origin", "https://github.com/owner/repo/blob/abc123/dir/a%20b%23c.txt")])
         );
         assert_eq!(
-            super::github_file_links(&snapshot, "abc123", "ü?.txt", &[]),
+            urls(super::hosted_file_links(&snapshot, "abc123", "ü?.txt", ListedHosts::default())),
             pairs(&[("origin", "https://github.com/owner/repo/blob/abc123/%C3%BC%3F.txt")])
+        );
+        let gitlab = with_remotes(&[("origin", "https://gitlab.com/group/proj")]);
+        assert_eq!(
+            urls(super::hosted_file_links(&gitlab, "abc123", "dir/a b.txt", ListedHosts::default())),
+            pairs(&[("origin", "https://gitlab.com/group/proj/-/blob/abc123/dir/a%20b.txt")])
         );
     }
 
     #[test]
     fn enterprise_remote_links_use_its_listed_host() {
-        let hosts = vec!["git.example.com".to_string()];
+        let listed = vec!["git.example.com".to_string()];
+        let hosts = ListedHosts { github: &listed, gitlab: &[] };
         let snapshot = with_remotes(&[("origin", "https://git.example.com/acme/app.git")]);
         assert_eq!(
-            super::github_commit_links(&snapshot, "abc123", &hosts),
+            urls(super::hosted_commit_links(&snapshot, "abc123", hosts)),
             pairs(&[("origin", "https://git.example.com/acme/app/commit/abc123")])
         );
         assert_eq!(
-            super::github_file_links(&snapshot, "abc123", "dir/a b.txt", &hosts),
+            urls(super::hosted_file_links(&snapshot, "abc123", "dir/a b.txt", hosts)),
             pairs(&[("origin", "https://git.example.com/acme/app/blob/abc123/dir/a%20b.txt")])
         );
         assert_eq!(
-            super::github_branch_link(&snapshot, &remote_branch_named("origin/feature/x"), &hosts).as_deref(),
+            super::hosted_branch_link(&snapshot, &remote_branch_named("origin/feature/x"), hosts).map(|l| l.url).as_deref(),
             Some("https://git.example.com/acme/app/tree/feature/x")
         );
         let branch = local_branch_with_upstream(Some("refs/remotes/origin/topic"));
-        assert_eq!(super::github_branch_link(&snapshot, &branch, &hosts).as_deref(), Some("https://git.example.com/acme/app/tree/topic"));
         assert_eq!(
-            super::github_pull_request_link(&snapshot, &branch, &hosts).as_deref(),
+            super::hosted_branch_link(&snapshot, &branch, hosts).map(|l| l.url).as_deref(),
+            Some("https://git.example.com/acme/app/tree/topic")
+        );
+        assert_eq!(
+            super::github_pull_request_link(&snapshot, &branch, &listed).as_deref(),
             Some("https://git.example.com/acme/app/compare/topic?expand=1")
         );
     }
 
     #[test]
+    fn self_hosted_gitlab_remote_links_once_its_host_is_listed() {
+        let listed = vec!["gitlab.example.com".to_string()];
+        let hosts = ListedHosts { github: &[], gitlab: &listed };
+        let snapshot = with_remotes(&[("origin", "ssh://git@gitlab.example.com/acme/tools/app.git")]);
+        assert_eq!(
+            urls(super::hosted_commit_links(&snapshot, "abc123", hosts)),
+            pairs(&[("origin", "https://gitlab.example.com/acme/tools/app/-/commit/abc123")])
+        );
+        assert!(super::hosted_commit_links(&snapshot, "abc123", ListedHosts::default()).is_empty(), "not listed");
+    }
+
+    #[test]
     fn enterprise_remote_gets_no_links_until_its_host_is_listed() {
         let snapshot = with_remotes(&[("origin", "https://git.example.com/acme/app.git")]);
-        assert!(super::github_commit_links(&snapshot, "abc123", &[]).is_empty());
-        assert!(super::github_file_links(&snapshot, "abc123", "a.txt", &[]).is_empty());
-        assert_eq!(super::github_branch_link(&snapshot, &remote_branch_named("origin/main"), &[]), None);
+        assert!(super::hosted_commit_links(&snapshot, "abc123", ListedHosts::default()).is_empty());
+        assert!(super::hosted_file_links(&snapshot, "abc123", "a.txt", ListedHosts::default()).is_empty());
+        assert_eq!(super::hosted_branch_link(&snapshot, &remote_branch_named("origin/main"), ListedHosts::default()), None);
         let branch = local_branch_with_upstream(Some("refs/remotes/origin/main"));
         assert_eq!(super::github_pull_request_link(&snapshot, &branch, &[]), None);
         let other = vec!["ghe.other.com".to_string()];
-        assert!(super::github_commit_links(&snapshot, "abc123", &other).is_empty(), "only the listed host counts");
+        let hosts = ListedHosts { github: &other, gitlab: &[] };
+        assert!(super::hosted_commit_links(&snapshot, "abc123", hosts).is_empty(), "only the listed host counts");
+    }
+
+    #[test]
+    fn menus_name_the_host_only_when_every_link_is_on_one() {
+        let github = WebLink { remote: "origin".into(), url: "https://github.com/a/b/commit/1".into(), host: Host::GitHub };
+        let gitlab = WebLink { remote: "fork".into(), url: "https://gitlab.com/a/b/-/commit/1".into(), host: Host::GitLab };
+        assert_eq!(super::open_label("Open", std::slice::from_ref(&github)), "Open on GitHub");
+        assert_eq!(super::open_label("Open file", std::slice::from_ref(&gitlab)), "Open file on GitLab");
+        assert_eq!(super::open_label("Open", &[github.clone(), gitlab.clone()]), "Open in browser");
+        assert_eq!(super::copy_commit_link_label(std::slice::from_ref(&github)), "Copy GitHub commit link");
+        assert_eq!(super::copy_commit_link_label(&[github, gitlab]), "Copy commit link");
+    }
+
+    #[test]
+    fn the_palette_repository_is_the_upstream_remote_when_it_is_hosted() {
+        use nicegit_core::Branch;
+        let mut snapshot = with_remotes(&[
+            ("origin", "git@github.com:owner/repo.git"),
+            ("gitlab", "git@gitlab.com:group/proj.git"),
+            ("mirror", "https://example.com/owner/repo.git"),
+        ]);
+        let current = |upstream: Option<&str>| Branch {
+            name: "main".into(),
+            is_current: true,
+            is_remote: false,
+            tip: "abc".into(),
+            subject: String::new(),
+            upstream: upstream.map(String::from),
+        };
+        snapshot.branches = vec![current(Some("refs/remotes/gitlab/main"))];
+        let repository = super::default_hosted_repository(&snapshot, ListedHosts::default()).expect("a hosted repository");
+        assert_eq!(repository.home_url(), "https://gitlab.com/group/proj");
+        snapshot.branches = vec![current(Some("refs/remotes/mirror/main"))];
+        let repository = super::default_hosted_repository(&snapshot, ListedHosts::default()).expect("origin");
+        assert_eq!(repository.home_url(), "https://github.com/owner/repo", "origin when the upstream is not hosted");
     }
 
     #[test]

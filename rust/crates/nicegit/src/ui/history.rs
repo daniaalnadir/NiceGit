@@ -876,13 +876,13 @@ impl NiceGitApp {
                 ui.ctx().copy_text(format!("{} <{}>", commit.author_name, commit.author_email));
             }
         });
-        crate::git_ext::github_open_menu(
+        crate::git_ext::web_open_menu(
             ui,
-            "Open on GitHub",
-            crate::git_ext::github_commit_links(snapshot, &commit.hash, &self.settings.github_enterprise_hosts),
+            "Open",
+            crate::git_ext::hosted_commit_links(snapshot, &commit.hash, self.settings.listed_hosts()),
             crate::git_ext::PUSHED_COMMIT_NOTE,
         );
-        crate::git_ext::github_link_menu(ui, snapshot, &commit.hash, &self.settings.github_enterprise_hosts);
+        crate::git_ext::commit_link_menu(ui, snapshot, &commit.hash, self.settings.listed_hosts());
         if ui.button(format!("{}  Save as patch…", icon::FLOPPY_DISK)).clicked() {
             ui.close();
             self.export_patch(commit);

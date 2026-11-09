@@ -21,8 +21,8 @@ pub struct PaletteState {
 #[derive(Clone)]
 enum Run {
     PullRequest(String),
-    /// Opens a GitHub page for the repository, as its full address.
-    OpenGitHub(String),
+    /// Opens a page of the repository on its host, as its full address.
+    OpenHosted(String),
     Shortcuts,
     Fetch,
     FetchRemote(String),
@@ -192,17 +192,23 @@ impl NiceGitApp {
                 Run::PullRequest(branch),
             ));
         }
-        // Hidden unless a GitHub remote is chosen, as the pull request command is.
-        if let Some(repository) =
-            snapshot.and_then(|s| crate::git_ext::default_github_repository(s, &self.settings.github_enterprise_hosts))
-        {
-            for (title, glyph, page) in [
-                ("Open repository on GitHub", icon::GITHUB_LOGO, None),
-                ("Open pull requests on GitHub", icon::GIT_PULL_REQUEST, Some("pulls")),
-                ("Open Actions on GitHub", icon::PLAY, Some("actions")),
-            ] {
-                let url = repository.web_url(page);
-                list.push(command(title, &url, glyph, true, Run::OpenGitHub(url.clone())));
+        // Hidden unless a remote on a supported host is chosen, as the pull request command is.
+        if let Some(repository) = snapshot.and_then(|s| crate::git_ext::default_hosted_repository(s, self.settings.listed_hosts())) {
+            let host = repository.kind.name();
+            let mut pages = vec![
+                (format!("Open repository on {host}"), crate::git_ext::host_glyph(repository.kind), repository.home_url()),
+                (
+                    format!("Open {} on {host}", crate::git_ext::pull_request_label(repository.kind).to_lowercase()),
+                    icon::GIT_PULL_REQUEST,
+                    repository.pull_requests_url(),
+                ),
+            ];
+            // Actions is a GitHub page; the other hosts' pipelines are not offered here.
+            if let Some(url) = repository.github_page_url("actions") {
+                pages.push((format!("Open Actions on {host}"), icon::PLAY, url));
+            }
+            for (title, glyph, url) in pages {
+                list.push(command(&title, &url, glyph, true, Run::OpenHosted(url.clone())));
             }
         }
         if let Some(snapshot) = snapshot {
@@ -342,7 +348,7 @@ impl NiceGitApp {
                     self.open_pull_request(ctx, &branch);
                 }
             }
-            Run::OpenGitHub(url) => crate::ui::changes::open_url(&url),
+            Run::OpenHosted(url) => crate::ui::changes::open_url(&url),
             Run::Shortcuts => self.show_shortcuts = true,
             Run::Open => self.choose_folder(),
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
