@@ -87,6 +87,7 @@ fn history_frame_time_with_a_thousand_commits() {
             unit: MouseWheelUnit::Point,
             delta: vec2(0.0, -300.0),
             phase: TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
             modifiers: Modifiers::NONE,
         });
         let start = Instant::now();

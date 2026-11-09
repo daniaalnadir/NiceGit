@@ -552,6 +552,7 @@ fn load_older_history_reads_the_next_page() {
             unit: egui::MouseWheelUnit::Point,
             delta: egui::vec2(0.0, -4000.0),
             phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
             modifiers: Modifiers::NONE,
         });
         harness.step();
@@ -2394,8 +2395,13 @@ fn a_recent_commit_summary_can_be_reused() {
     loaded(&mut harness);
     harness.get_by_label("Recent commit summaries").click();
     wait(&mut harness, "the recent summaries", |h| h.query_by_label("Use a recent summary").is_some());
-    // The menu is drawn over everything else, so its entry is the last with that name.
-    harness.get_all_by_role_and_label(Role::Button, "Start the notes").last().expect("the menu entry").click();
+    // History rows share the button role, so the menu's entry is the match nearest the button that opened it.
+    let trigger = harness.get_by_role_and_label(Role::Button, "Recent commit summaries").rect().center();
+    let entry = harness
+        .get_all_by_role_and_label(Role::Button, "Start the notes")
+        .min_by(|a, b| a.rect().center().distance(trigger).total_cmp(&b.rect().center().distance(trigger)))
+        .expect("the menu entry");
+    entry.click();
     settle(&mut harness);
     assert_eq!(harness.state().repo().unwrap().draft.summary, "Start the notes");
 }

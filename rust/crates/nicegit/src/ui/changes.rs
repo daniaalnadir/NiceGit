@@ -114,7 +114,7 @@ impl NiceGitApp {
             if show_filter {
                 ui.add_space(6.0);
                 let field = widgets::search_field(ui, &mut self.repos[self.active].change_filter, "Filter changed files");
-                field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter changed files"));
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter changed files"));
                 if focus_requested {
                     field.request_focus();
                 }
@@ -168,14 +168,14 @@ impl NiceGitApp {
                         let count = shown(&unstaged, &all_unstaged);
                         let full = format!("Unstaged files ({count})");
                         ui.label(RichText::new(format!("{}  Unstaged{noun} ({count})", icon::CARET_DOWN)).strong())
-                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &full));
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
                     },
                     |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // The bulk buttons act on every file in their section, not only the shown ones.
                         let enabled = idle && !all_unstaged.is_empty();
                         let stage_all = outlined(ui, if compact { "Stage All" } else { "Stage All Changes" }, c.accent, enabled);
-                        stage_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, "Stage All Changes"));
+                        stage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, "Stage All Changes"));
                         let stage_all = if filtering {
                             stage_all.on_hover_text(format!(
                                 "Stages all {} unstaged files, including those hidden by the filter",
@@ -197,7 +197,7 @@ impl NiceGitApp {
                             "Discard all changes…".to_string()
                         };
                         let discard_all = widgets::icon_button(ui, icon::TRASH, &discard_tip, discard_all_enabled);
-                        discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, discard_all_enabled, "Discard all changes…"));
+                        discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, discard_all_enabled, "Discard all changes…"));
                         if discard_all.clicked() {
                             let hidden = if filtering { " Files hidden by the filter are included." } else { "" };
                             self.confirm(
@@ -243,13 +243,13 @@ impl NiceGitApp {
                         let count = shown(&staged, &all_staged);
                         let full = format!("Staged files ({count})");
                         ui.label(RichText::new(format!("{}  Staged{noun} ({count})", icon::CARET_DOWN)).strong())
-                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &full));
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
                     },
                     |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled = idle && !all_staged.is_empty();
                         let unstage_all = outlined(ui, if compact { "Unstage All" } else { "Unstage All Changes" }, c.accent, enabled);
-                        unstage_all.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, "Unstage All Changes"));
+                        unstage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, "Unstage All Changes"));
                         let unstage_all = if filtering {
                             unstage_all.on_hover_text(format!(
                                 "Unstages all {} staged files, including those hidden by the filter",
@@ -666,7 +666,7 @@ impl NiceGitApp {
                             .frame(egui::Frame::NONE)
                             .desired_width((ui.available_width() - 124.0).max(40.0)),
                     )
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit summary"));
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit summary"));
                     // Characters used out of the 72-character guideline, e.g. "0/72".
                     let length = repo.draft.summary.chars().count();
                     let color = if length > 72 { c.warning } else { c.muted };
@@ -698,7 +698,7 @@ impl NiceGitApp {
                         });
                         menu.response
                             .on_hover_text("Recent commit summaries")
-                            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Recent commit summaries"));
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Recent commit summaries"));
                     }
                     // The menu is read only while open: its identity is cached until it closes.
                     let (menu, open) = egui::containers::menu::MenuButton::new(RichText::new(icon::USERS).color(c.muted))
@@ -714,8 +714,7 @@ impl NiceGitApp {
                     if open.is_none() {
                         repo.trailer_identity = None;
                     }
-                    menu.on_hover_text("Add trailers")
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add trailers"));
+                    menu.on_hover_text("Add trailers").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Add trailers"));
                 });
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
@@ -724,7 +723,7 @@ impl NiceGitApp {
                         .desired_rows(4)
                         .desired_width(f32::INFINITY),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Commit description"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit description"));
                 if repo.draft_from_template.as_ref() == Some(&repo.draft) {
                     ui.label(RichText::new("From commit.template").small().color(c.muted));
                 }
@@ -859,7 +858,7 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
     let response = ui
         .add_enabled(identity_set, egui::Button::new(trailer_row(on, &format!("{name} <{email}>"))).truncate())
         .on_disabled_hover_text("Set your Git name and email first");
-    response.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, identity_set, label.clone()));
+    response.widget_info(move || egui::WidgetInfo::labeled(egui::Role::Button, identity_set, label.clone()));
     if response.clicked() {
         repo.draft.toggle_trailer(&signed_off);
     }
@@ -890,7 +889,7 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
     }
     if authors.len() > 8 {
         ui.add(egui::TextEdit::singleline(&mut repo.trailer_filter).hint_text("Filter authors").desired_width(220.0))
-            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter authors"));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter authors"));
     }
     let needle = repo.trailer_filter.trim().to_lowercase();
     let shown: Vec<&(String, String)> = authors
@@ -906,7 +905,7 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
         let on = repo.draft.has_trailer(&trailer);
         let label = trailer.clone();
         let response = ui.add(egui::Button::new(trailer_row(on, &text)).truncate());
-        response.widget_info(move || egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.clone()));
+        response.widget_info(move || egui::WidgetInfo::labeled(egui::Role::Button, true, label.clone()));
         if response.clicked() {
             repo.draft.toggle_trailer(&trailer);
         }
@@ -948,11 +947,11 @@ pub(crate) fn matches_filter(entry: &StatusEntry, filter: &str) -> bool {
 /// whether a shortcut asked for it to be focused. Egui drops a field's focus on Escape before the
 /// shortcuts run, so the state from the previous frame is what tells Escape to clear the field.
 fn filter_focus_key() -> egui::Id {
-    egui::Id::new("changes_filter_focused")
+    egui::Id::unique("changes_filter_focused")
 }
 
 fn filter_focus_request_key() -> egui::Id {
-    egui::Id::new("changes_filter_focus_request")
+    egui::Id::unique("changes_filter_focus_request")
 }
 
 /// Whether the filter field had focus when the Changes panel was drawn in the previous pass. A

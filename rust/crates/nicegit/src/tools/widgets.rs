@@ -10,7 +10,7 @@ pub fn icon_button(ui: &mut Ui, glyph: &str, tooltip: &str, enabled: bool) -> eg
     let response =
         ui.add_enabled(enabled, egui::Button::new(RichText::new(glyph).size(15.0)).frame(false).min_size(egui::vec2(24.0, 24.0)));
     // The icon alone means nothing to a screen reader, so the button is named by its tooltip.
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tooltip));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, tooltip));
     response.on_hover_text(tooltip).on_disabled_hover_text(tooltip)
 }
 

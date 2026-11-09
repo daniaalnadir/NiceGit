@@ -287,7 +287,7 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
         ui.centered_and_justified(|ui| ui.label(RichText::new("No changes to show").weak()));
         return response;
     }
-    let drag_id = Id::new(("diff-selection-drag", content.title.as_str()));
+    let drag_id = Id::unique(("diff-selection-drag", content.title.as_str()));
     if !ui.input(|input| input.pointer.primary_down()) {
         ui.ctx().data_mut(|data| data.remove::<Option<bool>>(drag_id));
     }
@@ -409,7 +409,7 @@ fn block_buttons(ui: &mut Ui, buttons: BlockButtons) -> ShownButtons {
                 let text = if choice == BlockAction::Discard { text.color(c.removed) } else { text };
                 let button = ui.add(egui::Button::new(text).frame(false)).on_hover_text(tip);
                 let name = format!("{label} this change");
-                button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+                button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                 if button.clicked() {
                     action = Some(choice);
                 }
@@ -668,7 +668,7 @@ fn line_button(ui: &mut Ui, view: &View, rect: Rect, line: usize, response: &mut
     let button = ui.interact(area, view.drag_id.with(("line button", line)), Sense::click());
     let number = diff_line.new_number.or(diff_line.old_number).unwrap_or(line);
     let name = format!("{verb} line {number}");
-    button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+    button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
     let colors = view.style.colors;
     let line_hovered = ui.rect_contains_pointer(rect);
     let color = if button.hovered() {
@@ -746,7 +746,7 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
         // A fixed identity: the staging hint above appears once the review loads, and an
         // identity taken from the layout would move the field and drop its focus.
         let edit = widgets::search_input_with_id(ui, "diff-find", &mut options.find.query, "Find in diff", 180.0);
-        edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Find in diff"));
+        edit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Find in diff"));
         // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
         if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {
             edit.request_focus();
@@ -960,8 +960,15 @@ mod tests {
         let mut output = ctx.run_ui(input, |ui| {
             let style = Style::new(ui, &content, false, 0.0);
             let colors = style.colors;
-            let view =
-                View { content: &content, occurrences: &[], current: 0, split: false, style, drag_id: Id::new("test-diff"), buttons: None };
+            let view = View {
+                content: &content,
+                occurrences: &[],
+                current: 0,
+                split: false,
+                style,
+                drag_id: Id::unique("test-diff"),
+                buttons: None,
+            };
             let removed = view.spans(0);
             let added = view.spans(1);
             assert!(removed

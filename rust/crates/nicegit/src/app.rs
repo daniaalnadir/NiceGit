@@ -177,11 +177,19 @@ pub type FileLineCounts = std::collections::HashMap<String, nicegit_core::line_c
 pub type TagDetailsRead =
     (String, Task<nicegit_core::Result<(Option<nicegit_core::TagDetails>, Option<nicegit_core::signature::CommitSignature>)>>);
 
+/// The [`egui::Id`] under which egui keeps the state of the side or bottom panel `name` in the main
+/// layout. egui 0.37 derives a panel's id from its parent `Ui`'s scope, and the main layout's
+/// parent is the viewport's root `Ui`.
+pub fn panel_id(ctx: &egui::Context, name: &str) -> egui::Id {
+    ctx.viewport_id().root_ui_id().with_salt(egui::IdSalt::new(name))
+}
+
 /// Returns every side and bottom panel to its default width, a share of the window.
 pub fn restore_panel_widths(ctx: &egui::Context) {
+    let ids: Vec<egui::Id> = ["repositories", "sidebar", "changes", "terminal"].into_iter().map(|name| panel_id(ctx, name)).collect();
     ctx.data_mut(|data| {
-        for id in ["repositories", "sidebar", "changes", "terminal"] {
-            data.remove::<egui::containers::panel::PanelState>(egui::Id::new(id));
+        for id in ids {
+            data.remove::<egui::containers::panel::PanelState>(id);
         }
     });
 }
@@ -665,7 +673,7 @@ impl NiceGitApp {
         let (hovering, dropped) = ctx.input(|i| (!i.raw.hovered_files.is_empty(), i.raw.dropped_files.clone()));
         if hovering {
             let screen = ctx.content_rect();
-            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop target")));
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("drop target")));
             let c = crate::theme::colors(ctx.theme() == egui::Theme::Dark);
             painter.rect_filled(screen, 0.0, c.accent.gamma_multiply(0.12));
             painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
@@ -2127,7 +2135,7 @@ impl NiceGitApp {
             };
             let size = egui::vec2(width, wanted.y).min(screen.size() - egui::vec2(40.0, 60.0));
             egui::Window::new(tool.title())
-                .id(egui::Id::new(("tool", tool.id())))
+                .id(egui::Id::unique(("tool", tool.id())))
                 .pivot(egui::Align2::CENTER_CENTER)
                 .default_pos(screen.center())
                 .default_size(size)

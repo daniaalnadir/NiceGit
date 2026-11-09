@@ -132,7 +132,7 @@ impl ToolWindow for LfsWindow {
                     idle,
                     egui::TextEdit::singleline(&mut self.pattern).hint_text("*.psd, docs/*.pdf").desired_width(width),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "LFS pattern"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "LFS pattern"));
                 let can_track = idle && status.version.is_some() && !self.pattern.trim().is_empty();
                 if widgets::primary_button(ui, "Track", can_track).clicked() {
                     track = Some(self.pattern.trim().to_string());

@@ -85,7 +85,7 @@ impl ToolWindow for ContentSearchWindow {
                     .hint_text("Text in files")
                     .desired_width((ui.available_width() - 150.0).max(160.0)),
             );
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Text in files"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Text in files"));
             if self.focus_requested {
                 response.request_focus();
                 self.focus_requested = false;

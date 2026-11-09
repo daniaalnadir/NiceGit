@@ -645,6 +645,7 @@ fn settings_scroll_shots(folder: &Path) {
         unit: egui::MouseWheelUnit::Point,
         delta: egui::vec2(0.0, -260.0),
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
         modifiers: egui::Modifiers::NONE,
     });
     settle(&mut harness);

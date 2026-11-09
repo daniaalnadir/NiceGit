@@ -900,7 +900,7 @@ fn double_clicking_a_panel_edge_restores_its_width() {
     let mut harness = open(repo.path());
     loaded(&mut harness);
     settle(&mut harness);
-    let id = egui::Id::new("sidebar");
+    let id = crate::app::panel_id(&harness.ctx, "sidebar");
     let width = |h: &Harness<'static, NiceGitApp>| PanelState::load(&h.ctx, id).map(|s| s.size().x).unwrap_or_default();
     let default = width(&harness);
 

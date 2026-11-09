@@ -96,7 +96,7 @@ impl ClonePicker {
         let mut host = self.host.clone();
         let mut picked = None;
         let mut check_again = false;
-        let modal = egui::Modal::new(egui::Id::new("clone-picker")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("clone-picker")).show(ctx, |ui| {
             ui.set_width(440.0);
             let c = theme::of(ui);
             ui.heading("Choose a GitHub repository");
@@ -117,7 +117,7 @@ impl ClonePicker {
             });
             ui.add_space(4.0);
             widgets::search_field(ui, &mut self.filter, "Filter repositories")
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter repositories"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter repositories"));
             ui.add_space(8.0);
 
             match &self.listing {

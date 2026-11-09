@@ -198,7 +198,7 @@ impl Layout {
 pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height: f32) {
     let c = theme::of(ui);
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), Sense::click());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "History columns"));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, "History columns"));
     let response = response.on_hover_text("Drag a column's edge to resize it. Right-click to choose columns.");
     let layout = columns.layout(rect.left(), rect.right(), graph);
     let font = egui::TextStyle::Small.resolve(ui.style());
@@ -223,8 +223,8 @@ pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height:
         }
         let edge = if column.before_message() { span.max } else { span.min };
         let grab = egui::Rect::from_x_y_ranges(Rangef::new(edge - GRAB, edge + GRAB), rect.y_range());
-        let handle = ui.interact(grab, ui.id().with(("history column edge", column)), Sense::click_and_drag());
-        handle.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("Resize the {} column", column.title())));
+        let handle = ui.interact(grab, ui.scope_id().with(("history column edge", column)), Sense::click_and_drag());
+        handle.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("Resize the {} column", column.title())));
         let active = handle.hovered() || handle.dragged();
         if active {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);

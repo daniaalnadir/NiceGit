@@ -139,7 +139,7 @@ impl NiceGitApp {
                             }
                         })
                         .response;
-                    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, idle, "Branches shown"));
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, idle, "Branches shown"));
                     response.on_hover_text("Which branches the graph includes");
                 });
                 if scope != shown {
@@ -194,7 +194,7 @@ impl NiceGitApp {
                                         .desired_width(f32::INFINITY),
                                 )
                                 .on_hover_text("Matches each commit's message, author, ID, branches, and tags");
-                            field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter loaded commits"));
+                            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter loaded commits"));
                         });
                     });
                 if ui
@@ -366,10 +366,10 @@ impl NiceGitApp {
             self.load(false);
         }
         let view_id = ui.make_persistent_id("history_view");
-        ui.data_mut(|d| d.insert_temp(view_id, (output.state.offset.y, output.inner_rect.height())));
+        ui.data_mut(|d| d.insert_temp(view_id, (output.state.unclamped_offset().y, output.inner_rect.height())));
         // A row cut by the bottom edge fades out, so it reads as more history below rather than
         // a broken row.
-        if more_below(output.state.offset.y, output.inner_rect.height(), output.content_size.y) {
+        if more_below(output.state.unclamped_offset().y, output.inner_rect.height(), output.content_size.y) {
             paint_fade(ui.painter(), output.inner_rect, background);
         }
     }
@@ -400,7 +400,7 @@ impl NiceGitApp {
             Some(commit) => commit.subject.clone(),
             None => "Working tree".to_string(),
         };
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::SelectableLabel, true, &description));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &description));
         // Only rows scrolled out of view are skipped. A frame egui is about to discard reports the
         // ui as invisible, and skipping its rows there would drop the labels' and rows' open menus.
         if !rect.intersects(ui.clip_rect()) {
@@ -567,9 +567,9 @@ impl NiceGitApp {
         // on the row does, and its right-click opens the branch's menu rather than the commit's.
         let mut label_clicked = false;
         for (index, (pill, branch)) in branch_pills.into_iter().enumerate() {
-            let label = ui.interact(pill, ui.id().with(("label", &commit.hash, index)), Sense::click_and_drag());
+            let label = ui.interact(pill, ui.scope_id().with(("label", &commit.hash, index)), Sense::click_and_drag());
             let name = format!("Branch label {}", branch.display_name());
-            label.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
+            label.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
             label_clicked |= label.clicked();
             let label = label.on_hover_text(branch.display_name());
             // Drag a branch label onto the current commit to merge it in or rebase onto it.

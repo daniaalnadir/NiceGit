@@ -193,7 +193,7 @@ impl ToolWindow for CompareWindow {
             }
             Some(Ok(_)) => {
                 let mut clicked: Option<String> = None;
-                egui::Panel::left(ui.id().with("compare_files")).resizable(true).default_size(280.0).size_range(180.0..=460.0).show(
+                egui::Panel::left(ui.scope_id().with("compare_files")).resizable(true).default_size(280.0).size_range(180.0..=460.0).show(
                     ui,
                     |ui| {
                         if let Some(Ok(files)) = self.files.value(&()) {
