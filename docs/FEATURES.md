@@ -74,6 +74,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   skips the pre-push hook for Commit and push. When a pre-commit or commit-msg hook stops a
   commit, the notice shows Git's output and offers Commit without hooks, which makes the same
   commit once with hooks skipped if the branch and HEAD have not changed.
+- Sign or leave unsigned a single commit with "Sign this commit" in the same options menu. It
+  appears only when the repository has a signing setup (a signing key, `gpg.format`, or
+  `commit.gpgSign`), starts from `commit.gpgSign`, and resets after each commit. It applies to
+  the commit, amend, Stage all and commit, and Commit and push. When Git cannot sign a commit,
+  nothing is made and the notice explains the signing setup, with Git's message below it.
 - An empty commit message starts from the repository's commit.template, with comment
   lines removed. As with Git, an unedited template cannot be committed.
 - Show diffs side by side (old left, new right, long lines wrapped) or in one column; the

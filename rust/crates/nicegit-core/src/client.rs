@@ -230,6 +230,15 @@ pub struct CommitDetails {
     pub message: String,
 }
 
+/// The repository's signing setup, read once per load for the commit box's Sign toggle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SigningSetup {
+    /// Whether a signing key, a `gpg.format`, or `commit.gpgSign` is set, so commits can be signed.
+    pub configured: bool,
+    /// Whether `commit.gpgSign` signs commits unless a commit says otherwise.
+    pub sign_by_default: bool,
+}
+
 /// A selected file's change, as the action that was chosen for it last saw it.
 pub type Selected<'a> = &'a StatusEntry;
 
@@ -748,12 +757,14 @@ impl GitClient {
     // MARK: Commits
 
     pub fn commit(&self, message: &str, directory: &Path) -> Result<()> {
-        self.commit_with_options(message, false, directory)
+        self.commit_with_options(message, false, None, directory)
     }
 
     /// Commits the staged changes. With `skip_hooks`, `--no-verify` leaves out the pre-commit and
-    /// commit-msg hooks. A commit a hook refuses is `GitError::HookRejected`.
-    pub fn commit_with_options(&self, message: &str, skip_hooks: bool, directory: &Path) -> Result<()> {
+    /// commit-msg hooks. `sign` picks signing for this commit: `None` follows the configuration,
+    /// `Some(true)` signs with `-S`, and `Some(false)` passes `--no-gpg-sign`. A commit a hook
+    /// refuses is `GitError::HookRejected`; one Git could not sign is `GitError::SigningRejected`.
+    pub fn commit_with_options(&self, message: &str, skip_hooks: bool, sign: Option<bool>, directory: &Path) -> Result<()> {
         let message = message.trim();
         if message.is_empty() {
             return Err(GitError::EmptyCommitMessage);
@@ -762,15 +773,30 @@ impl GitClient {
         if skip_hooks {
             arguments.push("--no-verify");
         }
+        arguments.extend(sign_argument(sign));
         arguments.extend(["-m", message]);
         self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
-    /// Reports a failed commit as a hook's refusal when hooks ran and a `pre-commit` or
-    /// `commit-msg` hook is installed, unless Git's own checks explain the failure. Git prints the
-    /// hook's output on failure, so the message is kept whole.
+    /// Whether the repository has a signing setup, and whether `commit.gpgSign` signs commits by
+    /// default. A set `user.signingKey`, `gpg.format`, or `commit.gpgSign` counts as configured;
+    /// an empty value, such as the empty `gpg.format` some machines have, does not.
+    pub fn signing_setup(&self, directory: &Path) -> Result<SigningSetup> {
+        let is_set = |key: &str| -> Result<bool> { Ok(self.config(key, false, directory)?.is_some_and(|value| !value.is_empty())) };
+        let sign_by_default = self.config("commit.gpgsign", true, directory)?.is_some_and(|value| value == "true");
+        let configured = sign_by_default || is_set("user.signingkey")? || is_set("gpg.format")?;
+        Ok(SigningSetup { configured, sign_by_default })
+    }
+
+    /// Reports a failed commit as a signing failure when Git could not sign it, and otherwise as a
+    /// hook's refusal when hooks ran and a `pre-commit` or `commit-msg` hook is installed, unless
+    /// Git's own checks explain the failure. Git prints the hook's output on failure, so the
+    /// message is kept whole.
     fn refusal_by_hook(&self, error: GitError, skip_hooks: bool, directory: &Path) -> GitError {
         match error {
+            GitError::CommandFailed { command, message } if is_signing_refusal(&message) => {
+                GitError::SigningRejected { command, output: message }
+            }
             GitError::CommandFailed { command, message }
                 if !skip_hooks && !is_own_commit_refusal(&message) && self.commit_hooks_installed(directory) =>
             {
@@ -848,16 +874,18 @@ impl GitClient {
 
     /// Replaces the last commit with one that also contains the staged changes.
     pub fn amend(&self, message: &str, expected_branch: &str, expected_head: &str, directory: &Path) -> Result<()> {
-        self.amend_with_options(message, expected_branch, expected_head, false, directory)
+        self.amend_with_options(message, expected_branch, expected_head, false, None, directory)
     }
 
-    /// Like `amend`, with `skip_hooks` leaving out the pre-commit and commit-msg hooks.
+    /// Like `amend`, with `skip_hooks` leaving out the pre-commit and commit-msg hooks, and `sign`
+    /// choosing signing as `commit_with_options` does.
     pub fn amend_with_options(
         &self,
         message: &str,
         expected_branch: &str,
         expected_head: &str,
         skip_hooks: bool,
+        sign: Option<bool>,
         directory: &Path,
     ) -> Result<()> {
         let message = message.trim();
@@ -872,6 +900,7 @@ impl GitClient {
         if skip_hooks {
             arguments.push("--no-verify");
         }
+        arguments.extend(sign_argument(sign));
         arguments.extend(["--message", message]);
         self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
@@ -1542,11 +1571,19 @@ impl GitClient {
     /// `snapshot` and the branch has an upstream; pushes only the commit just made, on top of
     /// that HEAD. If the push fails, the commit stays and the error says so.
     pub fn commit_and_push(&self, message: &str, snapshot: &Snapshot, directory: &Path) -> Result<()> {
-        self.commit_and_push_with_options(message, snapshot, false, directory)
+        self.commit_and_push_with_options(message, snapshot, false, None, directory)
     }
 
-    /// Like `commit_and_push`, with `skip_hooks` leaving out the commit's hooks and the pre-push hook.
-    pub fn commit_and_push_with_options(&self, message: &str, snapshot: &Snapshot, skip_hooks: bool, directory: &Path) -> Result<()> {
+    /// Like `commit_and_push`, with `skip_hooks` leaving out the commit's hooks and the pre-push hook,
+    /// and `sign` choosing signing for the commit as `commit_with_options` does.
+    pub fn commit_and_push_with_options(
+        &self,
+        message: &str,
+        snapshot: &Snapshot,
+        skip_hooks: bool,
+        sign: Option<bool>,
+        directory: &Path,
+    ) -> Result<()> {
         const COMMAND: &str = "commit and push";
         let branch = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).unwrap_or_default();
         let head = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD"], directory);
@@ -1556,7 +1593,7 @@ impl GitClient {
         if snapshot.upstream.is_none() {
             return Err(GitError::failed(COMMAND, "Publish the branch before pushing commits to it."));
         }
-        self.commit_with_options(message, skip_hooks, directory)?;
+        self.commit_with_options(message, skip_hooks, sign, directory)?;
         let committed = self.run_trimmed(&["rev-parse", "--verify", "HEAD"], directory)?;
         let parent = self.try_trimmed(&["rev-parse", "--verify", "--quiet", "HEAD^"], directory);
         let still_here = self.run_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory).ok() == Some(branch);
@@ -2184,6 +2221,22 @@ pub fn operation_in(git_directory: &Path) -> Option<Operation> {
     })
 }
 
+/// The flag for a commit's signing choice: `-S` to sign, `--no-gpg-sign` to leave it unsigned, and
+/// nothing to follow the configuration.
+fn sign_argument(sign: Option<bool>) -> Option<&'static str> {
+    match sign {
+        Some(true) => Some("-S"),
+        Some(false) => Some("--no-gpg-sign"),
+        None => None,
+    }
+}
+
+/// Whether Git's failure text says it could not sign a commit: the signing program failed or could
+/// not run, or the `gpg.format` setting is broken.
+fn is_signing_refusal(message: &str) -> bool {
+    ["gpg failed to sign", "error: cannot run gpg", "bad config variable 'gpg.format'"].iter().any(|sign| message.contains(sign))
+}
+
 /// Git's own reasons to refuse a commit, which no hook causes: nothing to commit, no identity,
 /// unmerged files, a lock on the index, or a signing failure.
 fn is_own_commit_refusal(message: &str) -> bool {
@@ -2240,6 +2293,22 @@ mod tests {
                 "branch.rebase={branch_rebase:?} pull.rebase={pull_rebase:?} pull.ff={pull_ff:?}"
             );
         }
+    }
+
+    #[test]
+    fn signing_failures_are_told_apart_from_hook_refusals() {
+        for message in [
+            "error: gpg failed to sign the data\nfatal: failed to write commit object",
+            "error: cannot run gpg: No such file or directory",
+            "fatal: bad config variable 'gpg.format' in file '.git/config' at line 3",
+        ] {
+            assert!(is_signing_refusal(message), "{message}");
+        }
+        assert!(!is_signing_refusal("error: the pre-commit hook refused the commit"));
+        assert!(!is_signing_refusal("nothing to commit, working tree clean"));
+        assert_eq!(sign_argument(Some(true)), Some("-S"));
+        assert_eq!(sign_argument(Some(false)), Some("--no-gpg-sign"));
+        assert_eq!(sign_argument(None), None);
     }
 
     #[test]

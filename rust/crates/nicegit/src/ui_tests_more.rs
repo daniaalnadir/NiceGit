@@ -3507,3 +3507,72 @@ fn managing_workspaces_renames_and_deletes_them_and_leaves_folders_alone() {
     assert!(repo.path().exists(), "deleting a workspace leaves its folder on disk");
     assert_eq!(harness.state().repos.len(), 1, "and its open tab stays open");
 }
+
+#[test]
+fn sign_this_commit_shows_only_with_a_signing_setup_and_resets_after_a_commit() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "unsigned\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    // Without any signing setup the options menu has no toggle.
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the signing setup", |h| h.state().repo().is_some_and(|repo| repo.signing.is_some()));
+    type_into(&mut harness, "Commit summary", "Plain commit");
+    harness.get_by_label("Commit options").click();
+    settle(&mut harness);
+    assert!(!has_label(&harness, "Sign this commit"), "no signing setup, so no toggle");
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+    drop(harness);
+
+    // commit.gpgsign signs by default, so the toggle is there and starts ticked. Unticking it makes
+    // this one commit unsigned, without signing anything, and the choice resets afterwards.
+    git(path, &["config", "commit.gpgsign", "true"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the signing setup", |h| h.state().repo().is_some_and(|repo| repo.signing.is_some()));
+    type_into(&mut harness, "Commit summary", "Unsigned on purpose");
+    harness.get_by_label("Commit options").click();
+    settle(&mut harness);
+    assert!(has_label(&harness, "Sign this commit"), "a signing setup shows the toggle");
+    harness.get_by_role_and_label(Role::CheckBox, "Sign this commit").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repo().unwrap().sign_override, Some(false));
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+    wait(&mut harness, "the commit", |_| git(path, &["log", "-1", "--format=%s"]) == "Unsigned on purpose");
+    assert!(!git(path, &["cat-file", "commit", "HEAD"]).contains("gpgsig"), "the commit is not signed");
+    assert_eq!(harness.state().repo().unwrap().sign_override, None, "the choice resets after the commit");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_commit_git_cannot_sign_is_refused_with_the_signing_notice() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("notes.txt"), "unsignable\n").unwrap();
+    git(path, &["add", "notes.txt"]);
+    // A signing key that does not exist, so Git cannot sign.
+    git(path, &["config", "commit.gpgsign", "true"]);
+    git(path, &["config", "gpg.format", "ssh"]);
+    git(path, &["config", "user.signingkey", "/nonexistent/nicegit-test-key"]);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    type_into(&mut harness, "Commit summary", "Cannot sign");
+
+    wait(&mut harness, "the commit button", |h| has_label(h, "Commit 1 file to main"));
+    harness.get_by_label_contains("Commit 1 file to main").click();
+    idle(&mut harness);
+
+    let notice = harness.state().notice.as_ref().expect("a notice explains the failure");
+    assert_eq!(notice.text, nicegit_core::models::COMMIT_NOT_SIGNED);
+    assert!(notice.is_error && notice.detail.is_some(), "Git's explanation is kept as the detail");
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), before, "nothing was committed");
+    assert_eq!(harness.state().repo().unwrap().draft.summary, "Cannot sign", "the message comes back to the commit box");
+}

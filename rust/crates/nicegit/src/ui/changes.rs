@@ -780,7 +780,8 @@ impl NiceGitApp {
                     }
                     menu.on_hover_text("Add trailers").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Add trailers"));
                     // Commit options. Kept open while toggled, like the trailers menu.
-                    let gear = if repo.skip_hooks { c.accent } else { c.muted };
+                    let gear = if repo.skip_hooks || repo.sign_override.is_some() { c.accent } else { c.muted };
+                    let signing = repo.signing.filter(|setup| setup.configured);
                     let options = egui::containers::menu::MenuButton::new(RichText::new(icon::GEAR_SIX).color(gear))
                         .config(
                             egui::containers::menu::MenuConfig::new()
@@ -791,6 +792,20 @@ impl NiceGitApp {
                                 "Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when \
                                  committing and pushing. Resets after each commit.",
                             );
+                            // Shown only with a signing setup. It starts from commit.gpgSign each commit.
+                            if let Some(setup) = signing {
+                                let mut sign = repo.sign_override.unwrap_or(setup.sign_by_default);
+                                if ui
+                                    .checkbox(&mut sign, "Sign this commit")
+                                    .on_hover_text(
+                                        "Sign the next commit, amend, or Commit and push with your signing key, or leave it \
+                                         unsigned. Starts from commit.gpgSign and resets after each commit.",
+                                    )
+                                    .changed()
+                                {
+                                    repo.sign_override = Some(sign);
+                                }
+                            }
                         })
                         .0;
                     options
