@@ -45,6 +45,8 @@ enum Run {
     Tool(&'static str),
     Checkout(Branch),
     Repository(PathBuf),
+    /// Opens a saved workspace's folders as tabs, by its name.
+    OpenWorkspace(String),
     ApplyPatch,
     Identity {
         name: String,
@@ -320,6 +322,15 @@ impl NiceGitApp {
                 run: Run::Repository(path.clone()),
             });
         }
+        for workspace in &self.settings.workspaces {
+            list.push(Command {
+                title: format!("Open workspace {}", workspace.name),
+                detail: crate::ui::workspaces::repository_count(workspace.repositories.len()),
+                glyph: icon::FOLDERS,
+                enabled: self.busy.is_none(),
+                run: Run::OpenWorkspace(workspace.name.clone()),
+            });
+        }
         list
     }
 
@@ -379,6 +390,7 @@ impl NiceGitApp {
             }),
             Run::Checkout(branch) => self.checkout(branch),
             Run::Repository(path) => self.open(path),
+            Run::OpenWorkspace(name) => self.open_workspace(&name),
             Run::Tool(name) => {
                 let remote = self.snapshot().and_then(|s| s.remotes.iter().find(|r| *r == "origin").or(s.remotes.first()).cloned());
                 let tool: Option<Box<dyn tools::ToolWindow>> = match name {

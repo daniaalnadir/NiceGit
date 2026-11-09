@@ -133,6 +133,16 @@ pub enum Pending {
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
     PopStash(Stash),
+    /// Saving open tabs under the name of a workspace that already exists. The repositories are
+    /// those shown when the name was entered.
+    ReplaceWorkspace {
+        name: String,
+        repositories: Vec<std::path::PathBuf>,
+    },
+    /// Removing a saved workspace. Its folders are left alone.
+    DeleteWorkspace {
+        name: String,
+    },
 }
 
 pub enum InputKind {
@@ -170,6 +180,10 @@ pub enum InputKind {
     RenameStash(Stash),
     /// Cloning. The destination follows the address until the person edits it or chooses one.
     Clone(CloneDestination),
+    /// Naming a workspace for the open tabs, which are captured in tab order when the dialog opens.
+    SaveWorkspace {
+        repositories: Vec<std::path::PathBuf>,
+    },
 }
 
 /// The Clone dialog's destination. While it is automatic it is the default folder joined with
@@ -345,6 +359,7 @@ impl Pending {
                 | Pending::DeleteTag { .. }
                 | Pending::DeleteRemoteBranch { .. }
                 | Pending::DropStash(_)
+                | Pending::DeleteWorkspace { .. }
                 | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
                 | Pending::ForcePush { .. }
@@ -545,6 +560,11 @@ impl NiceGitApp {
                     let name_problem = names_a_ref.then(|| crate::git_ext::ref_name_problem(value.trim())).flatten();
                     if let Some(problem) = name_problem {
                         ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    // Saving under a saved workspace's name asks first, so the note says what happens.
+                    if matches!(kind, InputKind::SaveWorkspace { .. }) && self.settings.workspaces.iter().any(|w| w.name == value.trim()) {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("A workspace with this name exists. You will be asked to replace it.").small().color(c.muted));
                     }
                     if matches!(kind, InputKind::BranchFromStash { .. }) {
                         ui.add_space(4.0);
@@ -1079,6 +1099,8 @@ impl NiceGitApp {
             Pending::PopStash(stash) => self.act("Pop stash", move |client, path| {
                 client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
             }),
+            Pending::ReplaceWorkspace { name, repositories } => self.store_workspace(name, repositories),
+            Pending::DeleteWorkspace { name } => self.delete_workspace(&name),
             Pending::Undo => self.undo(),
             Pending::Redo => self.redo(),
             Pending::UndoCommit { branch, head } => {
@@ -1161,6 +1183,7 @@ impl NiceGitApp {
                     }
                 }
             }),
+            InputKind::SaveWorkspace { repositories } => self.save_workspace(value.trim().to_string(), repositories),
             InputKind::SaveStash => {
                 let options = if self.settings.stash_staged_only {
                     StashOptions { keep_index: false, include_untracked: false, staged_only: true }

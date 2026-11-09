@@ -16,6 +16,7 @@ pub mod settings_window;
 pub mod shortcuts_window;
 pub mod sidebar;
 pub mod toolbar;
+pub mod workspaces;
 
 use egui::{Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;

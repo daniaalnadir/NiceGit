@@ -24,6 +24,7 @@ impl NiceGitApp {
                     if widgets::icon_button(ui, icon::PLUS, "Open another repository", self.busy.is_none()).clicked() {
                         self.choose_folder();
                     }
+                    self.workspaces_menu(ui);
                 });
             });
             ui.add_space(4.0);
