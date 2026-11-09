@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use nicegit_core::client::PullStrategy;
 use serde::{Deserialize, Serialize};
 
 use crate::theme::{Appearance, GraphPalette};
@@ -25,6 +26,41 @@ pub enum SyncAction {
     Fetch,
     /// Fetch, then fast-forward the current branch.
     Pull,
+}
+
+/// How Pull brings the upstream's commits into the current branch. `FollowGit` reads Git's own
+/// configuration for each pull, so a repository set up for rebasing keeps rebasing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PullSetting {
+    /// Git's `pull.rebase`, `branch.<name>.rebase`, and `pull.ff`; with none set, fast-forward only.
+    #[default]
+    FollowGit,
+    FastForwardOnly,
+    Merge,
+    Rebase,
+}
+
+impl PullSetting {
+    pub const ALL: [PullSetting; 4] = [PullSetting::FollowGit, PullSetting::FastForwardOnly, PullSetting::Merge, PullSetting::Rebase];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            PullSetting::FollowGit => "Follow Git's settings",
+            PullSetting::FastForwardOnly => "Fast-forward only",
+            PullSetting::Merge => "Merge",
+            PullSetting::Rebase => "Rebase",
+        }
+    }
+
+    /// The strategy this setting names, or `None` when it follows Git's configuration.
+    pub fn strategy(self) -> Option<PullStrategy> {
+        match self {
+            PullSetting::FollowGit => None,
+            PullSetting::FastForwardOnly => Some(PullStrategy::FastForwardOnly),
+            PullSetting::Merge => Some(PullStrategy::Merge),
+            PullSetting::Rebase => Some(PullStrategy::Rebase),
+        }
+    }
 }
 
 /// Which branches the commit graph shows. Mirrors `nicegit_core::HistoryScope`, which has no
@@ -214,6 +250,9 @@ pub struct Settings {
     pub show_repositories: bool,
     /// Whether the toolbar's Fetch and Pull button fetches or pulls.
     pub sync_action: SyncAction,
+    /// How Pull brings the upstream's commits in: fast-forward only, merge, or rebase.
+    #[serde(default)]
+    pub pull_setting: PullSetting,
     /// The history's columns: which are shown and how wide.
     pub history_columns: crate::ui::history_columns::HistoryColumns,
     /// Repositories open as tabs, in order.
@@ -279,6 +318,7 @@ impl Default for Settings {
             file_view: FileView::Path,
             show_repositories: true,
             sync_action: SyncAction::Fetch,
+            pull_setting: PullSetting::FollowGit,
             history_columns: Default::default(),
             open: Vec::new(),
             active: 0,

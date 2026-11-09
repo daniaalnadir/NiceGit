@@ -170,7 +170,12 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Publish new branches to a chosen remote and set their upstream.
 - Fetch, pull, push, and refresh from the toolbar.
 - Fetch a single remote from its right-click menu in the sidebar, instead of every remote.
-- Pull only fast-forwards. When the branch and its upstream have both moved on, Pull explains
+- Pull brings the upstream's commits in by the strategy Settings chooses: Follow Git's settings
+  (the default, which reads `branch.<name>.rebase`, `pull.rebase`, and `pull.ff`, and only
+  fast-forwards when none is set), Fast-forward only, Merge, or Rebase. The Fetch and Pull menu
+  also has Pull (merge) and Pull (rebase), each run once. Merges and rebases that conflict stop
+  for resolution, and Continue or Abort finish or cancel them. Undo reverses a completed pull.
+- With fast-forward only, when the branch and its upstream have both moved on, Pull explains
   why it stopped and offers Merge or rebase… to integrate the upstream's commits.
 - Show outgoing and incoming commit counts against the configured upstream.
 - Keep recently opened repositories in the sidebar.

@@ -8,7 +8,7 @@ use nicegit_core::diff::DiffRequest;
 use nicegit_core::graph::{layout, layout_with_working_tree, GraphRow};
 use nicegit_core::models::short;
 use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
-use nicegit_core::{Branch, GitClient, GitError, Snapshot, Stash, StatusEntry};
+use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
@@ -2019,11 +2019,23 @@ impl NiceGitApp {
             && !snapshot.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted)
     }
 
+    /// Pulls with the strategy Settings chooses.
     pub fn pull(&mut self) {
+        let strategy = self.settings.pull_setting.strategy();
+        self.pull_using(strategy);
+    }
+
+    /// Pulls with `strategy`, or, when `None`, with the strategy Git's configuration names. The
+    /// configuration is read when the pull runs, on the same checkout the pull then checks.
+    pub fn pull_using(&mut self, strategy: Option<PullStrategy>) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let branch = snapshot.is_on_branch().then(|| snapshot.current_branch.clone());
         self.act_recording_detail("Pull", "Pull", branch, move |client, path| {
-            client.pull(&snapshot, path).map(|_| Some("Pulled the latest changes.".into()))
+            let strategy = match strategy {
+                Some(strategy) => strategy,
+                None => client.configured_pull_strategy(&snapshot.current_branch, path)?,
+            };
+            client.pull(&snapshot, strategy, path).map(|_| Some("Pulled the latest changes.".into()))
         });
     }
 

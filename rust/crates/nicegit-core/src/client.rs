@@ -15,6 +15,43 @@ const BRANCH_CHANGED: &str = "This branch changed since it was selected. Refresh
 /// The largest `commit.template` file read. A commit message is never this long.
 const COMMIT_TEMPLATE_LIMIT: u64 = 64 * 1024;
 
+/// How `GitClient::pull` brings the upstream's commits into the current branch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PullStrategy {
+    /// Moves the branch forward only. A branch that has diverged from its upstream is refused.
+    FastForwardOnly,
+    /// Merges the upstream in, with a merge commit when the branches have diverged.
+    Merge,
+    /// Replays the branch's own commits onto the upstream.
+    Rebase,
+}
+
+/// The strategy `git pull` would use, from the values of `branch.<name>.rebase`, `pull.rebase`,
+/// and `pull.ff` (each `None` when unset). `pull.ff=only` wins, as it does in Git. A rebase
+/// setting, the branch's own first, chooses rebase or merge. With nothing set, the pull only
+/// fast-forwards, as NiceGit always has.
+pub fn pull_strategy_from_config(branch_rebase: Option<&str>, pull_rebase: Option<&str>, pull_ff: Option<&str>) -> PullStrategy {
+    if pull_ff.is_some_and(|ff| ff.trim().eq_ignore_ascii_case("only")) {
+        return PullStrategy::FastForwardOnly;
+    }
+    match branch_rebase.or(pull_rebase).and_then(rebase_setting_rebases) {
+        Some(true) => PullStrategy::Rebase,
+        Some(false) => PullStrategy::Merge,
+        None if pull_ff.is_some() => PullStrategy::Merge,
+        None => PullStrategy::FastForwardOnly,
+    }
+}
+
+/// Whether a `rebase` config value rebases (`Some(true)`) or merges (`Some(false)`); `None` when
+/// the value is not one Git accepts.
+fn rebase_setting_rebases(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" | "merges" | "m" | "interactive" | "i" | "preserve" => Some(true),
+        "false" | "no" | "off" | "0" => Some(false),
+        _ => None,
+    }
+}
+
 /// What a force push would change on the remote, from `GitClient::force_push_preview`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForcePushPreview {
@@ -1131,7 +1168,7 @@ impl GitClient {
         if !self.run(&arguments, directory)?.is_empty() {
             return Err(GitError::failed(
                 "merge",
-                "Ignored local files would be overwritten by this merge. Move or back them up before merging.",
+                "Ignored local files would be overwritten by the incoming changes. Move or back them up first.",
             ));
         }
         Ok(())
@@ -1212,12 +1249,18 @@ impl GitClient {
         Ok((!value.is_empty()).then(|| value.trim().to_string()))
     }
 
-    /// Whether `git pull` would auto-stash: `pull.autoStash` overrides the merge or rebase
-    /// default, and a branch's rebase setting overrides `pull.rebase`.
-    pub(crate) fn pull_auto_stash(&self, directory: &Path) -> Result<bool> {
-        if let Some(value) = self.config("pull.autostash", true, directory)? {
-            return Ok(value == "true");
-        }
+    /// The strategy `git pull` would use for the current branch, from its configuration. Read
+    /// before a pull is dispatched, when the setting asks to follow Git.
+    pub fn configured_pull_strategy(&self, branch: &str, directory: &Path) -> Result<PullStrategy> {
+        let branch_rebase = self.config(&format!("branch.{branch}.rebase"), false, directory)?;
+        let pull_rebase = self.config("pull.rebase", false, directory)?;
+        let pull_ff = self.config("pull.ff", false, directory)?;
+        Ok(pull_strategy_from_config(branch_rebase.as_deref(), pull_rebase.as_deref(), pull_ff.as_deref()))
+    }
+
+    /// Whether the current branch's rebase setting rebases: a branch's own setting overrides
+    /// `pull.rebase`.
+    fn pull_config_rebases(&self, directory: &Path) -> Result<bool> {
         let branch = self.try_trimmed(&["symbolic-ref", "--quiet", "--short", "HEAD"], directory);
         let branch_key = branch.map(|branch| format!("branch.{branch}.rebase"));
         let key = match branch_key {
@@ -1225,16 +1268,25 @@ impl GitClient {
             _ => "pull.rebase".to_string(),
         };
         let rebase = self.config(&key, false, directory)?;
-        let rebasing = ["merges", "m", "interactive", "i"].contains(&rebase.as_deref().unwrap_or(""))
-            || self.config(&key, true, directory)?.as_deref() == Some("true");
+        Ok(["merges", "m", "interactive", "i"].contains(&rebase.as_deref().unwrap_or(""))
+            || self.config(&key, true, directory)?.as_deref() == Some("true"))
+    }
+
+    /// Whether a pull auto-stashes: `pull.autoStash` overrides the merge or rebase default, which
+    /// is `rebase.autoStash` when `rebasing`, and `merge.autoStash` otherwise.
+    pub(crate) fn pull_auto_stash(&self, rebasing: bool, directory: &Path) -> Result<bool> {
+        if let Some(value) = self.config("pull.autostash", true, directory)? {
+            return Ok(value == "true");
+        }
         let setting = if rebasing { "rebase.autostash" } else { "merge.autostash" };
         Ok(self.config(setting, true, directory)?.as_deref() == Some("true"))
     }
 
-    /// Fetches, then fast-forwards the current branch. `git pull` cannot protect ignored local
-    /// files, so this fetches and merges with `--no-overwrite-ignore` itself, rechecking the
-    /// checkout after the network step.
-    pub fn pull(&self, snapshot: &Snapshot, directory: &Path) -> Result<()> {
+    /// Fetches, then brings the upstream's commits into the current branch with `strategy`.
+    /// `git pull` cannot protect ignored local files, so this fetches and integrates itself,
+    /// rechecking the checkout after the network step. Conflicts stop the merge or rebase, which
+    /// Continue and Abort then finish or cancel.
+    pub fn pull(&self, snapshot: &Snapshot, strategy: PullStrategy, directory: &Path) -> Result<()> {
         let expected_head = snapshot.head_hash.as_deref();
         let state = self.require_checkout(&snapshot.current_branch, expected_head, "pull", directory)?;
         if state.operation.is_some() {
@@ -1248,12 +1300,33 @@ impl GitClient {
             self.require_remote_addresses(&snapshot.remote_fetch_addresses, &remote, false, "pull", directory)?;
         }
         let recurse = self.config("submodule.recurse", true, directory)?.as_deref() == Some("true");
-        let auto_stash = self.pull_auto_stash(directory)?;
+        // A fast-forward keeps the rebase setting that has always chosen the auto-stash default.
+        let rebasing = match strategy {
+            PullStrategy::FastForwardOnly => self.pull_config_rebases(directory)?,
+            PullStrategy::Merge => false,
+            PullStrategy::Rebase => true,
+        };
+        let auto_stash = self.pull_auto_stash(rebasing, directory)?;
         self.run(&["fetch"], directory)?;
         // Another client may switch checkouts during network activity.
         self.require_checkout(&snapshot.current_branch, expected_head, "pull", directory)?;
         let stash_flag = if auto_stash { "--autostash" } else { "--no-autostash" };
-        self.run(&["merge", "--ff-only", "--no-overwrite-ignore", stash_flag, "FETCH_HEAD"], directory)?;
+        match strategy {
+            PullStrategy::FastForwardOnly => {
+                self.run(&["merge", "--ff-only", "--no-overwrite-ignore", stash_flag, "FETCH_HEAD"], directory)?;
+            }
+            PullStrategy::Merge | PullStrategy::Rebase => {
+                // The first FETCH_HEAD line is the upstream branch, the one a merge takes. It is
+                // named by object ID, so the ignored-file check and the integration see one commit.
+                let upstream = self.run_trimmed(&["rev-parse", "--verify", "FETCH_HEAD"], directory)?;
+                self.require_no_ignored_merge_collisions(&upstream, directory)?;
+                if strategy == PullStrategy::Merge {
+                    self.run(&["merge", "--no-overwrite-ignore", "--no-edit", stash_flag, &upstream], directory)?;
+                } else {
+                    self.run(&["rebase", "--no-update-refs", stash_flag, &upstream], directory)?;
+                }
+            }
+        }
         if recurse {
             self.run(&["submodule", "update", "--recursive", "--checkout"], directory)?;
         }
@@ -1892,6 +1965,40 @@ pub fn operation_in(git_directory: &Path) -> Option<Operation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pull_strategy_follows_git_config_in_git_precedence_order() {
+        use PullStrategy::{FastForwardOnly, Merge, Rebase};
+        // One row per case: branch.<name>.rebase, pull.rebase, pull.ff, and the strategy each gives.
+        type Row<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>, PullStrategy);
+        let table: [Row; 16] = [
+            (None, None, None, FastForwardOnly),
+            (None, None, Some("true"), Merge),
+            (None, None, Some("false"), Merge),
+            (None, None, Some("only"), FastForwardOnly),
+            (None, Some("false"), None, Merge),
+            (None, Some("true"), None, Rebase),
+            (None, Some("merges"), None, Rebase),
+            (None, Some("interactive"), None, Rebase),
+            (None, Some("i"), None, Rebase),
+            (None, Some("garbage"), None, FastForwardOnly),
+            // The branch's own setting wins over pull.rebase, in both directions.
+            (Some("false"), Some("true"), None, Merge),
+            (Some("true"), Some("false"), None, Rebase),
+            (Some("merges"), None, None, Rebase),
+            // pull.ff=only wins over any rebase setting, as Git does.
+            (Some("true"), None, Some("only"), FastForwardOnly),
+            (None, Some("true"), Some("ONLY"), FastForwardOnly),
+            (Some("false"), Some("false"), Some(" only "), FastForwardOnly),
+        ];
+        for (branch_rebase, pull_rebase, pull_ff, expected) in table {
+            assert_eq!(
+                pull_strategy_from_config(branch_rebase, pull_rebase, pull_ff),
+                expected,
+                "branch.rebase={branch_rebase:?} pull.rebase={pull_rebase:?} pull.ff={pull_ff:?}"
+            );
+        }
+    }
 
     #[test]
     fn glob_escape_prefixes_each_glob_character_with_a_backslash() {

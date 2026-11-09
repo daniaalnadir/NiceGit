@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-use nicegit_core::client::GitClient;
+use nicegit_core::client::{GitClient, PullStrategy};
 use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::models::{
     Branch, GitError, HistoryScope, MergeStyle, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind,
@@ -1600,7 +1600,7 @@ fn pull_fast_forwards_from_remote() {
     let remote_tip = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
     git(&clone, &["push", "origin", "main"]);
 
-    client().pull(&snapshot(repo.path()), repo.path()).expect("pull");
+    client().pull(&snapshot(repo.path()), PullStrategy::FastForwardOnly, repo.path()).expect("pull");
 
     assert_eq!(repo.head(), remote_tip);
     assert_eq!(repo.read("remote.txt"), "from the other clone\n");
@@ -1616,7 +1616,127 @@ fn pull_refuses_stale_snapshot() {
     let stale = snapshot(repo.path());
     repo.commit("a.txt", "two\n", "Second");
 
-    assert!(error_text(client().pull(&stale, repo.path())).contains("changed since this action was selected"));
+    for strategy in [PullStrategy::FastForwardOnly, PullStrategy::Merge, PullStrategy::Rebase] {
+        assert!(error_text(client().pull(&stale, strategy, repo.path())).contains("changed since this action was selected"));
+    }
+}
+
+/// Pushes one commit from another clone to `remote`, and commits one in `repo`, so the branch and
+/// its upstream have both moved on. Returns the remote's new tip.
+fn diverge_from_remote(repo: &Repo, remote: &Path) -> String {
+    let workspace = tempfile::tempdir().expect("create workspace");
+    git(workspace.path(), &["clone", "--quiet", &path_string(remote), "clone"]);
+    let clone = workspace.path().join("clone");
+    configure(&clone);
+    fs::write(clone.join("remote.txt"), "from the other clone\n").expect("write file");
+    git(&clone, &["add", "--", "remote.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "Remote work"]);
+    git(&clone, &["push", "--quiet", "origin", "main"]);
+    let tip = git(&clone, &["rev-parse", "HEAD"]).trim().to_string();
+    repo.commit("local.txt", "from this checkout\n", "Local work");
+    tip
+}
+
+/// A published repository whose branch and upstream have diverged. Returns the remote, and the
+/// remote's tip.
+fn diverged_repository(repo: &Repo) -> (TempDir, String) {
+    let remote = bare_remote();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+    let tip = diverge_from_remote(repo, remote.path());
+    (remote, tip)
+}
+
+#[test]
+fn pull_fast_forward_only_still_refuses_a_diverged_branch() {
+    let repo = Repo::new();
+    let (_remote, _tip) = diverged_repository(&repo);
+    let before = repo.head();
+
+    let error = error_text(client().pull(&snapshot(repo.path()), PullStrategy::FastForwardOnly, repo.path()));
+    assert!(error.contains("Not possible to fast-forward"), "{error}");
+    assert_eq!(repo.head(), before, "the branch did not move");
+}
+
+#[test]
+fn pull_merge_joins_diverged_histories_with_a_merge_commit() {
+    let repo = Repo::new();
+    let (_remote, tip) = diverged_repository(&repo);
+    let local = repo.head();
+
+    client().pull(&snapshot(repo.path()), PullStrategy::Merge, repo.path()).expect("merge pull");
+
+    let parents: Vec<String> =
+        repo.git(&["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().skip(1).map(str::to_string).collect();
+    assert_eq!(parents, [local, tip.clone()], "the merge commit has both branches as parents");
+    assert_eq!(repo.read("remote.txt"), "from the other clone\n");
+    assert_eq!(repo.read("local.txt"), "from this checkout\n");
+    // A merge commit appears only when merging; the upstream commit is kept, not replayed.
+    assert_eq!(repo.git(&["rev-parse", "HEAD^2"]).trim(), tip);
+}
+
+#[test]
+fn pull_rebase_replays_local_commits_onto_the_fetched_tip() {
+    let repo = Repo::new();
+    let (_remote, tip) = diverged_repository(&repo);
+
+    client().pull(&snapshot(repo.path()), PullStrategy::Rebase, repo.path()).expect("rebase pull");
+
+    let parents: Vec<String> =
+        repo.git(&["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().skip(1).map(str::to_string).collect();
+    assert_eq!(parents, [tip], "the local commit now sits directly on the fetched tip");
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "Local work");
+    assert_eq!(repo.git(&["rev-list", "--merges", "--count", "HEAD"]).trim(), "0", "history stays linear");
+    assert_eq!(repo.read("remote.txt"), "from the other clone\n");
+    assert_eq!(repo.read("local.txt"), "from this checkout\n");
+}
+
+#[test]
+fn pull_merge_and_rebase_refuse_ignored_files_the_upstream_would_overwrite() {
+    for strategy in [PullStrategy::Merge, PullStrategy::Rebase] {
+        let remote = bare_remote();
+        let repo = Repo::new();
+        repo.commit(".gitignore", "theirs.txt\n", "Ignore theirs");
+        repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+        client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+        // The other clone adds theirs.txt, which this checkout has only as an ignored local file.
+        let workspace = tempfile::tempdir().expect("create workspace");
+        git(workspace.path(), &["clone", "--quiet", &path_string(remote.path()), "clone"]);
+        let clone = workspace.path().join("clone");
+        configure(&clone);
+        fs::write(clone.join("theirs.txt"), "tracked upstream\n").expect("write file");
+        // The clone inherits the ignore rule, so the file is added by force.
+        git(&clone, &["add", "-f", "--", "theirs.txt"]);
+        git(&clone, &["commit", "--quiet", "-m", "Add theirs"]);
+        git(&clone, &["push", "--quiet", "origin", "main"]);
+        repo.write("theirs.txt", "ignored and local\n");
+        repo.commit("local.txt", "from this checkout\n", "Local work");
+        let before = repo.head();
+
+        let error = error_text(client().pull(&snapshot(repo.path()), strategy, repo.path()));
+        assert!(error.contains("Ignored local files would be overwritten"), "{strategy:?}: {error}");
+        assert_eq!(repo.read("theirs.txt"), "ignored and local\n", "{strategy:?} kept the ignored file");
+        assert_eq!(repo.head(), before, "{strategy:?} did not move the branch");
+    }
+}
+
+#[test]
+fn pull_merge_and_rebase_refuse_a_head_that_moved_after_it_was_shown() {
+    for strategy in [PullStrategy::Merge, PullStrategy::Rebase] {
+        let remote = bare_remote();
+        let repo = Repo::new();
+        repo.commit("a.txt", "one\n", "First");
+        repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+        client().publish("origin", &snapshot(repo.path()), repo.path()).expect("publish");
+        let shown = snapshot(repo.path());
+        let _ = diverge_from_remote(&repo, remote.path());
+        let moved = repo.head();
+
+        let error = error_text(client().pull(&shown, strategy, repo.path()));
+        assert!(error.contains("changed since this action was selected"), "{strategy:?}: {error}");
+        assert_eq!(repo.head(), moved, "{strategy:?} did not integrate after the checkout moved");
+    }
 }
 
 #[test]

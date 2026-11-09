@@ -121,7 +121,7 @@ impl NiceGitApp {
         });
         let mut list = vec![
             command("Fetch", "Download from all remotes", icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
-            command("Pull", "Fetch and fast-forward the current branch", icon::ARROW_LINE_DOWN, idle && clean, Run::Pull),
+            command("Pull", "Fetch, then pull the current branch as Settings chooses", icon::ARROW_LINE_DOWN, idle && clean, Run::Pull),
             command("Push", "Send the current branch to its upstream", icon::ARROW_LINE_UP, idle, Run::Push),
             command(
                 "Force push…",
