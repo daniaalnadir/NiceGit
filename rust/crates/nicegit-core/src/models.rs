@@ -148,6 +148,9 @@ pub struct StashOptions {
     pub keep_index: bool,
     /// Stash untracked files too (`--include-untracked`).
     pub include_untracked: bool,
+    /// Stash only the staged changes (`--staged`). Unstaged and untracked changes stay where
+    /// they are. Cannot be combined with `keep_index` or `include_untracked`.
+    pub staged_only: bool,
 }
 
 /// A file a stash saved, with Git's change letter for it.

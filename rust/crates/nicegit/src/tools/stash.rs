@@ -15,6 +15,7 @@ use nicegit_core::Snapshot;
 use crate::diff_view::{self, DiffContent};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
+use crate::ui::dialogs::{Dialog, InputKind};
 
 /// A changed file that can be stashed. Conflicted files are left out, because Git cannot stash them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -271,7 +272,7 @@ impl StashWindow {
         match plan {
             SavePlan::All => cx.act("Stash changes", move |client, directory| {
                 // This window has no options of its own, so it keeps the stash's long-standing choices.
-                let options = StashOptions { keep_index: false, include_untracked: true };
+                let options = StashOptions { keep_index: false, include_untracked: true, staged_only: false };
                 client.save_stash(&message, options, directory).map(|()| Some("Saved your changes in a stash.".to_string()))
             }),
             SavePlan::Paths(paths) => {
@@ -321,6 +322,14 @@ impl StashWindow {
                                 cx.act(format!("Apply {reference}"), move |client, directory| {
                                     client.apply_stash(&stash, directory).map(|()| Some(format!("Applied {reference}.")))
                                 });
+                            }
+                            if action_button(ui, "Rename", "Give the stash a new name. It moves to the top of the list", idle).clicked() {
+                                cx.open_dialog(Dialog::input(
+                                    &format!("Rename {}", stash.reference),
+                                    "New name",
+                                    &stash.message,
+                                    InputKind::RenameStash(stash.clone()),
+                                ));
                             }
                         });
                     });

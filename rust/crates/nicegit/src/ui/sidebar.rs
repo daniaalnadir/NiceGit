@@ -425,6 +425,15 @@ impl NiceGitApp {
                             },
                         ));
                     }
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Rename…", icon::PENCIL_SIMPLE))).clicked() {
+                        ui.close();
+                        self.dialog = Some(Dialog::input(
+                            &format!("Rename {}", stash.reference),
+                            "New name",
+                            &stash.message,
+                            InputKind::RenameStash(stash.clone()),
+                        ));
+                    }
                     ui.separator();
                     if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
                         ui.close();

@@ -2295,6 +2295,7 @@ impl NiceGitApp {
             Request::SelectCommit(hash) => self.select_commit(hash),
             Request::OpenRepository(path) => self.open(path),
             Request::Open(tool) => self.open_tool(tool),
+            Request::Dialog(dialog) => self.dialog = Some(*dialog),
             Request::Refresh => self.load(true),
         }
     }
