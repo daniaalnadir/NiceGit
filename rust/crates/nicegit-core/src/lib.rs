@@ -18,6 +18,7 @@ pub mod github;
 pub mod graph;
 pub mod hosting;
 pub mod inline;
+mod json;
 pub mod lfs;
 pub mod line_counts;
 pub mod merge_preview;

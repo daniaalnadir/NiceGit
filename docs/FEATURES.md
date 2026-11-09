@@ -104,6 +104,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   finish them with no-fast-forward merges and version tags, compatible with git-flow.
 - Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose
   content has not been downloaded, and track or untrack patterns.
+- Git LFS locks: the Git LFS window lists the locks the remote holds, with each owner and
+  age, and unlocks your own. A lock another person holds can be force unlocked after a
+  confirmation. Files that a tracked pattern stores with LFS get Lock file (LFS) and Unlock
+  file (LFS) in the Changes panel and commit file menus. Locks need Git LFS installed and a
+  remote whose LFS server supports locking.
 - Move through the commit graph with the Up and Down arrow keys; Escape clears the
   selection. Home and End jump to the top and bottom of the loaded history, and Go to HEAD
   (Shift-Command-H) selects the checked-out commit from anywhere; the command palette also

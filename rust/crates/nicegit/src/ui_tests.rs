@@ -804,6 +804,45 @@ fn track_and_untrack_an_lfs_pattern() {
 }
 
 #[test]
+fn lfs_locks_say_why_they_cannot_be_read_without_a_remote() {
+    // The repository has no remote, so there is no LFS server to hold locks. Whether Git LFS is
+    // installed decides which reason the section gives first.
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let lfs_installed = Command::new("git").args(["lfs", "version"]).output().is_ok_and(|o| o.status.success());
+
+    repository_menu(&mut harness, &folder_name(repo.path()), "Git LFS");
+    wait(&mut harness, "the LFS window", |h| h.query_by_label("LFS pattern").is_some());
+    let reason = if lfs_installed { "This repository has no remote" } else { "Git LFS is missing" };
+    wait(&mut harness, "the locks message", |h| h.query_by_label_contains("file locks cannot be read").is_some());
+    assert!(harness.query_by_label_contains(reason).is_some(), "the locks section says why: {reason}");
+    assert!(harness.query_by_label_contains("Refresh").is_some(), "the locks section has a Refresh button");
+}
+
+#[test]
+fn lfs_files_offer_lock_items_in_the_changes_menu_only_when_tracked() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join(".gitattributes"), "*.psd filter=lfs diff=lfs merge=lfs -text\n").unwrap();
+    std::fs::write(path.join("art.psd"), "pretend image\n").unwrap();
+    std::fs::write(path.join("extra.txt"), "plain\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("art.psd").click_secondary();
+    wait(&mut harness, "the Lock item for a tracked file", |h| h.query_by_label_contains("Lock file (LFS)").is_some());
+    assert!(harness.query_by_label_contains("Unlock file (LFS)").is_some());
+    settle(&mut harness);
+    // Close the menu, then check a file that no pattern tracks.
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+    harness.get_by_label("extra.txt").click_secondary();
+    settle(&mut harness);
+    assert!(harness.query_by_label_contains("Lock file (LFS)").is_none(), "an untracked file has no lock item");
+}
+
+#[test]
 fn recent_repositories_reopen_after_their_tab_closes() {
     let first = repository();
     let second = repository();
