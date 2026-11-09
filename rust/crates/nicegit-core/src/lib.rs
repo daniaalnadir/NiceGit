@@ -15,6 +15,7 @@ pub mod diff;
 pub mod file_history;
 pub mod gitflow;
 pub mod github;
+pub mod gitlab;
 pub mod graph;
 pub mod hosting;
 pub mod inline;

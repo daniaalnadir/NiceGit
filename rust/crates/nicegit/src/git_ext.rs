@@ -231,23 +231,92 @@ pub fn ref_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// Where a local branch's pull request goes: the GitHub repository behind its upstream's remote,
-/// and the branch on that remote the pull request comes from.
+/// The repository a pull or merge request goes to: a GitHub repository, for `gh`, or a GitLab
+/// project, for `glab`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Forge {
+    GitHub(nicegit_core::github::GitHubRepository),
+    GitLab(HostedRepository),
+}
+
+impl Forge {
+    /// The service the repository is on.
+    pub fn kind(&self) -> Host {
+        match self {
+            Forge::GitHub(_) => Host::GitHub,
+            Forge::GitLab(_) => Host::GitLab,
+        }
+    }
+
+    /// The host name, such as `github.com` or `gitlab.com`.
+    pub fn host(&self) -> &str {
+        match self {
+            Forge::GitHub(repository) => &repository.host,
+            Forge::GitLab(repository) => &repository.host,
+        }
+    }
+
+    /// The owner and name, or the group path and name on GitLab.
+    pub fn slug(&self) -> String {
+        match self {
+            Forge::GitHub(repository) => repository.slug(),
+            Forge::GitLab(repository) => repository.slug(),
+        }
+    }
+
+    /// What the service calls the request: a pull request, or a merge request on GitLab.
+    pub fn request_noun(&self) -> &'static str {
+        match self.kind() {
+            Host::GitLab => "merge request",
+            Host::GitHub | Host::Bitbucket => "pull request",
+        }
+    }
+
+    /// The command-line tool that creates and reads the requests.
+    pub fn cli_name(&self) -> &'static str {
+        match self.kind() {
+            Host::GitLab => "GitLab CLI",
+            Host::GitHub | Host::Bitbucket => "GitHub CLI",
+        }
+    }
+
+    /// "Create pull request on GitHub", or "Create merge request on GitLab".
+    pub fn create_label(&self) -> String {
+        format!("Create {} on {}", self.request_noun(), self.kind().name())
+    }
+
+    /// The browser page for a new request from `branch`: GitHub's compare page, or GitLab's new
+    /// merge request form. Creating nothing, it is the fallback for the Create dialog.
+    pub fn compare_link(&self, branch: &str) -> String {
+        match self {
+            Forge::GitHub(repository) => {
+                format!("{}/{}/compare/{}?expand=1", repository.web_base(), repository.slug(), encode_path(branch))
+            }
+            Forge::GitLab(repository) => {
+                format!("{}/new?merge_request[source_branch]={}", repository.pull_requests_url(), encode_path(branch))
+            }
+        }
+    }
+}
+
+/// Where a local branch's pull or merge request goes: the repository behind its upstream's remote,
+/// and the branch on that remote the request comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PullRequestTarget {
-    pub repository: nicegit_core::github::GitHubRepository,
+    pub repository: Forge,
     /// The remote the upstream belongs to, such as `origin`.
     pub remote: String,
     /// The upstream's branch on that remote, without the remote's name.
     pub remote_branch: String,
 }
 
-/// The pull request target of a local branch whose upstream is a branch on a GitHub remote.
-/// Remote names can contain slashes, so the longest one that prefixes the upstream is its remote.
-pub fn github_pull_request_target(
+/// The pull or merge request target of a local branch whose upstream is a branch on a GitHub or
+/// GitLab remote. Remote names can contain slashes, so the longest one that prefixes the upstream
+/// is its remote. A GitHub remote is read exactly as [`github_repository_for_remote`] reads it.
+pub fn pull_request_target(
     snapshot: &nicegit_core::Snapshot,
     branch: &nicegit_core::Branch,
-    enterprise_hosts: &[String],
+    hosts: ListedHosts,
 ) -> Option<PullRequestTarget> {
     if branch.is_remote {
         return None;
@@ -255,20 +324,20 @@ pub fn github_pull_request_target(
     // The upstream is a full ref; only a remote-tracking branch has a remote to compare on.
     let upstream = branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?;
     let (remote, remote_branch) = split_remote(snapshot, upstream)?;
-    let repository = github_repository_for_remote(snapshot, remote, enterprise_hosts)?;
+    let repository = match hosted_repository_for_remote(snapshot, remote, hosts)? {
+        HostedRepository { kind: Host::GitHub, .. } => Forge::GitHub(github_repository_for_remote(snapshot, remote, hosts.github)?),
+        hosted if hosted.kind == Host::GitLab => Forge::GitLab(hosted),
+        _ => return None,
+    };
     Some(PullRequestTarget { repository, remote: remote.to_string(), remote_branch: remote_branch.to_string() })
 }
 
-/// The GitHub compare page for a local branch whose upstream is on a GitHub remote. It opens the
-/// pull request form in the browser, the fallback to Create pull request. See
-/// [`github_pull_request_target`].
-pub fn github_pull_request_link(
-    snapshot: &nicegit_core::Snapshot,
-    branch: &nicegit_core::Branch,
-    enterprise_hosts: &[String],
-) -> Option<String> {
-    let target = github_pull_request_target(snapshot, branch, enterprise_hosts)?;
-    Some(format!("{}/{}/compare/{}?expand=1", target.repository.web_base(), target.repository.slug(), encode_path(&target.remote_branch)))
+/// The browser page for a local branch's pull or merge request, when its upstream is on a supported
+/// remote. The dialog builds its link from the target it already has; this reads it in one step.
+#[cfg(test)]
+pub fn pull_request_link(snapshot: &nicegit_core::Snapshot, branch: &nicegit_core::Branch, hosts: ListedHosts) -> Option<String> {
+    let target = pull_request_target(snapshot, branch, hosts)?;
+    Some(target.repository.compare_link(&target.remote_branch))
 }
 
 /// The host whose glyph names the links, when they all share one host.
@@ -513,7 +582,7 @@ mod tests {
             subject: String::new(),
             upstream: upstream.map(String::from),
         };
-        let link = |upstream| super::github_pull_request_link(&snapshot, &branch(upstream), &[]);
+        let link = |upstream| super::pull_request_link(&snapshot, &branch(upstream), ListedHosts::default());
 
         assert_eq!(
             link(Some("refs/remotes/origin/feature/fix #2")).as_deref(),
@@ -527,6 +596,42 @@ mod tests {
         assert_eq!(link(Some("refs/remotes/mirror/topic")), None, "not on github.com");
         assert_eq!(link(Some("refs/heads/main")), None, "a local upstream has no remote");
         assert_eq!(link(None), None, "an unpublished branch has nothing to compare");
+    }
+
+    #[test]
+    fn merge_request_links_use_the_upstream_branch_on_its_gitlab_remote() {
+        use nicegit_core::{Branch, Snapshot};
+        let mut snapshot = Snapshot { remotes: vec!["origin".into(), "self".into()], ..Default::default() };
+        snapshot.remote_fetch_addresses.insert("origin".into(), vec!["git@gitlab.com:group/sub/proj.git".into()]);
+        snapshot.remote_fetch_addresses.insert("self".into(), vec!["https://git.example.com/acme/app".into()]);
+        let branch = |upstream: &str| Branch {
+            name: "local".into(),
+            is_current: true,
+            is_remote: false,
+            tip: "abc".into(),
+            subject: String::new(),
+            upstream: Some(upstream.into()),
+        };
+        let listed = vec!["git.example.com".to_string()];
+        let hosts = ListedHosts { github: &[], gitlab: &listed };
+        let target = super::pull_request_target(&snapshot, &branch("refs/remotes/origin/feature/x"), hosts).expect("gitlab.com");
+        assert_eq!(target.repository.create_label(), "Create merge request on GitLab");
+        assert_eq!(target.remote_branch, "feature/x");
+        assert_eq!(
+            super::pull_request_link(&snapshot, &branch("refs/remotes/origin/feature/x"), hosts).as_deref(),
+            Some("https://gitlab.com/group/sub/proj/-/merge_requests/new?merge_request[source_branch]=feature/x")
+        );
+        assert_eq!(
+            super::pull_request_link(&snapshot, &branch("refs/remotes/origin/feature/x"), ListedHosts::default()).as_deref(),
+            Some("https://gitlab.com/group/sub/proj/-/merge_requests/new?merge_request[source_branch]=feature/x"),
+            "gitlab.com needs no listing"
+        );
+        let self_hosted = super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), hosts).expect("listed as GitLab");
+        assert_eq!(self_hosted.repository.create_label(), "Create merge request on GitLab");
+        assert!(super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), ListedHosts::default()).is_none(), "not listed");
+        let as_github = ListedHosts { github: &listed, gitlab: &[] };
+        let github = super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), as_github).expect("listed as GitHub");
+        assert_eq!(github.repository.create_label(), "Create pull request on GitHub");
     }
 
     /// A snapshot whose remotes have these fetch addresses, in the order given.
@@ -693,7 +798,7 @@ mod tests {
             Some("https://git.example.com/acme/app/tree/topic")
         );
         assert_eq!(
-            super::github_pull_request_link(&snapshot, &branch, &listed).as_deref(),
+            super::pull_request_link(&snapshot, &branch, hosts).as_deref(),
             Some("https://git.example.com/acme/app/compare/topic?expand=1")
         );
     }
@@ -717,7 +822,7 @@ mod tests {
         assert!(super::hosted_file_links(&snapshot, "abc123", "a.txt", ListedHosts::default()).is_empty());
         assert_eq!(super::hosted_branch_link(&snapshot, &remote_branch_named("origin/main"), ListedHosts::default()), None);
         let branch = local_branch_with_upstream(Some("refs/remotes/origin/main"));
-        assert_eq!(super::github_pull_request_link(&snapshot, &branch, &[]), None);
+        assert_eq!(super::pull_request_link(&snapshot, &branch, ListedHosts::default()), None);
         let other = vec!["ghe.other.com".to_string()];
         let hosts = ListedHosts { github: &other, gitlab: &[] };
         assert!(super::hosted_commit_links(&snapshot, "abc123", hosts).is_empty(), "only the listed host counts");

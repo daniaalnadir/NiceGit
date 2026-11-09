@@ -1,18 +1,21 @@
 //! "Create pull request" for a local branch: a form that creates the pull request through the GitHub
-//! CLI. It fills in the base branch from GitHub, and the title and body from the branch's commits.
-//! The browser's compare page stays available as "Open in browser instead". Nothing here blocks the
-//! interface; every `gh` and Git read runs in the background.
+//! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`). It fills in the
+//! base branch from the host, and the title and body from the branch's commits. The browser's compare
+//! page, or GitLab's new merge request form, stays available as "Open in browser instead". Nothing here
+//! blocks the interface; every `gh`, `glab`, and Git read runs in the background.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use egui::{Color32, RichText};
 use egui_phosphor::regular as icon;
-use nicegit_core::github::{GhStatus, GitHubRepository, PrState, PullRequestStatus};
+use nicegit_core::github::{GhStatus, PrState, PullRequestStatus};
+use nicegit_core::gitlab::{self, GlabProgram, GlabStatus, NewMergeRequest};
+use nicegit_core::hosting::{Host, ListedHosts};
 use nicegit_core::{Branch, GitClient, GitError, Snapshot};
 
 use crate::app::{NiceGitApp, Notice, NoticeAction};
-use crate::git_ext::{self, PullRequestTarget};
+use crate::git_ext::{self, Forge, PullRequestTarget};
 use crate::theme;
 use crate::tools::{widgets, Task};
 
@@ -29,8 +32,8 @@ pub enum Outcome {
     Close,
     /// The compare page should open in the browser instead; the dialog closes.
     OpenInBrowser(String),
-    /// The pull request was created at this address; the dialog closes.
-    Created(String),
+    /// The pull or merge request was created at this address on a host of this kind; the dialog closes.
+    Created { url: String, kind: Host },
 }
 
 /// What `gh` said about the repository's default branch. A missing or signed-out `gh` is an answer.
@@ -67,8 +70,10 @@ pub struct PullRequestDialog {
     branch: String,
     /// Commits on the branch that its upstream does not have, when the dialog opened.
     unpushed: usize,
-    /// The repository folder that `gh` and Git run in.
+    /// The repository folder that `gh`, `glab`, and Git run in.
     directory: PathBuf,
+    /// The `glab` program that GitLab merge requests run through.
+    glab: GlabProgram,
     lookup: Lookup,
     base: String,
     /// Set once the person types in the base field, so a late default branch does not overwrite it.
@@ -134,22 +139,40 @@ fn message(error: &GitError) -> String {
     }
 }
 
-/// Asks `gh` whether it is signed in to the repository's host, then reads the default branch.
-fn load_base(repository: &GitHubRepository, directory: &Path) -> Result<BaseLookup, String> {
-    let client = GitClient::new();
-    match client.gh_status(&repository.host, directory) {
-        GhStatus::NotInstalled => Ok(BaseLookup::NotInstalled),
-        GhStatus::SignedOut(explanation) => Ok(BaseLookup::SignedOut(explanation)),
-        GhStatus::SignedIn => client.default_branch(repository, directory).map(BaseLookup::Branch).map_err(|error| message(&error)),
+/// What to say when the forge's command-line tool is not installed.
+fn not_installed(forge: &Forge) -> String {
+    match forge {
+        Forge::GitHub(_) => NOT_INSTALLED.to_string(),
+        Forge::GitLab(repository) => gitlab::not_installed_message(&repository.host),
     }
 }
 
-/// The command that signs `gh` in to `host`.
-fn sign_in_command(host: &str) -> String {
-    if host == "github.com" {
-        "gh auth login".to_string()
-    } else {
-        format!("gh auth login --hostname {host}")
+/// Asks the forge's command-line tool whether it is signed in to the repository's host, then reads
+/// the default branch.
+fn load_base(forge: &Forge, glab: &GlabProgram, directory: &Path) -> Result<BaseLookup, String> {
+    let client = GitClient::new();
+    match forge {
+        Forge::GitHub(repository) => match client.gh_status(&repository.host, directory) {
+            GhStatus::NotInstalled => Ok(BaseLookup::NotInstalled),
+            GhStatus::SignedOut(explanation) => Ok(BaseLookup::SignedOut(explanation)),
+            GhStatus::SignedIn => client.default_branch(repository, directory).map(BaseLookup::Branch).map_err(|error| message(&error)),
+        },
+        Forge::GitLab(repository) => match client.glab_status(repository, glab, directory) {
+            GlabStatus::NotInstalled => Ok(BaseLookup::NotInstalled),
+            GlabStatus::SignedOut(explanation) => Ok(BaseLookup::SignedOut(explanation)),
+            GlabStatus::SignedIn => {
+                client.glab_default_branch(repository, glab, directory).map(BaseLookup::Branch).map_err(|error| message(&error))
+            }
+        },
+    }
+}
+
+/// The command that signs the forge's command-line tool in to its host.
+fn sign_in_command(forge: &Forge) -> String {
+    match forge {
+        Forge::GitHub(repository) if repository.host == "github.com" => "gh auth login".to_string(),
+        Forge::GitHub(repository) => format!("gh auth login --hostname {}", repository.host),
+        Forge::GitLab(repository) => gitlab::sign_in_command(&repository.host),
     }
 }
 
@@ -172,15 +195,18 @@ impl PullRequestDialog {
         branch: String,
         unpushed: usize,
         directory: PathBuf,
+        glab: GlabProgram,
     ) -> Self {
-        let repository = target.repository.clone();
+        let forge = target.repository.clone();
         let lookup_directory = directory.clone();
-        let lookup = Lookup::Loading(Task::spawn(ctx, move || load_base(&repository, &lookup_directory)));
+        let lookup_glab = glab.clone();
+        let lookup = Lookup::Loading(Task::spawn(ctx, move || load_base(&forge, &lookup_glab, &lookup_directory)));
         Self {
             title: title_from_branch_name(&branch),
             branch,
             unpushed,
             directory,
+            glab,
             target,
             compare_link,
             lookup,
@@ -248,7 +274,7 @@ impl PullRequestDialog {
         let result = task.get().cloned()?;
         self.creation = Creation::Idle;
         match result {
-            Ok(url) => Some(Outcome::Created(url)),
+            Ok(url) => Some(Outcome::Created { url, kind: self.target.repository.kind() }),
             Err(text) => {
                 self.error = Some(text);
                 None
@@ -260,24 +286,31 @@ impl PullRequestDialog {
     /// that the dialog shows. `current` is the target the snapshot gives now.
     fn create(&mut self, ctx: &egui::Context, current: Option<&PullRequestTarget>) {
         if current != Some(&self.target) {
-            self.error = Some(
-                "The branch's GitHub remote changed after this dialog opened, so nothing was created. Close the dialog and open it again."
-                    .to_string(),
-            );
+            self.error = Some(format!(
+                "The branch's {} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.",
+                self.target.repository.kind().name()
+            ));
             return;
         }
-        let repository = self.target.repository.clone();
+        let forge = self.target.repository.clone();
         let head = self.target.remote_branch.clone();
         let base = self.base.trim().to_string();
         let title = self.title.trim().to_string();
         let body = self.body.clone();
         let draft = self.draft;
         let directory = self.directory.clone();
+        let glab = self.glab.clone();
         self.error = None;
         self.creation = Creation::Running(Task::spawn(ctx, move || {
-            GitClient::new()
-                .create_pull_request(&repository, &head, &base, &title, &body, draft, &directory)
-                .map_err(|error| message(&error))
+            let client = GitClient::new();
+            let result = match &forge {
+                Forge::GitHub(repository) => client.create_pull_request(repository, &head, &base, &title, &body, draft, &directory),
+                Forge::GitLab(repository) => {
+                    let request = NewMergeRequest { source: head, target: base, title, description: body, draft };
+                    client.create_merge_request(repository, &glab, &request, &directory)
+                }
+            };
+            result.map_err(|error| message(&error))
         }));
     }
 
@@ -296,6 +329,9 @@ impl PullRequestDialog {
         // Creation cannot work without gh, so its button waits for a verdict that says gh is usable.
         let gh_blocked = matches!(self.lookup, Lookup::Done(Ok(BaseLookup::NotInstalled | BaseLookup::SignedOut(_))));
         let can_create = !creating && !gh_blocked && !self.title.trim().is_empty() && !self.base.trim().is_empty();
+        let noun = self.target.repository.request_noun();
+        let create_label = format!("Create {noun}");
+        let creating_text = format!("Creating the {noun} on {}", self.target.repository.kind().name());
         let mut action = Action::None;
         let modal = egui::Modal::new(egui::Id::unique("pull-request")).show(ctx, |ui| {
             ui.set_width(480.0);
@@ -303,7 +339,7 @@ impl PullRequestDialog {
             let base_text = self.base.trim();
             let shown_base = if base_text.is_empty() { "…" } else { base_text };
             ui.heading(format!("{} → {shown_base}", self.branch));
-            ui.label(RichText::new(format!("{} on {}", self.target.repository.slug(), self.target.repository.host)).small().color(c.muted));
+            ui.label(RichText::new(format!("{} on {}", self.target.repository.slug(), self.target.repository.host())).small().color(c.muted));
             ui.add_space(8.0);
 
             if self.unpushed > 0 {
@@ -330,14 +366,15 @@ impl PullRequestDialog {
             }
             match &self.lookup {
                 Lookup::Loading(_) | Lookup::Done(Ok(BaseLookup::Branch(_))) => {}
-                Lookup::Done(Ok(BaseLookup::NotInstalled)) => widgets::callout(ui, NOT_INSTALLED, true),
+                Lookup::Done(Ok(BaseLookup::NotInstalled)) => widgets::callout(ui, &not_installed(&self.target.repository), true),
                 Lookup::Done(Ok(BaseLookup::SignedOut(explanation))) => {
-                    let command = sign_in_command(&self.target.repository.host);
+                    let command = sign_in_command(&self.target.repository);
                     widgets::callout(
                         ui,
                         &format!(
-                            "GitHub CLI is not signed in to {}. Run {command} in a terminal, then open this dialog again.",
-                            self.target.repository.host
+                            "{} is not signed in to {}. Run {command} in a terminal, then open this dialog again.",
+                            self.target.repository.cli_name(),
+                            self.target.repository.host()
                         ),
                         true,
                     );
@@ -373,11 +410,11 @@ impl PullRequestDialog {
                 ui.add_space(6.0);
             }
             if creating {
-                widgets::loading(ui, "Creating the pull request on GitHub");
+                widgets::loading(ui, &creating_text);
                 ui.add_space(6.0);
             }
             ui.horizontal(|ui| {
-                if widgets::primary_button(ui, "Create pull request", can_create).clicked() {
+                if widgets::primary_button(ui, &create_label, can_create).clicked() {
                     action = Action::Create;
                 }
                 if ui.add_enabled(!creating, egui::Button::new("Open in browser instead")).clicked() {
@@ -420,12 +457,12 @@ impl NiceGitApp {
     /// opens for any other branch.
     pub fn open_pull_request(&mut self, ctx: &egui::Context, branch: &Branch) {
         let Some(snapshot) = self.snapshot() else { return };
-        let hosts = &self.settings.github_enterprise_hosts;
-        let Some(target) = git_ext::github_pull_request_target(snapshot, branch, hosts) else { return };
-        let Some(compare_link) = git_ext::github_pull_request_link(snapshot, branch, hosts) else { return };
+        let Some(target) = git_ext::pull_request_target(snapshot, branch, self.settings.listed_hosts()) else { return };
+        let compare_link = target.repository.compare_link(&target.remote_branch);
         let unpushed = unpushed_commits(self, snapshot, branch);
         let Some(directory) = self.repo().map(|repo| repo.path.clone()) else { return };
-        self.pull_request = Some(PullRequestDialog::open(ctx, target, compare_link, branch.name.clone(), unpushed, directory));
+        let glab = self.glab.clone();
+        self.pull_request = Some(PullRequestDialog::open(ctx, target, compare_link, branch.name.clone(), unpushed, directory, glab));
     }
 
     /// Draws the Create pull request dialog while it is open, and acts on what it reports.
@@ -434,7 +471,7 @@ impl NiceGitApp {
         // The branch as the snapshot shows it now, so creation can refuse a changed GitHub target.
         let current = self.snapshot().and_then(|snapshot| {
             let branch = snapshot.branches.iter().find(|branch| !branch.is_remote && branch.name == branch_name)?;
-            git_ext::github_pull_request_target(snapshot, branch, &self.settings.github_enterprise_hosts)
+            git_ext::pull_request_target(snapshot, branch, self.settings.listed_hosts())
         });
         let Some(dialog) = self.pull_request.as_mut() else { return };
         match dialog.show(ctx, current.as_ref()) {
@@ -444,12 +481,13 @@ impl NiceGitApp {
                 self.pull_request = None;
                 crate::ui::changes::open_url(&link);
             }
-            Some(Outcome::Created(url)) => {
+            Some(Outcome::Created { url, kind }) => {
                 self.pull_request = None;
                 let number = url.rsplit('/').next().unwrap_or_default().to_string();
+                let (noun, marker) = if kind == Host::GitLab { ("merge request", "!") } else { ("pull request", "#") };
                 // The notice's button opens the pull request, so nothing opens before the person asks.
                 self.notice = Some(Notice {
-                    text: format!("Created pull request #{number}."),
+                    text: format!("Created {noun} {marker}{number}."),
                     is_error: false,
                     action: Some(NoticeAction::OpenUrl(url)),
                     detail: None,
@@ -473,13 +511,16 @@ impl NiceGitApp {
     /// on screen while it is read again, if the branch is the same. Without `gh`, or signed out of
     /// it, the status is simply none.
     pub fn refresh_pr_status(&mut self, index: usize) {
-        let hosts = self.settings.github_enterprise_hosts.clone();
+        let github_hosts = self.settings.github_enterprise_hosts.clone();
+        let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let glab = self.glab.clone();
         let context = self.worker.context.clone();
         let Some(repo) = self.repos.get_mut(index) else { return };
         repo.pr_checked_at = Some(Instant::now());
         let target = repo.snapshot.as_ref().and_then(|snapshot| {
             let branch = snapshot.current().filter(|branch| !branch.is_remote)?;
-            let target = git_ext::github_pull_request_target(snapshot, branch, &hosts)?;
+            let hosts = ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts };
+            let target = git_ext::pull_request_target(snapshot, branch, hosts)?;
             Some((snapshot.current_branch.clone(), target))
         });
         let Some((branch, target)) = target else {
@@ -491,11 +532,19 @@ impl NiceGitApp {
         let read_branch = branch.clone();
         let task = Task::spawn_with(&context, stale, move || {
             let client = GitClient::new();
-            match client.gh_status(&target.repository.host, &path) {
-                GhStatus::SignedIn => {
-                    client.pull_request_for_branch(&target.repository, &read_branch, &path).map_err(|error| error.to_string())
-                }
-                GhStatus::NotInstalled | GhStatus::SignedOut(_) => Ok(None),
+            match &target.repository {
+                Forge::GitHub(repository) => match client.gh_status(&repository.host, &path) {
+                    GhStatus::SignedIn => {
+                        client.pull_request_for_branch(repository, &read_branch, &path).map_err(|error| error.to_string())
+                    }
+                    GhStatus::NotInstalled | GhStatus::SignedOut(_) => Ok(None),
+                },
+                Forge::GitLab(repository) => match client.glab_status(repository, &glab, &path) {
+                    GlabStatus::SignedIn => {
+                        client.merge_request_for_branch(repository, &glab, &read_branch, &path).map_err(|error| error.to_string())
+                    }
+                    GlabStatus::NotInstalled | GlabStatus::SignedOut(_) => Ok(None),
+                },
             }
         });
         repo.pr_status = Some((branch, task));
@@ -543,8 +592,9 @@ impl PrBadge {
         } else {
             None
         };
+        let (noun, marker) = if status.kind == Host::GitLab { ("MR", "!") } else { ("PR", "#") };
         Self {
-            label: format!("{glyph}  PR #{}", status.number),
+            label: format!("{glyph}  {noun} {marker}{}", status.number),
             label_color: color,
             checks: checks_label,
             hover: format!("{}\n{} passed, {} failed, {} pending", status.title, checks.passed, checks.failed, checks.pending),

@@ -119,7 +119,8 @@ impl NiceGitApp {
         // The checkout's name when it can have a pull request, opened from the palette.
         let pull_request = snapshot.and_then(|s| {
             let current = s.branches.iter().find(|b| b.is_current && !b.is_remote)?;
-            crate::git_ext::github_pull_request_target(s, current, &self.settings.github_enterprise_hosts).map(|_| current.name.clone())
+            let target = crate::git_ext::pull_request_target(s, current, self.settings.listed_hosts())?;
+            Some((current.name.clone(), target.repository.create_label(), target.repository.cli_name()))
         });
         let mut list = vec![
             command("Fetch", "Download from all remotes", icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
@@ -185,10 +186,10 @@ impl NiceGitApp {
             ),
             command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
         ];
-        if let Some(branch) = pull_request {
+        if let Some((branch, label, cli)) = pull_request {
             list.push(command(
-                "Create pull request on GitHub",
-                "For the current branch, through the GitHub CLI",
+                &label,
+                &format!("For the current branch, through the {cli}"),
                 icon::GIT_PULL_REQUEST,
                 true,
                 Run::PullRequest(branch),
