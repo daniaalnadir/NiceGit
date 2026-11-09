@@ -477,6 +477,77 @@ fn push_tag_never_moves_an_existing_remote_tag() {
 }
 
 #[test]
+fn push_tags_lists_and_pushes_only_the_tags_the_remote_lacks() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    repo.git(&["tag", "v1", &first]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    client().push_tag("v1", "origin", &first, &expected, repo.path()).expect("push v1");
+    let second = repo.commit("a.txt", "two\n", "Second");
+    client().create_tag("v2", &second, Some("Annotated"), false, repo.path()).expect("create annotated tag");
+    repo.git(&["tag", "v3", &second]);
+
+    let listed = client().tags_missing_on_remote("origin", &expected, repo.path()).expect("list missing tags");
+    let names: Vec<&str> = listed.missing.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(names, ["v2", "v3"], "v1 is already on the remote");
+    assert!(listed.conflicting.is_empty());
+    assert_eq!(listed.missing[0].1, snapshot(repo.path()).tag_tips["v2"], "the annotated tag's own object is listed");
+
+    client().push_tags("origin", &listed.missing, &expected, repo.path()).expect("push listed tags");
+    assert!(tag_exists(remote.path(), "v2") && tag_exists(remote.path(), "v3"));
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/tags/v1"]).trim(), first, "v1 is unchanged");
+}
+
+#[test]
+fn push_tags_reports_a_different_remote_tag_as_conflicting_and_never_moves_it() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    repo.git(&["tag", "v1", &first]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    client().push_tag("v1", "origin", &first, &expected, repo.path()).expect("push v1");
+    let second = repo.commit("a.txt", "two\n", "Second");
+    repo.git(&["tag", "-f", "v1", &second]);
+    repo.git(&["tag", "v2", &second]);
+
+    let listed = client().tags_missing_on_remote("origin", &expected, repo.path()).expect("list missing tags");
+    assert_eq!(listed.conflicting, ["v1"]);
+    let names: Vec<&str> = listed.missing.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(names, ["v2"]);
+
+    client().push_tags("origin", &listed.missing, &expected, repo.path()).expect("push listed tags");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/tags/v1"]).trim(), first, "the remote's v1 is not replaced");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/tags/v2"]).trim(), second);
+}
+
+#[test]
+fn push_tags_refuses_a_tag_moved_after_listing_and_a_changed_push_url() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    repo.git(&["tag", "v1", &first]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    let listed = client().tags_missing_on_remote("origin", &expected, repo.path()).expect("list missing tags");
+
+    let second = repo.commit("a.txt", "two\n", "Second");
+    repo.git(&["tag", "-f", "v1", &second]);
+    let message = error_text(client().push_tags("origin", &listed.missing, &expected, repo.path()));
+    assert!(message.contains("tag changed"), "{message}");
+    assert!(!tag_exists(remote.path(), "v1"), "nothing was pushed");
+
+    let other = bare_remote();
+    repo.git(&["remote", "set-url", "--push", "origin", &path_string(other.path())]);
+    let relisted = client().tags_missing_on_remote("origin", &expected, repo.path());
+    assert!(relisted.is_err(), "a changed push URL is refused before listing");
+    assert!(client().push_tags("origin", &[("v1".to_string(), second)], &expected, repo.path()).is_err());
+    assert!(!tag_exists(other.path(), "v1"), "nothing reached the new address");
+}
+
+#[test]
 fn delete_remote_tag_removes_it_from_the_remote() {
     let remote = bare_remote();
     let repo = Repo::new();

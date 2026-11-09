@@ -306,6 +306,39 @@ fn push_a_tag_to_a_remote_then_delete_it_there() {
 }
 
 #[test]
+fn push_the_missing_tags_to_a_remote_after_confirming() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = bare_remote();
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    git(path, &["push", "-q", "origin", "main"]);
+    git(path, &["tag", "v1.0"]);
+    git(path, &["tag", "v2.0"]);
+    let remote_tags = || git(remote.path(), &["tag", "--list"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label_contains("TAGS").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Push tags to origin").click();
+    wait(&mut harness, "the push confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    match &harness.state().dialog {
+        Some(crate::ui::dialogs::Dialog::Confirm { title, message, .. }) => {
+            assert_eq!(title, "Push 2 tags to origin?");
+            assert!(message.contains("• v1.0") && message.contains("• v2.0"), "{message}");
+        }
+        _ => panic!("the push confirmation should be open"),
+    }
+    assert!(remote_tags().is_empty(), "nothing is pushed before confirming");
+
+    harness.get_by_role_and_label(Role::Button, "Push tags").click();
+    idle(&mut harness);
+    wait(&mut harness, "the tags on the remote", |_| remote_tags() == "v1.0\nv2.0");
+    assert_eq!(git(path, &["tag", "--list"]), "v1.0\nv2.0", "the local tags are kept");
+}
+
+#[test]
 fn delete_a_branch_from_its_remote() {
     let repo = repository();
     let path = repo.path();

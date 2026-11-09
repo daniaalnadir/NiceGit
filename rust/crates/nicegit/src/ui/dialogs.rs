@@ -125,6 +125,13 @@ pub enum Pending {
         tip: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
+    /// Pushing the tags `remote` lacks, as listed when the confirmation opened. Each tag carries
+    /// the object ID its ref had then, and `addresses` are the remote's push addresses shown.
+    PushTags {
+        remote: String,
+        tags: Vec<(String, String)>,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
     PopStash(Stash),
 }
 
@@ -400,6 +407,34 @@ pub fn resolve_conflicts_confirmation(paths: &[String], side: &str) -> (String, 
         message.push_str(&format!("\n…and {} more", paths.len() - LISTED_CONFLICTS));
     }
     (title, message, format!("Take {side} versions"))
+}
+
+/// The most tag names the push confirmation lists by name, for each of its two lists.
+const LISTED_TAGS: usize = 20;
+
+/// The title and message of the confirmation for pushing `missing` tags to `remote`. Tags the
+/// remote already has at another object are named as skipped, never pushed.
+pub fn push_tags_confirmation(remote: &str, missing: &[(String, String)], conflicting: &[String]) -> (String, String) {
+    let count = missing.len();
+    let title = if count == 1 { format!("Push 1 tag to {remote}?") } else { format!("Push {count} tags to {remote}?") };
+    let mut message = format!("These local tags are not on {remote} yet. Tags already on {remote} are never replaced.");
+    for (name, _) in missing.iter().take(LISTED_TAGS) {
+        message.push_str("\n• ");
+        message.push_str(name);
+    }
+    if count > LISTED_TAGS {
+        message.push_str(&format!("\n…and {} more", count - LISTED_TAGS));
+    }
+    if !conflicting.is_empty() {
+        let names: Vec<&str> = conflicting.iter().take(LISTED_TAGS).map(String::as_str).collect();
+        let more = conflicting.len().saturating_sub(LISTED_TAGS);
+        message.push_str(&format!("\n\nSkipped, because {remote} has a different tag with the same name: {}", names.join(", ")));
+        if more > 0 {
+            message.push_str(&format!(", and {more} more"));
+        }
+        message.push('.');
+    }
+    (title, message)
 }
 
 /// The notice for a bulk resolution: how many files took the side, and which could not be
@@ -993,6 +1028,13 @@ impl NiceGitApp {
                     client.push_branch(&branch, &remote, &addresses, path).map(|_| Some(format!("Pushed {name} to {remote}.")))
                 })
             }
+            Pending::PushTags { remote, tags, addresses } => {
+                let summary = if tags.len() == 1 { "1 tag".to_string() } else { format!("{} tags", tags.len()) };
+                self.act("Push tags", move |client, path| {
+                    let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
+                    client.push_tags(&remote, &tags, expected, path).map(|_| Some(format!("Pushed {summary} to {remote}.")))
+                })
+            }
             Pending::ForcePush { branch, head, upstream, expected_remote_tip, addresses } => {
                 self.act("Force push", move |client, path| {
                     // The push reads only these fields, so it runs against what was shown.
@@ -1159,7 +1201,23 @@ impl NiceGitApp {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_push_remote, repository_folder_name, CloneDestination};
+    use super::{default_push_remote, push_tags_confirmation, repository_folder_name, CloneDestination};
+
+    #[test]
+    fn the_push_tags_confirmation_lists_at_most_twenty_names_and_the_skipped_ones() {
+        let missing: Vec<(String, String)> = (0..23).map(|n| (format!("v{n}"), "a".repeat(40))).collect();
+        let (title, message) = push_tags_confirmation("origin", &missing, &[]);
+        assert_eq!(title, "Push 23 tags to origin?");
+        assert!(message.contains("\n• v19\n") && !message.contains("• v20"), "{message}");
+        assert!(message.ends_with("…and 3 more"), "{message}");
+        assert!(!message.contains("Skipped"));
+
+        let one = [("v1".to_string(), "b".repeat(40))];
+        let conflicting = vec!["old".to_string()];
+        let (title, message) = push_tags_confirmation("origin", &one, &conflicting);
+        assert_eq!(title, "Push 1 tag to origin?");
+        assert!(message.ends_with("Skipped, because origin has a different tag with the same name: old."), "{message}");
+    }
 
     #[test]
     fn a_new_tag_is_pushed_to_the_upstream_remote_then_origin_then_the_first() {

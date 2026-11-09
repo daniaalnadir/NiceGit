@@ -562,6 +562,8 @@ pub struct NiceGitApp {
     pub(crate) full_loads: usize,
     applied_appearance: Option<(theme::Appearance, theme::GraphPalette)>,
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
+    /// Reading the tags a remote lacks, before the push confirmation opens.
+    pub pending_tag_scan: Option<TagScan>,
     /// The "From GitHub…" list over the Clone dialog, while it is open.
     pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
     /// The Create pull request dialog, while it is open.
@@ -572,6 +574,15 @@ pub struct NiceGitApp {
     /// The terminal panel under the history, when shown.
     pub terminal: Option<crate::tools::terminal::TerminalWindow>,
     fitted_to_monitor: bool,
+}
+
+/// A read of the tags one remote lacks. The repository and the remote's push addresses are
+/// the ones shown when the read started.
+pub struct TagScan {
+    path: PathBuf,
+    remote: String,
+    addresses: std::collections::BTreeMap<String, Vec<String>>,
+    task: Task<nicegit_core::Result<nicegit_core::settings::TagsToPush>>,
 }
 
 struct Watch {
@@ -620,6 +631,7 @@ impl NiceGitApp {
             full_loads: 0,
             applied_appearance: None,
             pending_clone: None,
+            pending_tag_scan: None,
             clone_picker: None,
             pull_request: None,
             recorded: Arc::new(Mutex::new(None)),
@@ -2324,6 +2336,50 @@ impl NiceGitApp {
         }
     }
 
+    /// Starts reading which local tags `remote` lacks. The push confirmation opens when the read
+    /// finishes, for the repository that was active when it started.
+    pub fn scan_tags_for_remote(&mut self, remote: String, addresses: std::collections::BTreeMap<String, Vec<String>>) {
+        if self.busy.is_some() || self.pending_tag_scan.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let path = repo.path.clone();
+        let expected = addresses.get(&remote).cloned().unwrap_or_default();
+        self.busy = Some("Read tags".into());
+        let context = self.worker.context.clone();
+        let (read_path, read_remote) = (path.clone(), remote.clone());
+        let task = Task::spawn(&context, move || GitClient::new().tags_missing_on_remote(&read_remote, &expected, &read_path));
+        self.pending_tag_scan = Some(TagScan { path, remote, addresses, task });
+    }
+
+    /// Opens the push confirmation once the tags have been read, or reports that there is
+    /// nothing to push. A read for a repository that is no longer active is dropped.
+    fn finish_tag_scan(&mut self) {
+        let Some(scan) = self.pending_tag_scan.as_mut() else { return };
+        let Some(result) = scan.task.get().cloned() else { return };
+        let Some(scan) = self.pending_tag_scan.take() else { return };
+        self.busy = None;
+        if self.repos.get(self.active).is_none_or(|repo| repo.path != scan.path) {
+            return;
+        }
+        match result {
+            Err(error) => self.notify(format!("Could not read the tags on {}: {error}", scan.remote), true),
+            Ok(tags) if tags.missing.is_empty() => {
+                let text = if tags.conflicting.is_empty() {
+                    format!("Every local tag is already on {}.", scan.remote)
+                } else {
+                    format!("No local tags are missing from {}. {} differ there and were not pushed.", scan.remote, tags.conflicting.len())
+                };
+                self.notify(text, false);
+            }
+            Ok(tags) => {
+                let (title, message) = crate::ui::dialogs::push_tags_confirmation(&scan.remote, &tags.missing, &tags.conflicting);
+                let pending = Pending::PushTags { remote: scan.remote, tags: tags.missing, addresses: scan.addresses };
+                self.confirm(title, message, "Push tags", pending);
+            }
+        }
+    }
+
     // MARK: Refresh
 
     /// Watches the active repository for changes made in other apps, and its Git directory too
@@ -2499,6 +2555,7 @@ impl eframe::App for NiceGitApp {
         self.receive_templates();
         self.receive_message_copies(&ctx);
         self.finish_clone();
+        self.finish_tag_scan();
         self.shortcuts(&ctx);
         self.drop_folders(&ctx);
         self.auto_refresh(&ctx);

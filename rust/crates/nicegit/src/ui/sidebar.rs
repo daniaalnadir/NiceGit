@@ -366,6 +366,17 @@ impl NiceGitApp {
                 }
                 response.context_menu(|ui| self.tag_menu(ui, tag, &tip, snapshot));
             }
+            // Pushes every local tag a remote lacks, after the list of those tags is read and shown.
+            let idle = self.idle();
+            for remote in &snapshot.remotes {
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Push tags to {remote}…", icon::ARROW_LINE_UP)).small()).clicked()
+                    {
+                        self.scan_tags_for_remote(remote.clone(), snapshot.remote_push_addresses.clone());
+                    }
+                });
+            }
         });
 
         // Creating a branch from a stash rewrites working files, so the unsaved editor blocks it too.
