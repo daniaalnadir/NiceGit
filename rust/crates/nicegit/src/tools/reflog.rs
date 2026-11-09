@@ -8,9 +8,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use egui::{Color32, Margin, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::reflog::ReflogEntry;
-use nicegit_core::Snapshot;
+use nicegit_core::{Branch, Snapshot};
 
 use crate::theme;
+use crate::tools::reset::ResetWindow;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 /// How many entries are listed; older ones are rarely what anyone is looking for.
@@ -35,6 +36,8 @@ pub(crate) fn age_text(time: i64) -> String {
 
 #[derive(Default)]
 pub struct ReflogWindow {
+    /// The branch whose own reflog is shown, as "Tip history". `None` shows HEAD's reflog.
+    branch: Option<Branch>,
     /// The reflog and the unreachable commits, read in the background.
     loading: Option<Task<Loaded>>,
     /// Set when the repository changed, so the reflog is read again on the next frame.
@@ -55,6 +58,20 @@ impl ReflogWindow {
         Self { needs_load: true, ..Self::default() }
     }
 
+    /// The tip history of one branch: every commit it has pointed to, from its own reflog.
+    pub fn for_branch(branch: &Branch) -> Self {
+        Self { branch: Some(branch.clone()), needs_load: true, ..Self::default() }
+    }
+
+    /// The branch's display name when this window is for the current local branch, so a reset of
+    /// it can be offered. The checkout must still be that branch and no Git operation may be running.
+    fn reset_branch(&self, cx: &Ctx) -> Option<String> {
+        let branch = self.branch.as_ref()?;
+        let current = cx.snapshot.current()?;
+        let is_current = !branch.is_remote && current.full_ref() == branch.full_ref();
+        (is_current && cx.snapshot.operation.is_none()).then(|| branch.display_name())
+    }
+
     /// The selected entry, if it is still listed.
     fn selected_entry(&self) -> Option<&ReflogEntry> {
         let selector = self.selected.as_deref()?;
@@ -64,11 +81,17 @@ impl ReflogWindow {
 
 impl ToolWindow for ReflogWindow {
     fn id(&self) -> String {
-        "reflog".to_string()
+        match &self.branch {
+            Some(branch) => format!("reflog:{}", branch.full_ref()),
+            None => "reflog".to_string(),
+        }
     }
 
     fn title(&self) -> String {
-        "Recover Lost Work".to_string()
+        match &self.branch {
+            Some(branch) => format!("Tip history of {}", branch.display_name()),
+            None => "Recover Lost Work".to_string(),
+        }
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -82,8 +105,12 @@ impl ToolWindow for ReflogWindow {
     fn ui(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         if self.needs_load && self.loading.is_none() {
             self.needs_load = false;
-            self.loading = Some(query(ui.ctx(), cx.repo, |client, directory| {
-                let entries = client.reflog(ENTRY_LIMIT, directory)?;
+            let branch_ref = self.branch.as_ref().map(Branch::full_ref);
+            self.loading = Some(query(ui.ctx(), cx.repo, move |client, directory| {
+                let entries = match &branch_ref {
+                    Some(full_ref) => client.branch_reflog(full_ref, ENTRY_LIMIT, directory)?,
+                    None => client.reflog(ENTRY_LIMIT, directory)?,
+                };
                 let hashes: Vec<String> = entries.iter().map(|entry| entry.hash.clone()).collect();
                 let unreachable = client.unreachable_commits(&hashes, directory)?;
                 Ok((entries, unreachable))
@@ -117,9 +144,11 @@ impl ToolWindow for ReflogWindow {
 
         let c = theme::of(ui);
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("Every position HEAD has had, including commits that no branch points to any more.").small().color(c.muted),
-            );
+            let intro = match &self.branch {
+                Some(branch) => format!("Every commit {} has pointed to, including ones it no longer points to.", branch.display_name()),
+                None => "Every position HEAD has had, including commits that no branch points to any more.".to_string(),
+            };
+            ui.label(RichText::new(intro).small().color(c.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read the reflog again", self.loading.is_none()).clicked() {
                     self.needs_load = true;
@@ -148,9 +177,15 @@ impl ReflogWindow {
     fn list(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let c = theme::of(ui);
         if self.entries.is_empty() && self.loading.is_none() && self.error.is_none() {
-            widgets::empty_state(ui, icon::CLOCK_COUNTER_CLOCKWISE, "No history yet.");
+            let text = match &self.branch {
+                Some(_) => "No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.",
+                None => "No history yet.",
+            };
+            widgets::empty_state(ui, icon::CLOCK_COUNTER_CLOCKWISE, text);
             return;
         }
+        let reset_name = self.reset_branch(cx);
+        let snapshot = cx.snapshot;
         egui::ScrollArea::vertical().id_salt("reflog_entries").auto_shrink([false, false]).show(ui, |ui| {
             for index in 0..self.entries.len() {
                 let entry = &self.entries[index];
@@ -189,11 +224,19 @@ impl ReflogWindow {
                 }
                 let hash = entry.hash.clone();
                 let short_hash = short(&entry.hash).to_string();
+                let subject = entry.subject.clone();
                 response.context_menu(|ui| {
                     if ui.add_enabled(cx.idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
                         self.branch_target = Some((hash.clone(), short_hash.clone()));
                         self.branch_name.clear();
                         ui.close();
+                    }
+                    if let Some(name) = &reset_name {
+                        if ui.add_enabled(cx.idle, egui::Button::new(format!("{}  Reset {name} to here…", icon::ARROW_ARC_LEFT))).clicked()
+                        {
+                            cx.open(Box::new(ResetWindow::new(hash.clone(), subject.clone(), snapshot)));
+                            ui.close();
+                        }
                     }
                     if ui.button(format!("{}  Copy commit hash", icon::COPY)).clicked() {
                         ui.ctx().copy_text(hash.clone());
@@ -233,6 +276,11 @@ impl ReflogWindow {
                 if widgets::primary_button(ui, &format!("{}  Create branch here…", icon::GIT_BRANCH), idle).clicked() {
                     self.branch_target = Some((entry.hash.clone(), short(&entry.hash).to_string()));
                     self.branch_name.clear();
+                }
+                if let Some(name) = self.reset_branch(cx) {
+                    if widgets::labeled_button(ui, icon::ARROW_ARC_LEFT, &format!("Reset {name} to here…"), idle).clicked() {
+                        cx.open(Box::new(ResetWindow::new(entry.hash.clone(), entry.subject.clone(), cx.snapshot)));
+                    }
                 }
                 if widgets::labeled_button(ui, icon::GIT_COMMIT, "Show in graph", true).clicked() {
                     cx.select_commit(entry.hash.clone());

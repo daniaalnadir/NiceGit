@@ -537,6 +537,58 @@ fn creating_a_branch_at_a_reflog_entry_keeps_the_commit_reachable() {
 }
 
 #[test]
+fn branch_reflog_lists_the_commits_a_branch_moved_through_newest_first() {
+    let repo = Repo::new();
+    let base = repo.commit("a.txt", "base\n", "Base");
+    repo.git(&["switch", "-q", "-c", "topic"]);
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.commit("a.txt", "two\n", "Second");
+    repo.git(&["reset", "-q", "--hard", &first]);
+    repo.git(&["commit", "-q", "--amend", "-m", "First amended"]);
+    let amended = repo.head();
+
+    let entries = client().branch_reflog("refs/heads/topic", 50, repo.path()).expect("branch reflog");
+
+    assert_eq!(entries.len(), 5, "{entries:?}");
+    assert_eq!(entries[0].hash, amended, "{entries:?}");
+    assert!(entries[0].action.starts_with("commit (amend)"), "{entries:?}");
+    assert_eq!(entries[0].subject, "First amended");
+    assert_eq!(entries[1].hash, first, "{entries:?}");
+    assert!(entries[1].action.starts_with("reset:"), "{entries:?}");
+    assert_eq!(entries[2].subject, "Second");
+    assert!(entries[2].action.starts_with("commit:"), "{entries:?}");
+    assert_eq!(entries[3].hash, first, "{entries:?}");
+    assert!(entries[3].action.starts_with("commit:"), "{entries:?}");
+    assert_eq!(entries[4].hash, base, "{entries:?}");
+    assert!(entries[0].selector.ends_with("@{0}"), "{entries:?}");
+    assert!(entries.iter().all(|entry| entry.time.is_some()));
+}
+
+#[test]
+fn branch_reflog_refuses_refs_that_are_not_branches_or_do_not_exist() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "base\n", "Base");
+    repo.git(&["tag", "v1"]);
+
+    for name in ["HEAD", "refs/tags/v1", "refs/heads/missing", "refs/heads/../main", "--all", "main"] {
+        assert!(client().branch_reflog(name, 50, repo.path()).is_err(), "{name} is refused");
+    }
+    assert!(client().branch_reflog("refs/heads/main", 50, repo.path()).is_ok());
+}
+
+#[test]
+fn branch_reflog_is_empty_for_a_branch_made_without_a_reflog() {
+    let repo = Repo::new();
+    let base = repo.commit("a.txt", "base\n", "Base");
+    repo.git(&["config", "core.logAllRefUpdates", "false"]);
+    repo.git(&["update-ref", "refs/heads/plain", &base]);
+
+    let entries = client().branch_reflog("refs/heads/plain", 50, repo.path()).expect("branch reflog");
+
+    assert!(entries.is_empty(), "{entries:?}");
+}
+
+#[test]
 fn gitflow_hotfix_finish_tags_and_merges_into_both_branches() {
     let (repo, head) = gitflow_repo("v");
     client().start_gitflow(GitFlowKind::Hotfix, "1.0.1", "main", Some(&head), repo.path()).expect("start hotfix");
