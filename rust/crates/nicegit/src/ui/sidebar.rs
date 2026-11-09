@@ -841,6 +841,16 @@ impl NiceGitApp {
                     self.set_branch_hidden(branch, true);
                 }
             }
+            // Solo shows this branch and HEAD alone, so the current branch can be soloed too.
+            if self.solo_branch().as_deref() == Some(branch.full_ref().as_str()) {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  Stop showing only this branch", icon::EYE))).clicked() {
+                    ui.close();
+                    self.set_solo_branch(None);
+                }
+            } else if ui.add_enabled(idle, egui::Button::new(format!("{}  Show only this branch", icon::EYE))).clicked() {
+                ui.close();
+                self.set_solo_branch(Some(branch.full_ref()));
+            }
         }
         ui.separator();
         if ui.button(format!("{}  Copy name", icon::COPY)).clicked() {

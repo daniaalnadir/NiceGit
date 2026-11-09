@@ -251,6 +251,10 @@ pub struct Settings {
     /// such as `refs/heads/feature`, so a local and a remote branch never collide.
     #[serde(default)]
     pub hidden_branches: BTreeMap<String, BTreeSet<String>>,
+    /// The branch each checkout shows alone in the commit graph, keyed like `drafts`. The value is
+    /// a full ref name, as `hidden_branches` holds them.
+    #[serde(default)]
+    pub solo_branch: BTreeMap<String, String>,
 }
 
 fn default_true() -> bool {
@@ -284,6 +288,7 @@ impl Default for Settings {
             stash_include_untracked: true,
             cherry_pick_record_origin: false,
             hidden_branches: BTreeMap::new(),
+            solo_branch: BTreeMap::new(),
         }
     }
 }
@@ -330,6 +335,24 @@ impl Settings {
         change(&mut hidden);
         if !hidden.is_empty() {
             self.hidden_branches.insert(key, hidden);
+        }
+    }
+
+    /// The full ref name of the branch the commit graph of the checkout at `folder` shows alone, if any.
+    pub fn solo_branch_of(&self, folder: &Path) -> Option<String> {
+        self.solo_branch.get(&Self::draft_key(&folder.to_string_lossy())).cloned()
+    }
+
+    /// Sets or clears the branch shown alone in the commit graph of the checkout at `folder`.
+    pub fn set_solo_branch(&mut self, folder: &Path, reference: Option<String>) {
+        let key = Self::draft_key(&folder.to_string_lossy());
+        match reference {
+            Some(reference) => {
+                self.solo_branch.insert(key, reference);
+            }
+            None => {
+                self.solo_branch.remove(&key);
+            }
         }
     }
 
@@ -404,6 +427,42 @@ mod tests {
         storage.set_string(STORAGE_KEY, older);
         let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
         assert!(loaded.hidden_branches.is_empty());
+    }
+
+    #[test]
+    fn solo_branch_round_trips_for_its_checkout_only() {
+        let folder = Path::new("/work/repo");
+        let mut settings = Settings::default();
+        settings.set_solo_branch(folder, Some("refs/remotes/origin/feature".into()));
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert_eq!(loaded.solo_branch_of(folder).as_deref(), Some("refs/remotes/origin/feature"));
+        assert_eq!(loaded.solo_branch_of(Path::new("/work/other")), None);
+    }
+
+    #[test]
+    fn clearing_the_solo_branch_drops_the_checkout_entry() {
+        let folder = Path::new("/work/repo");
+        let mut settings = Settings::default();
+        settings.set_solo_branch(folder, Some("refs/heads/feature".into()));
+        assert_eq!(settings.solo_branch.len(), 1);
+        settings.set_solo_branch(folder, None);
+        assert!(settings.solo_branch.is_empty());
+        assert_eq!(settings.solo_branch_of(folder), None);
+    }
+
+    #[test]
+    fn settings_saved_before_solo_branch_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // An empty map is written as `solo_branch:{}`; an older file has no such field.
+        let older = saved.replacen(",solo_branch:{}", "", 1);
+        assert_ne!(older, saved, "the field is in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.solo_branch.is_empty());
     }
 
     #[test]

@@ -164,6 +164,38 @@ fn hide_a_branch_in_the_graph_from_the_sidebar_and_show_it_again() {
 }
 
 #[test]
+fn show_only_a_branch_from_the_sidebar_and_show_all_again() {
+    let repo = repository_with_feature_commit();
+    let path = repo.path();
+    // A third branch with a commit of its own, which the solo walk must leave out.
+    git(path, &["switch", "-q", "-c", "other"]);
+    commit_file(path, "other.txt", b"from other\n", "Work on the other branch");
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    assert!(history_has_subject(&harness, "Work on the other branch"), "the other branch's commit is in the graph");
+
+    harness.get_all_by_label("feature").next().expect("feature row").hover();
+    harness.step();
+    harness.get_all_by_label("feature").next().expect("feature row").click_secondary();
+    wait(&mut harness, "the sidebar menu", |h| shows(h, "Show only this branch"));
+    harness.get_by_label_contains("Show only this branch").hover();
+    harness.step();
+    harness.get_by_label_contains("Show only this branch").click();
+    wait(&mut harness, "the reload with only the feature's commits", |h| !history_has_subject(h, "Work on the other branch"));
+    settle(&mut harness);
+    assert!(history_has_subject(&harness, "Work on the feature"), "the solo branch's commit stays");
+    assert!(shows(&harness, "Showing only feature."), "the note shows");
+
+    harness.get_by_label("Show all").hover();
+    harness.step();
+    harness.get_by_label("Show all").click();
+    wait(&mut harness, "the other branch's commit to come back", |h| history_has_subject(h, "Work on the other branch"));
+    settle(&mut harness);
+    assert!(!shows(&harness, "Showing only"), "the note goes once the graph shows every branch");
+}
+
+#[test]
 fn a_click_on_a_branch_label_selects_its_commit() {
     let repo = repository_with_feature_commit();
     let path = repo.path();

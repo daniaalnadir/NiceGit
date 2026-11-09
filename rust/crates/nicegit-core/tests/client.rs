@@ -1973,6 +1973,43 @@ fn entries_that_are_not_branches_are_ignored() {
 }
 
 #[test]
+fn solo_branch_walk_lists_only_its_commits_and_head() {
+    let (repo, [first, feature_one, feature_two, other]) = repository_with_feature_and_other();
+    let solo = client()
+        .load_snapshot_solo(repo.path(), 100, HistoryScope::All, &hidden(&["refs/heads/feature"]), Some("refs/heads/feature"))
+        .expect("solo");
+    let hashes = history_hashes(&solo);
+    assert!(hashes.contains(&feature_one) && hashes.contains(&feature_two), "the solo branch's commits are shown");
+    assert!(hashes.contains(&first), "HEAD's commit is shown, and so are the commits both share");
+    assert!(!hashes.contains(&other), "another branch's own commit is left out");
+    assert_eq!(hashes.len(), 3, "{hashes:?}");
+}
+
+#[test]
+fn solo_branch_ignores_scope_and_hidden_branches() {
+    let (repo, _) = repository_with_feature_and_other();
+    let solo_local =
+        client().load_snapshot_solo(repo.path(), 100, HistoryScope::Local, &[], Some("refs/heads/feature")).expect("solo local");
+    let solo_current = client()
+        .load_snapshot_solo(repo.path(), 100, HistoryScope::Current, &hidden(&["refs/heads/feature"]), Some("refs/heads/feature"))
+        .expect("solo current");
+    assert_eq!(history_hashes(&solo_local), history_hashes(&solo_current));
+    assert_eq!(history_hashes(&solo_local).len(), 3);
+}
+
+#[test]
+fn solo_branch_that_no_longer_exists_shows_the_history_as_before() {
+    let (repo, _) = repository_with_feature_and_other();
+    let plain = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &[]).expect("plain");
+    for solo in ["refs/heads/gone", "refs/tags/feature", "feature", ""] {
+        let snapshot = client()
+            .load_snapshot_solo(repo.path(), 100, HistoryScope::All, &[], Some(solo))
+            .unwrap_or_else(|error| panic!("{solo}: {error}"));
+        assert_eq!(history_hashes(&snapshot), history_hashes(&plain), "{solo}");
+    }
+}
+
+#[test]
 fn current_scope_ignores_hidden_branches() {
     let (repo, _) = repository_with_feature_and_other();
     let plain = client().load_snapshot_scoped(repo.path(), 100, HistoryScope::Current).expect("plain");
