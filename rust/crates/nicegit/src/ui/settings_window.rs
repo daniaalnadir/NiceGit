@@ -108,6 +108,20 @@ impl NiceGitApp {
                 .on_hover_text("How often the open repository is fetched in the background, so ahead and behind counts stay current");
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    ui.label("Pull with");
+                    egui::ComboBox::from_id_salt("pull_with").selected_text(self.settings.pull_setting.title()).show_ui(ui, |ui| {
+                        for choice in crate::settings::PullSetting::ALL {
+                            ui.selectable_value(&mut self.settings.pull_setting, choice, choice.title());
+                        }
+                    });
+                })
+                .response
+                .on_hover_text(
+                    "How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; \
+                     with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.",
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
                     ui.label("Clone into");
                     match self.settings.clone_folder.as_ref() {
                         Some(folder) => {

@@ -1,5 +1,6 @@
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::PullStrategy;
 
 use crate::app::{HistoryEntry, NiceGitApp};
 use crate::settings::SyncAction;
@@ -29,6 +30,8 @@ enum ToolAction {
     Redo,
     Fetch,
     Pull,
+    /// A pull run once from the Fetch and Pull menu, whatever the setting says.
+    PullWith(PullStrategy),
     Push,
     Branch,
     Stash,
@@ -232,8 +235,9 @@ fn picker(ui: &mut Ui, caption: &str, value: &str, add: impl FnOnce(&mut Ui)) {
     });
 }
 
-/// The choice of what the Fetch and Pull button does.
-fn sync_menu(ui: &mut Ui, action: &mut SyncAction) {
+/// The choice of what the Fetch and Pull button does, and the pulls that run once. Returns the
+/// strategy of a pull chosen from the menu; `pull_ready` says whether a pull can run now.
+fn sync_menu(ui: &mut Ui, action: &mut SyncAction, pull_ready: bool) -> Option<PullStrategy> {
     let c = theme::of(ui);
     ui.set_min_width(250.0);
     ui.label(RichText::new("Toolbar button").small().color(c.muted));
@@ -242,7 +246,7 @@ fn sync_menu(ui: &mut Ui, action: &mut SyncAction) {
     let indent = ui.spacing().icon_width + ui.spacing().icon_spacing;
     for (choice, name, detail) in [
         (SyncAction::Fetch, "Fetch", "Download from all remotes"),
-        (SyncAction::Pull, "Pull", "Fetch, then fast-forward the current branch"),
+        (SyncAction::Pull, "Pull", "Fetch, then pull the current branch as Settings chooses"),
     ] {
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -257,6 +261,18 @@ fn sync_menu(ui: &mut Ui, action: &mut SyncAction) {
         });
         ui.add_space(6.0);
     }
+    ui.separator();
+    let mut chosen = None;
+    for (strategy, name, detail) in [
+        (PullStrategy::Merge, "Pull (merge)", "Fetch, then merge the upstream's commits into the current branch"),
+        (PullStrategy::Rebase, "Pull (rebase)", "Fetch, then replay the current branch's commits onto the upstream"),
+    ] {
+        if ui.add_enabled(pull_ready, egui::Button::new(name)).on_hover_text(detail).clicked() {
+            chosen = Some(strategy);
+            ui.close();
+        }
+    }
+    chosen
 }
 
 impl NiceGitApp {
@@ -273,6 +289,7 @@ impl NiceGitApp {
         let can_undo = idle && undo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let can_redo = idle && redo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let mut sync_action = self.settings.sync_action;
+        let pull_ready = idle && clean && snapshot.upstream.is_some();
         let behind = snapshot.behind.unwrap_or(0);
         let ahead = snapshot.ahead.unwrap_or(0);
         let pull_label = if behind > 0 { format!("Pull {behind}") } else { "Pull".into() };
@@ -309,8 +326,8 @@ impl NiceGitApp {
                     SyncAction::Pull => ToolItem::new(
                         icon::ARROW_LINE_DOWN,
                         &pull_label,
-                        "Fetch and fast-forward the current branch".into(),
-                        idle && clean && snapshot.upstream.is_some(),
+                        "Fetch, then pull the current branch as Settings chooses".into(),
+                        pull_ready,
                         ToolAction::Pull,
                     ),
                 }
@@ -421,7 +438,11 @@ impl NiceGitApp {
                         }
                         if item.menu {
                             let caret = menu_caret(ui, "Fetch and Pull", "Choose what Fetch and Pull does");
-                            egui::Popup::menu(&caret).show(|ui| sync_menu(ui, &mut sync_action));
+                            egui::Popup::menu(&caret).show(|ui| {
+                                if let Some(strategy) = sync_menu(ui, &mut sync_action, pull_ready) {
+                                    chosen = Some(ToolAction::PullWith(strategy));
+                                }
+                            });
                         }
                         // Only when there is something for Undo to step back through.
                         if let Some(titles) = item.history.as_ref().filter(|titles| !titles.is_empty()) {
@@ -466,6 +487,7 @@ impl NiceGitApp {
             Some(ToolAction::Redo) => self.confirm_redo(),
             Some(ToolAction::Fetch) => self.fetch(),
             Some(ToolAction::Pull) => self.pull(),
+            Some(ToolAction::PullWith(strategy)) => self.pull_using(Some(strategy)),
             Some(ToolAction::Push) => self.push(),
             Some(ToolAction::Branch) => {
                 self.dialog = Some(Dialog::input(

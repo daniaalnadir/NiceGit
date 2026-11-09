@@ -1683,6 +1683,63 @@ fn undo_a_pull_from_the_toolbar() {
 }
 
 #[test]
+fn pull_rebase_from_the_fetch_and_pull_menu_keeps_history_linear() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    // Someone else pushes a commit, and this checkout commits its own, so the branch has diverged.
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"from the other clone\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    let theirs = git(&clone, &["rev-parse", "HEAD"]);
+    commit_file(path, "mine.txt", b"from this checkout\n", "Local work");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    settle(&mut harness);
+    harness.get_by_label("Fetch and Pull options").click();
+    wait(&mut harness, "the Fetch and Pull menu", |h| h.query_by_role_and_label(Role::Button, "Pull (rebase)").is_some());
+    harness.get_by_role_and_label(Role::Button, "Pull (rebase)").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rebased pull", |_| git(path, &["rev-parse", "HEAD^"]) == theirs);
+
+    assert_eq!(git(path, &["rev-list", "--merges", "--count", "HEAD"]), "0", "the history stays linear");
+    assert!(path.join("theirs.txt").exists(), "the upstream's commit is in the checkout");
+    assert!(path.join("mine.txt").exists(), "the local commit is kept");
+    assert!(!harness.state().notice.as_ref().is_some_and(|notice| notice.is_error), "the rebase did not fail");
+}
+
+#[test]
+fn pull_follows_the_rebase_setting_in_git_config_by_default() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = publish_to_bare(path);
+    let other = temp_dir();
+    let clone = other.path().join("clone");
+    git(other.path(), &["clone", "-q", &remote.path().to_string_lossy(), "clone"]);
+    git(&clone, &["config", "user.name", "Other"]);
+    git(&clone, &["config", "user.email", "other@example.invalid"]);
+    commit_file(&clone, "theirs.txt", b"from the other clone\n", "Work from elsewhere");
+    git(&clone, &["push", "-q", "origin", "main"]);
+    let theirs = git(&clone, &["rev-parse", "HEAD"]);
+    commit_file(path, "mine.txt", b"from this checkout\n", "Local work");
+    // The repository asks for rebasing, which the default Pull setting follows.
+    git(path, &["config", "pull.rebase", "true"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    choose_sync_action(&mut harness, "Pull");
+    toolbar_button(&mut harness, "Pull");
+    idle(&mut harness);
+    wait(&mut harness, "the rebased pull", |_| git(path, &["rev-parse", "HEAD^"]) == theirs);
+    assert_eq!(git(path, &["rev-list", "--merges", "--count", "HEAD"]), "0", "the history stays linear");
+}
+
+#[test]
 fn publish_a_branch_from_the_command_palette() {
     let repo = repository();
     let path = repo.path();

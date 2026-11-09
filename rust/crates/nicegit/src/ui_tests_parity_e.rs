@@ -234,7 +234,10 @@ fn a_refused_pull_of_a_diverged_branch_offers_merge_or_rebase() {
     git(&clone, &["config", "user.email", "other@example.invalid"]);
     commit_file(&clone, "theirs.txt", "from the other clone\n", "Work from elsewhere");
     git(&clone, &["push", "-q", "origin", "main"]);
-    // Both sides moved on, so Pull's fast-forward is refused.
+    // Both sides moved on, so Pull's fast-forward is refused. Pull follows Git's settings, and Git
+    // for Windows sets pull.rebase=false system-wide, which would merge, so this repository says
+    // to fast-forward only.
+    git(path, &["config", "pull.ff", "only"]);
     commit_file(path, "mine.txt", "mine\n", "Work from here");
     let before = git(path, &["rev-parse", "HEAD"]);
     let mut harness = open(path);
