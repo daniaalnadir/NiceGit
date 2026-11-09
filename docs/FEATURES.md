@@ -126,6 +126,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Compare changed images side by side with their dimensions and file sizes.
 - Recover lost work from Repository > Recover Lost Work: every position HEAD has had,
   with commits on no branch marked, and a branch can be created at any of them.
+- Tip history from a branch's menu (sidebar or graph label) lists every commit that branch has
+  pointed to, newest first, from its own reflog. A branch can be created at any entry, and for
+  the current branch an entry can be reset to, with the usual reset confirmation.
 - Stash only selected files (including untracked ones) from the Stashes window.
 - Remove a clean linked worktree, and forget worktrees whose folders were deleted.
 - Command palette (Shift-Command-P) for repository actions, branch switching, and recent

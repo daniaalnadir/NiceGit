@@ -34,6 +34,22 @@ impl GitClient {
         Ok(parse_reflog(&output))
     }
 
+    /// One branch's own reflog entries, newest first, up to `limit`: every commit the branch has
+    /// pointed to. `full_ref` must be a local (`refs/heads/`) or remote-tracking (`refs/remotes/`)
+    /// branch that exists. A branch created without a reflog gives an empty list.
+    pub fn branch_reflog(&self, full_ref: &str, limit: usize, directory: &Path) -> Result<Vec<ReflogEntry>> {
+        if !(full_ref.starts_with("refs/heads/") || full_ref.starts_with("refs/remotes/")) {
+            return Err(GitError::failed("reflog", format!("{full_ref} is not a local or remote-tracking branch")));
+        }
+        self.run(&["check-ref-format", full_ref], directory)?;
+        if self.try_trimmed(&["rev-parse", "--verify", "--quiet", "--end-of-options", full_ref], directory).is_none() {
+            return Err(GitError::failed("reflog", format!("{full_ref} does not exist")));
+        }
+        let count = limit.max(1).to_string();
+        let output = self.run(&["reflog", "show", "--no-color", "-n", &count, REFLOG_FORMAT, full_ref, "--"], directory)?;
+        Ok(parse_reflog(&output))
+    }
+
     /// The commits among `hashes` that no branch, tag, or remote-tracking branch contains. Only
     /// the reflog keeps these; Git may delete them once it expires.
     pub fn unreachable_commits(&self, hashes: &[String], directory: &Path) -> Result<HashSet<String>> {

@@ -185,6 +185,57 @@ fn recover_lost_work_creates_a_branch_at_a_reset_away_commit() {
 }
 
 #[test]
+fn tip_history_from_the_sidebar_selects_an_older_tip_in_the_graph() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["switch", "-q", "feature"]);
+    commit_file(path, "draft.txt", "idea\n", "Feature tip before reset", None);
+    let old_tip = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["reset", "-q", "--hard", "HEAD~1"]);
+    git(path, &["switch", "-q", "main"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Tip history").click();
+    wait(&mut harness, "the tip history of feature", |h| h.state().tools.iter().any(|t| t.title() == "Tip history of feature"));
+    wait(&mut harness, "the old tip of feature", |h| shows(h, "Feature tip before reset"));
+    settle(&mut harness);
+    // The first match is the entry in the list.
+    harness.get_all_by_label("Feature tip before reset").next().expect("the old tip's entry").click();
+    settle(&mut harness);
+    assert_eq!(selected_commit(&harness).as_deref(), Some(old_tip.as_str()), "the old tip is selected in the graph");
+    assert_ne!(git(path, &["rev-parse", "feature"]), old_tip, "the branch itself is not moved");
+}
+
+#[test]
+fn tip_history_of_the_current_branch_resets_it_to_an_older_tip() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "draft.txt", "idea\n", "Main tip before reset", None);
+    let old_tip = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["reset", "-q", "--hard", "HEAD~1"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    // The sidebar lists the branch first; the graph's label for it comes after.
+    harness.get_all_by_label("main").next().expect("the sidebar's main branch").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Tip history").click();
+    wait(&mut harness, "the tip history of main", |h| h.state().tools.iter().any(|t| t.title() == "Tip history of main"));
+    wait(&mut harness, "the old tip of main", |h| shows(h, "Main tip before reset"));
+    settle(&mut harness);
+    harness.get_all_by_label("Main tip before reset").next().expect("the old tip's entry").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("Reset main to here").click();
+    wait(&mut harness, "the reset confirmation", |h| shows(h, "Reset branch"));
+    harness.get_by_label("Reset branch").click();
+    idle(&mut harness);
+    assert_eq!(git(path, &["rev-parse", "main"]), old_tip, "main moves back to the older tip");
+}
+
+#[test]
 fn blame_labels_each_line_with_its_commit_and_author() {
     let repo = repository();
     let path = repo.path();
