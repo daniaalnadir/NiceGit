@@ -654,10 +654,12 @@ impl NiceGitApp {
             ui.close();
             self.fetch();
         }
-        if crate::git_ext::github_pull_request_target(snapshot, branch, &self.settings.github_enterprise_hosts).is_some() {
-            let button = ui
-                .button(format!("{}  Create pull request on GitHub", icon::GIT_PULL_REQUEST))
-                .on_hover_text("Create the pull request through the GitHub CLI");
+        if let Some(target) = crate::git_ext::pull_request_target(snapshot, branch, self.settings.listed_hosts()) {
+            let button = ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, target.repository.create_label())).on_hover_text(format!(
+                "Create the {} through the {}",
+                target.repository.request_noun(),
+                target.repository.cli_name()
+            ));
             if button.clicked() {
                 ui.close();
                 let context = ui.ctx().clone();

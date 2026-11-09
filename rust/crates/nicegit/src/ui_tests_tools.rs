@@ -573,3 +573,28 @@ fn create_a_pull_request_from_the_branch_menu_and_open_it_in_the_browser() {
     assert_eq!(opened, vec!["https://github.com/owner/repo/compare/feature?expand=1".to_string()]);
     assert!(harness.state().pull_request.is_none(), "the dialog closes once the browser opens");
 }
+
+#[test]
+fn a_gitlab_merge_request_says_how_to_fix_a_missing_glab() {
+    let repo = repository();
+    let path = repo.path();
+    git(path, &["remote", "add", "origin", "https://gitlab.com/group/proj.git"]);
+    git(path, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+    git(path, &["config", "branch.feature.remote", "origin"]);
+    git(path, &["config", "branch.feature.merge", "refs/heads/feature"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    // glab is looked for at a file that does not exist, as on a Mac without it. Tests never
+    // change PATH, so this names the program the app runs instead.
+    harness.state_mut().glab = nicegit_core::gitlab::GlabProgram::Given(std::path::PathBuf::from("/nonexistent/nicegit-test/glab"));
+    harness.get_by_label("feature").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Create merge request on GitLab").click();
+    wait(&mut harness, "the merge request dialog", |h| h.state().pull_request.is_some());
+    wait(&mut harness, "the base lookup", |h| h.state().pull_request.as_ref().is_some_and(|d| d.settled()));
+    settle(&mut harness);
+
+    assert!(harness.query_by_label_contains("GitLab CLI (glab) is not installed").is_some(), "the dialog says glab is missing");
+    assert!(harness.query_by_label_contains("glab auth login --hostname gitlab.com").is_some(), "and how to sign in once it is installed");
+    assert!(harness.query_by_label_contains("Create merge request").is_some(), "the dialog is for a merge request");
+}

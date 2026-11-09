@@ -588,6 +588,7 @@ fn failed_undo_clears_older_steps() {
 fn sample_pull_request() -> nicegit_core::github::PullRequestStatus {
     use nicegit_core::github::{Checks, PrState, PullRequestStatus};
     PullRequestStatus {
+        kind: nicegit_core::hosting::Host::GitHub,
         number: 12,
         title: "Add the status bar".into(),
         state: PrState::Open,
@@ -626,4 +627,27 @@ fn status_bar_keeps_the_pull_request_inside_a_narrow_window() {
     settle(&mut harness);
     let badge = harness.get_by_label_contains("PR #12").rect();
     assert!(badge.max.x <= 560.0, "the badge stays inside the window: {badge:?}");
+}
+
+#[test]
+fn status_bar_shows_the_current_branchs_gitlab_merge_request_and_its_pipeline() {
+    use nicegit_core::hosting::Host;
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+    let mut merge_request = sample_pull_request();
+    merge_request.kind = Host::GitLab;
+    merge_request.number = 7;
+    merge_request.url = "https://gitlab.com/group/proj/-/merge_requests/7".into();
+    harness.state_mut().repos[0].pr_status = Some(("main".into(), crate::tools::Task::ready(Ok(Some(merge_request)))));
+    settle(&mut harness);
+    assert!(harness.query_by_label_contains("MR !7").is_some(), "the status bar names the merge request with !");
+    assert!(harness.query_by_label_contains("PR #7").is_none(), "not as a GitHub pull request");
+
+    crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
+    harness.get_by_label_contains("MR !7").click();
+    settle(&mut harness);
+    let opened = crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow().clone());
+    assert_eq!(opened, vec!["https://gitlab.com/group/proj/-/merge_requests/7".to_string()], "clicking opens the merge request");
 }

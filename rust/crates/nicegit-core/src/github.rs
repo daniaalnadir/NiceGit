@@ -8,14 +8,15 @@ use std::time::{Duration, Instant};
 
 use crate::client::GitClient;
 use crate::json::{parse_json, Json};
+use crate::hosting::Host;
 use crate::models::{GitError, Result};
 use crate::rebase::Scratch;
 use crate::runner;
 
 const NOT_INSTALLED: &str = "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.";
-const TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Longest `gh` error shown to the user.
-const MESSAGE_LIMIT: usize = 2000;
+pub(crate) const MESSAGE_LIMIT: usize = 2000;
 /// The operation name used in errors and temporary file names for pull requests.
 const PULL_REQUEST_COMMAND: &str = "create pull request";
 
@@ -231,6 +232,8 @@ pub struct Checks {
 /// The pull request for a branch, with its checks, as `gh pr list` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PullRequestStatus {
+    /// The host service the request is on: GitHub for `#12`, GitLab for `!12`.
+    pub kind: Host,
     pub number: u64,
     /// Without control characters, and at most 300 characters.
     pub title: String,
@@ -434,7 +437,7 @@ impl GitClient {
     /// Refuses `name` unless it is a usable branch name: not empty, without spaces or control
     /// characters, not starting with `-`, and accepted by `git check-ref-format --branch`. That
     /// check also expands `@{-n}`, so such names are refused before it runs.
-    fn check_branch_name(&self, name: &str, directory: &Path) -> Result<()> {
+    pub(crate) fn check_branch_name(&self, name: &str, directory: &Path) -> Result<()> {
         let plain = !name.is_empty()
             && !name.starts_with('-')
             && !name.contains("@{")
@@ -552,7 +555,7 @@ fn clean_description(text: &str) -> String {
 }
 
 /// Text without control characters, trimmed, and at most `limit` characters.
-fn clean_text(text: &str, limit: usize) -> String {
+pub(crate) fn clean_text(text: &str, limit: usize) -> String {
     // Control characters, line breaks among them, become spaces, so words they separated stay
     // apart; runs of whitespace then collapse to one space.
     let spaced: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
@@ -659,7 +662,14 @@ fn decode_pull_request_entry(entry: &Json, repository: &GitHubRepository) -> Res
             CheckOutcome::Pending => checks.pending += 1,
         }
     }
-    Ok(PullRequestStatus { number, title: clean_text(title, PULL_REQUEST_TITLE_LIMIT), state, url: url.to_string(), checks })
+    Ok(PullRequestStatus {
+        kind: Host::GitHub,
+        number,
+        title: clean_text(title, PULL_REQUEST_TITLE_LIMIT),
+        state,
+        url: url.to_string(),
+        checks,
+    })
 }
 
 /// How one check in a pull request's status rollup stands.
@@ -702,11 +712,16 @@ fn classify_check(word: &str) -> CheckOutcome {
 
 /// The first `gh` on the search path that is an executable file.
 fn gh_executable() -> Option<PathBuf> {
-    let name = if cfg!(windows) { "gh.exe" } else { "gh" };
-    std::env::split_paths(runner::search_path()).map(|directory| directory.join(name)).find(|candidate| is_executable(candidate))
+    find_program("gh")
 }
 
-fn is_executable(path: &Path) -> bool {
+/// The first executable called `name` (with `.exe` on Windows) on NiceGit's search path.
+pub(crate) fn find_program(name: &str) -> Option<PathBuf> {
+    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    std::env::split_paths(runner::search_path()).map(|directory| directory.join(&file)).find(|candidate| is_executable(candidate))
+}
+
+pub(crate) fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -744,29 +759,36 @@ fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel, host: Option<&s
         None => None,
     };
     let executable = gh_executable().ok_or_else(|| NOT_INSTALLED.to_string())?;
-    run_program(&executable, arguments, directory, cancel, host.as_deref())
+    let mut env = vec![("GH_PROMPT_DISABLED", "1"), ("GH_NO_UPDATE_NOTIFIER", "1"), ("NO_COLOR", "1")];
+    // GH_HOST is set only for this call, when a host is given; GH_REPO and GH_HOST from the
+    // environment are removed so they cannot point gh at another repository or host.
+    if let Some(host) = host.as_deref() {
+        env.push(("GH_HOST", host));
+    }
+    run_program(&executable, arguments, directory, cancel, "GitHub", &env, &["GH_REPO", "GH_HOST"])
 }
 
-/// Runs a program to completion, its timeout, or cancellation, returning its standard output.
-fn run_program(
+/// Runs a CLI program to completion, its timeout, or cancellation, returning its standard output.
+/// `service` names the service in the timeout and failure messages. `removed` lists variables to
+/// take out of the environment, and `env` lists variables to set, both for this call only.
+pub(crate) fn run_program(
     executable: &Path,
     arguments: &[&str],
     directory: &Path,
     cancel: &Cancel,
-    gh_host: Option<&str>,
+    service: &str,
+    env: &[(&str, &str)],
+    removed: &[&str],
 ) -> std::result::Result<String, String> {
     let mut command = Command::new(executable);
     command.args(arguments).current_dir(directory).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     command.env("PATH", runner::search_path());
-    // Variables that would point gh at another repository or host. A host is set only when asked for.
-    command.env_remove("GH_REPO");
-    command.env_remove("GH_HOST");
-    if let Some(host) = gh_host {
-        command.env("GH_HOST", host);
+    for name in removed {
+        command.env_remove(name);
     }
-    command.env("GH_PROMPT_DISABLED", "1");
-    command.env("GH_NO_UPDATE_NOTIFIER", "1");
-    command.env("NO_COLOR", "1");
+    for (name, value) in env {
+        command.env(name, value);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -805,7 +827,7 @@ fn run_program(
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err("GitHub request timed out. Retry when the connection is available.".to_string());
+                return Err(format!("{service} request timed out. Retry when the connection is available."));
             }
             Err(error) => return Err(error.to_string()),
         }
@@ -816,7 +838,7 @@ fn run_program(
         return Ok(String::from_utf8_lossy(&stdout).into_owned());
     }
     let message = String::from_utf8_lossy(&stderr).trim().to_string();
-    let message = if message.is_empty() { "GitHub request failed.".to_string() } else { message };
+    let message = if message.is_empty() { format!("{service} request failed.") } else { message };
     Err(message.chars().take(MESSAGE_LIMIT).collect())
 }
 
@@ -844,7 +866,7 @@ mod tests {
             canceller.cancel();
         });
         let started = Instant::now();
-        let result = run_program(Path::new("/bin/sleep"), &["30"], Path::new("/"), &cancel, None);
+        let result = run_program(Path::new("/bin/sleep"), &["30"], Path::new("/"), &cancel, "GitHub", &[], &[]);
         assert_eq!(result, Err(CANCELLED.to_string()));
         assert!(started.elapsed() < Duration::from_secs(5), "stopped after {:?}", started.elapsed());
     }

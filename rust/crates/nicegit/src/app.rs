@@ -568,6 +568,8 @@ pub struct NiceGitApp {
     pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
     /// The Create pull request dialog, while it is open.
     pub pull_request: Option<crate::ui::pull_request::PullRequestDialog>,
+    /// The `glab` program that GitLab merge requests run through. Tests point it at a missing file.
+    pub glab: nicegit_core::gitlab::GlabProgram,
     recorded: RecordSlot,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
@@ -634,6 +636,7 @@ impl NiceGitApp {
             pending_tag_scan: None,
             clone_picker: None,
             pull_request: None,
+            glab: nicegit_core::gitlab::GlabProgram::default(),
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
             terminal: None,

@@ -356,26 +356,31 @@ Actions on GitHub): from the current branch's upstream remote when it is on a su
 else `origin`, else the only such remote.
 
 Create pull request… in a branch's menu, or the command palette's Create pull request on GitHub
-entry, opens a dialog for a local branch whose upstream is on a GitHub remote. NiceGit creates the
-pull request through your GitHub CLI login, so it works for github.com and the Enterprise hosts
-listed in Settings. The dialog reads the repository's default branch and fills in the base,
+entry, opens a dialog for a local branch whose upstream is on a GitHub remote. On a GitLab remote
+(gitlab.com, or a GitLab host listed in Settings) the same entries read Create merge request on
+GitLab and open the same dialog for a merge request. NiceGit creates the request through your
+GitHub CLI login (gh) or GitLab CLI login (glab), so it works for github.com and the Enterprise
+hosts listed in Settings, and for gitlab.com and the GitLab hosts listed in Settings. The dialog reads the repository's default branch and fills in the base,
 which you can change. The title is the subject of the branch's only commit ahead of the base, or
 the branch name in words. The body lists the commit subjects when there are two to twenty of them.
 You can edit all three, and choose a draft pull request. A warning appears when the branch has
 commits its upstream does not have, since the pull request will not include them. Until the
 pull request is created, nothing on GitHub changes. When it is created, NiceGit shows its number
-in the notice bar, with an Open button that opens it in your browser. If gh is missing or signed
-out, the dialog says how to fix that.
-Open in browser instead is the fallback: it opens GitHub's compare page, as before, and creates
-nothing.
+in the notice bar, with an Open button that opens it in your browser. If gh or glab is missing or
+signed out, the dialog says how to fix that, with the command to sign in (glab auth login --hostname
+followed by the host, for GitLab).
+Open in browser instead is the fallback: it opens GitHub's compare page, or GitLab's new merge
+request form, and creates nothing.
 
-The status bar shows the current branch's pull request when its upstream is on a GitHub remote
-and gh is installed and signed in: its number and state (open, draft, merged, or closed), and its
-checks as a count of failing, pending, or passing ones. Clicking it opens the pull request in your
+The status bar shows the current branch's pull request when its upstream is on a GitHub remote,
+or its merge request on a GitLab remote, and gh or glab is installed and signed in. It shows the
+number (#12 for a pull request, !12 for a merge request) and state (open, draft, merged, or closed).
+On GitHub its checks are counted as failing, pending, or passing ones. On GitLab the checks are the
+merge request's head pipeline, counted as one check. Clicking it opens the pull request in your
 browser, and hovering shows its title and the check totals. The status is read through gh when a
 repository opens, after fetching, pulling, pushing, publishing, or creating a pull request, and
-every five minutes while NiceGit is focused. Without gh, or when signed out, the status bar shows
-nothing.
+every five minutes while NiceGit is focused. Without gh or glab, or when signed out, the status bar
+shows nothing.
 
 Force push… in the current branch's menu replaces the remote branch with yours, for example
 after you rewrite commits that were already pushed. The confirmation lists the remote commits
