@@ -871,3 +871,43 @@ fn click_until(
         assert!(start.elapsed() < std::time::Duration::from_secs(30), "timed out waiting for {what}");
     }
 }
+
+#[test]
+fn a_pull_request_detail_window_shows_its_checks_conversation_and_files() {
+    use crate::tools::pull_request_detail::PullRequestDetailWindow;
+    use nicegit_core::github::{decode_pull_request_detail, GitHubRepository};
+
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+
+    // The answer is decoded from a fixture and injected, so the window never asks gh for it.
+    let json = r#"{"number": 12, "title": "Add the status bar", "body": "Shows the pull request.",
+        "author": {"login": "octocat"}, "state": "OPEN", "isDraft": false, "baseRefName": "main",
+        "headRefName": "status-bar", "url": "https://github.com/acme/app/pull/12",
+        "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-02T03:04:05Z", "reviewDecision": null,
+        "mergeable": "MERGEABLE", "additions": 10, "deletions": 2, "changedFiles": 1, "commits": [],
+        "files": [{"path": "src/status_bar.rs", "additions": 10, "deletions": 2}],
+        "reviews": [], "comments": [{"author": {"login": "carol"}, "body": "Please rename the helper.",
+        "createdAt": "2026-01-02T04:00:00Z"}],
+        "statusCheckRollup": [{"__typename": "CheckRun", "name": "Integration suite", "status": "COMPLETED",
+        "conclusion": "SUCCESS", "detailsUrl": "https://github.com/acme/app/actions/runs/9"}], "labels": []}"#;
+    let github = GitHubRepository { host: "github.com".into(), owner: "acme".into(), name: "app".into() };
+    let detail = decode_pull_request_detail(json, &github, 12).expect("the fixture decodes");
+    harness.state_mut().open_tool(Box::new(PullRequestDetailWindow::loaded(github, 12, detail)));
+    wait(&mut harness, "the detail window", |h| h.state().tools.iter().any(|t| t.title() == "Pull request #12"));
+    settle(&mut harness);
+
+    assert!(shows(&harness, "Add the status bar"), "the title is shown");
+    harness.get_by_label_contains("Checks (").click();
+    settle(&mut harness);
+    assert!(shows(&harness, "Integration suite"), "the check is listed");
+    assert!(shows(&harness, "Open check"), "the check links to its run");
+    harness.get_by_label_contains("Conversation (").click();
+    settle(&mut harness);
+    assert!(shows(&harness, "Please rename the helper."), "the comment is shown");
+    harness.get_by_label_contains("Files (").click();
+    settle(&mut harness);
+    assert!(shows(&harness, "src/status_bar.rs"), "the changed file is listed");
+}

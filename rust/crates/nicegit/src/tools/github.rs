@@ -307,7 +307,7 @@ fn state_color(state: &str, c: &theme::Colors) -> Color32 {
 }
 
 /// A GitHub label in its own colour, with text that stays readable on it.
-fn label_pill(ui: &mut Ui, name: &str, hex: &str) {
+pub(crate) fn label_pill(ui: &mut Ui, name: &str, hex: &str) {
     let fill = parse_hex(hex).unwrap_or(Color32::from_rgb(0x8f, 0x99, 0xad));
     let [r, g, b, _] = fill.to_array();
     // Relative luminance decides whether dark or light text reads better on the fill.
@@ -339,7 +339,7 @@ fn heading_for_remote(remote: &str, host: Option<&str>) -> String {
     }
 }
 
-fn message(error: &GitError) -> String {
+pub(crate) fn message(error: &GitError) -> String {
     match error {
         GitError::CommandFailed { message, .. } => message.clone(),
         other => other.to_string(),
@@ -348,28 +348,34 @@ fn message(error: &GitError) -> String {
 
 /// The latest answer to a background query. A refresh keeps the previous answer on screen until
 /// the new one arrives, so the window does not flicker while it reloads.
-struct Refreshing<K, T> {
+pub(crate) struct Refreshing<K, T> {
     shown: Option<(K, Task<nicegit_core::Result<T>>)>,
     pending: Option<(K, Task<nicegit_core::Result<T>>)>,
 }
 
 impl<K: PartialEq + Copy, T: Send + 'static> Refreshing<K, T> {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { shown: None, pending: None }
     }
 
+    /// An answer already shown for `key`, for tests that do not reach GitHub.
+    #[cfg(test)]
+    pub(crate) fn with_answer(key: K, answer: nicegit_core::Result<T>) -> Self {
+        Self { shown: Some((key, Task::ready(answer))), pending: None }
+    }
+
     /// Replaces any request still in flight; only the newest answer is kept.
-    fn start(&mut self, key: K, task: Task<nicegit_core::Result<T>>) {
+    pub(crate) fn start(&mut self, key: K, task: Task<nicegit_core::Result<T>>) {
         self.pending = Some((key, task));
     }
 
     /// Whether the answer for `key` is already shown or on its way.
-    fn shown_or_pending_key(&self, key: &K) -> bool {
+    pub(crate) fn shown_or_pending_key(&self, key: &K) -> bool {
         self.shown.as_ref().is_some_and(|(shown, _)| shown == key) || self.pending.as_ref().is_some_and(|(pending, _)| pending == key)
     }
 
     /// Moves a finished request into place. Returns true when a new answer arrived.
-    fn settle(&mut self) -> bool {
+    pub(crate) fn settle(&mut self) -> bool {
         let finished = self.pending.as_mut().is_some_and(|(_, task)| !task.is_pending());
         if finished {
             self.shown = self.pending.take();
@@ -377,11 +383,21 @@ impl<K: PartialEq + Copy, T: Send + 'static> Refreshing<K, T> {
         finished
     }
 
+    /// Whether a request is still on its way.
+    pub(crate) fn is_pending(&mut self) -> bool {
+        self.pending.as_mut().is_some_and(|(_, task)| task.is_pending())
+    }
+
     /// The answer for `key`, once it has arrived.
-    fn value(&mut self, key: &K) -> Option<&nicegit_core::Result<T>> {
+    pub(crate) fn value(&mut self, key: &K) -> Option<&nicegit_core::Result<T>> {
         match &mut self.shown {
             Some((shown, task)) if shown == key => task.get(),
             _ => None,
         }
+    }
+
+    /// The latest shown answer whatever its key, so a view keeps its last answer while a refresh runs.
+    pub(crate) fn latest(&mut self) -> Option<&nicegit_core::Result<T>> {
+        self.shown.as_mut().and_then(|(_, task)| task.get())
     }
 }

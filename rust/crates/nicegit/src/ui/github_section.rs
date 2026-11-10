@@ -164,6 +164,24 @@ impl NiceGitApp {
         self.dialog = Some(crate::ui::dialogs::Dialog::start_issue_work(remote, item.number, item.title, snapshot, default));
     }
 
+    /// Opens the detail window of pull request `number`, which the status bar shows for the current
+    /// branch. Nothing opens for a GitLab merge request or a branch with no GitHub upstream.
+    pub fn open_current_pull_request_details(&mut self, number: u64) {
+        let github_hosts = self.settings.github_enterprise_hosts.clone();
+        let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let repository = self.repos.get(self.active).and_then(|repo| repo.snapshot.as_ref()).and_then(|snapshot| {
+            let branch = snapshot.current().filter(|branch| !branch.is_remote)?;
+            let hosts = nicegit_core::hosting::ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts };
+            match crate::git_ext::pull_request_target(snapshot, branch, hosts)?.repository {
+                crate::git_ext::Forge::GitHub(repository) => Some(repository),
+                crate::git_ext::Forge::GitLab(_) => None,
+            }
+        });
+        if let Some(repository) = repository {
+            self.open_tool(Box::new(crate::tools::pull_request_detail::PullRequestDetailWindow::new(repository, number)));
+        }
+    }
+
     pub fn github_section(&mut self, ui: &mut Ui, snapshot: &Snapshot, kind: ItemKind) {
         let c = theme::of(ui);
         let (id, glyph, title) = match kind {
@@ -181,6 +199,8 @@ impl NiceGitApp {
         let mut check_out: Option<(String, GitHubItem)> = None;
         // An issue's "Start work…" asks for its dialog the same way.
         let mut start_work: Option<(String, GitHubItem)> = None;
+        // A pull request's "View details…" asks for its detail window, which opens once the list is drawn.
+        let mut details: Option<(String, u64)> = None;
         let hosts = self.settings.github_enterprise_hosts.clone();
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
@@ -259,6 +279,10 @@ impl NiceGitApp {
                         ui.close();
                         ui.ctx().copy_text(item.url.clone());
                     }
+                    if kind == ItemKind::PullRequest && ui.button(format!("{}  View details…", icon::GIT_PULL_REQUEST)).clicked() {
+                        ui.close();
+                        details = Some((list.remote.clone(), item.number));
+                    }
                     if kind == ItemKind::PullRequest && ui.button(format!("{}  Check out locally…", icon::GIT_BRANCH)).clicked() {
                         ui.close();
                         check_out = Some((list.remote.clone(), item.clone()));
@@ -292,6 +316,11 @@ impl NiceGitApp {
         }
         if let Some((remote, item)) = start_work {
             self.open_start_issue_work(snapshot, remote, item);
+        }
+        if let Some((remote, number)) = details {
+            if let Some(repository) = crate::git_ext::github_repository_for_remote(snapshot, &remote, &hosts) {
+                self.open_tool(Box::new(crate::tools::pull_request_detail::PullRequestDetailWindow::new(repository, number)));
+            }
         }
         if let Some(remote) = window {
             let tool = match kind {

@@ -941,13 +941,7 @@ fn decode_pull_request_entry(entry: &Json, repository: &GitHubRepository) -> Res
         return Err(unexpected());
     }
     let is_draft = entry.get("isDraft").and_then(Json::as_bool).ok_or_else(unexpected)?;
-    let state = match entry.get("state").and_then(Json::as_str) {
-        Some("OPEN") if is_draft => PrState::Draft,
-        Some("OPEN") => PrState::Open,
-        Some("MERGED") => PrState::Merged,
-        Some("CLOSED") => PrState::Closed,
-        _ => return Err(unexpected()),
-    };
+    let state = pr_state(entry.get("state").and_then(Json::as_str), is_draft).ok_or_else(unexpected)?;
     let Some(Json::Array(rollup)) = entry.get("statusCheckRollup") else { return Err(unexpected()) };
     let checks = tally_checks(rollup).ok_or_else(unexpected)?;
     Ok(PullRequestStatus {
@@ -1116,12 +1110,362 @@ fn tally_checks(rollup: &[Json]) -> Option<Checks> {
     Some(checks)
 }
 
+/// The fields `gh pr view --json` reads for the pull request detail view. Each one is a field
+/// `gh pr view` lists; the decoder refuses an answer that lacks any of them.
+const PULL_REQUEST_DETAIL_FIELDS: &str = "number,title,body,author,state,isDraft,baseRefName,headRefName,url,createdAt,updatedAt,\
+     reviewDecision,mergeable,additions,deletions,changedFiles,files,commits,reviews,comments,statusCheckRollup,labels";
+
+/// The longest body, review, or comment text kept, in characters.
+const TEXT_LIMIT: usize = 50_000;
+
+/// One pull request in full, for the detail view, as `gh pr view` reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestDetail {
+    pub number: u64,
+    /// Without control characters, and at most 300 characters.
+    pub title: String,
+    /// The pull request's own page, on the repository's host.
+    pub url: String,
+    /// Plain text: line breaks and tabs are kept, other control characters are removed.
+    pub body: String,
+    /// The author's login, or `None` when GitHub reports no author.
+    pub author: Option<String>,
+    pub state: PrState,
+    pub base_ref: String,
+    pub head_ref: String,
+    /// The UTC times GitHub reports, such as `2026-01-02T03:04:05Z`.
+    pub created_at: String,
+    pub updated_at: String,
+    /// GitHub's review decision word, such as `APPROVED`, when there is one.
+    pub review_decision: Option<String>,
+    /// GitHub's mergeability word, such as `MERGEABLE`, when it is known.
+    pub mergeable: Option<String>,
+    pub labels: Vec<GitHubLabel>,
+    pub additions: u64,
+    pub deletions: u64,
+    pub changed_files: u64,
+    pub commit_count: u64,
+    /// The changed files `gh` listed, which can be fewer than `changed_files`.
+    pub files: Vec<PullRequestFile>,
+    pub reviews: Vec<PullRequestReview>,
+    pub comments: Vec<PullRequestComment>,
+    /// The tally of `check_rows`, counted as the status bar counts them.
+    pub checks: Checks,
+    pub check_rows: Vec<CheckRow>,
+}
+
+impl PullRequestDetail {
+    /// The reviews and comments that have a time, oldest first. A review that is not submitted
+    /// yet has no time and is left out.
+    pub fn conversation(&self) -> Vec<ConversationEntry<'_>> {
+        let reviews = self.reviews.iter().filter_map(|review| {
+            let seconds = timestamp_seconds(review.submitted_at.as_deref()?)?;
+            Some((seconds, ConversationEntry::Review(review)))
+        });
+        let comments =
+            self.comments.iter().filter_map(|comment| Some((timestamp_seconds(&comment.created_at)?, ConversationEntry::Comment(comment))));
+        let mut entries: Vec<(i64, ConversationEntry<'_>)> = reviews.chain(comments).collect();
+        // A stable sort keeps a review before a comment written in the same second.
+        entries.sort_by_key(|(seconds, _)| *seconds);
+        entries.into_iter().map(|(_, entry)| entry).collect()
+    }
+}
+
+/// A changed file in a pull request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestFile {
+    pub path: String,
+    pub additions: u64,
+    pub deletions: u64,
+}
+
+/// A review on a pull request. `state` is GitHub's word, such as `APPROVED` or `COMMENTED`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestReview {
+    pub author: Option<String>,
+    pub state: String,
+    pub body: String,
+    /// `None` for a review that has not been submitted.
+    pub submitted_at: Option<String>,
+}
+
+/// A comment in a pull request's conversation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestComment {
+    pub author: Option<String>,
+    pub body: String,
+    pub created_at: String,
+}
+
+/// One entry of a pull request's conversation, borrowed from its detail.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConversationEntry<'a> {
+    Review(&'a PullRequestReview),
+    Comment(&'a PullRequestComment),
+}
+
+/// One check in a pull request's status rollup, with its link when it is safe to open.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckRow {
+    /// The check's name, or the context of a commit status.
+    pub name: String,
+    pub outcome: CheckOutcome,
+    /// The word GitHub reported last, such as `SUCCESS`, `IN_PROGRESS`, or `PENDING`.
+    pub detail: String,
+    /// Only an HTTPS link on the repository's host, or on github.com's Actions pages of the repository.
+    pub url: Option<String>,
+}
+
 /// How one check in a pull request's status rollup stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CheckOutcome {
+pub enum CheckOutcome {
     Passed,
     Failed,
     Pending,
+}
+
+/// Counts check outcomes the way the status bar does.
+fn tally(outcomes: impl IntoIterator<Item = CheckOutcome>) -> Checks {
+    let mut checks = Checks::default();
+    for outcome in outcomes {
+        match outcome {
+            CheckOutcome::Passed => checks.passed += 1,
+            CheckOutcome::Failed => checks.failed += 1,
+            CheckOutcome::Pending => checks.pending += 1,
+        }
+    }
+    checks
+}
+
+/// The state of a pull request from its `state` word and draft flag. An open draft is a draft.
+/// Any other word is `None`, which the decoders refuse.
+fn pr_state(word: Option<&str>, is_draft: bool) -> Option<PrState> {
+    match word? {
+        "OPEN" if is_draft => Some(PrState::Draft),
+        "OPEN" => Some(PrState::Open),
+        "MERGED" => Some(PrState::Merged),
+        "CLOSED" => Some(PrState::Closed),
+        _ => None,
+    }
+}
+
+impl GitClient {
+    /// The full detail of pull request `number` on `repository`, read through `gh pr view`. The
+    /// answer is refused unless it names that number on the repository's own page.
+    pub fn pull_request_detail(
+        &self,
+        repository: &GitHubRepository,
+        number: u64,
+        cancel: &Cancel,
+        directory: &Path,
+    ) -> Result<PullRequestDetail> {
+        if number == 0 {
+            return Err(GitError::failed("GitHub", "The pull request number is not valid."));
+        }
+        let number_text = number.to_string();
+        let repo = repository.gh_repo();
+        let output = run_gh(
+            &["pr", "view", &number_text, "--repo", &repo, "--json", PULL_REQUEST_DETAIL_FIELDS],
+            directory,
+            cancel,
+            Some(repository.host.as_str()),
+        )
+        .map_err(|message| GitError::failed("GitHub", message))?;
+        decode_pull_request_detail(&output, repository, number)
+    }
+}
+
+/// Decodes `gh pr view --json` output for pull request `number` on `repository`. Every field is
+/// checked, and the link must be the repository's own pull request page. Text is cleaned for
+/// display: titles lose control characters, and bodies keep their line breaks as plain text.
+pub fn decode_pull_request_detail(json: &str, repository: &GitHubRepository, number: u64) -> Result<PullRequestDetail> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned an unexpected pull request.");
+    let value = parse_json(json).map_err(|_| unexpected())?;
+    decode_detail(&value, repository, number).ok_or_else(unexpected)
+}
+
+fn decode_detail(entry: &Json, repository: &GitHubRepository, number: u64) -> Option<PullRequestDetail> {
+    let Json::Object(_) = entry else { return None };
+    if count_field(entry, "number")? != number {
+        return None;
+    }
+    let url = entry.get("url")?.as_str()?;
+    let expected = format!("{}/{}/pull/{number}", repository.web_base(), repository.slug()).to_ascii_lowercase();
+    if url.to_ascii_lowercase() != expected {
+        return None;
+    }
+    let is_draft = entry.get("isDraft")?.as_bool()?;
+    let created_at = entry.get("createdAt")?.as_str()?;
+    let updated_at = entry.get("updatedAt")?.as_str()?;
+    timestamp_seconds(created_at)?;
+    timestamp_seconds(updated_at)?;
+    let labels = array_field(entry, "labels")?.iter().map(label).collect::<Option<Vec<_>>>()?;
+    let files = array_field(entry, "files")?.iter().map(file).collect::<Option<Vec<_>>>()?;
+    let reviews = array_field(entry, "reviews")?.iter().map(review).collect::<Option<Vec<_>>>()?;
+    let comments = array_field(entry, "comments")?.iter().map(comment).collect::<Option<Vec<_>>>()?;
+    let check_rows =
+        array_field(entry, "statusCheckRollup")?.iter().map(|check| check_row(check, repository)).collect::<Option<Vec<_>>>()?;
+    let checks = tally(check_rows.iter().map(|row| row.outcome));
+    Some(PullRequestDetail {
+        number,
+        title: clean_text(entry.get("title")?.as_str()?, PULL_REQUEST_TITLE_LIMIT),
+        url: url.to_string(),
+        body: plain_text(optional_text(entry, "body")?),
+        author: author_login(entry)?,
+        state: pr_state(entry.get("state")?.as_str(), is_draft)?,
+        base_ref: clean_text(entry.get("baseRefName")?.as_str()?, 255),
+        head_ref: clean_text(entry.get("headRefName")?.as_str()?, 255),
+        created_at: created_at.to_string(),
+        updated_at: updated_at.to_string(),
+        review_decision: optional_word(entry, "reviewDecision")?,
+        mergeable: optional_word(entry, "mergeable")?,
+        labels,
+        additions: count_field(entry, "additions")?,
+        deletions: count_field(entry, "deletions")?,
+        changed_files: count_field(entry, "changedFiles")?,
+        commit_count: array_field(entry, "commits")?.len() as u64,
+        files,
+        reviews,
+        comments,
+        checks,
+        check_rows,
+    })
+}
+
+fn label(value: &Json) -> Option<GitHubLabel> {
+    let name = clean_text(value.get("name")?.as_str()?, 100);
+    let color = optional_text(value, "color")?.trim_start_matches('#').to_string();
+    (!name.is_empty()).then_some(GitHubLabel { name, color })
+}
+
+fn file(value: &Json) -> Option<PullRequestFile> {
+    let path = clean_text(value.get("path")?.as_str()?, 1000);
+    (!path.is_empty()).then_some(PullRequestFile {
+        path,
+        additions: count_field(value, "additions")?,
+        deletions: count_field(value, "deletions")?,
+    })
+}
+
+fn review(value: &Json) -> Option<PullRequestReview> {
+    let submitted_at = match optional_text(value, "submittedAt")? {
+        "" => None,
+        text => {
+            timestamp_seconds(text)?;
+            Some(text.to_string())
+        }
+    };
+    Some(PullRequestReview {
+        author: author_login(value)?,
+        state: clean_text(value.get("state")?.as_str()?, 40),
+        body: plain_text(optional_text(value, "body")?),
+        submitted_at,
+    })
+}
+
+fn comment(value: &Json) -> Option<PullRequestComment> {
+    let created_at = value.get("createdAt")?.as_str()?;
+    timestamp_seconds(created_at)?;
+    Some(PullRequestComment {
+        author: author_login(value)?,
+        body: plain_text(optional_text(value, "body")?),
+        created_at: created_at.to_string(),
+    })
+}
+
+/// One check of a status rollup. A check run is named by `name` and links by `detailsUrl`; a
+/// commit status is named by `context` and links by `targetUrl`. The outcome must be recognised.
+fn check_row(check: &Json, repository: &GitHubRepository) -> Option<CheckRow> {
+    let outcome = check_outcome(check)?;
+    let name = match optional_text(check, "name")? {
+        "" => optional_text(check, "context")?,
+        name => name,
+    };
+    let detail = ["conclusion", "status", "state"].into_iter().find_map(|key| optional_text(check, key).filter(|text| !text.is_empty()));
+    let url = ["detailsUrl", "targetUrl"]
+        .into_iter()
+        .find_map(|key| optional_text(check, key).filter(|text| !text.is_empty()))
+        .and_then(|link| check_link(link, repository));
+    Some(CheckRow { name: clean_text(name, 200), outcome, detail: clean_text(detail.unwrap_or(""), 40), url })
+}
+
+/// The link of a check, when it is safe to open: HTTPS, without user information, a port, or
+/// control characters, and on the repository's host, or a github.com Actions page of the repository.
+fn check_link(link: &str, repository: &GitHubRepository) -> Option<String> {
+    if link.len() > 2048 || link.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return None;
+    }
+    let rest = link.strip_prefix("https://")?;
+    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+    if authority.is_empty() || authority.contains(['@', ':']) {
+        return None;
+    }
+    let host = authority.to_ascii_lowercase();
+    let actions_prefix = format!("{}/actions/", repository.slug()).to_ascii_lowercase();
+    let on_host = host == repository.host;
+    let actions = host == "github.com" && path.to_ascii_lowercase().starts_with(&actions_prefix);
+    (on_host || actions).then(|| link.to_string())
+}
+
+/// A user's login from an `author` object. An absent or `null` author is `Some(None)`, and an
+/// unexpected shape is `None`.
+fn author_login(entry: &Json) -> Option<Option<String>> {
+    match entry.get("author") {
+        None | Some(Json::Null) => Some(None),
+        Some(author @ Json::Object(_)) => {
+            let login = clean_text(author.get("login")?.as_str()?, 100);
+            Some((!login.is_empty()).then_some(login))
+        }
+        Some(_) => None,
+    }
+}
+
+/// A short word field, cleaned, where an absent or `null` value is `None`.
+fn optional_word(entry: &Json, key: &str) -> Option<Option<String>> {
+    let cleaned = clean_text(optional_text(entry, key)?, 100);
+    Some((!cleaned.is_empty()).then_some(cleaned))
+}
+
+/// A required whole number that fits in JSON numbers without losing precision.
+fn count_field(entry: &Json, key: &str) -> Option<u64> {
+    let number = entry.get(key)?.as_number()?;
+    (number.fract() == 0.0 && (0.0..9.0e15).contains(&number)).then_some(number as u64)
+}
+
+fn array_field<'a>(entry: &'a Json, key: &str) -> Option<&'a [Json]> {
+    match entry.get(key)? {
+        Json::Array(values) => Some(values),
+        _ => None,
+    }
+}
+
+/// Body text as plain text: CRLF and CR become line feeds, tabs and line feeds are kept, other
+/// control characters (escape sequences included) are removed, and the text is trimmed and limited.
+fn plain_text(text: &str) -> String {
+    let lines = text.replace("\r\n", "\n").replace('\r', "\n");
+    let kept: String = lines.chars().filter(|c| *c == '\n' || *c == '\t' || !c.is_control()).collect();
+    kept.trim().chars().take(TEXT_LIMIT).collect::<String>().trim_end().to_string()
+}
+
+/// How long before `now` (Unix seconds) the ISO 8601 `stamp` was, in words such as `3 days ago`.
+/// A time after `now` reads as `just now`. `None` when the stamp is not a UTC time.
+pub fn relative_time(stamp: &str, now: i64) -> Option<String> {
+    let seconds = now - timestamp_seconds(stamp)?;
+    let ago = |count: i64, unit: &str| format!("{count} {unit}{} ago", if count == 1 { "" } else { "s" });
+    let days = seconds / 86_400;
+    Some(if seconds < 60 {
+        "just now".to_string()
+    } else if seconds < 3_600 {
+        ago(seconds / 60, "minute")
+    } else if seconds < 86_400 {
+        ago(seconds / 3_600, "hour")
+    } else if days < 30 {
+        ago(days, "day")
+    } else if days < 365 {
+        ago(days / 30, "month")
+    } else {
+        ago(days / 365, "year")
+    })
 }
 
 /// The outcome of a check-run entry (with `status` and `conclusion`) or a commit status entry
@@ -2037,6 +2381,168 @@ mod tests {
         }
     }
 
+    /// A draft pull request as `gh pr view` reports it, with both check shapes, a control character
+    /// in the title and the body, and a check whose link is on another host.
+    const DETAIL_JSON: &str = r#"{
+        "number": 21, "title": "Draft: add\u0007 the detail view", "body": "Line one\r\nLine two\u001b[31m\n\n",
+        "author": {"login": "octocat"}, "state": "OPEN", "isDraft": true,
+        "baseRefName": "main", "headRefName": "feature/detail", "url": "https://github.com/acme/app/pull/21",
+        "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-03T04:05:06Z",
+        "reviewDecision": "", "mergeable": "MERGEABLE", "additions": 120, "deletions": 4, "changedFiles": 3,
+        "files": [{"path": "src/app.rs", "additions": 100, "deletions": 2}, {"path": "docs/a b.md", "additions": 20, "deletions": 2}],
+        "commits": [{"oid": "a"}, {"oid": "b"}],
+        "reviews": [
+            {"author": {"login": "bob"}, "state": "APPROVED", "body": "Looks good", "submittedAt": "2026-01-02T10:00:00Z"},
+            {"author": null, "state": "COMMENTED", "body": "", "submittedAt": "2026-01-02T08:00:00Z"},
+            {"author": {"login": "ghost"}, "state": "PENDING", "body": "not sent yet", "submittedAt": null}
+        ],
+        "comments": [
+            {"author": {"login": "ghost"}, "body": "Thanks", "createdAt": "2026-01-02T09:00:00Z"},
+            {"author": {"login": "carol"}, "body": "", "createdAt": "2026-01-01T00:00:00Z"}
+        ],
+        "statusCheckRollup": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS",
+             "detailsUrl": "https://github.com/acme/app/actions/runs/1/job/2"},
+            {"__typename": "CheckRun", "name": "test", "status": "IN_PROGRESS", "conclusion": null,
+             "detailsUrl": "https://ci.example.com/test"},
+            {"__typename": "StatusContext", "context": "ci/legacy", "state": "FAILURE",
+             "targetUrl": "https://github.com/acme/app/actions/runs/3"}
+        ],
+        "labels": [{"name": "bug", "color": "d73a4a"}]
+    }"#;
+
+    /// The conversation of a detail as `author:kind` words, in order, with `-` for no author.
+    fn conversation_words(detail: &PullRequestDetail) -> Vec<String> {
+        detail
+            .conversation()
+            .into_iter()
+            .map(|entry| match entry {
+                ConversationEntry::Review(review) => format!("review:{}", review.author.as_deref().unwrap_or("-")),
+                ConversationEntry::Comment(comment) => format!("comment:{}", comment.author.as_deref().unwrap_or("-")),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pull_request_detail_reads_a_draft_with_both_check_shapes() {
+        let github = repository("github.com", "acme", "app");
+        let detail = decode_pull_request_detail(DETAIL_JSON, &github, 21).unwrap();
+        assert_eq!(detail.number, 21);
+        assert_eq!(detail.title, "Draft: add the detail view", "control characters become spaces");
+        assert_eq!(detail.url, "https://github.com/acme/app/pull/21");
+        assert_eq!(detail.body, "Line one\nLine two[31m", "CRLF becomes a line feed and escape characters are removed");
+        assert_eq!(detail.author.as_deref(), Some("octocat"));
+        assert_eq!(detail.state, PrState::Draft);
+        assert_eq!((detail.base_ref.as_str(), detail.head_ref.as_str()), ("main", "feature/detail"));
+        assert_eq!(detail.review_decision, None, "an empty review decision is none");
+        assert_eq!(detail.mergeable.as_deref(), Some("MERGEABLE"));
+        assert_eq!(detail.labels, vec![GitHubLabel { name: "bug".into(), color: "d73a4a".into() }]);
+        assert_eq!((detail.additions, detail.deletions, detail.changed_files, detail.commit_count), (120, 4, 3, 2));
+        assert_eq!(detail.files[1], PullRequestFile { path: "docs/a b.md".into(), additions: 20, deletions: 2 });
+
+        assert_eq!(detail.checks, Checks { passed: 1, failed: 1, pending: 1 });
+        let rows: Vec<(&str, CheckOutcome, &str, Option<&str>)> =
+            detail.check_rows.iter().map(|row| (row.name.as_str(), row.outcome, row.detail.as_str(), row.url.as_deref())).collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("build", CheckOutcome::Passed, "SUCCESS", Some("https://github.com/acme/app/actions/runs/1/job/2")),
+                ("test", CheckOutcome::Pending, "IN_PROGRESS", None),
+                ("ci/legacy", CheckOutcome::Failed, "FAILURE", Some("https://github.com/acme/app/actions/runs/3")),
+            ],
+            "a check on another host has no link"
+        );
+    }
+
+    #[test]
+    fn pull_request_detail_orders_the_conversation_oldest_first() {
+        let github = repository("github.com", "acme", "app");
+        let detail = decode_pull_request_detail(DETAIL_JSON, &github, 21).unwrap();
+        assert_eq!(
+            conversation_words(&detail),
+            vec!["comment:carol", "review:-", "comment:ghost", "review:bob"],
+            "a review with no author stays, and an unsubmitted review is left out"
+        );
+        assert_eq!(detail.reviews[1].author, None, "a null author is no author");
+        assert_eq!(detail.comments[0].author.as_deref(), Some("ghost"), "a ghost login is kept as GitHub gives it");
+        assert_eq!(detail.reviews[2].submitted_at, None);
+    }
+
+    #[test]
+    fn pull_request_detail_reads_an_empty_pull_request() {
+        let github = repository("github.com", "acme", "app");
+        let json = r#"{"number": 2, "title": "Empty", "body": null, "author": null, "state": "OPEN", "isDraft": false,
+            "baseRefName": "main", "headRefName": "empty", "url": "https://github.com/acme/app/pull/2",
+            "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-02T03:04:05Z", "reviewDecision": null, "mergeable": null,
+            "additions": 0, "deletions": 0, "changedFiles": 0, "files": [], "commits": [], "reviews": [], "comments": [],
+            "statusCheckRollup": [], "labels": []}"#;
+        let detail = decode_pull_request_detail(json, &github, 2).unwrap();
+        assert_eq!(detail.state, PrState::Open);
+        assert!(detail.body.is_empty() && detail.author.is_none(), "a null body and author are empty");
+        assert!(detail.review_decision.is_none() && detail.mergeable.is_none());
+        assert_eq!(detail.checks, Checks::default());
+        assert!(detail.check_rows.is_empty() && detail.files.is_empty() && detail.conversation().is_empty());
+    }
+
+    #[test]
+    fn pull_request_detail_refuses_unexpected_answers() {
+        let github = repository("github.com", "acme", "app");
+        let refused = [
+            // Another number, another repository, another host, or a link that names another number.
+            DETAIL_JSON.replace(r#""number": 21"#, r#""number": 22"#),
+            DETAIL_JSON.replace("https://github.com/acme/app/pull/21", "https://github.com/acme/other/pull/21"),
+            DETAIL_JSON.replace("https://github.com/acme/app/pull/21", "https://git.example.com/acme/app/pull/21"),
+            DETAIL_JSON.replace("https://github.com/acme/app/pull/21", "https://github.com/acme/app/pull/22"),
+            // An unknown state, a string author, a missing count, and a bad time.
+            DETAIL_JSON.replace(r#""state": "OPEN""#, r#""state": "WEIRD""#),
+            DETAIL_JSON.replace(r#""author": {"login": "octocat"}"#, r#""author": "octocat""#),
+            DETAIL_JSON.replace(r#""changedFiles": 3,"#, ""),
+            DETAIL_JSON.replace("2026-01-02T10:00:00Z", "yesterday"),
+            // A check with neither shape, and a comment without a time.
+            DETAIL_JSON.replace(r#""name": "build", "status": "COMPLETED", "conclusion": "SUCCESS""#, r#""name": "build""#),
+            DETAIL_JSON.replace(r#""createdAt": "2026-01-01T00:00:00Z""#, r#""createdAt": null"#),
+            "[]".to_string(),
+            "not json".to_string(),
+        ];
+        for json in refused {
+            assert!(decode_pull_request_detail(&json, &github, 21).is_err(), "must be refused: {}", &json[..json.len().min(120)]);
+        }
+    }
+
+    #[test]
+    fn check_links_are_limited_to_https_on_the_host_or_github_actions() {
+        let github = repository("github.com", "acme", "app");
+        let enterprise = repository("git.example.com", "acme", "app");
+        let cases = [
+            (&github, "https://github.com/acme/app/actions/runs/1", true),
+            (&github, "https://github.com/ACME/APP/actions/runs/1", true),
+            (&github, "https://github.com/acme/app/pull/1/checks", true),
+            // Any page on the pull request's own host is allowed, so github.com pages of other repositories too.
+            (&github, "https://github.com/acme/other/actions/runs/1", true),
+            (&github, "http://github.com/acme/app/actions/runs/1", false),
+            (&github, "https://github.com.example.net/acme/app/actions/runs/1", false),
+            (&github, "https://user@github.com/acme/app/actions/runs/1", false),
+            (&github, "https://github.com:8443/acme/app/actions/runs/1", false),
+            (&github, "https://github.com/acme/app/actions/runs/1 x", false),
+            (&github, "https://ci.example.com/build/1", false),
+            (&github, "javascript:alert(1)", false),
+            (&enterprise, "https://git.example.com/ci/run/1", true),
+            (&enterprise, "https://github.com/acme/app/actions/runs/1", true),
+            (&enterprise, "https://github.com/acme/other/actions/runs/1", false),
+            (&enterprise, "https://github.com/ci/run/1", false),
+        ];
+        for (repository, link, expected) in cases {
+            assert_eq!(check_link(link, repository).is_some(), expected, "{link}");
+        }
+    }
+
+    #[test]
+    fn plain_text_keeps_lines_and_tabs_and_drops_other_control_characters() {
+        assert_eq!(plain_text("a\r\nb\rc\u{7}\tx\u{1b}[0m\n\n\n"), "a\nb\nc\tx[0m");
+        assert_eq!(plain_text("   \n  "), "", "blank text is empty");
+        assert_eq!(plain_text(&"x".repeat(TEXT_LIMIT + 10)).chars().count(), TEXT_LIMIT, "counted in characters");
+    }
+
     #[test]
     fn logins_are_checked_before_they_are_used() {
         assert!(valid_login("daniaal"));
@@ -2118,5 +2624,20 @@ esac
                 assert!(!call.iter().any(|word| word.starts_with("-X") || *word == "--method"), "{call:?} is a GET");
             }
         }
+    }
+
+    #[test]
+    fn relative_time_words_the_age_of_a_stamp() {
+        let now = 1_768_003_200; // 2026-01-10T00:00:00Z
+        let ago = |stamp: &str| relative_time(stamp, now);
+        assert_eq!(ago("2026-01-09T23:59:30Z").as_deref(), Some("just now"));
+        assert_eq!(ago("2026-01-09T23:58:30Z").as_deref(), Some("1 minute ago"));
+        assert_eq!(ago("2026-01-09T22:00:00Z").as_deref(), Some("2 hours ago"));
+        assert_eq!(ago("2026-01-09T00:00:00Z").as_deref(), Some("1 day ago"));
+        assert_eq!(ago("2026-01-07T00:00:00Z").as_deref(), Some("3 days ago"));
+        assert_eq!(ago("2025-11-26T00:00:00Z").as_deref(), Some("1 month ago"), "45 days");
+        assert_eq!(ago("2024-12-01T00:00:00Z").as_deref(), Some("1 year ago"));
+        assert_eq!(ago("2026-01-11T00:00:00Z").as_deref(), Some("just now"), "a time after now is just now");
+        assert_eq!(ago("not a time"), None);
     }
 }
