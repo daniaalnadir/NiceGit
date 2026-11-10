@@ -599,6 +599,68 @@ fn a_gitlab_merge_request_says_how_to_fix_a_missing_glab() {
     assert!(harness.query_by_label_contains("Create merge request").is_some(), "the dialog is for a merge request");
 }
 
+/// The Launchpad reads each open repository's GitHub pull requests through `gh`. With no `gh` to
+/// run, each repository says why it is not available, and no network call is made: the GitHub
+/// repository stops at the missing program, and the GitLab one never reaches it.
+#[test]
+fn the_launchpad_says_why_each_repository_is_not_available() {
+    let github = repository();
+    git(github.path(), &["remote", "add", "origin", "https://github.com/acme/app.git"]);
+    let gitlab = repository();
+    git(gitlab.path(), &["remote", "add", "origin", "https://gitlab.com/group/proj.git"]);
+    let mut harness = open(github.path());
+    loaded(&mut harness);
+    harness.state_mut().open(gitlab.path().to_path_buf());
+    wait(&mut harness, "the second repository to load", |h| h.state().repos.len() == 2 && h.state().busy.is_none());
+    loaded(&mut harness);
+
+    let missing = nicegit_core::github::GhProgram::Given(std::path::PathBuf::from("/nonexistent/nicegit-test/gh"));
+    let paths = vec![github.path().to_path_buf(), gitlab.path().to_path_buf()];
+    let launchpad = crate::tools::launchpad::LaunchpadWindow::new(paths, Vec::new(), Vec::new()).with_program(missing);
+    harness.state_mut().open_tool(Box::new(launchpad));
+    wait(&mut harness, "the Launchpad's answers", |h| shows(h, "Not available"));
+    settle(&mut harness);
+
+    assert!(shows(&harness, "Needs your review (0)"), "the sections are listed, empty");
+    assert!(shows(&harness, "Yours (0)") && shows(&harness, "Other open (0)"), "every section is listed");
+    assert!(shows(&harness, "The GitHub CLI (gh) is not installed"), "the GitHub repository says gh is missing");
+    assert!(
+        shows(&harness, "This remote is not on github.com or a GitHub Enterprise host listed in Settings"),
+        "the GitLab repository says its remote is not on GitHub"
+    );
+    assert!(!shows(&harness, "Loading"), "nothing is still loading");
+}
+
+/// A Check out from the Launchpad for a repository that is not shown switches to it, and the
+/// Check out pull request dialog opens once it is shown. Nothing is fetched until its button is pressed.
+#[test]
+fn a_launchpad_check_out_switches_to_its_repository_and_opens_the_dialog() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    harness.state_mut().open(second.path().to_path_buf());
+    wait(&mut harness, "the second repository to load", |h| h.state().repos.len() == 2 && h.state().busy.is_none());
+    loaded(&mut harness);
+
+    let request = crate::tools::CheckOutRequest {
+        path: first.path().to_path_buf(),
+        remote: "origin".into(),
+        number: 7,
+        title: "Add the review file".into(),
+        author: "octocat".into(),
+    };
+    harness.state_mut().check_out_from_launchpad(request);
+    wait(
+        &mut harness,
+        "the check out dialog",
+        |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::CheckOutPullRequest { local, .. }) if local == "pr/7-add-the-review-file"),
+    );
+    let shown = harness.state().repo().and_then(|r| r.path.canonicalize().ok());
+    assert_eq!(shown, first.path().canonicalize().ok(), "the repository of the pull request is the one shown");
+    assert!(harness.state().pending_check_out.is_none(), "nothing is left waiting");
+}
+
 // MARK: External diff and merge tools
 
 /// Whether a Changes panel row for `file` is on screen.

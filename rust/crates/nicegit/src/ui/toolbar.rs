@@ -564,6 +564,11 @@ impl NiceGitApp {
                 Box::new(tools::github::GitHubWindow::new(remote.clone(), hosts.clone()))
             });
         }
+        if ui.add_enabled(has_repo, egui::Button::new(format!("{}  Launchpad…", icon::GIT_PULL_REQUEST))).clicked() {
+            ui.close();
+            let window = tools::launchpad::LaunchpadWindow::for_app(self);
+            self.open_tool(Box::new(window));
+        }
         ui.separator();
         let can_publish = self.snapshot().is_some_and(|s| s.upstream.is_none() && s.is_on_branch() && !s.remotes.is_empty()) && self.idle();
         if ui

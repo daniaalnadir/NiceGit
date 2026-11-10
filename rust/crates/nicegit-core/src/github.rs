@@ -255,6 +255,54 @@ pub struct PullRequestStatus {
     pub checks: Checks,
 }
 
+/// How many open pull requests one Launchpad read lists for a repository.
+pub const OPEN_PULL_REQUEST_LIMIT: usize = 50;
+
+/// The fields one Launchpad read asks `gh pr list` for.
+const OPEN_PULL_REQUEST_FIELDS: &str =
+    "number,title,author,url,headRefName,isDraft,reviewDecision,reviewRequests,updatedAt,statusCheckRollup";
+
+/// The longest team name kept, in characters.
+const TEAM_NAME_LIMIT: usize = 100;
+
+/// An open pull request as the Launchpad lists it, from `gh pr list`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenPullRequest {
+    pub number: u64,
+    /// Without control characters, and at most 300 characters.
+    pub title: String,
+    /// The pull request's own page, `<web base>/<owner>/<name>/pull/<number>`.
+    pub url: String,
+    /// The author's login. `None` when GitHub reports no author, as for a deleted account.
+    pub author: Option<String>,
+    /// The branch the pull request comes from, cleaned as the title is.
+    pub head_branch: String,
+    pub is_draft: bool,
+    /// GitHub's review decision. `None` when there is none yet, or when GitHub reports a word
+    /// this version does not know.
+    pub review_decision: Option<ReviewDecision>,
+    /// The users and teams whose review is requested, in the order `gh` lists them.
+    pub review_requests: Vec<ReviewRequest>,
+    /// When the pull request last changed, in seconds since the Unix epoch.
+    pub updated_at: i64,
+    pub checks: Checks,
+}
+
+/// The review decision GitHub reports for a pull request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReviewDecision {
+    Approved,
+    ChangesRequested,
+    ReviewRequired,
+}
+
+/// Someone whose review is requested: a user by login, or a team by name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReviewRequest {
+    User(String),
+    Team(String),
+}
+
 /// Whether `gh` can be used for the repository.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GhStatus {
@@ -262,6 +310,49 @@ pub enum GhStatus {
     /// Installed, but not signed in; carries `gh`'s explanation.
     SignedOut(String),
     SignedIn,
+}
+
+impl GhStatus {
+    /// Why `gh` cannot read `host`, as one line for a list, or `None` when it is installed and
+    /// signed in. The explanation from `gh` is kept, without control characters.
+    pub fn reason(&self, host: &str) -> Option<String> {
+        match self {
+            GhStatus::SignedIn => None,
+            GhStatus::NotInstalled => Some(NOT_INSTALLED.to_string()),
+            GhStatus::SignedOut(explanation) => {
+                let command = sign_in_command(host);
+                let text = format!("The GitHub CLI is not signed in to {host}. Run {command} in a terminal. {explanation}");
+                Some(clean_text(&text, MESSAGE_LIMIT))
+            }
+        }
+    }
+}
+
+/// The command that signs the GitHub CLI in to `host`.
+fn sign_in_command(host: &str) -> String {
+    if host == "github.com" {
+        "gh auth login".to_string()
+    } else {
+        format!("gh auth login --hostname {host}")
+    }
+}
+
+/// The `gh` program a read runs: the one on NiceGit's search path, or the file given. Tests give a
+/// missing or stand-in file, as the GitLab reads do.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum GhProgram {
+    #[default]
+    Search,
+    Given(PathBuf),
+}
+
+impl GhProgram {
+    fn executable(&self) -> Option<PathBuf> {
+        match self {
+            GhProgram::Search => gh_executable(),
+            GhProgram::Given(path) => is_executable(path).then(|| path.clone()),
+        }
+    }
 }
 
 impl GitClient {
@@ -278,13 +369,47 @@ impl GitClient {
 
     /// Whether `gh` is installed and signed in to `host`.
     pub fn gh_status(&self, host: &str, directory: &Path) -> GhStatus {
-        if gh_executable().is_none() {
-            return GhStatus::NotInstalled;
-        }
-        match run_gh(&["auth", "status", "--hostname", host], directory, &Cancel::default(), None) {
+        self.gh_status_with(host, &GhProgram::Search, directory)
+    }
+
+    /// Like [`Self::gh_status`], running `program`.
+    pub fn gh_status_with(&self, host: &str, program: &GhProgram, directory: &Path) -> GhStatus {
+        let Some(executable) = program.executable() else { return GhStatus::NotInstalled };
+        match run_gh_with(&executable, &["auth", "status", "--hostname", host], directory, &Cancel::default(), None) {
             Ok(_) => GhStatus::SignedIn,
             Err(message) => GhStatus::SignedOut(message),
         }
+    }
+
+    /// The login of the signed-in user on `host`, read through `gh api user`. The answer is
+    /// checked as a GitHub login before it is returned.
+    pub fn github_login(&self, host: &str, program: &GhProgram, directory: &Path) -> Result<String> {
+        let executable = program.executable().ok_or_else(|| GitError::failed("GitHub", NOT_INSTALLED))?;
+        let output = run_gh_with(&executable, &["api", "user", "--jq", ".login"], directory, &Cancel::default(), Some(host))
+            .map_err(|message| GitError::failed("GitHub", message))?;
+        let login = output.trim();
+        if !valid_login(login) {
+            return Err(GitError::failed("GitHub", "GitHub did not report your login."));
+        }
+        Ok(login.to_string())
+    }
+
+    /// The open pull requests of `repository` for the Launchpad, from one read-only `gh pr list`.
+    /// At most [`OPEN_PULL_REQUEST_LIMIT`] are listed, so a longer list is cut short.
+    pub fn github_open_pull_requests(
+        &self,
+        repository: &GitHubRepository,
+        program: &GhProgram,
+        cancel: &Cancel,
+        directory: &Path,
+    ) -> Result<Vec<OpenPullRequest>> {
+        let executable = program.executable().ok_or_else(|| GitError::failed("GitHub", NOT_INSTALLED))?;
+        let repo = repository.gh_repo();
+        let limit = OPEN_PULL_REQUEST_LIMIT.to_string();
+        let arguments = ["pr", "list", "--repo", &repo, "--state", "open", "--limit", &limit, "--json", OPEN_PULL_REQUEST_FIELDS];
+        let output = run_gh_with(&executable, &arguments, directory, cancel, Some(repository.host.as_str()))
+            .map_err(|message| GitError::failed("GitHub", message))?;
+        decode_open_pull_requests(&output, repository)
     }
 
     /// Lists pull requests or issues, newest first, through `gh`. `limit` is clamped to 1 to 1000.
@@ -824,14 +949,7 @@ fn decode_pull_request_entry(entry: &Json, repository: &GitHubRepository) -> Res
         _ => return Err(unexpected()),
     };
     let Some(Json::Array(rollup)) = entry.get("statusCheckRollup") else { return Err(unexpected()) };
-    let mut checks = Checks::default();
-    for check in rollup {
-        match check_outcome(check).ok_or_else(unexpected)? {
-            CheckOutcome::Passed => checks.passed += 1,
-            CheckOutcome::Failed => checks.failed += 1,
-            CheckOutcome::Pending => checks.pending += 1,
-        }
-    }
+    let checks = tally_checks(rollup).ok_or_else(unexpected)?;
     Ok(PullRequestStatus {
         kind: Host::GitHub,
         number,
@@ -840,6 +958,162 @@ fn decode_pull_request_entry(entry: &Json, repository: &GitHubRepository) -> Res
         url: url.to_string(),
         checks,
     })
+}
+
+/// Decodes `gh pr list --json` output for the Launchpad, for `repository`. Every entry is checked:
+/// its link must be the repository's own pull request page, and its date, draft flag, branch,
+/// review requests, and checks must have the expected shapes. Missing fields refuse the whole list.
+/// An author that is `null` is kept as no author, and a review decision that is empty or unknown is
+/// kept as none.
+pub fn decode_open_pull_requests(json: &str, repository: &GitHubRepository) -> Result<Vec<OpenPullRequest>> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned unexpected pull requests.");
+    let value = parse_json(json).map_err(|_| unexpected())?;
+    let Json::Array(entries) = value else { return Err(unexpected()) };
+    entries.iter().map(|entry| decode_open_pull_request(entry, repository)).collect()
+}
+
+/// One entry of [`decode_open_pull_requests`].
+fn decode_open_pull_request(entry: &Json, repository: &GitHubRepository) -> Result<OpenPullRequest> {
+    let unexpected = || GitError::failed("GitHub", "GitHub returned unexpected pull requests.");
+    let Json::Object(_) = entry else { return Err(unexpected()) };
+    let number = entry.get("number").and_then(Json::as_number).filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n < 9.0e15);
+    let number = number.ok_or_else(unexpected)? as u64;
+    let title = entry.get("title").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let url = entry.get("url").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let expected = format!("{}/{}/pull/{number}", repository.web_base(), repository.slug()).to_ascii_lowercase();
+    if url.to_ascii_lowercase() != expected {
+        return Err(unexpected());
+    }
+    let head_branch = entry.get("headRefName").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let is_draft = entry.get("isDraft").and_then(Json::as_bool).ok_or_else(unexpected)?;
+    let updated_at = entry.get("updatedAt").and_then(Json::as_str).and_then(timestamp_seconds).ok_or_else(unexpected)?;
+    let author = match entry.get("author") {
+        None | Some(Json::Null) => None,
+        Some(author) => {
+            Some(author.get("login").and_then(Json::as_str).filter(|login| !login.is_empty()).ok_or_else(unexpected)?.to_string())
+        }
+    };
+    let review_decision = entry.get("reviewDecision").and_then(Json::as_str).and_then(review_decision);
+    let Some(Json::Array(requests)) = entry.get("reviewRequests") else { return Err(unexpected()) };
+    let review_requests = requests.iter().map(review_request).collect::<Option<Vec<_>>>().ok_or_else(unexpected)?;
+    let Some(Json::Array(rollup)) = entry.get("statusCheckRollup") else { return Err(unexpected()) };
+    let checks = tally_checks(rollup).ok_or_else(unexpected)?;
+    Ok(OpenPullRequest {
+        number,
+        title: clean_text(title, PULL_REQUEST_TITLE_LIMIT),
+        url: url.to_string(),
+        author,
+        head_branch: clean_text(head_branch, PULL_REQUEST_TITLE_LIMIT),
+        is_draft,
+        review_decision,
+        review_requests,
+        updated_at,
+        checks,
+    })
+}
+
+/// The review decision for a word GitHub reports; empty or unknown words are `None`.
+fn review_decision(word: &str) -> Option<ReviewDecision> {
+    match word {
+        "APPROVED" => Some(ReviewDecision::Approved),
+        "CHANGES_REQUESTED" => Some(ReviewDecision::ChangesRequested),
+        "REVIEW_REQUIRED" => Some(ReviewDecision::ReviewRequired),
+        _ => None,
+    }
+}
+
+/// One review request: a user, by `login`, or a team, by `name` or `slug`. Any other shape is
+/// `None`, which refuses the list.
+fn review_request(request: &Json) -> Option<ReviewRequest> {
+    let Json::Object(_) = request else { return None };
+    if let Some(login) = request.get("login").and_then(Json::as_str) {
+        return (!login.is_empty()).then(|| ReviewRequest::User(login.to_string()));
+    }
+    let name = request.get("name").or_else(|| request.get("slug")).and_then(Json::as_str)?;
+    let name = clean_text(name, TEAM_NAME_LIMIT);
+    (!name.is_empty()).then_some(ReviewRequest::Team(name))
+}
+
+/// Whether `login` can be a GitHub login: 1 to 39 letters, digits, or hyphens. `gh` prints `null`
+/// when it has no login, which is refused.
+pub fn valid_login(login: &str) -> bool {
+    login != "null" && !login.is_empty() && login.len() <= 39 && login.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+/// The Unix time, in seconds, of an RFC 3339 timestamp such as `2026-01-02T03:04:05Z`, which `gh`
+/// reports. A numeric offset such as `+02:00` is applied, and fractional seconds are ignored.
+pub fn timestamp_seconds(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    let number = |start: usize, end: usize| -> Option<i64> {
+        let part = text.get(start..end)?;
+        if part.bytes().all(|byte| byte.is_ascii_digit()) {
+            part.parse().ok()
+        } else {
+            None
+        }
+    };
+    if bytes.len() < 20 || bytes[4] != b'-' || bytes[7] != b'-' || !matches!(bytes[10], b'T' | b't' | b' ') {
+        return None;
+    }
+    if bytes[13] != b':' || bytes[16] != b':' {
+        return None;
+    }
+    let (year, month, day) = (number(0, 4)?, number(5, 7)?, number(8, 10)?);
+    let (hour, minute, second) = (number(11, 13)?, number(14, 16)?, number(17, 19)?);
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    // Fractional seconds are skipped, then the zone: `Z`, or a numeric offset.
+    let mut rest = &text[19..];
+    if let Some(fraction) = rest.strip_prefix('.') {
+        let digits = fraction.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            return None;
+        }
+        rest = &fraction[digits..];
+    }
+    let offset = match rest {
+        "Z" | "z" => 0,
+        _ => {
+            let sign = match rest.as_bytes().first()? {
+                b'+' => 1,
+                b'-' => -1,
+                _ => return None,
+            };
+            let zone = rest.get(1..)?;
+            if zone.len() != 5 || zone.get(2..3) != Some(":") {
+                return None;
+            }
+            let (zone_hour, zone_minute) = (zone.get(0..2)?.parse::<i64>().ok()?, zone.get(3..5)?.parse::<i64>().ok()?);
+            sign * (zone_hour * 3600 + zone_minute * 60)
+        }
+    };
+    let days = days_from_civil(year, month, day);
+    Some(days * 86_400 + hour * 3600 + minute * 60 + second - offset)
+}
+
+/// The days from 1970-01-01 to the given civil date in the proleptic Gregorian calendar.
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let month_from_march = (month + 9) % 12;
+    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// The passed, failed, and pending counts of a status rollup. `None` when an entry has neither shape.
+fn tally_checks(rollup: &[Json]) -> Option<Checks> {
+    let mut checks = Checks::default();
+    for check in rollup {
+        match check_outcome(check)? {
+            CheckOutcome::Passed => checks.passed += 1,
+            CheckOutcome::Failed => checks.failed += 1,
+            CheckOutcome::Pending => checks.pending += 1,
+        }
+    }
+    Some(checks)
 }
 
 /// How one check in a pull request's status rollup stands.
@@ -924,18 +1198,29 @@ impl Cancel {
 /// `host`, when given, is set as `GH_HOST` for this call only; it must be github.com or a valid
 /// Enterprise host. Prompts are disabled, and the request is abandoned after a timeout.
 fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel, host: Option<&str>) -> std::result::Result<String, String> {
+    let executable = gh_executable().ok_or_else(|| NOT_INSTALLED.to_string())?;
+    run_gh_with(&executable, arguments, directory, cancel, host)
+}
+
+/// [`run_gh`] with the program given.
+fn run_gh_with(
+    executable: &Path,
+    arguments: &[&str],
+    directory: &Path,
+    cancel: &Cancel,
+    host: Option<&str>,
+) -> std::result::Result<String, String> {
     let host = match host {
         Some(host) => Some(gh_host_variable(host).ok_or_else(|| "The GitHub host is not supported.".to_string())?),
         None => None,
     };
-    let executable = gh_executable().ok_or_else(|| NOT_INSTALLED.to_string())?;
     let mut env = vec![("GH_PROMPT_DISABLED", "1"), ("GH_NO_UPDATE_NOTIFIER", "1"), ("NO_COLOR", "1")];
     // GH_HOST is set only for this call, when a host is given; GH_REPO and GH_HOST from the
     // environment are removed so they cannot point gh at another repository or host.
     if let Some(host) = host.as_deref() {
         env.push(("GH_HOST", host));
     }
-    run_program(&executable, arguments, directory, cancel, "GitHub", &env, &["GH_REPO", "GH_HOST"])
+    run_program(executable, arguments, directory, cancel, "GitHub", &env, &["GH_REPO", "GH_HOST"])
 }
 
 /// Runs a CLI program to completion, its timeout, or cancellation, returning its standard output.
@@ -1573,5 +1858,265 @@ mod tests {
         let github = repository("github.com", "acme", "app");
         let error = client.pull_request_for_branch(&github, "--state=closed", Path::new(".")).unwrap_err();
         assert!(error.to_string().contains("branch name"), "{error}");
+    }
+
+    /// Open pull requests as `gh pr list --json` printed them for acme/app on github.com: a review
+    /// requested from a user, one from a team, a draft with no checks, a changes-requested pull
+    /// request with mixed checks, and a deleted author.
+    const OPEN_LIST: &str = r#"[
+        {"number": 41, "title": "Add the status bar", "author": {"is_bot": false, "login": "alice", "name": "Alice"},
+         "url": "https://github.com/acme/app/pull/41", "headRefName": "status-bar", "isDraft": false,
+         "reviewDecision": "REVIEW_REQUIRED",
+         "reviewRequests": [{"__typename": "User", "login": "daniaal"}],
+         "updatedAt": "2026-11-09T10:30:00Z",
+         "statusCheckRollup": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"},
+            {"__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE"},
+            {"__typename": "CheckRun", "name": "lint", "status": "IN_PROGRESS", "conclusion": null}
+         ]},
+        {"number": 42, "title": "Draft: rework the sidebar", "author": {"is_bot": false, "login": "daniaal", "name": ""},
+         "url": "https://github.com/acme/app/pull/42", "headRefName": "sidebar", "isDraft": true,
+         "reviewDecision": "",
+         "reviewRequests": [{"__typename": "Team", "name": "Core", "slug": "core"}],
+         "updatedAt": "2026-11-01T00:00:00Z",
+         "statusCheckRollup": []},
+        {"number": 43, "title": "Speed up the graph", "author": null,
+         "url": "https://github.com/acme/app/pull/43", "headRefName": "graph-speed", "isDraft": false,
+         "reviewDecision": "CHANGES_REQUESTED",
+         "reviewRequests": [{"__typename": "User", "login": "bob"}, {"__typename": "Team", "name": "Core", "slug": "core"}],
+         "updatedAt": "2026-10-20T12:00:00Z",
+         "statusCheckRollup": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"},
+            {"__typename": "StatusContext", "context": "ci/external", "state": "PENDING"}
+         ]}
+    ]"#;
+
+    fn open_repository() -> GitHubRepository {
+        repository("github.com", "acme", "app")
+    }
+
+    #[test]
+    fn open_pull_requests_decode_from_a_captured_list() {
+        let list = decode_open_pull_requests(OPEN_LIST, &open_repository()).unwrap();
+        assert_eq!(list.len(), 3);
+
+        let first = &list[0];
+        assert_eq!(first.number, 41);
+        assert_eq!(first.title, "Add the status bar");
+        assert_eq!(first.url, "https://github.com/acme/app/pull/41");
+        assert_eq!(first.author.as_deref(), Some("alice"));
+        assert_eq!(first.head_branch, "status-bar");
+        assert!(!first.is_draft);
+        assert_eq!(first.review_decision, Some(ReviewDecision::ReviewRequired));
+        assert_eq!(first.review_requests, [ReviewRequest::User("daniaal".into())]);
+        assert_eq!(first.updated_at, timestamp_seconds("2026-11-09T10:30:00Z").unwrap());
+        assert_eq!(first.checks, Checks { passed: 1, failed: 1, pending: 1 });
+
+        let draft = &list[1];
+        assert!(draft.is_draft);
+        assert_eq!(draft.review_decision, None, "an empty review decision is none");
+        assert_eq!(draft.review_requests, [ReviewRequest::Team("Core".into())], "a team request is a team, not a user");
+        assert_eq!(draft.checks, Checks::default(), "no checks");
+
+        let deleted = &list[2];
+        assert_eq!(deleted.author, None, "a null author is kept as none");
+        assert_eq!(deleted.review_decision, Some(ReviewDecision::ChangesRequested));
+        assert_eq!(
+            deleted.review_requests,
+            [ReviewRequest::User("bob".into()), ReviewRequest::Team("Core".into())],
+            "users and teams keep the order gh lists them in"
+        );
+        assert_eq!(deleted.checks, Checks { passed: 1, failed: 0, pending: 1 });
+    }
+
+    #[test]
+    fn open_pull_requests_read_a_review_request_by_slug_when_there_is_no_name() {
+        let json = r#"[{"number": 3, "title": "T", "author": null, "url": "https://github.com/acme/app/pull/3", "headRefName": "x",
+            "isDraft": false, "reviewDecision": "APPROVED", "reviewRequests": [{"__typename": "Team", "slug": "docs"}],
+            "updatedAt": "2026-01-02T03:04:05Z", "statusCheckRollup": []}]"#;
+        let list = decode_open_pull_requests(json, &open_repository()).unwrap();
+        assert_eq!(list[0].review_requests, [ReviewRequest::Team("docs".into())]);
+        assert_eq!(list[0].review_decision, Some(ReviewDecision::Approved));
+    }
+
+    #[test]
+    fn open_pull_requests_refuse_a_missing_field() {
+        let url = "https://github.com/acme/app/pull/3";
+        let entry = |without: &str| {
+            let fields = [
+                ("number", "3".to_string()),
+                ("title", r#""T""#.to_string()),
+                ("author", r#"{"login": "alice"}"#.to_string()),
+                ("url", format!(r#""{url}""#)),
+                ("headRefName", r#""x""#.to_string()),
+                ("isDraft", "false".to_string()),
+                ("reviewDecision", r#""APPROVED""#.to_string()),
+                ("reviewRequests", "[]".to_string()),
+                ("updatedAt", r#""2026-01-02T03:04:05Z""#.to_string()),
+                ("statusCheckRollup", "[]".to_string()),
+            ];
+            let body: Vec<String> =
+                fields.iter().filter(|(name, _)| *name != without).map(|(name, value)| format!(r#""{name}": {value}"#)).collect();
+            format!("[{{{}}}]", body.join(", "))
+        };
+        let complete = entry("");
+        assert!(decode_open_pull_requests(&complete, &open_repository()).is_ok(), "the complete entry decodes");
+        for field in ["number", "title", "url", "headRefName", "isDraft", "reviewRequests", "updatedAt", "statusCheckRollup"] {
+            let json = entry(field);
+            assert!(decode_open_pull_requests(&json, &open_repository()).is_err(), "without {field} the list is refused");
+        }
+        let without_author = entry("author");
+        let list = decode_open_pull_requests(&without_author, &open_repository()).unwrap();
+        assert_eq!(list[0].author, None, "a missing author is kept as none");
+        let without_decision = entry("reviewDecision");
+        assert_eq!(decode_open_pull_requests(&without_decision, &open_repository()).unwrap()[0].review_decision, None);
+    }
+
+    #[test]
+    fn open_pull_requests_refuse_unexpected_entries() {
+        let repository = open_repository();
+        let base = |url: &str, requests: &str, rollup: &str, updated: &str| {
+            format!(
+                r#"[{{"number": 3, "title": "T", "author": null, "url": "{url}", "headRefName": "x", "isDraft": false,
+                "reviewDecision": "", "reviewRequests": {requests}, "updatedAt": "{updated}", "statusCheckRollup": {rollup}}}]"#
+            )
+        };
+        let good = "https://github.com/acme/app/pull/3";
+        assert!(decode_open_pull_requests(&base(good, "[]", "[]", "2026-01-02T03:04:05Z"), &repository).is_ok());
+        let refused = [
+            base("https://github.com/acme/other/pull/3", "[]", "[]", "2026-01-02T03:04:05Z"),
+            base("https://git.example.com/acme/app/pull/3", "[]", "[]", "2026-01-02T03:04:05Z"),
+            base("https://github.com/acme/app/pull/4", "[]", "[]", "2026-01-02T03:04:05Z"),
+            base(good, r#"[{"__typename": "Bot", "id": "x"}]"#, "[]", "2026-01-02T03:04:05Z"),
+            base(good, r#"["alice"]"#, "[]", "2026-01-02T03:04:05Z"),
+            base(good, "{}", "[]", "2026-01-02T03:04:05Z"),
+            base(good, "[]", r#"[{"name": "no status"}]"#, "2026-01-02T03:04:05Z"),
+            base(good, "[]", "[]", "last Tuesday"),
+            base(good, "[]", "[]", "2026-13-02T03:04:05Z"),
+            r#"{"number": 3}"#.to_string(),
+        ];
+        for json in refused {
+            assert!(decode_open_pull_requests(&json, &repository).is_err(), "{json} must be refused");
+        }
+        assert!(decode_open_pull_requests("[]", &repository).unwrap().is_empty(), "an empty list is valid");
+    }
+
+    #[test]
+    fn open_pull_requests_clean_a_hostile_title_and_branch() {
+        let json = r#"[{"number": 9, "title": "Fix\u0007 the\nbar\u001b[0m", "author": null,
+            "url": "https://github.com/acme/app/pull/9", "headRefName": "feat\u0000ure\tx", "isDraft": false,
+            "reviewDecision": "", "reviewRequests": [{"login": ""}], "updatedAt": "2026-01-02T03:04:05Z", "statusCheckRollup": []}]"#;
+        // An empty login is refused, as it cannot name a person.
+        assert!(decode_open_pull_requests(json, &open_repository()).is_err());
+        let json = json.replace(r#"[{"login": ""}]"#, "[]");
+        let list = decode_open_pull_requests(&json, &open_repository()).unwrap();
+        assert_eq!(list[0].title, "Fix the bar [0m");
+        assert_eq!(list[0].head_branch, "feat ure x");
+        assert!(!list[0].title.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn timestamps_read_utc_and_offsets() {
+        assert_eq!(timestamp_seconds("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(timestamp_seconds("2000-03-01T00:00:00Z"), Some(951_868_800));
+        assert_eq!(timestamp_seconds("2024-02-29T12:00:00+01:00"), Some(1_709_204_400), "the offset is applied");
+        assert_eq!(timestamp_seconds("2024-02-29T10:00:00.123-01:00"), Some(1_709_204_400), "fractions are skipped");
+        assert_eq!(timestamp_seconds("2026-11-09 10:30:00z"), Some(timestamp_seconds("2026-11-09T10:30:00Z").unwrap()));
+        for bad in [
+            "",
+            "2026-11-09",
+            "2026-11-09T10:30:00",
+            "2026-02-30x10:30:00Z",
+            "2026-11-09T25:00:00Z",
+            "2026-11-09T10:30:00+0100",
+            "2026-11-09T10:30:00.Z",
+            "2026/11/09T10:30:00Z",
+            "2026-11-09T10:30:00\u{e9}Z",
+        ] {
+            assert_eq!(timestamp_seconds(bad), None, "{bad:?} must not read");
+        }
+    }
+
+    #[test]
+    fn logins_are_checked_before_they_are_used() {
+        assert!(valid_login("daniaal"));
+        assert!(valid_login("octo-cat2"));
+        assert!(!valid_login(""));
+        assert!(!valid_login("null"), "gh prints null when there is no login");
+        assert!(!valid_login("two words"));
+        assert!(!valid_login("bad/login"));
+        assert!(!valid_login(&"a".repeat(40)));
+    }
+
+    #[test]
+    fn a_missing_gh_gives_a_reason_for_the_host_and_no_read_runs() {
+        let missing = GhProgram::Given(PathBuf::from("/nonexistent/nicegit-test/gh"));
+        let client = GitClient::new();
+        let status = client.gh_status_with("github.com", &missing, Path::new("/"));
+        assert_eq!(status, GhStatus::NotInstalled);
+        assert_eq!(status.reason("github.com").as_deref(), Some(NOT_INSTALLED));
+        assert!(GhStatus::SignedIn.reason("github.com").is_none());
+        let signed_out = GhStatus::SignedOut("To get started, run: gh auth login\n".into());
+        let reason = signed_out.reason("git.example.com").unwrap();
+        assert!(reason.contains("gh auth login --hostname git.example.com"), "{reason}");
+        assert!(!reason.contains('\n'), "the explanation is one line");
+        assert!(signed_out.reason("github.com").unwrap().contains("Run gh auth login in a terminal"));
+
+        let message = client.github_login("github.com", &missing, Path::new("/")).unwrap_err().to_string();
+        assert!(message.contains("not installed"), "{message}");
+        let repository = open_repository();
+        let message = client.github_open_pull_requests(&repository, &missing, &Cancel::default(), Path::new("/")).unwrap_err().to_string();
+        assert!(message.contains("not installed"), "{message}");
+    }
+
+    /// A stand-in `gh` that answers the reads the Launchpad makes, and appends each call's
+    /// arguments to `calls.txt` beside itself, one per line. Only the test uses it.
+    #[cfg(unix)]
+    const FAKE_GH: &str = r#"#!/bin/sh
+{ printf '%s\n' "$@"; echo '--end-of-call--'; } >> "$(dirname "$0")/calls.txt"
+case "$1" in
+  api) echo 'daniaal' ;;
+  auth) echo "Logged in to github.com" ;;
+  pr) cat "$(dirname "$0")/open.json" ;;
+esac
+"#;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_launchpad_reads_run_only_read_only_gh_commands() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = crate::rebase::Scratch::new("launchpad test").unwrap();
+        let script = scratch.write("launchpad test", "gh", FAKE_GH.as_bytes()).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let folder = script.parent().unwrap().to_path_buf();
+        std::fs::write(folder.join("open.json"), OPEN_LIST).unwrap();
+        let program = GhProgram::Given(script);
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+
+        assert_eq!(client.gh_status_with("github.com", &program, &directory), GhStatus::SignedIn);
+        assert_eq!(client.github_login("github.com", &program, &directory).unwrap(), "daniaal");
+        let list = client.github_open_pull_requests(&repository, &program, &Cancel::default(), &directory).unwrap();
+        assert_eq!(list.len(), 3);
+
+        let calls = std::fs::read_to_string(folder.join("calls.txt")).unwrap();
+        let calls: Vec<Vec<&str>> =
+            calls.split("--end-of-call--\n").filter(|call| !call.is_empty()).map(|call| call.lines().collect()).collect();
+        assert_eq!(calls[0], ["auth", "status", "--hostname", "github.com"]);
+        assert_eq!(calls[1], ["api", "user", "--jq", ".login"]);
+        assert_eq!(calls[2][..6], ["pr", "list", "--repo", "github.com/acme/app", "--state", "open"]);
+        assert_eq!(calls[2][6..8], ["--limit", "50"]);
+        for call in &calls {
+            let verb = call.first().copied().unwrap_or_default();
+            assert!(matches!(verb, "auth" | "api" | "pr"), "{call:?} is not a read");
+            assert!(
+                !call.iter().any(|word| matches!(*word, "create" | "merge" | "close" | "edit" | "POST" | "PATCH" | "DELETE")),
+                "{call:?}"
+            );
+            if verb == "api" {
+                assert!(!call.iter().any(|word| word.starts_with("-X") || *word == "--method"), "{call:?} is a GET");
+            }
+        }
     }
 }

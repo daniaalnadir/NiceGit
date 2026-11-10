@@ -393,6 +393,17 @@ Pull requests and issues are GitHub-only. Remotes on GitLab (gitlab.com, and sel
 servers listed under GitLab in Settings) and Bitbucket (bitbucket.org) get browser links only,
 as described below; NiceGit makes no API calls for them and stores no token.
 
+The Launchpad (Repository menu, or the command palette) lists open pull requests across every
+repository open as a tab, and across a saved workspace's folders when you choose one under
+Include workspace. Each repository's origin is read through `gh`, one read-only `gh pr list` call
+per repository, four at a time in the background. Pull requests fall into Needs your review (a
+review requested from you, not from a team), Yours, and Other open, each newest first. A row
+shows the repository, number, title, draft and review state, author, when it last changed, who
+was asked to review, and the check totals, with Open in browser and Check out. Check out switches
+to the repository and opens the same dialog as Check out locally. A repository whose origin is not
+on GitHub, or where gh is missing or signed out, is listed under Not available with the reason.
+Refresh reads again; closing the window stops reads still running. Nothing polls.
+
 Branch context menus provide checkout, fetch, current-branch pull/push, selected-branch
 push to an explicit same-named remote branch with confirmation, an upstream
 selector with current-tracking indicators and removal,
