@@ -184,6 +184,9 @@ impl NiceGitApp {
             );
             if header.clicked() {
                 self.settings.recent_repositories_open = !expanded;
+                if !expanded {
+                    self.settings.forget_missing_recent();
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(rows.len().to_string()).small().monospace().color(c.accent));

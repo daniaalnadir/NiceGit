@@ -1234,3 +1234,47 @@ fn double_clicking_a_panel_edge_restores_its_width() {
     let restored = width(&harness);
     assert!((restored - default).abs() < 2.0, "restored {restored} to the default {default}");
 }
+
+/// With the repositories column hidden, its Show button sits at the top left of the sidebar, and
+/// showing the column forgets recent repositories whose folders are gone.
+#[test]
+fn showing_the_hidden_repositories_column_from_the_top_left_forgets_missing_folders() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+    let gone = second.path().join("deleted-repository");
+    harness.state_mut().settings.remember(gone);
+    harness.state_mut().settings.show_repositories = false;
+    settle(&mut harness);
+    assert!(harness.query_by_label("Hide repositories").is_none(), "the column is hidden");
+
+    let show = harness.get_by_label("Show repositories");
+    assert!(show.rect().left() < 60.0, "the toggle is at the left edge of the window: {:?}", show.rect());
+    assert!(show.rect().top() < 60.0, "the toggle is at the top of the window, not in the status bar: {:?}", show.rect());
+    show.click();
+    settle(&mut harness);
+
+    assert!(harness.state().settings.show_repositories);
+    assert!(!recent_has_folder(&harness, "deleted-repository"), "the missing folder is forgotten on showing the list");
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_some(), "an existing one stays");
+}
+
+/// The repository menu lists recent repositories, so they open even with the column hidden.
+#[test]
+fn the_repository_menu_reopens_a_recent_repository() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+    harness.state_mut().settings.show_repositories = false;
+    settle(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(second.path()), "Recent repositories");
+    harness.get_by_label_contains(&format!("  {first_name}")).click();
+    loaded(&mut harness);
+    assert_eq!(harness.state().repos.len(), 2, "reopened from the repository menu");
+    assert_eq!(harness.state().snapshot().map(|s| s.name.clone()), Some(first_name));
+}

@@ -482,6 +482,16 @@ impl Settings {
         self.recent.retain(|recent| recent != path);
         self.recent_opened_at.remove(path);
     }
+
+    /// Forgets every recent repository whose folder is gone or is no longer a Git repository, and
+    /// returns how many were forgotten. Runs when NiceGit starts and when the recent list is shown.
+    pub fn forget_missing_recent(&mut self) -> usize {
+        let before = self.recent.len();
+        self.recent.retain(|path| path.join(".git").exists());
+        let recent = &self.recent;
+        self.recent_opened_at.retain(|path, _| recent.contains(path));
+        before - self.recent.len()
+    }
 }
 
 #[cfg(test)]
@@ -763,6 +773,24 @@ mod tests {
         draft.toggle_trailer(ANA);
         draft.toggle_trailer(ANA);
         assert_eq!(draft.description, original);
+    }
+
+    #[test]
+    fn forgetting_missing_recent_repositories_keeps_the_ones_that_exist() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let present = dir.path().join("present");
+        std::fs::create_dir_all(present.join(".git")).expect("make a repository folder");
+        let plain = dir.path().join("plain");
+        std::fs::create_dir_all(&plain).expect("make a plain folder");
+        let gone = dir.path().join("gone");
+        let mut settings = Settings::default();
+        for path in [&gone, &plain, &present] {
+            settings.remember(path.clone());
+        }
+        assert_eq!(settings.forget_missing_recent(), 2, "the missing folder and the plain folder go");
+        assert_eq!(settings.recent, vec![present.clone()]);
+        assert_eq!(settings.recent_opened_at.keys().collect::<Vec<_>>(), vec![&present]);
+        assert!(plain.is_dir(), "a forgotten folder is left on disk");
     }
 
     #[test]

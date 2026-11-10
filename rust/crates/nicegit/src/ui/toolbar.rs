@@ -534,6 +534,30 @@ impl NiceGitApp {
             ui.close();
             self.create_repository();
         }
+        // Recent repositories, reachable here even while the repositories column is hidden.
+        let tabs: Vec<_> = self.repos.iter().map(|repo| repo.path.clone()).collect();
+        let recent: Vec<_> = self.settings.recent.iter().filter(|path| !tabs.contains(path) && path.is_dir()).take(12).cloned().collect();
+        ui.add_enabled_ui(!recent.is_empty(), |ui| {
+            ui.menu_button(format!("{}  Recent repositories", icon::CLOCK_COUNTER_CLOCKWISE), |ui| {
+                ui.set_min_width(220.0);
+                for path in recent {
+                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    if ui.button(format!("{}  {name}", icon::FOLDER)).on_hover_text(path.display().to_string()).clicked() {
+                        ui.close();
+                        self.open(path);
+                    }
+                }
+                ui.separator();
+                if ui.button(format!("{}  Show all in the sidebar", icon::SIDEBAR_SIMPLE)).clicked() {
+                    ui.close();
+                    self.settings.show_repositories = true;
+                    self.settings.recent_repositories_open = true;
+                    self.settings.forget_missing_recent();
+                }
+            })
+            .response
+            .on_disabled_hover_text("Repositories you open appear here");
+        });
         ui.separator();
         let open =
             |ui: &mut Ui, app: &mut NiceGitApp, glyph: &str, text: &str, make: &dyn Fn(&egui::Context) -> Box<dyn tools::ToolWindow>| {
