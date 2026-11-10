@@ -2,6 +2,8 @@
 
 **A fast Git client for macOS, Windows, and Linux. Free and open source.**
 
+[Website](https://daniaalnadir.github.io/NiceGit/) · [Download](https://github.com/daniaalnadir/NiceGit/releases/latest) · [Feature guide](docs/FEATURES.md)
+
 ![NiceGit showing a repository's commit graph, branches, and staged changes](docs/images/nicegit-cross-platform.png)
 
 NiceGit puts your repositories, branches, history, and changes in one window.

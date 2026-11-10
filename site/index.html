@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NiceGit · A fast, free Git client</title>
+  <meta name="description" content="NiceGit is a fast, free and open-source Git client for macOS, Windows and Linux. See your history, stage line by line, and rewrite history safely.">
+  <meta property="og:title" content="NiceGit">
+  <meta property="og:description" content="A fast, free and open-source Git client for macOS, Windows and Linux.">
+  <meta property="og:image" content="https://daniaalnadir.github.io/NiceGit/images/history.png">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="images/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <a class="brand" href="#">
+        <img src="images/icon.png" alt="" width="28" height="28">
+        <span>NiceGit</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="#features">Features</a>
+        <a href="#safety">Safety</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/daniaalnadir/NiceGit">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <img class="hero-icon" src="images/icon.png" alt="" width="88" height="88">
+        <h1>A fast Git client that keeps your work safe.</h1>
+        <p class="lead">
+          NiceGit puts your repositories, branches, history and changes in one window, on
+          macOS, Windows and Linux. Free and open source, with no account and nothing sent
+          anywhere except by Git itself.
+        </p>
+        <div class="actions">
+          <a class="button primary" id="download-primary" href="https://github.com/daniaalnadir/NiceGit/releases/latest">Download NiceGit</a>
+          <a class="button" href="https://github.com/daniaalnadir/NiceGit">View the source</a>
+        </div>
+        <p class="small muted" id="download-note">For macOS 11+, Windows 10+ and Linux (x86_64). Git must be installed.</p>
+      </div>
+      <div class="wrap wide">
+        <figure class="shot hero-shot">
+          <img src="images/history.png" width="1920" height="1080"
+               alt="NiceGit showing a commit graph with three branches and two tags, the authors and dates of each commit, and a list of staged and unstaged files">
+        </figure>
+      </div>
+    </section>
+
+    <section id="features" class="features">
+      <div class="wrap">
+        <div class="feature">
+          <div class="text">
+            <h2>See your history</h2>
+            <p>
+              A commit graph with stable lanes and colours, branch and tag labels, and your
+              uncommitted work joined to the commit it builds on. Search every branch by
+              message, author, code change or commit ID, blame any file, and follow a file's
+              history across renames.
+            </p>
+            <ul>
+              <li>Show every branch, only local ones, or just the current branch</li>
+              <li>Compare any two commits, side by side or in one column</li>
+              <li>Find the commit that introduced a bug with guided bisect</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="images/inspector-light.png" width="1920" height="1080" loading="lazy"
+                 alt="The light appearance, with a commit selected and its author, date, branches and changed files shown in the inspector">
+          </figure>
+        </div>
+
+        <div class="feature flip">
+          <div class="text">
+            <h2>Stage exactly what you mean</h2>
+            <p>
+              Stage and unstage whole files or single lines. Hover a change in a diff to stage,
+              unstage or discard just that change, and step through every changed file without
+              leaving the diff. Edit working files in place when a quick fix is all you need.
+            </p>
+            <ul>
+              <li>Side-by-side or unified diffs, with word-level highlights</li>
+              <li>Unstaged and staged files in their own lists, always in view</li>
+              <li>A separate commit draft for each checkout</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="images/stage-lines.png" width="1440" height="900" loading="lazy"
+                 alt="A diff of a Swift file with the changed words highlighted, and Stage and Discard buttons beside the change under the pointer">
+          </figure>
+        </div>
+
+        <div class="feature">
+          <div class="text">
+            <h2>Rewrite history with confidence</h2>
+            <p>
+              Interactive rebase lets you drag commits into order, and pick, reword, edit,
+              squash, fix up or drop them. Merge, rebase, cherry-pick, revert and reset, with a
+              preview of which files will conflict before you start, and a built-in editor to
+              resolve the conflicts that do.
+            </p>
+            <ul>
+              <li>Fold staged changes into an older commit with Fix up</li>
+              <li>Edit the message of any commit on the branch</li>
+              <li>Worktrees, submodules, stashes, GitFlow and Git LFS</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="images/rebase.png" width="1440" height="900" loading="lazy"
+                 alt="The interactive rebase window listing three commits, one set to Squash, with a warning that they are already on a remote">
+          </figure>
+        </div>
+
+        <div class="feature flip">
+          <div class="text">
+            <h2>Made for the keyboard</h2>
+            <p>
+              A command palette for actions, branches and repositories, an embedded terminal
+              for each checkout, and every shortcut in one list. NiceGit refreshes when files
+              change in other apps and fetches in the background, so what you see is current.
+            </p>
+            <ul>
+              <li>Light and dark appearance, and a colour-blind safe graph palette</li>
+              <li>Pull requests and issues through your existing GitHub CLI login</li>
+              <li>Make everything larger or smaller to suit your screen</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <img src="images/shortcuts.png" width="1440" height="900" loading="lazy"
+                 alt="The keyboard shortcuts list, grouped into Anywhere, History, Diff and Committing">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="safety" class="safety">
+      <div class="wrap">
+        <h2>Built so mistakes can be undone</h2>
+        <p class="lead">Git is powerful, and NiceGit treats that power with care.</p>
+        <div class="cards">
+          <div class="card">
+            <h3>Undo</h3>
+            <p>Undo the last commit, merge, rebase, reset, pull, cherry-pick or branch deletion, and bring back a file's discarded changes.</p>
+          </div>
+          <div class="card">
+            <h3>Checks before it acts</h3>
+            <p>Every destructive action confirms that the branch, commit or remote you saw is still the one it will change, and refuses if it is not.</p>
+          </div>
+          <div class="card">
+            <h3>Safer force push</h3>
+            <p>Force push with a lease: the confirmation lists what the remote would lose, and the push is refused if someone else pushed since your last fetch.</p>
+          </div>
+          <div class="card">
+            <h3>Recover lost work</h3>
+            <p>Commits left behind by a reset or rebase can be found again from Repository › Recover Lost Work.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="download">
+      <div class="wrap">
+        <h2>Download</h2>
+        <p class="lead">Free, with no account, subscription or paid tier. Get the latest build for your system.</p>
+        <div class="platforms">
+          <a class="platform" data-os="mac" href="https://github.com/daniaalnadir/NiceGit/releases/latest">
+            <strong>macOS</strong>
+            <span>11 or newer · Apple Silicon and Intel</span>
+            <code>.dmg</code>
+          </a>
+          <a class="platform" data-os="windows" href="https://github.com/daniaalnadir/NiceGit/releases/latest">
+            <strong>Windows</strong>
+            <span>10 or newer · 64-bit</span>
+            <code>.zip</code>
+          </a>
+          <a class="platform" data-os="linux" href="https://github.com/daniaalnadir/NiceGit/releases/latest">
+            <strong>Linux</strong>
+            <span>Debian and Ubuntu, or any x86_64</span>
+            <code>.deb · .tar.gz</code>
+          </a>
+        </div>
+        <p class="muted small">Every version needs <a href="https://git-scm.com/downloads">Git</a> installed and on your <code>PATH</code>.</p>
+
+        <h3 class="build-title">Or build it from source</h3>
+        <p>Install <a href="https://rustup.rs">Rust</a> 1.95 or newer, then:</p>
+        <pre><code>git clone https://github.com/daniaalnadir/NiceGit.git
+cd NiceGit/rust
+cargo run --release</code></pre>
+        <p class="muted small">
+          On Linux, first install the GTK 3, xkbcommon and Wayland or X11 development packages,
+          for example <code>libgtk-3-dev libxkbcommon-dev libwayland-dev</code>.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-row">
+      <span>NiceGit is free software under the <a href="https://github.com/daniaalnadir/NiceGit/blob/main/LICENSE">MIT License</a>.</span>
+      <span>
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/docs/FEATURES.md">Feature guide</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/CHANGELOG.md">Changelog</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/issues">Report an issue</a>
+      </span>
+    </div>
+  </footer>
+
+  <script>
+    // Name the visitor's system on the main button and highlight its download.
+    (function () {
+      var ua = navigator.userAgent;
+      var os = /Mac/.test(ua) && !/iPhone|iPad/.test(ua) ? "mac" : /Windows/.test(ua) ? "windows" : /Linux/.test(ua) && !/Android/.test(ua) ? "linux" : null;
+      var names = { mac: "macOS", windows: "Windows", linux: "Linux" };
+      if (!os) return;
+      document.getElementById("download-primary").textContent = "Download for " + names[os];
+      var card = document.querySelector('.platform[data-os="' + os + '"]');
+      if (card) card.classList.add("current");
+    })();
+  </script>
+</body>
+</html>
