@@ -213,6 +213,17 @@ pub struct GitHubRepoListing {
     pub updated_at: String,
 }
 
+/// A remote's default branch on GitHub, with the commit its remote-tracking ref held when it was
+/// read. Work on an issue can start there, and the tip is checked again before the branch is made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DefaultBranchStart {
+    /// The remote, such as `origin`, whose remote-tracking branch is `remote/branch`.
+    pub remote: String,
+    pub branch: String,
+    /// The full object ID of the commit `remote/branch` pointed to.
+    pub tip: String,
+}
+
 /// The state of a pull request, as the status bar shows it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PrState {
@@ -346,6 +357,52 @@ impl GitClient {
         }
         self.check_branch_name(name, directory)?;
         Ok(name.to_string())
+    }
+
+    /// The start point for work on an issue: `remote`'s default branch on GitHub, with the commit
+    /// its remote-tracking ref holds now. `remote` must be a GitHub remote on github.com or one of
+    /// `enterprise_hosts`. Nothing is fetched, so the remote-tracking ref must already exist.
+    pub fn remote_default_branch(&self, remote: &str, enterprise_hosts: &[String], directory: &Path) -> Result<DefaultBranchStart> {
+        let repository = self.github_repository(remote, directory, enterprise_hosts)?;
+        let branch = self.default_branch(&repository, directory)?;
+        let tip = self.remote_tracking_tip(remote, &branch, directory)?;
+        Ok(DefaultBranchStart { remote: remote.to_string(), branch, tip })
+    }
+
+    /// The commit `refs/remotes/<remote>/<branch>` points to, which must already be fetched.
+    fn remote_tracking_tip(&self, remote: &str, branch: &str, directory: &Path) -> Result<String> {
+        let reference = format!("refs/remotes/{remote}/{branch}^{{commit}}");
+        self.try_trimmed(&["rev-parse", "--verify", "--quiet", "--end-of-options", &reference], directory).ok_or_else(|| {
+            GitError::failed("GitHub", format!("{remote}/{branch} is not in this repository. Fetch {remote}, then try again."))
+        })
+    }
+
+    /// Creates the local branch `name` for issue work and checks it out, through the same guarded
+    /// path as Create and checkout branch. With `start` None the branch is created at HEAD, which
+    /// must still be `expected_head` on `expected_branch`. Otherwise the branch is created at the
+    /// commit `start` recorded, and that refuses if the remote-tracking ref has moved since. A
+    /// branch with this name that already exists is never replaced; the message offers checkout.
+    pub fn start_issue_branch(
+        &self,
+        name: &str,
+        start: Option<&DefaultBranchStart>,
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        directory: &Path,
+    ) -> Result<()> {
+        const COMMAND: &str = "start work";
+        // The checkout is checked before the remote is read, so a stale dialog changes nothing.
+        self.require_checkout(expected_branch, expected_head, COMMAND, directory)?;
+        if let Some(start) = start {
+            let tip = self.remote_tracking_tip(&start.remote, &start.branch, directory)?;
+            if tip != start.tip {
+                return Err(GitError::failed(
+                    COMMAND,
+                    format!("{}/{} changed since it was shown. Review it again before starting work.", start.remote, start.branch),
+                ));
+            }
+        }
+        self.create_and_checkout_branch(name, start.map(|start| start.tip.as_str()), expected_branch, expected_head, COMMAND, directory)
     }
 
     /// Creates a pull request from `head` into `base` on `repository` through `gh pr create`, and
@@ -522,9 +579,35 @@ impl GitClient {
 /// has no such characters.
 pub fn pull_request_branch_name(number: u64, title: &str) -> String {
     const SLUG_LIMIT: usize = 40;
+    let slug = title_slug(title, SLUG_LIMIT);
+    if slug.is_empty() {
+        format!("pr/{number}")
+    } else {
+        format!("pr/{number}-{slug}")
+    }
+}
+
+/// The local branch for work on issue `number`: `<number>-<slug>`, where the slug is the title's
+/// ASCII letters and digits, lowercased and joined by hyphens, at most 50 characters. The name is
+/// `<number>` alone when the title has no such characters. A leading number is valid in a branch
+/// name, so every result passes `git check-ref-format --branch`.
+pub fn issue_branch_name(number: u64, title: &str) -> String {
+    const SLUG_LIMIT: usize = 50;
+    let slug = title_slug(title, SLUG_LIMIT);
+    if slug.is_empty() {
+        number.to_string()
+    } else {
+        format!("{number}-{slug}")
+    }
+}
+
+/// The title's ASCII letters and digits, lowercased and separated by single hyphens, with no
+/// leading or trailing hyphen. Other characters, including non-ASCII letters, only separate words.
+/// The result is at most `limit` characters.
+fn title_slug(title: &str, limit: usize) -> String {
     let mut slug = String::new();
     for character in title.chars() {
-        if slug.len() >= SLUG_LIMIT {
+        if slug.len() >= limit {
             break;
         }
         if character.is_ascii_alphanumeric() {
@@ -533,12 +616,7 @@ pub fn pull_request_branch_name(number: u64, title: &str) -> String {
             slug.push('-');
         }
     }
-    let slug = slug.trim_end_matches('-');
-    if slug.is_empty() {
-        format!("pr/{number}")
-    } else {
-        format!("pr/{number}-{slug}")
-    }
+    slug.trim_end_matches('-').to_string()
 }
 
 /// The `gh pr create` arguments for a pull request from `head` into `base` on `repository`. Each

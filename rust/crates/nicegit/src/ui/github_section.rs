@@ -92,6 +92,30 @@ impl NiceGitApp {
         self.dialog = Some(crate::ui::dialogs::Dialog::check_out_pull_request(remote, item.number, item.title, author, snapshot));
     }
 
+    /// Opens the Start work dialog for issue `item` on `remote`. The remote's default branch is read
+    /// in the background as the dialog opens; nothing changes until the dialog's button is pressed.
+    fn open_start_issue_work(&mut self, snapshot: &Snapshot, remote: String, item: GitHubItem) {
+        if self.busy.is_some() {
+            self.notify("Wait for the current Git action to finish before starting work on an issue.", true);
+            return;
+        }
+        if snapshot.operation.is_some() {
+            self.notify("Finish or abort the current Git operation before starting work on an issue.", true);
+            return;
+        }
+        if snapshot.head_hash.is_none() {
+            self.notify("Make a first commit before starting work on an issue, so there is a HEAD to start from.", true);
+            return;
+        }
+        let Some(path) = self.repo().map(|repo| repo.path.clone()) else { return };
+        let hosts = self.settings.github_enterprise_hosts.clone();
+        let (remote_name, directory) = (remote.clone(), path);
+        let default = Task::spawn(&self.worker.context, move || {
+            GitClient::new().remote_default_branch(&remote_name, &hosts, &directory).map_err(|error| error.to_string())
+        });
+        self.dialog = Some(crate::ui::dialogs::Dialog::start_issue_work(remote, item.number, item.title, snapshot, default));
+    }
+
     pub fn github_section(&mut self, ui: &mut Ui, snapshot: &Snapshot, kind: ItemKind) {
         let c = theme::of(ui);
         let (id, glyph, title) = match kind {
@@ -107,6 +131,8 @@ impl NiceGitApp {
         let mut window: Option<String> = None;
         // A pull request's "Check out locally…" asks for the dialog, which opens once the list is drawn.
         let mut check_out: Option<(String, GitHubItem)> = None;
+        // An issue's "Start work…" asks for its dialog the same way.
+        let mut start_work: Option<(String, GitHubItem)> = None;
         let hosts = self.settings.github_enterprise_hosts.clone();
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
@@ -189,6 +215,10 @@ impl NiceGitApp {
                         ui.close();
                         check_out = Some((list.remote.clone(), item.clone()));
                     }
+                    if kind == ItemKind::Issue && ui.button(format!("{}  Start work…", icon::GIT_BRANCH)).clicked() {
+                        ui.close();
+                        start_work = Some((list.remote.clone(), item.clone()));
+                    }
                 });
             }
             if !loading && list.items.len() >= list.limit && list.limit < MAXIMUM {
@@ -210,6 +240,9 @@ impl NiceGitApp {
         }
         if let Some((remote, item)) = check_out {
             self.open_check_out_pull_request(snapshot, remote, item);
+        }
+        if let Some((remote, item)) = start_work {
+            self.open_start_issue_work(snapshot, remote, item);
         }
         if let Some(remote) = window {
             let tool = match kind {

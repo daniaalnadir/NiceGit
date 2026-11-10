@@ -984,6 +984,102 @@ fn check_out_a_pull_request_from_its_row() {
     assert!(repo.path().join("review.txt").exists());
 }
 
+/// An issue's Start work dialog opens from the row's menu with the branch named from the title,
+/// and its button creates and checks out that branch at HEAD. Nothing reaches GitHub: the issue
+/// list is stubbed.
+#[test]
+fn start_work_on_an_issue_creates_its_branch_at_head() {
+    let repo = repository();
+    let origin = temp_dir();
+    git(origin.path(), &["init", "-q", "--bare", "-b", "main"]);
+    let origin_path = origin.path().to_str().expect("UTF-8 temp path").to_string();
+    git(repo.path(), &["remote", "add", "origin", &origin_path]);
+    git(repo.path(), &["push", "-q", "origin", "main"]);
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let item = nicegit_core::github::GitHubItem {
+        number: 12,
+        title: "Login fails on Safari!".into(),
+        url: "https://github.com/acme/app/issues/12".into(),
+        author: Some("octocat".into()),
+        state: Some("OPEN".into()),
+        is_draft: false,
+        labels: Vec::new(),
+    };
+    harness.state_mut().repos[0].github[1] = Some(crate::ui::github_section::GitHubList::loaded("origin", vec![item]));
+    harness.get_by_label_contains("ISSUES").click();
+    settle(&mut harness);
+
+    harness.get_by_label_contains("#12  Login fails on Safari!").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Start work").click();
+    wait(
+        &mut harness,
+        "the start work dialog",
+        |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { local, .. }) if local == "12-login-fails-on-safari"),
+    );
+    settle(&mut harness);
+    harness.get_by_label("Start work").click();
+    idle(&mut harness);
+
+    assert_eq!(git(repo.path(), &["symbolic-ref", "--short", "HEAD"]), "12-login-fails-on-safari");
+    assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), head);
+    let notice = harness.state().notice.as_ref().map(|notice| notice.text.clone()).unwrap_or_default();
+    assert!(notice.contains("issue #12"), "the notice names the issue: {notice}");
+}
+
+/// The remote's default branch is chosen from the dialog. Its tip is checked again when the button
+/// is pressed, so a default branch that moved after it was shown creates nothing.
+#[test]
+fn start_work_refuses_a_default_branch_that_moved_after_it_was_shown() {
+    let repo = repository();
+    let origin = temp_dir();
+    git(origin.path(), &["init", "-q", "--bare", "-b", "main"]);
+    let origin_path = origin.path().to_str().expect("UTF-8 temp path").to_string();
+    git(repo.path(), &["remote", "add", "origin", &origin_path]);
+    git(repo.path(), &["push", "-q", "origin", "main"]);
+    let shown = git(repo.path(), &["rev-parse", "HEAD"]);
+    std::fs::write(repo.path().join("notes.txt"), "moved\n").unwrap();
+    git(repo.path(), &["commit", "-qam", "Move the default branch"]);
+    git(repo.path(), &["push", "-q", "origin", "main"]);
+
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    let item = nicegit_core::github::GitHubItem {
+        number: 12,
+        title: "Login fails".into(),
+        url: "https://github.com/acme/app/issues/12".into(),
+        author: None,
+        state: Some("OPEN".into()),
+        is_draft: false,
+        labels: Vec::new(),
+    };
+    harness.state_mut().repos[0].github[1] = Some(crate::ui::github_section::GitHubList::loaded("origin", vec![item]));
+    harness.get_by_label_contains("ISSUES").click();
+    settle(&mut harness);
+    harness.get_by_label_contains("#12  Login fails").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Start work").click();
+    wait(&mut harness, "the start work dialog", |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { .. })));
+    // The default branch was read as the earlier tip, as a stubbed background read would give.
+    let stub = nicegit_core::github::DefaultBranchStart { remote: "origin".into(), branch: "main".into(), tip: shown.clone() };
+    if let Some(crate::ui::dialogs::Dialog::StartIssueWork { default, .. }) = &mut harness.state_mut().dialog {
+        *default = crate::tools::Task::ready(Ok(stub));
+    }
+    settle(&mut harness);
+    harness.get_by_label_contains("(the default branch)").click();
+    settle(&mut harness);
+    harness.get_by_label("Start work").click();
+    idle(&mut harness);
+
+    let notice = harness.state().notice.as_ref().map(|notice| notice.text.clone()).unwrap_or_default();
+    assert!(notice.contains("changed since it was shown"), "{notice}");
+    assert_eq!(git(repo.path(), &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert!(git(repo.path(), &["branch", "--list", "12-login-fails"]).is_empty(), "no branch was created");
+}
+
 #[test]
 fn double_clicking_a_panel_edge_restores_its_width() {
     use egui::containers::panel::PanelState;

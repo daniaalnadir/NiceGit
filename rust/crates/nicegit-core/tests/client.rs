@@ -2244,6 +2244,118 @@ fn pull_request_branch_names_are_valid_branch_names() {
     }
 }
 
+// MARK: Start work on an issue
+
+#[test]
+fn start_issue_work_creates_a_branch_at_head_and_checks_it_out() {
+    use nicegit_core::github::issue_branch_name;
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    let name = issue_branch_name(12, "Login fails");
+
+    client().start_issue_branch(&name, None, "main", Some(&head), repo.path()).expect("start work");
+
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "12-login-fails");
+    assert_eq!(repo.head(), head);
+}
+
+#[test]
+fn start_issue_work_refuses_an_existing_branch_and_offers_checkout() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["branch", "12-login-fails"]);
+
+    let message = error_text(client().start_issue_branch("12-login-fails", None, "main", Some(&head), repo.path()));
+
+    assert!(message.contains("already exists") && message.contains("Check it out instead"), "{message}");
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
+}
+
+#[test]
+fn start_issue_work_refuses_when_head_moved_since_it_was_shown() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    let second = repo.commit("b.txt", "two\n", "Second");
+
+    let message = error_text(client().start_issue_branch("12-login-fails", None, "main", Some(&first), repo.path()));
+
+    assert!(message.contains("changed"), "{message}");
+    assert!(!branch_exists(repo.path(), "12-login-fails"));
+    assert_eq!(repo.head(), second);
+}
+
+#[test]
+fn start_issue_work_at_the_remote_default_branch_creates_it_at_the_shown_tip() {
+    let repo = Repo::new();
+    let shown = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["update-ref", "refs/remotes/origin/main", &shown]);
+    let later = repo.commit("a.txt", "two\n", "Second");
+    let start = nicegit_core::github::DefaultBranchStart { remote: "origin".into(), branch: "main".into(), tip: shown.clone() };
+
+    client().start_issue_branch("3-start-here", Some(&start), "main", Some(&later), repo.path()).expect("start work");
+
+    assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "3-start-here");
+    assert_eq!(repo.head(), shown);
+    assert_eq!(repo.read("a.txt"), "one\n", "the working tree follows the new branch");
+    assert_eq!(repo.git(&["rev-parse", "refs/remotes/origin/main"]).trim(), shown, "the remote-tracking branch is left alone");
+    assert!(!git_output(repo.path(), &["config", "--get", "branch.3-start-here.remote"]).status.success(), "no upstream is set");
+}
+
+#[test]
+fn start_issue_work_refuses_a_remote_default_that_moved_since_it_was_shown() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["update-ref", "refs/remotes/origin/main", &first]);
+    let shown = nicegit_core::github::DefaultBranchStart { remote: "origin".into(), branch: "main".into(), tip: first.clone() };
+    let second = repo.commit("b.txt", "two\n", "Second");
+    repo.git(&["update-ref", "refs/remotes/origin/main", &second]);
+
+    let message = error_text(client().start_issue_branch("3-start-here", Some(&shown), "main", Some(&second), repo.path()));
+
+    assert!(message.contains("changed since it was shown"), "{message}");
+    assert!(!branch_exists(repo.path(), "3-start-here"), "nothing was created");
+    assert_eq!(repo.head(), second);
+}
+
+#[test]
+fn start_issue_work_refuses_a_remote_default_that_is_not_fetched() {
+    let repo = Repo::new();
+    let head = repo.commit("a.txt", "one\n", "First");
+    let shown = nicegit_core::github::DefaultBranchStart { remote: "origin".into(), branch: "main".into(), tip: head.clone() };
+
+    let message = error_text(client().start_issue_branch("3-start-here", Some(&shown), "main", Some(&head), repo.path()));
+
+    assert!(message.contains("Fetch origin"), "{message}");
+    assert!(!branch_exists(repo.path(), "3-start-here"));
+}
+
+#[test]
+fn remote_default_branch_refuses_a_remote_that_is_not_on_github_without_running_gh() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", "https://example.invalid/acme/app.git"]);
+
+    let message = error_text(client().remote_default_branch("origin", &[], repo.path()));
+
+    assert!(message.contains("not on github.com"), "{message}");
+}
+
+#[test]
+fn issue_branch_names_are_valid_branch_names() {
+    use nicegit_core::github::issue_branch_name;
+    assert_eq!(issue_branch_name(12, "Login fails on Safari!"), "12-login-fails-on-safari");
+    assert_eq!(issue_branch_name(3, "2FA login"), "3-2fa-login", "a title may start with a digit");
+    assert_eq!(issue_branch_name(12, "ünïcode *** "), "12-n-code", "non-ASCII letters only separate words");
+    assert_eq!(issue_branch_name(7, "!!!"), "7", "a title without letters or digits leaves the number");
+    let long = issue_branch_name(9, &"word ".repeat(30));
+    assert!(long.len() <= "9-".len() + 50, "the slug is at most 50 characters: {long}");
+    for name in [issue_branch_name(7, "Fix: the .lock/ and ~ thing"), long] {
+        assert!(!name.ends_with('-'), "{name}");
+        let reference = format!("refs/heads/{name}");
+        assert!(git_output(Path::new("."), &["check-ref-format", &reference]).status.success(), "{name} is a valid ref");
+    }
+}
+
 // MARK: History scope
 
 /// The commit hashes in a snapshot's history, newest first.
