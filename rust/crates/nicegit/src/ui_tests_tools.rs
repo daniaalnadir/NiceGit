@@ -810,7 +810,6 @@ fn git_settings_adds_lists_and_removes_a_local_setting() {
     harness.step();
     harness.get_by_role_and_label(Role::TextInput, "Setting value").type_text("1");
     harness.step();
-    harness.get_by_role_and_label(Role::Button, "Add").click();
     // `--get-all` exits 1 while the key is unset, so the value is read without asserting success.
     let local_value = |dir: &Path| {
         let output = Command::new("git")
@@ -822,7 +821,17 @@ fn git_settings_adds_lists_and_removes_a_local_setting() {
             .expect("run git");
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     };
-    wait(&mut harness, "the new setting to be written", |_| local_value(path) == "1");
+    // The button waits while the app is busy, which on a slow runner can outlast one click.
+    click_until(
+        &mut harness,
+        "the new setting to be written",
+        |h| {
+            if let Some(button) = h.query_by_role_and_label(Role::Button, "Add") {
+                button.click();
+            }
+        },
+        |_| local_value(path) == "1",
+    );
     idle(&mut harness);
     wait(&mut harness, "the new setting to be listed", |h| h.query_by_label("Remove nicegit.test").is_some());
 
@@ -833,8 +842,32 @@ fn git_settings_adds_lists_and_removes_a_local_setting() {
     settle(&mut harness);
     harness.get_by_role_and_label(Role::Button, "Remove nicegit.test").click();
     wait(&mut harness, "the removal confirmation", |h| h.query_by_role_and_label(Role::Button, "Remove").is_some());
-    harness.get_by_role_and_label(Role::Button, "Remove").click();
-    wait(&mut harness, "the setting to be removed", |_| !git(path, &["config", "--local", "--list"]).contains("nicegit.test="));
+    click_until(
+        &mut harness,
+        "the setting to be removed",
+        |h| {
+            if let Some(button) = h.query_by_role_and_label(Role::Button, "Remove") {
+                button.click();
+            }
+        },
+        |_| !git(path, &["config", "--local", "--list"]).contains("nicegit.test="),
+    );
     idle(&mut harness);
     wait(&mut harness, "the removed setting to leave the list", |h| h.query_by_label("Remove nicegit.test").is_none());
+}
+
+/// Clicks with `click` every few frames until `done` holds, for buttons that stay disabled while
+/// the app is busy. Fails after 30 seconds.
+fn click_until(
+    harness: &mut Harness<'static, NiceGitApp>,
+    what: &str,
+    click: impl Fn(&Harness<'static, NiceGitApp>),
+    done: impl Fn(&Harness<'static, NiceGitApp>) -> bool,
+) {
+    let start = std::time::Instant::now();
+    while !done(harness) {
+        click(harness);
+        harness.run_steps(5);
+        assert!(start.elapsed() < std::time::Duration::from_secs(30), "timed out waiting for {what}");
+    }
 }
