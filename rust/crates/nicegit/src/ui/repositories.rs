@@ -14,7 +14,7 @@ impl NiceGitApp {
         let c = theme::of(ui);
         egui::Frame::new().inner_margin(egui::Margin { left: 12, right: 10, top: 14, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if widgets::icon_button(ui, icon::SIDEBAR_SIMPLE, "Hide repositories", true).clicked() {
+                if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, "Hide repositories", true).clicked() {
                     self.settings.show_repositories = false;
                 }
                 ui.label(RichText::new("Repositories").strong().size(15.0));

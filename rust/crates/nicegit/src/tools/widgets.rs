@@ -14,6 +14,23 @@ pub fn icon_button(ui: &mut Ui, glyph: &str, tooltip: &str, enabled: bool) -> eg
     response.on_hover_text(tooltip).on_disabled_hover_text(tooltip)
 }
 
+/// An icon button drawn as a button: a filled, outlined square that lights up under the pointer, for
+/// a control that should read as clickable on its own, such as a panel toggle.
+pub fn framed_icon_button(ui: &mut Ui, glyph: &str, tooltip: &str, enabled: bool) -> egui::Response {
+    let c = theme::of(ui);
+    let button = egui::Button::new(RichText::new(glyph).size(16.0).color(c.accent))
+        .fill(c.card_bg)
+        .stroke(egui::Stroke::new(1.0, c.border))
+        .corner_radius(6.0)
+        .min_size(egui::vec2(28.0, 28.0));
+    let response = ui.add_enabled(enabled, button);
+    if response.hovered() {
+        ui.painter().rect_stroke(response.rect, 6.0, egui::Stroke::new(1.0, c.accent), egui::StrokeKind::Inside);
+    }
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, tooltip));
+    response.on_hover_text(tooltip).on_disabled_hover_text(tooltip)
+}
+
 /// A button with an icon followed by text.
 pub fn labeled_button(ui: &mut Ui, glyph: &str, text: &str, enabled: bool) -> egui::Response {
     ui.add_enabled(enabled, egui::Button::new(format!("{glyph}  {text}")))
