@@ -911,3 +911,73 @@ fn a_pull_request_detail_window_shows_its_checks_conversation_and_files() {
     settle(&mut harness);
     assert!(shows(&harness, "src/status_bar.rs"), "the changed file is listed");
 }
+
+/// Sets one of the graph's Show menu items on or off, opening the menu first when it is closed.
+/// The menu stays open while its items are toggled.
+fn set_graph_show(harness: &mut App, item: &str, on: bool) {
+    if harness.query_by_role_and_label(Role::CheckBox, item).is_none() {
+        harness.get_by_label_contains("Show…").click();
+        wait(harness, "the Show menu", |h| h.query_by_role_and_label(Role::CheckBox, item).is_some());
+    }
+    let wanted = if on { Toggled::True } else { Toggled::False };
+    if harness.get_by_role_and_label(Role::CheckBox, item).accesskit_node().toggled() != Some(wanted) {
+        harness.get_by_role_and_label(Role::CheckBox, item).click();
+    }
+    settle(harness);
+}
+
+#[test]
+fn the_show_menu_hides_and_restores_tag_labels_in_the_graph() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "notes.txt", "one\n", "Tagged commit", None);
+    git(path, &["tag", "v1.0"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the tag label in the graph", |h| h.query_by_label("Tag v1.0").is_some());
+
+    set_graph_show(&mut harness, "Tag labels", false);
+    wait(&mut harness, "the tag label to go", |h| h.query_by_label("Tag v1.0").is_none());
+    assert!(!harness.state().settings.show_tag_labels, "the choice is kept in the settings");
+    assert!(harness.query_by_role_and_label(Role::Button, "Tagged commit").is_some(), "the commit stays in the graph");
+
+    set_graph_show(&mut harness, "Tag labels", true);
+    wait(&mut harness, "the tag label back", |h| h.query_by_label("Tag v1.0").is_some());
+}
+
+/// Whether the graph draws a stash row, which is a button named by the stash's reference.
+fn stash_row_shown(harness: &App) -> bool {
+    harness.query_all(egui_kittest::kittest::By::new().role(Role::Button).label_contains("stash@{0}")).next().is_some()
+}
+
+#[test]
+fn the_show_menu_draws_a_stash_row_that_selects_the_stash() {
+    let repo = repository();
+    let path = repo.path();
+    commit_file(path, "other.txt", "other\n", "Add the other file", None);
+    std::fs::write(path.join("other.txt"), "changed other\n").unwrap();
+    git(path, &["stash", "push", "-q", "-m", "Graph stash"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    settle(&mut harness);
+    assert!(!stash_row_shown(&harness), "stashes are not drawn until asked");
+
+    set_graph_show(&mut harness, "Stashes", true);
+    wait(&mut harness, "the stash row in the graph", stash_row_shown);
+    settle(&mut harness);
+    harness
+        .query_all(egui_kittest::kittest::By::new().role(Role::Button).label_contains("stash@{0}"))
+        .next()
+        .expect("the stash row")
+        .click();
+    wait(&mut harness, "the stash's files", |h| stash_files_listed(h) == 1);
+    settle(&mut harness);
+    assert!(
+        harness.query_all(egui_kittest::kittest::By::new().role(Role::Button).label("other.txt")).next().is_some(),
+        "the stash's file is listed in the inspector"
+    );
+    assert!(
+        harness.state().repo().is_some_and(|r| matches!(&r.selection, Selection::Stash { file: None, .. })),
+        "the whole stash is selected, as the sidebar selects it"
+    );
+}

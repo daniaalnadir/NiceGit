@@ -284,6 +284,16 @@ pub struct Settings {
     /// Which branches the commit graph shows, in every repository.
     #[serde(default)]
     pub history_scope: HistoryScope,
+    /// Whether the commit graph labels commits with remote branches, such as `origin/main`. A local
+    /// branch that tracks one still shows its label either way.
+    #[serde(default = "default_true")]
+    pub show_remote_labels: bool,
+    /// Whether the commit graph labels commits with their tags.
+    #[serde(default = "default_true")]
+    pub show_tag_labels: bool,
+    /// Whether the commit graph draws each stash as a row above the commit it was made on.
+    #[serde(default)]
+    pub show_stashes: bool,
     /// How many unchanged lines each diff shows around its changes.
     #[serde(default)]
     pub diff_context: DiffContextSetting,
@@ -346,6 +356,9 @@ impl Default for Settings {
             github_enterprise_hosts: Vec::new(),
             gitlab_hosts: Vec::new(),
             history_scope: HistoryScope::All,
+            show_remote_labels: true,
+            show_tag_labels: true,
+            show_stashes: false,
             diff_context: DiffContextSetting::default(),
             clone_folder: None,
             stash_keep_index: false,
@@ -548,6 +561,34 @@ mod tests {
         storage.set_string(STORAGE_KEY, older);
         let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
         assert!(loaded.solo_branch.is_empty());
+    }
+
+    #[test]
+    fn graph_display_options_start_as_labels_on_and_stashes_off() {
+        let defaults = Settings::default();
+        assert!(defaults.show_remote_labels && defaults.show_tag_labels && !defaults.show_stashes);
+        let mut storage = MemoryStorage::default();
+        let settings = Settings { show_tag_labels: false, show_stashes: true, ..Settings::default() };
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert!(loaded.show_remote_labels && !loaded.show_tag_labels && loaded.show_stashes);
+    }
+
+    #[test]
+    fn settings_saved_before_graph_display_options_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // Remove the three fields as an older file has none of them.
+        let mut older = saved.clone();
+        for field in ["show_remote_labels:true", "show_tag_labels:true", "show_stashes:false"] {
+            let before = older.clone();
+            older = older.replacen(&format!(",{field}"), "", 1);
+            assert_ne!(older, before, "{field} is in the saved settings");
+        }
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.show_remote_labels && loaded.show_tag_labels && !loaded.show_stashes);
     }
 
     #[test]

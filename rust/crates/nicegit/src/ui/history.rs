@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use egui::{Color32, FontId, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::{Branch, Commit, GitClient, HistoryFilter, Snapshot, StatusEntry, StatusKind};
+use nicegit_core::{Branch, Commit, GitClient, HistoryFilter, Snapshot, Stash, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
-use crate::graph_view::{self, Node};
+use crate::graph_view::{self, Entry, Node};
 use crate::settings::HistoryScope;
 use crate::theme;
 use crate::tools::{self, widgets, Task};
@@ -30,10 +30,18 @@ struct Label {
     branch: Option<Branch>,
 }
 
+/// Which kinds of label the graph draws. Hiding a kind leaves the pairing of local branches with
+/// their upstreams as it is; only the remote label goes.
+#[derive(Clone, Copy)]
+struct LabelShow {
+    remote: bool,
+    tags: bool,
+}
+
 /// The branch and tag labels for a commit. A local branch and its upstream on the same commit
 /// share one label; the pairing compares full ref names, since display names are ambiguous.
 /// A hidden branch has no label, even where a shown branch reaches its commit.
-fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String]) -> Vec<Label> {
+fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String], show: LabelShow) -> Vec<Label> {
     let shown = |branch: &&Branch| hidden.is_empty() || !hidden.contains(&branch.full_ref());
     let locals: HashMap<&str, &Branch> =
         snapshot.branches.iter().filter(|b| !b.is_remote).filter(shown).map(|b| (b.name.as_str(), b)).collect();
@@ -44,7 +52,9 @@ fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String]) -> Vec<Label>
     let mut remote_labels = Vec::new();
     for reference in &commit.refs {
         if let Some(tag) = reference.strip_prefix("tag: ") {
-            out.push(Label { text: tag.to_string(), kind: LabelKind::Tag, branch: None });
+            if show.tags {
+                out.push(Label { text: tag.to_string(), kind: LabelKind::Tag, branch: None });
+            }
         } else if let Some(name) = reference.strip_prefix("HEAD -> ") {
             let branch = locals.get(name).map(|b| (*b).clone());
             let upstream_here = branch.as_ref().and_then(|b| b.upstream.clone()).and_then(|upstream| {
@@ -72,7 +82,9 @@ fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String]) -> Vec<Label>
                 branch: Some((*local).clone()),
             });
         } else if let Some(remote) = remotes.get(reference.as_str()) {
-            remote_labels.push(Label { text: reference.clone(), kind: LabelKind::Remote, branch: Some((*remote).clone()) });
+            if show.remote {
+                remote_labels.push(Label { text: reference.clone(), kind: LabelKind::Remote, branch: Some((*remote).clone()) });
+            }
         }
         // Anything else, such as a remote's symbolic HEAD, is not shown.
     }
@@ -188,6 +200,20 @@ impl NiceGitApp {
                             ui.close();
                         }
                     });
+                });
+                // What the graph draws. These only change what is drawn, so no Git runs and the menu
+                // is never disabled. It stays open while several are toggled.
+                let show_button = ui
+                    .button(format!("{}  Show…", icon::EYE))
+                    .on_hover_text("Choose the branch and tag labels the graph draws, and whether stashes are shown");
+                egui::Popup::menu(&show_button).close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                    ui.set_width(240.0);
+                    ui.label(RichText::new("Show in the graph").small().color(c.muted));
+                    ui.checkbox(&mut self.settings.show_remote_labels, "Remote branch labels")
+                        .on_hover_text("Labels such as origin/main. A local branch that tracks one keeps its label.");
+                    ui.checkbox(&mut self.settings.show_tag_labels, "Tag labels");
+                    ui.checkbox(&mut self.settings.show_stashes, "Stashes")
+                        .on_hover_text("Each stash as a row above the commit it was made on, when that commit is loaded");
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let more = if snapshot.has_more_commits { "+" } else { "" };
@@ -374,16 +400,16 @@ impl NiceGitApp {
             self.set_solo_branch(None);
         }
 
-        // Column headers, which resize the columns and choose which are shown.
-        let graph_width = graph_view::width_for(self.repo().map(|r| r.lanes).unwrap_or(1)).clamp(44.0, 240.0);
-        history_columns::header(ui, &mut self.settings.history_columns, graph_width, ROW_HEIGHT);
-
         let dirty = !snapshot.status.is_empty();
-        let rows: Vec<usize> = if filter.is_empty() {
-            (0..self.repo().map(|r| r.rows.len()).unwrap_or(0)).collect()
-        } else {
-            let repo = self.repo().expect("active repository");
-            (0..repo.rows.len())
+        // Stashes are drawn only in the unfiltered history: a filtered one would show a stash above
+        // a commit the filter did not pick, and a stash is no commit to match.
+        let stashes_shown = self.settings.show_stashes && filter.is_empty() && applied_filter.is_empty();
+        let entries: Vec<Entry> = match self.repo() {
+            Some(repo) if filter.is_empty() => {
+                let stashes: &[Stash] = if stashes_shown { &snapshot.stashes } else { &[] };
+                graph_view::with_stashes(&repo.rows, |index| repo.commit_at(index).map(|c| c.hash.as_str()), stashes)
+            }
+            Some(repo) => (0..repo.rows.len())
                 .filter(|&index| {
                     repo.commit_at(index).is_some_and(|commit| {
                         commit.subject.to_lowercase().contains(&filter)
@@ -392,19 +418,30 @@ impl NiceGitApp {
                             || commit.refs.iter().any(|r| r.to_lowercase().contains(&filter))
                     })
                 })
-                .collect()
+                .map(Entry::Commit)
+                .collect(),
+            None => Vec::new(),
         };
+        // Column headers, which resize the columns and choose which are shown. The graph is wide
+        // enough for the stash nodes beside the lanes too.
+        let lanes = self.repo().map(|r| r.lanes).unwrap_or(1).max(graph_view::stash_lanes(&entries));
+        let graph_width = graph_view::width_for(lanes).clamp(44.0, 240.0);
+        history_columns::header(ui, &mut self.settings.history_columns, graph_width, ROW_HEIGHT);
+
         let show_more = snapshot.has_more_commits && filter.is_empty();
-        let count = rows.len() + usize::from(show_more);
+        let count = entries.len() + usize::from(show_more);
         let background = ui.visuals().window_fill;
 
         // Scroll the selected row into view when it changed by keyboard or from elsewhere.
         let mut scroll_area = egui::ScrollArea::vertical().id_salt("history").auto_shrink(false);
         if self.repo().is_some_and(|r| r.scroll_to_selection) {
             let selected_index = self.repo().and_then(|repo| match &repo.selection {
-                Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } => {
-                    rows.iter().position(|&i| repo.commit_at(i).is_some_and(|c| &c.hash == hash))
-                }
+                Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } => entries
+                    .iter()
+                    .position(|entry| matches!(entry, Entry::Commit(i) if repo.commit_at(*i).is_some_and(|c| &c.hash == hash))),
+                Selection::Stash { hash, .. } => entries.iter().position(
+                    |entry| matches!(entry, Entry::Stash(row) if snapshot.stashes.get(row.stash).is_some_and(|s| &s.hash == hash)),
+                ),
                 Selection::WorkingTree | Selection::Change { .. } if dirty => Some(0),
                 _ => None,
             });
@@ -426,7 +463,7 @@ impl NiceGitApp {
         let output = scroll_area.show_rows(ui, ROW_HEIGHT, count, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for position in range {
-                let Some(&index) = rows.get(position) else {
+                let Some(entry) = entries.get(position) else {
                     ui.horizontal(|ui| {
                         let left = ui.max_rect().left();
                         let layout = self.settings.history_columns.layout(left, left + ui.available_width(), graph_width);
@@ -438,7 +475,10 @@ impl NiceGitApp {
                     });
                     continue;
                 };
-                self.history_row(ui, index, &snapshot, graph_width, background, filter.is_empty(), &marked);
+                match entry {
+                    Entry::Commit(index) => self.history_row(ui, *index, &snapshot, graph_width, background, filter.is_empty(), &marked),
+                    Entry::Stash(row) => self.stash_row(ui, row, &snapshot, graph_width, background),
+                }
             }
         });
         if load_older && self.idle() && self.repo().is_some_and(|r| !r.loading) {
@@ -557,8 +597,10 @@ impl NiceGitApp {
         let Some(commit) = commit else { return };
 
         // Branch and tag labels, joined to the node by a line in the lane colour.
-        let all_labels = labels(&commit, snapshot, &hidden);
+        let show = LabelShow { remote: self.settings.show_remote_labels, tags: self.settings.show_tag_labels };
+        let all_labels = labels(&commit, snapshot, &hidden, show);
         let mut branch_pills: Vec<(egui::Rect, Branch)> = Vec::new();
+        let mut tag_pills: Vec<(egui::Rect, String)> = Vec::new();
         if let (false, Some(refs)) = (all_labels.is_empty(), layout.get(Column::Refs)) {
             let painter = painter.with_clip_rect(cell(refs));
             let mut x = refs.min + 10.0;
@@ -600,8 +642,10 @@ impl NiceGitApp {
                     painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.5, Color32::WHITE.gamma_multiply(0.85)), egui::StrokeKind::Inside);
                 }
                 painter.galley(egui::pos2(pill.left() + 6.0, y - galley.size().y / 2.0), galley, Color32::WHITE);
-                if let Some(branch) = label.branch.as_ref() {
-                    branch_pills.push((pill, branch.clone()));
+                match label.branch.as_ref() {
+                    Some(branch) => branch_pills.push((pill, branch.clone())),
+                    None if label.kind == LabelKind::Tag => tag_pills.push((pill, label.text.clone())),
+                    None => {}
                 }
                 last_right = pill.right();
                 x = pill.right() + 4.0;
@@ -658,6 +702,11 @@ impl NiceGitApp {
             }
             label.context_menu(|ui| self.branch_menu(ui, &branch, snapshot, can_switch));
         }
+        // Tag labels are named for screen readers and tests; hovering passes through to the row.
+        for (index, (pill, name)) in tag_pills.into_iter().enumerate() {
+            let tag = ui.interact(pill, ui.scope_id().with(("tag", &commit.hash, index)), Sense::hover());
+            tag.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, format!("Tag {name}")));
+        }
         if is_head && snapshot.is_on_branch() {
             if let Some(source) = response.dnd_release_payload::<Branch>() {
                 if self.idle() && snapshot.operation.is_none() && !source.is_current {
@@ -679,6 +728,60 @@ impl NiceGitApp {
             }
         }
         response.context_menu(|ui| self.commit_menu(ui, &commit, snapshot, can_switch));
+    }
+
+    /// A stash's row, listed above the commit it was made on: its node in the graph, `stash@{n}`,
+    /// and its message, truncated as a commit's subject is. A click selects the stash as the
+    /// sidebar does, so the inspector lists its files.
+    fn stash_row(&mut self, ui: &mut Ui, row: &graph_view::StashRow, snapshot: &Snapshot, graph_width: f32, background: Color32) {
+        let c = theme::of(ui);
+        let Some(stash) = snapshot.stashes.get(row.stash).cloned() else { return };
+        let selected = matches!(self.repo().map(|r| &r.selection), Some(Selection::Stash { hash, .. }) if *hash == stash.hash);
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{}: {}", stash.reference, stash.message)));
+        // Skipped while scrolled out of view, as commit rows are.
+        if !rect.intersects(ui.clip_rect()) {
+            return;
+        }
+        let lane_color = theme::graph_color(row.color);
+        let alpha = if selected {
+            58
+        } else if response.hovered() {
+            24
+        } else {
+            0
+        };
+        let painter = ui.painter().with_clip_rect(rect);
+        painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(lane_color.r(), lane_color.g(), lane_color.b(), alpha));
+        let layout = self.settings.history_columns.layout(rect.left(), rect.right(), graph_width);
+        let cell = |span: egui::Rangef| egui::Rect::from_x_y_ranges(span, rect.y_range());
+        let message_left = layout.message().min;
+        painter.rect_filled(
+            egui::Rect::from_min_size(egui::pos2(message_left - 4.0, rect.top()), egui::vec2(3.0, ROW_HEIGHT)),
+            0.0,
+            lane_color,
+        );
+        if let Some(graph) = layout.get(Column::Graph).map(cell) {
+            graph_view::paint_stash_row(&painter.with_clip_rect(graph), graph, row, background);
+        }
+        let y = rect.center().y;
+        let small = FontId::proportional(11.5);
+        if let Some(refs) = layout.get(Column::Refs) {
+            let refs_painter = painter.with_clip_rect(cell(refs));
+            let label =
+                truncate_to(&refs_painter, &format!("{}  {}", icon::ARCHIVE_BOX, stash.reference), refs.span() - 18.0, small.clone());
+            text_at(&refs_painter, refs.min + 10.0, y, label, small, c.muted);
+        }
+        let body = FontId::proportional(13.5);
+        let subject_rect =
+            egui::Rect::from_min_max(egui::pos2(message_left + 10.0, rect.top()), egui::pos2(layout.message().max - 8.0, rect.bottom()));
+        let subject_painter = painter.with_clip_rect(subject_rect);
+        let message = truncate_to(&subject_painter, &stash.message, subject_rect.width(), body.clone());
+        text_at(&subject_painter, subject_rect.left(), y, message, body, ui.visuals().text_color());
+        let response = response.on_hover_text(format!("{}: {}", stash.reference, stash.message));
+        if response.clicked() {
+            self.select_stash(stash);
+        }
     }
 
     pub fn commit_menu(&mut self, ui: &mut Ui, commit: &Commit, snapshot: &Snapshot, can_switch: bool) {
