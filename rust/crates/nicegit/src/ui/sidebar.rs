@@ -135,10 +135,7 @@ impl NiceGitApp {
                 // With the repositories column hidden, its toggle sits here, top left, where the column's
                 // own Hide button was, so open tabs and recent repositories are one click away.
                 if !self.settings.show_repositories {
-                    if widgets::icon_button(ui, icon::SIDEBAR_SIMPLE, "Show repositories", true)
-                        .on_hover_text("Show open tabs and recent repositories")
-                        .clicked()
-                    {
+                    if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, "Show repositories", true).clicked() {
                         self.settings.show_repositories = true;
                         self.settings.forget_missing_recent();
                     }
