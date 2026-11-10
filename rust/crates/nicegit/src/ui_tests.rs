@@ -1311,3 +1311,47 @@ fn settings_fits_a_short_window_and_closes_from_the_keyboard() {
     assert!(!harness.state().show_settings, "Command-W closes Settings");
     assert_eq!(harness.state().repos.len(), 1, "Command-W closed Settings, not the repository tab");
 }
+
+/// A long commit description is held to about eight lines that scroll, so the commit's details
+/// below it stay in view; a short one is shown whole.
+#[test]
+fn a_long_commit_description_scrolls_in_a_box_of_about_eight_lines() {
+    let repo = repository();
+    let path = repo.path();
+    let body: String = (1..=40).map(|n| format!("Description line {n}\n")).collect();
+    std::fs::write(path.join("long.txt"), "long\n").unwrap();
+    git(path, &["add", "long.txt"]);
+    git(path, &["commit", "-q", "-m", &format!("A long description\n\n{body}")]);
+    let long = git(path, &["rev-parse", "HEAD"]);
+    std::fs::write(path.join("short.txt"), "short\n").unwrap();
+    git(path, &["add", "short.txt"]);
+    git(path, &["commit", "-q", "-m", "A short description\n\nOne line of detail."]);
+    let short = git(path, &["rev-parse", "HEAD"]);
+
+    // The inspector is on the right, so of the labels the graph and the inspector share, its own
+    // is the right-most.
+    let rightmost = |h: &Harness<'static, NiceGitApp>, label: &str| {
+        h.get_all_by_label(label).map(|node| node.rect()).max_by(|a, b| a.left().total_cmp(&b.left()))
+    };
+    let gap = |h: &Harness<'static, NiceGitApp>, subject: &str| {
+        let subject = rightmost(h, subject).expect("the subject in the inspector");
+        let author = rightmost(h, "Test").expect("the author in the inspector");
+        author.top() - subject.bottom()
+    };
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.state_mut().select_commit(long);
+    wait(&mut harness, "the long commit's details", |h| {
+        h.query_all_by_label("A long description").count() >= 2 && h.query_all_by_label("Test").count() >= 1
+    });
+    settle(&mut harness);
+    let long_gap = gap(&harness, "A long description");
+    assert!(long_gap < 260.0, "the author sits below about eight lines of description, not forty: {long_gap}");
+    assert!(long_gap > 120.0, "the description shows several lines: {long_gap}");
+
+    harness.state_mut().select_commit(short);
+    wait(&mut harness, "the short commit's details", |h| h.query_all_by_label("One line of detail.").count() >= 1);
+    settle(&mut harness);
+    let short_gap = gap(&harness, "A short description");
+    assert!(short_gap < 100.0, "a short description is shown whole, with no box: {short_gap}");
+}
