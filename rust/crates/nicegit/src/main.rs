@@ -7,6 +7,7 @@ mod file_dialog;
 mod git_ext;
 mod graph_view;
 mod settings;
+mod syntax;
 mod theme;
 mod tools;
 mod ui;

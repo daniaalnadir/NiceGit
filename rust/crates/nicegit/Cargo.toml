@@ -20,6 +20,8 @@ egui-phosphor = "0.14.0"
 serde = { version = "1.0.229", features = ["derive"] }
 notify = "8.2.0"
 alacritty_terminal = "0.26.0"
+# Pure-Rust regex (no C toolchain) with the default Sublime Text syntaxes and themes, for diff colours.
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 
 # Windows machines without GPU drivers (virtual machines, Remote Desktop) lack the OpenGL 2.0
 # the default renderer needs; wgpu draws through Direct3D 12, with a software fallback.

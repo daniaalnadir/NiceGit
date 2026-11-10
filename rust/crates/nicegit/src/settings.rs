@@ -244,6 +244,9 @@ pub struct Settings {
     pub appearance: Appearance,
     pub graph_palette: GraphPalette,
     pub split_diff: bool,
+    /// Whether code in diffs is coloured by its language.
+    #[serde(default = "default_true")]
+    pub syntax_highlighting: bool,
     pub ignore_whitespace: bool,
     pub auto_refresh: bool,
     /// How often the open repository is fetched from its remotes in the background, in
@@ -325,6 +328,7 @@ impl Default for Settings {
             appearance: Appearance::System,
             graph_palette: GraphPalette::Standard,
             split_diff: false,
+            syntax_highlighting: true,
             ignore_whitespace: false,
             auto_refresh: true,
             auto_fetch_minutes: 15,

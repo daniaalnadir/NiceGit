@@ -1125,3 +1125,22 @@ fn returning_to_the_app_reloads_everything() {
     wait(&mut harness, "the full refresh on return", |h| load_counts(h).1 > full);
     assert_eq!(load_counts(&harness).0, quick, "returning to the app never starts a quick refresh");
 }
+
+#[test]
+fn rust_changes_are_coloured_and_the_setting_is_on_by_default() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("lib.rs"), "fn main() {\n    let text = \"hi\";\n}\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+    harness.get_by_label("lib.rs").click();
+    wait(&mut harness, "the diff of lib.rs", |h| h.state().diff_panel_width.is_some() && h.state().repos[h.state().active].diff.is_some());
+    let coloured = harness.state().repos[harness.state().active].diff.as_ref().map(|diff| diff.coloured_hunks());
+    assert_eq!(coloured, Some(1), "the Rust file's change is coloured by its language");
+
+    // Settings lists the choice, on by default.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    wait(&mut harness, "the Settings window", |h| h.query_by_role_and_label(Role::CheckBox, "Syntax highlighting").is_some());
+    let toggled = harness.get_by_role_and_label(Role::CheckBox, "Syntax highlighting").accesskit_node().toggled();
+    assert_eq!(toggled, Some(Toggled::True), "syntax highlighting is on by default");
+}
