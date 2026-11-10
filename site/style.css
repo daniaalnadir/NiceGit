@@ -1,0 +1,217 @@
+/* NiceGit's website. Colours follow the app's own dark and light themes (rust/crates/nicegit/src/theme.rs). */
+
+:root {
+  --bg: #15181e;
+  --surface: #1d2129;
+  --card: #20242d;
+  --border: #2e333e;
+  --text: #e8ebf0;
+  --muted: #8a93a6;
+  --accent: #3fc17f;
+  --accent-text: #0d1a12;
+  --accent-soft: rgba(63, 193, 127, 0.12);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --radius: 12px;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --surface: #f1f3f6;
+    --card: #ffffff;
+    --border: #dce0e6;
+    --text: #1b1f27;
+    --muted: #5b6270;
+    --accent: #157f4b;
+    --accent-text: #ffffff;
+    --accent-soft: rgba(21, 127, 75, 0.08);
+    --shadow: 0 24px 60px rgba(20, 30, 50, 0.16);
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+/* Sections reached from the menu clear the sticky header. */
+section[id] { scroll-margin-top: 60px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.wrap.wide { max-width: 1240px; }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.88rem; }
+
+/* Header */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.top-row { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 650; font-size: 1.05rem; }
+.brand:hover { text-decoration: none; }
+.brand img { border-radius: 7px; }
+
+nav { display: flex; gap: 22px; }
+nav a { color: var(--muted); font-size: 0.95rem; }
+nav a:hover { color: var(--text); text-decoration: none; }
+
+/* Hero */
+
+.hero { padding: 72px 0 40px; text-align: center; overflow: hidden; }
+.hero-icon { border-radius: 20px; margin-bottom: 20px; }
+
+h1 {
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0 auto 18px;
+  max-width: 14em;
+}
+
+h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); line-height: 1.2; letter-spacing: -0.01em; margin: 0 0 14px; }
+h3 { font-size: 1.1rem; margin: 0 0 8px; }
+
+.lead { color: var(--muted); font-size: 1.15rem; max-width: 40em; margin: 0 auto 28px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-bottom: 14px; }
+
+.button {
+  display: inline-block;
+  padding: 12px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+.button:hover { text-decoration: none; border-color: var(--accent); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.button.primary:hover { filter: brightness(1.08); }
+
+.shot { margin: 0; }
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.hero-shot { margin-top: 48px; }
+
+/* Features */
+
+.features { padding: 64px 0; }
+
+.feature {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 48px;
+  align-items: center;
+  margin-bottom: 96px;
+}
+.feature:last-child { margin-bottom: 0; }
+.feature.flip .text { order: 2; }
+
+.feature p { color: var(--muted); }
+.feature ul { padding: 0; margin: 16px 0 0; list-style: none; }
+.feature li { position: relative; padding-left: 22px; margin: 6px 0; }
+.feature li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Safety */
+
+.safety { padding: 80px 0; background: var(--surface); border-block: 1px solid var(--border); text-align: center; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: left; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+.card p { color: var(--muted); margin: 0; font-size: 0.95rem; }
+
+/* Download */
+
+.download { padding: 80px 0; text-align: center; }
+.platforms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px; }
+
+.platform {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+.platform:hover { text-decoration: none; border-color: var(--accent); }
+.platform strong { font-size: 1.2rem; }
+.platform span { color: var(--muted); font-size: 0.92rem; }
+.platform code { color: var(--accent); margin-top: 6px; }
+.platform.current { border-color: var(--accent); background: var(--accent-soft); }
+
+.build-title { margin-top: 56px; }
+
+pre {
+  display: inline-block;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 22px;
+  margin: 0 0 12px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Footer */
+
+footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--muted); font-size: 0.9rem; }
+.footer-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+/* Narrow screens */
+
+@media (max-width: 860px) {
+  .feature { grid-template-columns: 1fr; gap: 24px; margin-bottom: 64px; }
+  .feature.flip .text { order: 0; }
+  .cards { grid-template-columns: 1fr 1fr; }
+  .platforms { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .wrap { padding: 0 16px; }
+  nav { gap: 14px; }
+  nav a:not(:last-child):not([href="#download"]) { display: none; }
+  .hero { padding-top: 48px; }
+  .cards { grid-template-columns: 1fr; }
+}
