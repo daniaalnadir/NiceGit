@@ -109,9 +109,9 @@
   annotations, in a box below its message.
 - A branch's right-click menu has Compare with the checked-out branch, listing the commits
   only each side has and the files that merging the branch would change.
-- Go to HEAD (Shift-Command-H) selects the checked-out commit from anywhere, even after scrolling
-  far down the graph; Home and End jump to the top and bottom of the loaded history, and the
-  command palette has Go to upstream.
+- Go to HEAD (Shift-Command-H) selects the checked-out commit from anywhere, even after
+  scrolling far down the graph; Home and End jump to the top and bottom of the loaded history,
+  and the command palette has Go to upstream.
 - Blame skips the commits listed in `.git-blame-ignore-revs` by default, so a reformatting
   commit does not take the lines it only reformatted. A checkbox shows every commit instead.
 - New repository… asks for the folder, the first branch's name, and whether to add a README and
@@ -124,6 +124,32 @@
 - A commit's right-click menu and the inspector's … menu have a Copy submenu: the commit ID,
   its short ID, subject, full message, or author.
 - Built with egui 0.37. Panel widths return to their defaults once after updating.
+- Show only one branch and HEAD in the commit graph from its right-click menu, with a link back
+  to all.
+- Add, update, sync, and remove submodules from the Submodules window and sidebar.
+- Pull can merge or rebase the upstream's commits, chosen in Settings. By default it follows
+  Git's pull.rebase and pull.ff. The Fetch and Pull menu runs a merge or rebase once.
+- Open commits, branches, files, and repositories on GitLab and Bitbucket, plus
+  self-hosted GitLab servers listed in Settings.
+- Skip Git hooks for one commit from the commit box's options menu, including Commit and push.
+  After a hook stops a commit, Commit without hooks makes it again with hooks skipped.
+- Stash only staged changes from the Stash dialog, and rename stashes from their menus.
+- Tip history… in a branch's menu lists every commit the branch has pointed to, from its own
+  reflog.
+- Push all local tags a remote lacks from the Tags section, after confirming the list.
+- Workspaces: save the open tabs as a named workspace, reopen it from the Open tabs menu or the
+  command palette, and rename or delete workspaces without touching the folders.
+- Lock and unlock Git LFS files from the Changes panel and the LFS window, with owners shown.
+- Check out a GitHub pull request locally from its row menu, as a new `pr/<number>-<title>`
+  branch.
+- Create GitLab merge requests through the `glab` CLI from the branch menu or palette, and show
+  the current branch's merge request (!number, state, pipeline) in the status bar.
+- Open changed files in your `diff.tool` and resolve conflicts in your `merge.tool` from the
+  Changes panel and the conflict editor.
+- Command-click local branches in the sidebar to delete several at once, undoable in one step.
+- Sign or leave unsigned each commit from the commit options menu (Sign this commit).
+- Browse every file in a commit's tree from the inspector's All files view, and read
+  any file as it was at that commit.
 
 ## 1.5.0 - Fewer surprises
 
