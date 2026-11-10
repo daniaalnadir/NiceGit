@@ -341,7 +341,9 @@ impl NiceGitApp {
         let mut scroll_area = egui::ScrollArea::vertical().id_salt("history").auto_shrink(false);
         if self.repo().is_some_and(|r| r.scroll_to_selection) {
             let selected_index = self.repo().and_then(|repo| match &repo.selection {
-                Selection::Commit { hash, .. } => rows.iter().position(|&i| repo.commit_at(i).is_some_and(|c| &c.hash == hash)),
+                Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } => {
+                    rows.iter().position(|&i| repo.commit_at(i).is_some_and(|c| &c.hash == hash))
+                }
                 Selection::WorkingTree | Selection::Change { .. } if dirty => Some(0),
                 _ => None,
             });
@@ -425,7 +427,7 @@ impl NiceGitApp {
         }
         let lane_color = theme::graph_color(row.color);
         let selected = match (&selection, &commit) {
-            (Selection::Commit { hash, .. }, Some(commit)) => *hash == commit.hash,
+            (Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. }, Some(commit)) => *hash == commit.hash,
             (Selection::WorkingTree | Selection::Change { .. }, None) => true,
             _ => false,
         };
@@ -898,7 +900,9 @@ impl NiceGitApp {
     fn copy_commit_message(&mut self, ctx: &egui::Context, commit: &Commit) {
         let Some(repo) = self.repos.get_mut(self.active) else { return };
         let loaded = match &repo.selection {
-            Selection::Commit { hash, .. } if *hash == commit.hash => repo.details.as_mut().and_then(|task| task.get()),
+            Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } if *hash == commit.hash => {
+                repo.details.as_mut().and_then(|task| task.get())
+            }
             _ => None,
         };
         if let Some(Ok(details)) = loaded {

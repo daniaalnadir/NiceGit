@@ -3,6 +3,7 @@
 
 pub mod changes;
 pub mod clone_picker;
+pub mod commit_tree;
 pub mod dialogs;
 pub mod github_section;
 pub mod go_to_file;
@@ -160,7 +161,9 @@ impl NiceGitApp {
             return;
         }
         let current = match &repo.selection {
-            Selection::Commit { hash, .. } => (0..count).find(|&i| repo.commit_at(i).is_some_and(|c| &c.hash == hash)),
+            Selection::Commit { hash, .. } | Selection::CommitFile { hash, .. } => {
+                (0..count).find(|&i| repo.commit_at(i).is_some_and(|c| &c.hash == hash))
+            }
             Selection::WorkingTree | Selection::Change { .. } if repo.dirty() => Some(0),
             _ => None,
         };
@@ -260,7 +263,10 @@ impl NiceGitApp {
                 .size_range(260.0..=640.0_f32.min(width * 0.4).max(260.0))
                 .frame(panel)
                 .show(ui, |ui| {
-                    if matches!(self.repo().map(|r| &r.selection), Some(Selection::Commit { .. } | Selection::Stash { .. })) {
+                    if matches!(
+                        self.repo().map(|r| &r.selection),
+                        Some(Selection::Commit { .. } | Selection::CommitFile { .. } | Selection::Stash { .. })
+                    ) {
                         self.inspector(ui);
                     } else {
                         self.changes_panel(ui);
@@ -287,7 +293,11 @@ impl NiceGitApp {
             if self.showing_diff() {
                 egui::Frame::new().fill(ui.visuals().extreme_bg_color).show(ui, |ui| {
                     ui.set_min_size(ui.available_size());
-                    self.diff_panel(ui);
+                    if matches!(self.repo().map(|r| &r.selection), Some(Selection::CommitFile { .. })) {
+                        self.contents_panel(ui);
+                    } else {
+                        self.diff_panel(ui);
+                    }
                 });
             } else {
                 self.history(ui);

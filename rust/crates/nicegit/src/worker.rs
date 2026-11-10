@@ -33,6 +33,10 @@ pub enum Message {
         hash: String,
         result: Result<Vec<StashFile>, GitError>,
     },
+    /// A file saved from a commit. The result is the saved file's name.
+    FileSaved {
+        result: Result<String, GitError>,
+    },
 }
 
 /// Runs Git work off the interface thread and wakes the interface when it is done.
@@ -143,4 +147,19 @@ impl Worker {
             Message::StashFiles { path, hash: stash.hash, result }
         });
     }
+
+    /// Writes a file as it was at a commit to `destination`.
+    pub fn save_copy(&self, directory: PathBuf, commit: String, file: String, destination: PathBuf) {
+        self.spawn(move || Message::FileSaved { result: save_copy(&directory, &commit, &file, &destination) });
+    }
+}
+
+/// Writes the contents a file had at a commit, returning the saved file's name. A file the commit
+/// does not hold, such as one it deleted, has nothing to save.
+fn save_copy(directory: &Path, commit: &str, file: &str, destination: &Path) -> Result<String, GitError> {
+    let bytes = GitClient::new()
+        .file_bytes_at(Some(commit), file, directory)?
+        .ok_or_else(|| GitError::failed("save a copy", "This file is not in that commit."))?;
+    std::fs::write(destination, bytes).map_err(|error| GitError::failed("save a copy", error.to_string()))?;
+    Ok(destination.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default())
 }

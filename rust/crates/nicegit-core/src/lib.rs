@@ -8,6 +8,7 @@ pub mod blame;
 pub mod branch_compare;
 pub mod cleanup;
 pub mod client;
+pub mod commit_tree;
 pub mod compare;
 pub mod conflict;
 pub mod containing;

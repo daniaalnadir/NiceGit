@@ -31,7 +31,18 @@ impl NiceGitApp {
     /// The commit inspector: message, metadata, signature, and changed files.
     fn commit_inspector(&mut self, ui: &mut Ui) {
         let c = theme::of(ui);
-        let Some(Selection::Commit { hash, file }) = self.repo().map(|r| r.selection.clone()) else { return };
+        // `file` is the one file a diff shows from the commit; `viewing` the one file view open.
+        let Some((hash, file, viewing)) = self.repo().and_then(|r| match &r.selection {
+            Selection::Commit { hash, file } => Some((hash.clone(), file.clone(), None)),
+            Selection::CommitFile { hash, path } => Some((hash.clone(), None, Some(path.clone()))),
+            _ => None,
+        }) else {
+            return;
+        };
+        let all_files = self.repo().is_some_and(|r| r.inspector_all_files);
+        if all_files {
+            self.ensure_commit_tree(&hash);
+        }
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let summary = snapshot.commits.iter().find(|c| c.hash == hash).cloned();
         let details = self.repos[self.active].details.as_mut().and_then(|task| task.get().map(|r| r.clone().map_err(|e| e.to_string())));
@@ -155,27 +166,39 @@ impl NiceGitApp {
                     }
                 }
                 ui.add_space(14.0);
+                // Changed files lists what the commit changed; All files lists its whole tree.
                 ui.horizontal(|ui| {
-                    widgets::section(ui, &format!("Changed files ({})", files.len()));
+                    if ui.add(egui::Button::selectable(!all_files, format!("Changed files ({})", files.len()))).clicked() {
+                        self.set_all_files(false);
+                    }
+                    let all = ui.add(egui::Button::selectable(all_files, "All files"));
+                    if all.on_hover_text("Every file in this commit's tree").clicked() {
+                        self.set_all_files(true);
+                    }
                 });
                 ui.add_space(2.0);
-                let all_selected = file.is_none();
-                if ui.add(egui::Button::selectable(all_selected, RichText::new(format!("{}  All files", icon::FILES)))).clicked() {
-                    self.select_commit_file(hash.clone(), None);
-                }
-                let counts = self.repos[self.active]
-                    .commit_line_counts
-                    .as_mut()
-                    .filter(|(counted, _)| *counted == hash)
-                    .and_then(|(_, task)| task.get().cloned().flatten())
-                    .unwrap_or_default();
-                for (status, path) in &files {
-                    let selected = file.as_deref() == Some(path.as_str());
-                    let response = changed_file_row(ui, status, path, selected, counts.get(path).copied(), None);
-                    if response.clicked() {
-                        self.select_commit_file(hash.clone(), Some(path.clone()));
+                if all_files {
+                    self.all_files_list(ui, &hash, viewing.as_deref());
+                } else {
+                    let all_selected = file.is_none() && viewing.is_none();
+                    let all_changes = RichText::new(format!("{}  All changes", icon::FILES));
+                    if ui.add(egui::Button::selectable(all_selected, all_changes)).clicked() {
+                        self.select_commit_file(hash.clone(), None);
                     }
-                    response.context_menu(|ui| self.commit_file_menu(ui, &hash, path, status));
+                    let counts = self.repos[self.active]
+                        .commit_line_counts
+                        .as_mut()
+                        .filter(|(counted, _)| *counted == hash)
+                        .and_then(|(_, task)| task.get().cloned().flatten())
+                        .unwrap_or_default();
+                    for (status, path) in &files {
+                        let selected = file.as_deref() == Some(path.as_str());
+                        let response = changed_file_row(ui, status, path, selected, counts.get(path).copied(), None);
+                        if response.clicked() {
+                            self.select_commit_file(hash.clone(), Some(path.clone()));
+                        }
+                        response.context_menu(|ui| self.commit_file_menu(ui, &hash, path, status));
+                    }
                 }
             });
         });
@@ -333,6 +356,11 @@ impl NiceGitApp {
         }
         self.lfs_menu_items(ui, path, idle);
         ui.separator();
+        // A file the commit deleted has no version at it to save.
+        if !status.starts_with('D') && ui.button(format!("{}  Save a copy…", icon::FLOPPY_DISK)).clicked() {
+            ui.close();
+            self.save_commit_file_copy(hash, path);
+        }
         if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
             ui.close();
             ui.ctx().copy_text(path.to_string());

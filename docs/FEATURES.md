@@ -61,6 +61,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Search diffs with previous/next matching-line navigation and Command-F.
 - Select a commit to inspect its metadata, changed files, and patches in a persistent side panel. The inspector also lists the branches that contain the commit, the first tag that includes it, and any Git notes attached to the commit.
 - Read the complete commit message, including multiline descriptions, in the inspector.
+- Browse every file in a commit's tree from the inspector's All files view, as a folder tree. Choose a file to read it as it was at that commit, read-only, with its lines numbered; binary files show their size, and files over 2 MB wait for Open anyway. A file's menu offers its history, blame at the commit, opening it on GitHub or GitLab, saving a copy, and copying its path. Changed files returns to the commit's changes.
 - Restore a file from a commit's changed-file list to that commit's version, or to its
   version before the commit, then review and commit the staged result.
 - Amend the last commit with staged changes from the commit panel, with a warning when it
