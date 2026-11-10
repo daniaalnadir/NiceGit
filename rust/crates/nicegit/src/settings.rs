@@ -271,6 +271,13 @@ pub struct Settings {
     pub active: usize,
     /// Recently opened repositories, newest first.
     pub recent: Vec<PathBuf>,
+    /// When each recently opened repository was last opened, in seconds since the Unix epoch. Keyed
+    /// like `recent`; repositories remembered before times were kept have none.
+    #[serde(default)]
+    pub recent_opened_at: BTreeMap<PathBuf, u64>,
+    /// Whether the Recent repositories list in the Repositories column is expanded.
+    #[serde(default = "default_true")]
+    pub recent_repositories_open: bool,
     /// Commit message drafts, keyed by checkout folder.
     pub drafts: BTreeMap<String, Draft>,
     /// GitHub Enterprise Server hosts, such as `git.example.com`. Their remotes work like
@@ -328,6 +335,9 @@ pub struct Settings {
     pub workspaces: Vec<Workspace>,
 }
 
+/// How many recently opened repositories are remembered.
+pub const RECENT_LIMIT: usize = 30;
+
 fn default_true() -> bool {
     true
 }
@@ -352,6 +362,8 @@ impl Default for Settings {
             open: Vec::new(),
             active: 0,
             recent: Vec::new(),
+            recent_opened_at: BTreeMap::new(),
+            recent_repositories_open: true,
             drafts: BTreeMap::new(),
             github_enterprise_hosts: Vec::new(),
             gitlab_hosts: Vec::new(),
@@ -454,10 +466,21 @@ impl Settings {
         }
     }
 
+    /// Remembers that `path` was just opened, moving it to the front of the recent list.
     pub fn remember(&mut self, path: PathBuf) {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs());
+        self.recent_opened_at.insert(path.clone(), now);
         self.recent.retain(|recent| recent != &path);
         self.recent.insert(0, path);
-        self.recent.truncate(15);
+        self.recent.truncate(RECENT_LIMIT);
+        let recent = &self.recent;
+        self.recent_opened_at.retain(|path, _| recent.contains(path));
+    }
+
+    /// Forgets a recently opened repository. The folder itself is never touched.
+    pub fn forget_recent(&mut self, path: &Path) {
+        self.recent.retain(|recent| recent != path);
+        self.recent_opened_at.remove(path);
     }
 }
 
@@ -740,5 +763,75 @@ mod tests {
         draft.toggle_trailer(ANA);
         draft.toggle_trailer(ANA);
         assert_eq!(draft.description, original);
+    }
+
+    #[test]
+    fn remember_keeps_the_thirty_newest_repositories() {
+        let mut settings = Settings::default();
+        for index in 0..35 {
+            settings.remember(PathBuf::from(format!("/work/repo-{index}")));
+        }
+        assert_eq!(settings.recent.len(), 30);
+        assert_eq!(settings.recent[0], PathBuf::from("/work/repo-34"));
+        assert_eq!(settings.recent.last(), Some(&PathBuf::from("/work/repo-5")));
+        // Times are kept only for the repositories still remembered.
+        assert_eq!(settings.recent_opened_at.len(), 30);
+        assert!(!settings.recent_opened_at.contains_key(Path::new("/work/repo-4")));
+    }
+
+    #[test]
+    fn remember_records_when_a_repository_was_opened() {
+        let before = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let mut settings = Settings::default();
+        settings.remember(PathBuf::from("/work/api"));
+        let after = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let opened = settings.recent_opened_at[Path::new("/work/api")];
+        assert!(before <= opened && opened <= after);
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert_eq!(loaded.recent_opened_at, settings.recent_opened_at);
+    }
+
+    #[test]
+    fn moving_a_repository_to_the_front_keeps_one_copy() {
+        let mut settings = Settings::default();
+        settings.remember(PathBuf::from("/work/api"));
+        settings.remember(PathBuf::from("/work/web"));
+        settings.remember(PathBuf::from("/work/api"));
+        assert_eq!(settings.recent, [PathBuf::from("/work/api"), PathBuf::from("/work/web")]);
+        assert_eq!(settings.recent_opened_at.len(), 2);
+    }
+
+    #[test]
+    fn forgetting_a_repository_drops_it_and_its_time() {
+        let mut settings = Settings::default();
+        settings.remember(PathBuf::from("/work/api"));
+        settings.remember(PathBuf::from("/work/web"));
+        settings.forget_recent(Path::new("/work/api"));
+        assert_eq!(settings.recent, [PathBuf::from("/work/web")]);
+        assert!(!settings.recent_opened_at.contains_key(Path::new("/work/api")));
+    }
+
+    #[test]
+    fn settings_saved_before_recent_times_and_collapsing_still_load() {
+        let mut storage = MemoryStorage::default();
+        let mut settings = Settings { recent_repositories_open: false, ..Settings::default() };
+        settings.remember(PathBuf::from("/work/api"));
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // Strip the fields as a file from before them has none; the list stays readable.
+        let mut older = saved.replacen(",recent_repositories_open:false", "", 1);
+        assert_ne!(older, saved, "the expansion choice is in the saved settings");
+        let before = older.clone();
+        let start = older.find(",recent_opened_at:").expect("the times are saved");
+        let end = start + older[start..].find('}').expect("the map closes") + 1;
+        older.replace_range(start..end, "");
+        assert_ne!(older, before);
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.recent_repositories_open, "an older file expands the list");
+        assert!(loaded.recent_opened_at.is_empty());
+        assert_eq!(loaded.recent, [PathBuf::from("/work/api")]);
     }
 }

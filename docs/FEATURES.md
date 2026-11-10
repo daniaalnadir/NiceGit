@@ -219,7 +219,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - With fast-forward only, when the branch and its upstream have both moved on, Pull explains
   why it stopped and offers Merge or rebase… to integrate the upstream's commits.
 - Show outgoing and incoming commit counts against the configured upstream.
-- Keep recently opened repositories in the sidebar.
+- Keep recently opened repositories in the Repositories column, under Recent repositories. It
+  lists the 30 most recent that are not open as tabs, newest first, each with its parent folder
+  and when it was last opened. Click a row to open it. A folder that is gone, or is no longer a
+  Git repository, is greyed with "Folder not found" and cannot be opened. Hovering a row shows
+  a × to remove it from the list, and its right-click menu also removes it, copies its path, or
+  shows it in the file manager. Remove missing forgets every missing folder, and Clear all…
+  asks first. Removing only forgets the entry; no folder is deleted. The section collapses under
+  its header, and the choice is kept between launches.
 - Refresh repository state when returning to the app, unless an operation or review dialog is active.
 - Save, apply, pop, and delete stashes, including untracked files. Pop removes the
   saved stash only after applying succeeds; failed applies retain it. The Stash dialog can
