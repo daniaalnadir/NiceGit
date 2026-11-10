@@ -101,13 +101,21 @@ fn scope_title(scope: HistoryScope) -> &'static str {
     }
 }
 
-fn label_icons(kind: LabelKind) -> &'static str {
-    match kind {
-        LabelKind::Head => icon::CHECK,
-        LabelKind::Local => icon::LAPTOP,
-        LabelKind::Remote => icon::CLOUD,
-        LabelKind::Both => icon::LAPTOP,
-        LabelKind::Tag => icon::TAG,
+/// A label's icons: what goes before its name (the checked-out mark, or a tag), and where the branch
+/// lives, drawn together after the name: a laptop for local, a cloud for remote, both for a local
+/// branch shown with the remote branch it tracks.
+fn label_icons(label: &Label) -> (String, String) {
+    let lead = |glyph: &str| format!("{glyph} ");
+    // A thin space keeps the laptop and cloud apart without spreading the label.
+    let place = |glyphs: &[&str]| format!(" {}", glyphs.join("\u{2009}"));
+    match label.kind {
+        // The checked-out branch; a detached HEAD has no branch, so no place.
+        LabelKind::Head if label.branch.is_some() => (lead(icon::CHECK), place(&[icon::LAPTOP])),
+        LabelKind::Head => (lead(icon::CHECK), String::new()),
+        LabelKind::Local => (String::new(), place(&[icon::LAPTOP])),
+        LabelKind::Remote => (String::new(), place(&[icon::CLOUD])),
+        LabelKind::Both => (String::new(), place(&[icon::LAPTOP, icon::CLOUD])),
+        LabelKind::Tag => (lead(icon::TAG), String::new()),
     }
 }
 
@@ -624,14 +632,14 @@ impl NiceGitApp {
             for (i, label) in all_labels.iter().take(shown).enumerate() {
                 let remaining = all_labels.len() - shown;
                 let suffix = if i == shown - 1 && remaining > 0 { format!(" +{remaining}") } else { String::new() };
-                let glyph = label_icons(label.kind);
-                let cloud = if label.kind == LabelKind::Both { format!(" {}", icon::CLOUD) } else { String::new() };
+                let (lead, place) = label_icons(label);
                 let available = (label_limit - x - 6.0).max(30.0);
-                // Every label carries where it lives: a laptop for local, a cloud for remote, a tag.
+                // Every label carries where it lives, after its name: a laptop for local, a cloud for
+                // remote, both side by side for a paired branch.
                 // Long names lose their middle, not their end, so names that share a prefix
                 // stay distinguishable; the full name is in the label's tooltip.
                 let fits = |text: &str| {
-                    painter.layout_no_wrap(format!("{glyph} {text}{cloud}{suffix}"), small.clone(), Color32::WHITE).size().x
+                    painter.layout_no_wrap(format!("{lead}{text}{place}{suffix}"), small.clone(), Color32::WHITE).size().x
                         <= available - 12.0
                 };
                 // The last part of a name is what tells branches apart, so a prefix such as
@@ -643,7 +651,7 @@ impl NiceGitApp {
                     .chain((4..=length.min(40)).rev().map(|max| middle_ellipsis(short.as_deref().unwrap_or(&label.text), max)))
                     .find(|text| fits(text))
                     .unwrap_or_else(|| middle_ellipsis(&label.text, 4));
-                let full = format!("{glyph} {text}{cloud}{suffix}");
+                let full = format!("{lead}{text}{place}{suffix}");
                 let galley =
                     painter.layout_no_wrap(truncate_to(&painter, &full, available - 12.0, small.clone()), small.clone(), Color32::WHITE);
                 let pill = egui::Rect::from_min_size(egui::pos2(x, y - 10.0), egui::vec2(galley.size().x + 12.0, 20.0));
