@@ -170,6 +170,15 @@
   browser; Check out stays GitHub-only.
 - Review a pull request (approve, request changes, or comment) or merge it from its detail
   window, each after a confirmation; a merge is refused if the branch moved since it was shown.
+- Recent repositories in the Repositories column collapses, keeps 30 entries with when each
+  was last used, and forgets entries on request; folders that no longer exist drop out by
+  themselves. Folders are never deleted.
+- The Repositories column's toggle is a framed button at the top left of the sidebar, and the
+  repository menu lists recent repositories.
+- Settings stays within the window and scrolls, so its close button is always visible; Escape
+  or Command-W closes it.
+- A branch label in the graph shows its local and remote icons together after its name.
+- A long commit description in the inspector is held to about eight lines that scroll.
 
 ## 1.5.0 - Fewer surprises
 
