@@ -22,6 +22,7 @@ pub mod conflict;
 pub mod content_search;
 pub mod editor;
 pub mod file_history;
+pub mod git_settings;
 pub mod gitflow;
 pub mod github;
 pub mod interactive_rebase;

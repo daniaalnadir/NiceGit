@@ -15,6 +15,7 @@ pub mod containing;
 pub mod diff;
 pub mod external;
 pub mod file_history;
+pub mod git_config;
 pub mod gitflow;
 pub mod github;
 pub mod gitlab;

@@ -30,6 +30,9 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   open it instead.
 - Configure a repository-local commit identity.
 - Add remotes through Repository Settings.
+- Read, add, edit, and remove this repository's own Git settings from Repository > Git settings
+  (also in the command palette). Keys with several values are shown read-only, and a change is
+  refused if the setting changed after it was shown. Global settings are shown read-only.
 - Clone repositories from a remote URL or local path.
 - Clones go into a default folder: set it under Clone into in Settings, or let NiceGit remember the parent folder of your first clone. The Clone dialog then fills in the destination from the repository's name.
 - Pick one of your GitHub repositories when cloning, through the GitHub CLI (`gh`), including GitHub Enterprise hosts listed in Settings.

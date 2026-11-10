@@ -543,6 +543,7 @@ impl NiceGitApp {
                 }
             };
         open(ui, self, icon::GEAR_SIX, "Repository settings…", &|_| Box::new(tools::repository_settings::RepositorySettingsWindow::new()));
+        open(ui, self, icon::SLIDERS_HORIZONTAL, "Git settings…", &|_| Box::new(tools::git_settings::GitSettingsWindow::new()));
         open(ui, self, icon::ARCHIVE, "Stashes…", &|_| Box::new(tools::stash::StashWindow::new()));
         open(ui, self, icon::MAGNIFYING_GLASS, "Search history…", &|_| Box::new(tools::commit_search::CommitSearchWindow::new()));
         open(ui, self, icon::FILE_MAGNIFYING_GLASS, "Search file contents…", &|_| {
