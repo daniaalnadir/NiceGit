@@ -166,6 +166,10 @@
   description, checks, conversation, and changed files.
 - The graph's Show menu hides remote branch and tag labels, and can draw each stash as a row
   above the commit it was made on. Stashes are off by default.
+- The Launchpad also lists open GitLab merge requests, read through glab, with Open in
+  browser; Check out stays GitHub-only.
+- Review a pull request (approve, request changes, or comment) or merge it from its detail
+  window, each after a confirmation; a merge is refused if the branch moved since it was shown.
 
 ## 1.5.0 - Fewer surprises
 
