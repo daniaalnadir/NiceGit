@@ -2003,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "alacritty_terminal",
  "eframe",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit-core"
-version = "1.6.0"
+version = "2.0.0"
 dependencies = [
  "tempfile",
 ]
