@@ -68,6 +68,8 @@ impl NiceGitApp {
             });
         });
         ui.separator();
+        // How tall the panel is, before the scroll area: a long description is held to part of it.
+        let panel_height = ui.available_height();
         egui::ScrollArea::vertical().id_salt("inspector").auto_shrink(false).show(ui, |ui| {
             egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 8, bottom: 12 }).show(ui, |ui| {
                 match &details {
@@ -82,7 +84,8 @@ impl NiceGitApp {
                         ui.label(RichText::new(subject).size(16.0).strong());
                         if !body.is_empty() {
                             ui.add_space(4.0);
-                            ui.label(RichText::new(body.as_str()).color(ui.visuals().text_color().gamma_multiply(0.85)));
+                            let hash = summary.as_ref().map(|commit| commit.hash.clone()).unwrap_or_default();
+                            commit_description(ui, &body, &hash, panel_height);
                         }
                         if !details.notes.is_empty() {
                             ui.add_space(10.0);
@@ -511,8 +514,50 @@ fn signature_color(level: u8, c: &theme::Colors) -> egui::Color32 {
     }
 }
 
+/// The lines of a commit's description shown before it scrolls.
+const DESCRIPTION_LINES: f32 = 8.0;
+
+/// A commit's description. One of up to about eight lines is shown whole; a longer one is held to
+/// that height, never more than 40% of the panel and never less than three lines, in a tinted box
+/// that scrolls on its own. Each commit's box starts at the top.
+pub(crate) fn commit_description(ui: &mut egui::Ui, body: &str, hash: &str, panel_height: f32) {
+    let color = ui.visuals().text_color().gamma_multiply(0.85);
+    let text = RichText::new(body).color(color);
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let line = ui.fonts_mut(|fonts| fonts.row_height(&font));
+    let galley = egui::WidgetText::from(text.clone()).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Wrap),
+        ui.available_width() - 20.0,
+        egui::TextStyle::Body,
+    );
+    let limit = (line * DESCRIPTION_LINES).min(panel_height * 0.4).max(line * 3.0);
+    if galley.size().y <= limit + 1.0 {
+        ui.label(text);
+        return;
+    }
+    let c = crate::theme::of(ui);
+    egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(egui::Margin { left: 8, right: 4, top: 6, bottom: 6 }).show(
+        ui,
+        |ui| {
+            // A solid bar rather than egui's floating one, which fades out until hovered.
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+            egui::ScrollArea::vertical()
+                .id_salt(("commit-description", hash))
+                .max_height(limit)
+                .auto_shrink([false, true])
+                // Always drawn, so the box reads as one that scrolls.
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                .show(ui, |ui| {
+                    ui.label(text);
+                });
+        },
+    );
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::signature_color;
     use crate::theme;
 
