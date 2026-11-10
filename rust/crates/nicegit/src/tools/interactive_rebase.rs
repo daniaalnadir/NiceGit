@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use egui::{Id, RichText, Stroke, TextStyle};
 use egui_phosphor::regular as icon;
 use nicegit_core::models::Commit;
-use nicegit_core::rebase::{RebaseAction, RebaseOutcome, RebasePlan, RebaseStep};
+use nicegit_core::rebase::{autosquash, RebaseAction, RebaseOutcome, RebasePlan, RebaseStep};
 use nicegit_core::Snapshot;
 
 use super::{query, widgets, Ctx, Task, ToolWindow};
@@ -108,6 +108,8 @@ pub struct InteractiveRebaseWindow {
     moved: bool,
     /// Whether the reworded commit's message should take keyboard focus on its first frame.
     focus_pending: bool,
+    /// What the last Apply fixups did, shown above the list until the edits are reset.
+    fixup_note: Option<String>,
 }
 
 impl InteractiveRebaseWindow {
@@ -127,6 +129,7 @@ impl InteractiveRebaseWindow {
             preset: None,
             moved: false,
             focus_pending: false,
+            fixup_note: None,
         }
     }
 
@@ -413,6 +416,10 @@ impl ToolWindow for InteractiveRebaseWindow {
             );
             ui.add_space(8.0);
         }
+        if let Some(note) = self.fixup_note.clone() {
+            ui.label(RichText::new(note).small().color(c.muted));
+            ui.add_space(8.0);
+        }
 
         let published = self.published_count();
         if published > 0 {
@@ -466,6 +473,7 @@ impl ToolWindow for InteractiveRebaseWindow {
         let mut start = false;
         let mut cancel = false;
         let mut reset = false;
+        let mut fixups = false;
         ui.horizontal(|ui| {
             let ready = cx.idle && self.plan.is_some() && self.head.is_some() && problem.is_none() && self.has_pending_rewrite();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -476,6 +484,11 @@ impl ToolWindow for InteractiveRebaseWindow {
                 if ui.add_enabled(cx.idle && self.changed(), egui::Button::new("Reset edits")).clicked() {
                     reset = true;
                 }
+                fixups = ui
+                    .add_enabled(cx.idle && self.plan.is_some(), egui::Button::new("Apply fixups"))
+                    .on_hover_text("Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash")
+                    .on_disabled_hover_text("Wait for the plan to load and for the current Git action to finish")
+                    .clicked();
             });
         });
 
@@ -484,6 +497,23 @@ impl ToolWindow for InteractiveRebaseWindow {
         }
         if reset {
             self.entries = self.original.clone();
+            self.fixup_note = None;
+        }
+        if fixups {
+            let (matched, moved) = apply_fixups(&mut self.entries);
+            let note = match (matched, moved) {
+                (0, _) => "No fixup! or squash! commit names an earlier commit in this list.".to_string(),
+                (count, moved) => {
+                    let noun = if count == 1 { "fixup or squash commit" } else { "fixup or squash commits" };
+                    let placed = format!("Applied {count} {noun}; each sits directly after the commit it names.");
+                    if moved {
+                        format!("{placed} Moving commits can cause conflicts.")
+                    } else {
+                        placed
+                    }
+                }
+            };
+            self.fixup_note = Some(note);
         }
         if start {
             if let (Some(plan), Some(head)) = (self.plan.clone(), self.head.clone()) {
@@ -645,6 +675,35 @@ fn drop_together(entries: &mut [Entry], hashes: &[String]) -> Option<bool> {
         entries[index].choice = Choice::Drop;
     }
     Some(false)
+}
+
+/// Arranges the entries as Git's autosquash would: each `fixup!` or `squash!` commit moves directly
+/// after the commit it names, and takes the Fixup or Squash action. `entries` are newest first, as
+/// shown. Returns how many commits named an earlier commit, and whether any commit moved.
+fn apply_fixups(entries: &mut Vec<Entry>) -> (usize, bool) {
+    let oldest: Vec<Entry> = entries.iter().rev().cloned().collect();
+    let commits: Vec<Commit> = oldest.iter().map(|entry| entry.commit.clone()).collect();
+    let order = autosquash(&commits);
+    let matched = order.iter().filter(|(_, action)| action.is_some()).count();
+    let moved = order.iter().enumerate().any(|(position, (index, _))| position != *index);
+    let arranged: Vec<Entry> = order
+        .into_iter()
+        .map(|(index, action)| {
+            let mut entry = oldest[index].clone();
+            // A commit the person chose to drop stays dropped.
+            if entry.choice == Choice::Drop {
+                return entry;
+            }
+            match action {
+                Some(RebaseAction::Fixup) => entry.choice = Choice::Fixup,
+                Some(RebaseAction::Squash) => entry.choice = Choice::Squash,
+                _ => {}
+            }
+            entry
+        })
+        .collect();
+    *entries = arranged.into_iter().rev().collect();
+    (matched, moved)
 }
 
 /// The steps for Git, oldest first. The entries are shown newest first, so they are reversed.
@@ -868,5 +927,68 @@ mod tests {
         );
         assert_eq!(apply_preset(&mut entries, &Preset::Reword("b".to_string()), "main"), Ok(false));
         assert_eq!(shape(&entries)[2], ("b", Choice::Reword));
+    }
+
+    /// An entry whose subject is `subject`, as the plan lists it.
+    fn titled(hash: &str, subject: &str, choice: Choice) -> Entry {
+        let mut entry = entry(hash, choice);
+        entry.commit.subject = subject.to_string();
+        entry.message = subject.to_string();
+        entry
+    }
+
+    #[test]
+    fn apply_fixups_marks_a_fixup_that_is_already_in_place_without_moving_it() {
+        // Newest first: "d", the fixup "c" of "b", "b", "a".
+        let mut entries = vec![
+            titled("d", "C", Choice::Pick),
+            titled("c", "fixup! B", Choice::Pick),
+            titled("b", "B", Choice::Pick),
+            titled("a", "A", Choice::Pick),
+        ];
+        assert_eq!(apply_fixups(&mut entries), (1, false));
+        assert_eq!(shape(&entries), [("d", Choice::Pick), ("c", Choice::Fixup), ("b", Choice::Pick), ("a", Choice::Pick)]);
+    }
+
+    #[test]
+    fn apply_fixups_moves_a_misplaced_fixup_next_to_its_target() {
+        // "fixup! A" was listed last; it moves above "A" in the newest-first list, below "B" and "C".
+        let mut entries = vec![
+            titled("f", "fixup! A", Choice::Pick),
+            titled("c", "C", Choice::Pick),
+            titled("b", "B", Choice::Pick),
+            titled("a", "A", Choice::Pick),
+        ];
+        assert_eq!(apply_fixups(&mut entries), (1, true));
+        assert_eq!(shape(&entries), [("c", Choice::Pick), ("b", Choice::Pick), ("f", Choice::Fixup), ("a", Choice::Pick)]);
+    }
+
+    #[test]
+    fn apply_fixups_sets_squash_and_leaves_unmatched_commits_alone() {
+        let mut entries = vec![
+            titled("s", "squash! Missing", Choice::Pick),
+            titled("f", "fixup! B", Choice::Drop),
+            titled("b", "B", Choice::Reword),
+            titled("a", "A", Choice::Pick),
+        ];
+        // A dropped fixup stays dropped. "squash! Missing" names no commit, so it keeps its place
+        // and its Pick action.
+        assert_eq!(apply_fixups(&mut entries), (1, false));
+        assert_eq!(shape(&entries), [("s", Choice::Pick), ("f", Choice::Drop), ("b", Choice::Reword), ("a", Choice::Pick)]);
+    }
+
+    #[test]
+    fn apply_fixups_reports_nothing_to_do_without_a_match() {
+        let mut entries = vec![titled("f", "fixup! Missing", Choice::Pick), titled("a", "A", Choice::Pick)];
+        let before = entries.clone();
+        assert_eq!(apply_fixups(&mut entries), (0, false));
+        assert_eq!(entries, before);
+    }
+
+    #[test]
+    fn apply_fixups_keeps_a_dropped_fixup_dropped() {
+        let mut entries = vec![titled("c", "fixup! B", Choice::Drop), titled("b", "B", Choice::Pick)];
+        apply_fixups(&mut entries);
+        assert_eq!(shape(&entries), [("c", Choice::Drop), ("b", Choice::Pick)]);
     }
 }

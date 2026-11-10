@@ -783,6 +783,38 @@ impl NiceGitApp {
                 );
             }
         }
+        {
+            // A fixup commit records the staged changes for an interactive rebase to fold in later, so
+            // it needs no rebase now. HEAD qualifies too, and unstaged edits do not block it, since only
+            // the index is committed. The target itself must not be a merge. The core checks that the
+            // commit is on the current branch.
+            let merge = commit.parents.len() > 1;
+            let has_staged = snapshot.status.iter().any(StatusEntry::is_staged);
+            let conflicted = snapshot.status.iter().any(|entry| entry.kind == StatusKind::Conflicted);
+            let enabled = idle && !merge && has_staged && !conflicted && snapshot.operation.is_none();
+            let reason = if !idle {
+                Some("Wait for the current Git action to finish")
+            } else if merge {
+                Some("Merge commits can't be fixed up here")
+            } else if !has_staged {
+                Some("Stage the changes to commit as a fixup first")
+            } else if conflicted {
+                Some("Resolve the conflicted files first")
+            } else if snapshot.operation.is_some() {
+                Some("Finish the current Git operation first")
+            } else {
+                None
+            };
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Commit staged changes as fixup", icon::GIT_COMMIT)));
+            let button = match reason {
+                Some(reason) => button.on_disabled_hover_text(reason),
+                None => button.on_hover_text("Records a fixup! commit for this commit. An interactive rebase folds it in later"),
+            };
+            if button.clicked() {
+                ui.close();
+                self.commit_fixup(commit.hash.clone(), commit.subject.clone(), snapshot.current_branch.clone(), snapshot.head_hash.clone());
+            }
+        }
         if is_head
             && ui
                 .add_enabled(

@@ -2207,6 +2207,30 @@ impl NiceGitApp {
         }
     }
 
+    /// Commits the staged changes as a fixup for `target`, from its graph menu. Git writes the message
+    /// from the target's subject, so the commit box's message is left as it is. The branch and HEAD
+    /// are those the menu showed, and the commit box's hook and signing choices apply once, as for a
+    /// commit. The commit is recorded for Undo as a commit is.
+    pub fn commit_fixup(&mut self, target: String, subject: String, branch: String, head: Option<String>) {
+        if !self.idle() {
+            return;
+        }
+        let Some(head) = head else { return };
+        let Some((skip, sign)) = self.repo().map(|repo| (repo.skip_hooks, repo.sign_override)) else { return };
+        let short: String = target.chars().take(7).collect();
+        self.act_recording_detail("Fixup commit", "Commit", Some(format!("fixup! {subject}")), move |client, path| {
+            client
+                .commit_fixup(&target, &branch, &head, skip, sign, path)
+                .map(|_| Some(format!("Committed a fixup for {short}. An interactive rebase can fold it in.")))
+        });
+        if self.busy.is_some() {
+            if let Some(repo) = self.repo_mut() {
+                repo.sign_override = None;
+                repo.skip_hooks = false;
+            }
+        }
+    }
+
     /// Makes a commit that a Git hook stopped, again with hooks skipped, as the notice offers.
     /// Refused when the branch or HEAD changed since the commit stopped, so it lands only on the
     /// checkout the notice described.

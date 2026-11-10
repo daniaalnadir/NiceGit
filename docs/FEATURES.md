@@ -273,7 +273,12 @@ itself and stores new messages as Git objects, so a rebase that stops for a conf
 resumes with Continue and can be undone with Abort. It refuses to start with
 uncommitted tracked changes, during another operation, when the branch or HEAD changed
 since the editor opened, or when the range contains a merge commit. It does not move
-other branches, stash automatically, or reorder commits on its own.
+other branches, stash automatically, or reorder commits on its own. Apply fixups is the
+one exception, and only when clicked: it moves each commit whose subject starts with
+fixup! or squash! directly after the earlier commit that subject names, and sets it to
+Fixup or Squash, as Git's autosquash does. A commit that names nothing stays where it is,
+a commit set to Drop stays dropped, and an amend! commit is left unchanged. The plan changes only until Rewrite commits is
+clicked.
 
 Amending checks that the branch and HEAD still match the moment amend was switched on,
 and refuses during an unfinished operation. Stashing selected files verifies that only
@@ -491,6 +496,12 @@ Fix up with staged changes… in the same menu folds what you have staged into a
 commit. It needs staged changes and no unstaged ones (untracked files may stay). The
 commits from that one through HEAD are rewritten, so their hashes change, and Undo restores
 them with the folded changes staged again.
+Commit staged changes as fixup in the same menu, on a commit that is not a merge and on
+HEAD, records the staged changes as a fixup! commit for that commit, without rewriting
+anything. Its message is Git's own, so the commit box's message is not used. The commit box's
+Skip Git hooks and Sign choices apply once, as for a commit, and Undo removes it as it removes
+a commit. NiceGit refuses it when the commit is not on the current branch, when HEAD changed
+after the menu opened, or when nothing is staged. An interactive rebase folds the fixup in later.
 
 Remote checkout reuses a unique existing local tracking branch, including renamed
 branches, without resetting local commits. Ambiguous tracking branches must be

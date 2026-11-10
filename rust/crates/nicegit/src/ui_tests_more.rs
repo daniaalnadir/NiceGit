@@ -1432,6 +1432,78 @@ fn fix_up_is_disabled_with_unstaged_changes() {
     assert_eq!(git(path, &["log", "--format=%s"]), "third\nsecond\nfirst", "nothing was rewritten");
 }
 
+/// Right-clicks the commit with `subject` and chooses Commit staged changes as fixup.
+fn commit_fixup_from_menu(harness: &mut App, subject: &str) {
+    harness.get_by_label(subject).click_secondary();
+    settle(harness);
+    harness.get_by_label_contains("Commit staged changes as fixup").click();
+}
+
+#[test]
+fn commit_staged_changes_as_fixup_from_the_graph_menu() {
+    let repo = three_commits();
+    let path = repo.path();
+    stage_fix_to_first_commit(path);
+    let before = git(path, &["rev-parse", "HEAD"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    commit_fixup_from_menu(&mut harness, "first");
+    idle(&mut harness);
+    wait(&mut harness, "the fixup commit", |_| git(path, &["rev-parse", "HEAD"]) != before);
+    assert_eq!(git(path, &["log", "-1", "--format=%s"]), "fixup! first", "the fixup commit is at the top");
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "4", "one commit was added");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+    wait(&mut harness, "the fixup commit in the graph", |h| shows(h, "fixup! first"));
+}
+
+#[test]
+fn commit_as_fixup_is_disabled_without_staged_changes() {
+    let repo = three_commits();
+    let path = repo.path();
+    std::fs::write(path.join("c.txt"), "c\nnot staged\n").unwrap();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("first").click_secondary();
+    settle(&mut harness);
+    let item = harness.get_by_label_contains("Commit staged changes as fixup");
+    assert!(item.accesskit_node().is_disabled(), "the item is disabled without staged changes");
+    item.click();
+    settle(&mut harness);
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "3", "no commit was made");
+}
+
+#[test]
+fn apply_fixups_moves_a_fixup_commit_and_rewrites_it_into_its_target() {
+    let repo = three_commits();
+    let path = repo.path();
+    // A fixup for "second" lands on top of "third", where autosquash needs it moved.
+    commit_file(path, "b.txt", b"b\nfixed\n", "fixup! second");
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label("first").click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Interactive rebase from here").click();
+    let apply = "Apply fixups";
+    wait(&mut harness, "the apply fixups button", |h| {
+        h.query_by_role_and_label(Role::Button, apply).is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, apply).click();
+    settle(&mut harness);
+    assert!(shows(&harness, "Applied 1 fixup or squash commit"), "the window reports the fixup it applied");
+
+    wait(&mut harness, "the rewrite button", |h| {
+        h.query_by_role_and_label(Role::Button, "Rewrite commits").is_some_and(|b| !b.accesskit_node().is_disabled())
+    });
+    harness.get_by_role_and_label(Role::Button, "Rewrite commits").click();
+    idle(&mut harness);
+    wait(&mut harness, "the rewritten history", |_| git(path, &["log", "--format=%s"]) == "third\nsecond\nfirst");
+    assert_eq!(git(path, &["rev-list", "--count", "HEAD"]), "3", "the fixup was folded into second");
+    assert!(git(path, &["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
 #[test]
 fn undo_after_fix_up_restores_the_staged_changes() {
     let repo = three_commits();

@@ -778,6 +778,52 @@ impl GitClient {
         self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
+    /// Commits the staged changes as a `fixup!` commit for `target`, which is HEAD or an earlier
+    /// commit on the current branch that is not a merge. Git writes the message from the target's
+    /// subject, so the commit box's message is not used. An interactive rebase folds the commit
+    /// into its target later, as Git's autosquash does. The branch and HEAD must still match what
+    /// was shown, and `skip_hooks` and `sign` choose hooks and signing as `commit_with_options` does.
+    pub fn commit_fixup(
+        &self,
+        target: &str,
+        expected_branch: &str,
+        expected_head: &str,
+        skip_hooks: bool,
+        sign: Option<bool>,
+        directory: &Path,
+    ) -> Result<()> {
+        const COMMAND: &str = "fixup commit";
+        let state = self.require_checkout(expected_branch, Some(expected_head), COMMAND, directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed(COMMAND, "Finish or abort the current Git operation first."));
+        }
+        let target = self.resolve_commit(target, directory)?;
+        let parents = self.run_trimmed(&["show", "--no-patch", "--format=%P", &target, "--"], directory)?;
+        if parents.split_whitespace().count() > 1 {
+            return Err(GitError::failed(COMMAND, "Merge commits can't be fixed up here."));
+        }
+        if target != expected_head {
+            self.run(&["merge-base", "--is-ancestor", &target, expected_head], directory)
+                .map_err(|_| GitError::failed(COMMAND, "This commit is not part of the current branch's history."))?;
+        }
+
+        let entries = self.load_status(directory)?;
+        if entries.iter().any(|entry| entry.kind == StatusKind::Conflicted) {
+            return Err(GitError::failed(COMMAND, "Resolve the conflicted files first."));
+        }
+        if !entries.iter().any(StatusEntry::is_staged) {
+            return Err(GitError::failed(COMMAND, "Stage the changes to commit as a fixup first."));
+        }
+
+        let fixup = format!("--fixup={target}");
+        let mut arguments = vec!["commit", "--quiet", fixup.as_str()];
+        if skip_hooks {
+            arguments.push("--no-verify");
+        }
+        arguments.extend(sign_argument(sign));
+        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
+    }
+
     /// Whether the repository has a signing setup, and whether `commit.gpgSign` signs commits by
     /// default. A set `user.signingKey`, `gpg.format`, or `commit.gpgSign` counts as configured;
     /// an empty value, such as the empty `gpg.format` some machines have, does not.
