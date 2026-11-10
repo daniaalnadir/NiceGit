@@ -15,7 +15,7 @@ There is no account, subscription, or paid tier, and nothing is sent anywhere ex
 Git itself. Built with Rust, and released under the [MIT License](LICENSE).
 
 > **Preview software:** NiceGit is under active development. Back up important work
-> before trying history-changing operations. The current version is 1.5.0.
+> before trying history-changing operations. The current version is 2.0.0.
 
 ## Highlights
 

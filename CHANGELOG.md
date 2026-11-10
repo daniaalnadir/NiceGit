@@ -1,6 +1,9 @@
 # Changelog
 
-## 1.6.0 - Tidy tabs
+## 2.0.0 - Room to work
+
+NiceGit 2.0 is the first release since 1.0.0. It brings together everything below, including
+the 1.1.0 to 1.5.0 entries, which were never published on their own.
 
 - Middle-click a repository tab to close it, as in a browser.
 - Command-W (Control-W elsewhere) closes the open window, such as the editor, or else the
@@ -179,6 +182,10 @@
   or Command-W closes it.
 - A branch label in the graph shows its local and remote icons together after its name.
 - A long commit description in the inspector is held to about eight lines that scroll.
+- The Changes panel splits its room equally between unstaged and staged files, each list
+  scrolling on its own, so staged files stay in view beside a long list of changes.
+- The branches sidebar no longer shows a cube icon before the repository name.
+- NiceGit has a website: https://daniaalnadir.github.io/NiceGit/
 
 ## 1.5.0 - Fewer surprises
 
