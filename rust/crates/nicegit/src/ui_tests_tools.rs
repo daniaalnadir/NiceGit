@@ -599,9 +599,9 @@ fn a_gitlab_merge_request_says_how_to_fix_a_missing_glab() {
     assert!(harness.query_by_label_contains("Create merge request").is_some(), "the dialog is for a merge request");
 }
 
-/// The Launchpad reads each open repository's GitHub pull requests through `gh`. With no `gh` to
-/// run, each repository says why it is not available, and no network call is made: the GitHub
-/// repository stops at the missing program, and the GitLab one never reaches it.
+/// The Launchpad reads each open repository's pull requests through `gh`, and merge requests through
+/// `glab`. With neither to run, each repository says why it is not available, and no network call is
+/// made: both repositories stop at their missing programs.
 #[test]
 fn the_launchpad_says_why_each_repository_is_not_available() {
     let github = repository();
@@ -615,8 +615,11 @@ fn the_launchpad_says_why_each_repository_is_not_available() {
     loaded(&mut harness);
 
     let missing = nicegit_core::github::GhProgram::Given(std::path::PathBuf::from("/nonexistent/nicegit-test/gh"));
+    let missing_glab = nicegit_core::gitlab::GlabProgram::Given(std::path::PathBuf::from("/nonexistent/nicegit-test/glab"));
     let paths = vec![github.path().to_path_buf(), gitlab.path().to_path_buf()];
-    let launchpad = crate::tools::launchpad::LaunchpadWindow::new(paths, Vec::new(), Vec::new()).with_program(missing);
+    let launchpad = crate::tools::launchpad::LaunchpadWindow::new(paths, Vec::new(), Vec::new(), Vec::new())
+        .with_program(missing)
+        .with_glab_program(missing_glab);
     harness.state_mut().open_tool(Box::new(launchpad));
     wait(&mut harness, "the Launchpad's answers", |h| shows(h, "Not available"));
     settle(&mut harness);
@@ -624,10 +627,8 @@ fn the_launchpad_says_why_each_repository_is_not_available() {
     assert!(shows(&harness, "Needs your review (0)"), "the sections are listed, empty");
     assert!(shows(&harness, "Yours (0)") && shows(&harness, "Other open (0)"), "every section is listed");
     assert!(shows(&harness, "The GitHub CLI (gh) is not installed"), "the GitHub repository says gh is missing");
-    assert!(
-        shows(&harness, "This remote is not on github.com or a GitHub Enterprise host listed in Settings"),
-        "the GitLab repository says its remote is not on GitHub"
-    );
+    assert!(shows(&harness, "The GitLab CLI (glab) is not installed"), "the GitLab repository says glab is missing");
+    assert!(shows(&harness, "glab auth login --hostname gitlab.com"), "and how to sign in once it is installed");
     assert!(!shows(&harness, "Loading"), "nothing is still loading");
 }
 
