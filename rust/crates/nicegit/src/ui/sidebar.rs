@@ -127,17 +127,24 @@ impl NiceGitApp {
                     if widgets::icon_button(ui, icon::GEAR, "Settings", true).clicked() {
                         self.show_settings = true;
                     }
-                    if !self.settings.show_repositories
-                        && widgets::icon_button(ui, icon::SIDEBAR_SIMPLE, "Show repositories", true).clicked()
-                    {
-                        self.settings.show_repositories = true;
-                    }
                 });
             });
         });
         egui::Frame::new().inner_margin(egui::Margin { left: 8, right: 8, top: 12, bottom: 0 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.add_space(6.0);
+                // With the repositories column hidden, its toggle sits here, top left, where the column's
+                // own Hide button was, so open tabs and recent repositories are one click away.
+                if !self.settings.show_repositories {
+                    if widgets::icon_button(ui, icon::SIDEBAR_SIMPLE, "Show repositories", true)
+                        .on_hover_text("Show open tabs and recent repositories")
+                        .clicked()
+                    {
+                        self.settings.show_repositories = true;
+                        self.settings.forget_missing_recent();
+                    }
+                } else {
+                    ui.add_space(6.0);
+                }
                 ui.label(RichText::new(icon::CUBE).size(16.0).color(c.accent));
                 ui.menu_button(
                     RichText::new(format!("{} {}", snapshot.name, icon::CARET_DOWN)).strong().size(15.0).color(c.accent),

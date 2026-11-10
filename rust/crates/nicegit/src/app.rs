@@ -675,7 +675,9 @@ struct Watch {
 
 impl NiceGitApp {
     pub fn new(creation: &eframe::CreationContext<'_>, initial: Option<PathBuf>) -> Self {
-        let settings: Settings = creation.storage.and_then(|storage| eframe::get_value(storage, STORAGE_KEY)).unwrap_or_default();
+        let mut settings: Settings = creation.storage.and_then(|storage| eframe::get_value(storage, STORAGE_KEY)).unwrap_or_default();
+        // Repositories deleted or moved since the last run drop out of the recent list.
+        settings.forget_missing_recent();
         theme::install_fonts(&creation.egui_ctx);
         let mut app = Self {
             worker: Worker::new(creation.egui_ctx.clone()),

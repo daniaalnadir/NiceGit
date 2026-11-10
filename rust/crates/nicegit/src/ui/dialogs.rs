@@ -148,6 +148,10 @@ pub enum Pending {
     DeleteWorkspace {
         name: String,
     },
+    /// Forgetting the listed recent repositories, as Clear all shows them. No folder is touched.
+    ForgetRecent {
+        paths: Vec<std::path::PathBuf>,
+    },
 }
 
 pub enum InputKind {
@@ -431,6 +435,7 @@ impl Pending {
                 | Pending::DeleteRemoteBranch { .. }
                 | Pending::DropStash(_)
                 | Pending::DeleteWorkspace { .. }
+                | Pending::ForgetRecent { .. }
                 | Pending::RestoreFromStash { .. }
                 | Pending::Abort(_)
                 | Pending::ForcePush { .. }
@@ -1326,6 +1331,7 @@ impl NiceGitApp {
             }),
             Pending::ReplaceWorkspace { name, repositories } => self.store_workspace(name, repositories),
             Pending::DeleteWorkspace { name } => self.delete_workspace(&name),
+            Pending::ForgetRecent { paths } => self.forget_recent_paths(&paths),
             Pending::Undo => self.undo(),
             Pending::Redo => self.redo(),
             Pending::UndoCommit { branch, head } => {

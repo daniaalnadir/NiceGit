@@ -857,10 +857,107 @@ fn recent_repositories_reopen_after_their_tab_closes() {
     settle(&mut harness);
     assert_eq!(harness.state().repos.len(), 1);
 
-    harness.get_by_label_contains(&format!("  {first_name}")).click();
+    harness.get_by_label(&format!("Recent repository {first_name}")).click();
     loaded(&mut harness);
     assert_eq!(harness.state().repos.len(), 2, "reopened from Recent");
     assert_eq!(harness.state().snapshot().map(|s| s.name.clone()), Some(first_name));
+}
+
+/// Closes the tab of `first`, so only `second` stays open, and returns the folder name of `first`.
+fn close_first_of_two(harness: &mut Harness<'static, NiceGitApp>, first: &Path, second: &Path) -> String {
+    harness.state_mut().open(second.to_path_buf());
+    loaded(harness);
+    let first_name = folder_name(first);
+    harness.get_by_label(&format!("Close {first_name}")).click();
+    settle(harness);
+    assert_eq!(harness.state().repos.len(), 1);
+    first_name
+}
+
+/// Whether the settings still list a repository whose folder is named `name`.
+fn recent_has_folder(harness: &Harness<'static, NiceGitApp>, name: &str) -> bool {
+    harness.state().settings.recent.iter().any(|path| path.file_name().is_some_and(|folder| folder == name))
+}
+
+#[test]
+fn removing_a_recent_repository_forgets_it_and_keeps_the_folder() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+
+    // The × appears while the pointer is over the row.
+    harness.get_by_label(&format!("Recent repository {first_name}")).hover();
+    settle(&mut harness);
+    harness.get_by_label(&format!("Remove {first_name} from recent repositories")).click();
+    settle(&mut harness);
+
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_none(), "the row is gone");
+    assert!(!recent_has_folder(&harness, &first_name), "settings forget the repository");
+    assert!(first.path().is_dir(), "the folder is not deleted");
+}
+
+#[test]
+fn collapsing_recent_repositories_hides_its_rows_and_remembers_the_choice() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_some());
+
+    harness.get_by_label_contains("RECENT REPOSITORIES").click();
+    settle(&mut harness);
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_none(), "collapsed rows are hidden");
+    assert!(!harness.state().settings.recent_repositories_open, "the choice is in settings");
+
+    harness.get_by_label_contains("RECENT REPOSITORIES").click();
+    settle(&mut harness);
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_some(), "expanded again");
+    assert!(harness.state().settings.recent_repositories_open);
+}
+
+#[test]
+fn a_missing_recent_folder_is_greyed_and_remove_missing_forgets_it() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    // A folder that was never there, as one moved or deleted since it was opened.
+    let gone = repo.path().join("deleted-repository");
+    harness.state_mut().settings.remember(gone.clone());
+    settle(&mut harness);
+
+    assert!(has_label(&harness, "Folder not found"));
+    // A missing folder cannot be opened, so a click leaves the tab list alone.
+    harness.get_by_label("Recent repository deleted-repository, folder not found").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().repos.len(), 1);
+
+    harness.get_by_label("Remove missing").click();
+    settle(&mut harness);
+    assert!(!recent_has_folder(&harness, "deleted-repository"), "the missing folder is forgotten");
+    assert!(!has_label(&harness, "Folder not found"));
+    assert!(repo.path().is_dir());
+}
+
+#[test]
+fn clear_all_recent_repositories_asks_first_and_keeps_the_folders() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+
+    harness.get_by_label("Clear all…").click();
+    settle(&mut harness);
+    assert!(recent_has_folder(&harness, &first_name), "nothing is cleared before confirming");
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Clear").click();
+    settle(&mut harness);
+
+    assert!(!recent_has_folder(&harness, &first_name));
+    assert!(!has_label(&harness, "RECENT REPOSITORIES"), "an empty list has no section");
+    assert!(first.path().is_dir() && second.path().is_dir());
 }
 
 #[test]
@@ -1136,4 +1233,48 @@ fn double_clicking_a_panel_edge_restores_its_width() {
     settle(&mut harness);
     let restored = width(&harness);
     assert!((restored - default).abs() < 2.0, "restored {restored} to the default {default}");
+}
+
+/// With the repositories column hidden, its Show button sits at the top left of the sidebar, and
+/// showing the column forgets recent repositories whose folders are gone.
+#[test]
+fn showing_the_hidden_repositories_column_from_the_top_left_forgets_missing_folders() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+    let gone = second.path().join("deleted-repository");
+    harness.state_mut().settings.remember(gone);
+    harness.state_mut().settings.show_repositories = false;
+    settle(&mut harness);
+    assert!(harness.query_by_label("Hide repositories").is_none(), "the column is hidden");
+
+    let show = harness.get_by_label("Show repositories");
+    assert!(show.rect().left() < 60.0, "the toggle is at the left edge of the window: {:?}", show.rect());
+    assert!(show.rect().top() < 60.0, "the toggle is at the top of the window, not in the status bar: {:?}", show.rect());
+    show.click();
+    settle(&mut harness);
+
+    assert!(harness.state().settings.show_repositories);
+    assert!(!recent_has_folder(&harness, "deleted-repository"), "the missing folder is forgotten on showing the list");
+    assert!(harness.query_by_label(&format!("Recent repository {first_name}")).is_some(), "an existing one stays");
+}
+
+/// The repository menu lists recent repositories, so they open even with the column hidden.
+#[test]
+fn the_repository_menu_reopens_a_recent_repository() {
+    let first = repository();
+    let second = repository();
+    let mut harness = open(first.path());
+    loaded(&mut harness);
+    let first_name = close_first_of_two(&mut harness, first.path(), second.path());
+    harness.state_mut().settings.show_repositories = false;
+    settle(&mut harness);
+
+    repository_menu(&mut harness, &folder_name(second.path()), "Recent repositories");
+    harness.get_by_label_contains(&format!("  {first_name}")).click();
+    loaded(&mut harness);
+    assert_eq!(harness.state().repos.len(), 2, "reopened from the repository menu");
+    assert_eq!(harness.state().snapshot().map(|s| s.name.clone()), Some(first_name));
 }
