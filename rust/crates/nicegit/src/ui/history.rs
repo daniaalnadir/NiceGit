@@ -145,6 +145,16 @@ impl NiceGitApp {
         let mut filter_draft = repo.filter_draft.clone().unwrap_or_else(|| applied_filter.clone());
         let mut filter_change: Option<HistoryFilter> = None;
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 10, bottom: 6 }).show(ui, |ui| {
+            // A typical graph pane is under 500 points wide; there the Filter and Show buttons drop
+            // their words, keeping their names for hover and accessibility.
+            let narrow = ui.available_width() < 540.0;
+            let header_button = |ui: &mut egui::Ui, enabled: bool, glyph: &str, name: &str| {
+                let text = if narrow { glyph.to_string() } else { format!("{glyph}  {name}") };
+                let response = ui.add_enabled(enabled, egui::Button::new(text));
+                let name = name.to_string();
+                response.widget_info(move || egui::WidgetInfo::labeled(egui::Role::Button, enabled, name.clone()));
+                response
+            };
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Commit history").size(16.0).strong());
                 ui.add_space(8.0);
@@ -168,8 +178,7 @@ impl NiceGitApp {
                     scope_change = Some(scope);
                 }
                 // Author and path filters narrow the history whatever the scope or solo branch.
-                let filter_button = ui
-                    .add_enabled(idle, egui::Button::new(format!("{}  Filter…", icon::FUNNEL_SIMPLE)))
+                let filter_button = header_button(ui, idle, icon::FUNNEL_SIMPLE, "Filter…")
                     .on_hover_text("Show only the commits by an author, or that touch a file or folder")
                     .on_disabled_hover_text("Wait for the current Git action to finish");
                 egui::Popup::menu(&filter_button).show(|ui| {
@@ -203,8 +212,7 @@ impl NiceGitApp {
                 });
                 // What the graph draws. These only change what is drawn, so no Git runs and the menu
                 // is never disabled. It stays open while several are toggled.
-                let show_button = ui
-                    .button(format!("{}  Show…", icon::EYE))
+                let show_button = header_button(ui, true, icon::EYE, "Show…")
                     .on_hover_text("Choose the branch and tag labels the graph draws, and whether stashes are shown");
                 egui::Popup::menu(&show_button).close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                     ui.set_width(240.0);
@@ -217,7 +225,12 @@ impl NiceGitApp {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let more = if snapshot.has_more_commits { "+" } else { "" };
-                    ui.label(RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted));
+                    let count = RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted);
+                    let needed = egui::WidgetText::from(count.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Small).size().x;
+                    // In a narrow pane the count gives way rather than overlap the buttons.
+                    if ui.available_width() >= needed {
+                        ui.label(count);
+                    }
                 });
             });
             if let Some(branch) = &solo {
@@ -267,7 +280,8 @@ impl NiceGitApp {
             }
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                let search_width = 170.0;
+                let search_width = if narrow { 140.0 } else { 170.0 };
+                let search_text = if narrow { "Search history" } else { "Search all history" };
                 // A border, as on other text fields, so the light theme's white field reads as one.
                 egui::Frame::new()
                     .fill(ui.visuals().extreme_bg_color)
@@ -290,11 +304,11 @@ impl NiceGitApp {
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter loaded commits"));
                         });
                     });
-                if ui
-                    .add_sized([search_width, 28.0], egui::Button::new(format!("{}  Search all history", icon::MAGNIFYING_GLASS)))
-                    .on_hover_text("Shift-Ctrl/Cmd-F")
-                    .clicked()
-                {
+                let search = ui
+                    .add_sized([search_width, 28.0], egui::Button::new(format!("{}  {search_text}", icon::MAGNIFYING_GLASS)))
+                    .on_hover_text("Search all history (Shift-Ctrl/Cmd-F)");
+                search.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Search all history"));
+                if search.clicked() {
                     self.open_tool(Box::new(tools::commit_search::CommitSearchWindow::new()));
                 }
             });
