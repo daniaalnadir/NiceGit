@@ -446,6 +446,34 @@ fn history_scope_hides_other_branches() {
     assert!(!has_label(&harness, "Showing the current branch"), "the note goes once every branch is shown");
 }
 
+#[test]
+fn history_filter_by_author_narrows_the_graph_and_clears() {
+    let repo = repository();
+    let path = repo.path();
+    std::fs::write(path.join("ada.txt"), "ada\n").unwrap();
+    git(path, &["add", "ada.txt"]);
+    git(path, &["commit", "-q", "--author=Ada Lovelace <ada@example.com>", "-m", "Ada work"]);
+    std::fs::write(path.join("grace.txt"), "grace\n").unwrap();
+    git(path, &["add", "grace.txt"]);
+    git(path, &["commit", "-q", "--author=Grace Hopper <grace@example.com>", "-m", "Grace work"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "the commits in the graph", |h| h.query_by_label("Grace work").is_some());
+
+    harness.get_by_label_contains("Filter…").click();
+    settle(&mut harness);
+    type_into(&mut harness, "Filter by author", "ada");
+    harness.get_by_label("Apply").click();
+    wait(&mut harness, "only Ada's commit in the graph", |h| h.query_by_label("Grace work").is_none());
+    assert!(harness.query_by_label("Ada work").is_some(), "Ada's commit is shown");
+    assert!(harness.query_by_label("Start the notes").is_none(), "another author's commit is left out");
+    assert!(has_label(&harness, "Showing commits by ada."), "the note says what is filtered");
+
+    harness.get_by_label("Clear filters").click();
+    wait(&mut harness, "every commit back in the graph", |h| h.query_by_label("Grace work").is_some());
+    assert!(!has_label(&harness, "Showing commits"), "the note goes once the filters are cleared");
+}
+
 /// Writes `text` to notes.txt, stages it, and commits it with `summary` through the commit box.
 fn commit_notes(harness: &mut App, path: &Path, text: &str, summary: &str) {
     std::fs::write(path.join("notes.txt"), text).unwrap();

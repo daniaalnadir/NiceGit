@@ -248,6 +248,35 @@ pub enum HistoryScope {
     Current,
 }
 
+/// Narrows the commit history to the commits by an author and the commits that touch a path.
+/// A blank field does not filter. Both fields are trimmed when they are used.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HistoryFilter {
+    /// Matched as plain text, without regard to case, against the author's name or email.
+    pub author: String,
+    /// A repository-relative file or folder, matched as `git log -- <path>` matches it.
+    pub path: String,
+}
+
+impl HistoryFilter {
+    /// The author text to match, or `None` when the author field is blank.
+    pub fn author_text(&self) -> Option<&str> {
+        Some(self.author.trim()).filter(|text| !text.is_empty())
+    }
+
+    /// The repository-relative path to match, without a leading `./` or surrounding slashes, or
+    /// `None` when the path field is blank.
+    pub fn path_text(&self) -> Option<&str> {
+        let text = self.path.trim().trim_start_matches("./").trim_matches('/');
+        Some(text).filter(|text| !text.is_empty())
+    }
+
+    /// Whether neither field filters the history.
+    pub fn is_empty(&self) -> bool {
+        self.author_text().is_none() && self.path_text().is_none()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct Snapshot {
     pub root_path: String,

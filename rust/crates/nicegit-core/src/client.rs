@@ -140,6 +140,15 @@ fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+/// The `log` options that match the filter's author as plain text, without regard to case. The
+/// author is a limiting pattern, so `--fixed-strings` keeps characters such as `.` literal.
+fn author_arguments(filter: &HistoryFilter) -> Vec<String> {
+    match filter.author_text() {
+        Some(author) => vec!["--regexp-ignore-case".to_string(), "--fixed-strings".to_string(), format!("--author={author}")],
+        None => Vec::new(),
+    }
+}
+
 /// Escapes the characters `--exclude` reads as glob syntax, so a ref name matches only itself.
 /// Git refuses these characters in ref names, so this only guards against a future change.
 fn glob_escape(reference: &str) -> String {
@@ -500,6 +509,21 @@ impl GitClient {
         hidden: &[String],
         solo: Option<&str>,
     ) -> Result<Snapshot> {
+        self.load_snapshot_with_filter(selected, history_limit, scope, hidden, solo, &HistoryFilter::default())
+    }
+
+    /// Like `load_snapshot_solo`, with the history narrowed by `filter`: only the commits by the
+    /// filter's author, and the commits that touch its path, as `git log -- <path>` shows them. The
+    /// author is matched literally and without regard to case. HEAD is shown only when it matches.
+    pub fn load_snapshot_with_filter(
+        &self,
+        selected: &Path,
+        history_limit: usize,
+        scope: HistoryScope,
+        hidden: &[String],
+        solo: Option<&str>,
+        filter: &HistoryFilter,
+    ) -> Result<Snapshot> {
         let root = self.repository_root(selected)?;
         let limit = history_limit.max(1);
         let log_format = format!("--pretty=format:{LOG_FORMAT}");
@@ -510,9 +534,16 @@ impl GitClient {
             Some(revisions) => revisions,
             None => self.history_revisions(scope, &root, hidden),
         };
+        // Literal pathspecs come from the runner, which sets them for `log`, so the path is
+        // matched as written.
+        let author_options = author_arguments(filter);
+        let path = filter.path_text();
         let mut log = vec!["log"];
         log.extend(revisions.iter().map(String::as_str));
-        log.extend(["--topo-order", "--decorate=short", "--date=relative", "-n", count.as_str(), log_format.as_str(), "--"]);
+        log.extend(["--topo-order", "--decorate=short", "--date=relative", "-n", count.as_str()]);
+        log.extend(author_options.iter().map(String::as_str));
+        log.extend([log_format.as_str(), "--"]);
+        log.extend(path);
         let commands: Vec<Vec<String>> = [
             vec!["status", "--porcelain=v1", "-z", "--untracked-files=all"],
             vec!["branch", "--all", &branch_format],
@@ -541,13 +572,20 @@ impl GitClient {
         let head_hash = current.as_ref().map(|branch| branch.tip.clone()).or_else(|| self.head(&root));
         let commits = parse_log(&outputs[2]);
         let mut visible: Vec<Commit> = commits.iter().take(limit).cloned().collect();
-        // Keep HEAD visible even when other branches fill the first page.
+        // Keep HEAD visible even when other branches fill the first page. With a filter, HEAD is
+        // fetched only if it matches: `--topo-order` puts HEAD first, so `-1` reports HEAD itself.
         if let Some(head) = &head_hash {
             if !visible.iter().any(|commit| &commit.hash == head) {
                 if let Some(commit) = commits.iter().find(|commit| &commit.hash == head) {
                     visible.push(commit.clone());
-                } else if let Ok(output) = self.run(&["log", "-1", "--decorate=short", &log_format, "HEAD", "--"], &root) {
-                    visible.extend(parse_log(&output).into_iter().take(1));
+                } else {
+                    let mut head_log = vec!["log", "-1", "--topo-order", "--decorate=short"];
+                    head_log.extend(author_options.iter().map(String::as_str));
+                    head_log.extend([log_format.as_str(), "HEAD", "--"]);
+                    head_log.extend(path);
+                    if let Ok(output) = self.run(&head_log, &root) {
+                        visible.extend(parse_log(&output).into_iter().take(1).filter(|commit| filter.is_empty() || &commit.hash == head));
+                    }
                 }
             }
         }

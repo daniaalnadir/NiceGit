@@ -54,6 +54,13 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   repository. "Show only this branch" in the same menus shows one branch and HEAD alone,
   ignoring the branches menu and hidden branches; the note above the graph names it, with a
   link back to the whole graph. The choice is remembered for each repository.
+- Filter the commit history from the header's Filter menu by author, or by a file or folder
+  in the repository, or both. The author is matched as plain text, without regard to case,
+  against the author's name or email. The path is matched as `git log -- <path>` matches it, so
+  the commits that touch it are shown, with Git's default history simplification. The graph
+  shows only the matching commits, and a note above it says what is filtered, with "Clear
+  filters" to show everything again. HEAD stays in the graph only when it matches. The filter
+  applies whatever the branches shown are, and it is not remembered across restarts.
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.
