@@ -18,16 +18,25 @@ impl NiceGitApp {
             return;
         }
         let mut open = true;
+        // Escape closes Settings, unless it is closing one of the window's own menus.
+        if !egui::Popup::is_any_open(ctx) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            open = false;
+        }
         let mut reload_diff = false;
         let mut show_shortcuts = false;
+        // The window never grows past the app's window: its title bar, with the close button, stays
+        // on screen and the settings scroll beneath it.
+        let max_height = (ctx.content_rect().height() - 190.0).max(200.0);
         egui::Window::new("Settings")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .default_width(420.0)
+            .default_height(max_height)
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
+              egui::ScrollArea::vertical().id_salt("settings-scroll").max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
                 let c = theme::of(ui);
                 widgets::section(ui, "Appearance");
                 ui.horizontal(|ui| {
@@ -235,7 +244,10 @@ impl NiceGitApp {
                     crate::app::restore_panel_widths(ctx);
                     self.settings.history_columns.widths.clear();
                 }
-                ui.add_space(12.0);
+              });
+                // The version and shortcuts stay below the scrolling settings, always in view.
+                ui.separator();
+                let c = theme::of(ui);
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("NiceGit {}", env!("CARGO_PKG_VERSION"))).small().color(c.muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

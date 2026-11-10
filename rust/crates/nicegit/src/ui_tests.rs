@@ -1278,3 +1278,36 @@ fn the_repository_menu_reopens_a_recent_repository() {
     assert_eq!(harness.state().repos.len(), 2, "reopened from the repository menu");
     assert_eq!(harness.state().snapshot().map(|s| s.name.clone()), Some(first_name));
 }
+
+/// Settings fits a short window: its close button stays on screen and the settings scroll, and
+/// Escape or Command-W closes it.
+#[test]
+fn settings_fits_a_short_window_and_closes_from_the_keyboard() {
+    let repo = repository();
+    let path = repo.path().to_path_buf();
+    let mut harness = Harness::builder().with_size(egui::vec2(1100.0, 640.0)).build_eframe(move |cc| NiceGitApp::new(cc, Some(path)));
+    loaded(&mut harness);
+
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    let close = harness.get_by_label("Close window").rect();
+    assert!(close.top() >= 0.0 && close.bottom() <= 640.0, "the close button is on screen: {close:?}");
+    // The window settles into place over its first frames, as its contents are measured.
+    harness.run_steps(4);
+    harness.get_by_label("Close window").click();
+    settle(&mut harness);
+    assert!(!harness.state().show_settings, "the close button closes Settings");
+
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    harness.key_press(Key::Escape);
+    settle(&mut harness);
+    assert!(!harness.state().show_settings, "Escape closes Settings");
+
+    harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::W);
+    settle(&mut harness);
+    assert!(!harness.state().show_settings, "Command-W closes Settings");
+    assert_eq!(harness.state().repos.len(), 1, "Command-W closed Settings, not the repository tab");
+}
