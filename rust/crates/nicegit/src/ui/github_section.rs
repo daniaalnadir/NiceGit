@@ -6,13 +6,23 @@ use egui_phosphor::regular as icon;
 use nicegit_core::github::{Cancel, GitHubItem, ItemKind, ItemState, CANCELLED};
 use nicegit_core::{GitClient, Snapshot};
 
+use std::path::PathBuf;
+
 use crate::app::NiceGitApp;
 use crate::theme;
-use crate::tools::{self, widgets, Task};
+use crate::tools::{self, widgets, CheckOutRequest, Task};
 
 /// Items load in pages of this size, up to `MAXIMUM`.
 const PAGE: usize = 100;
 const MAXIMUM: usize = 1000;
+
+/// A Check out from the Launchpad whose repository is still loading. The dialog opens when the
+/// repository's snapshot arrives.
+pub struct PendingCheckOut {
+    /// The repository's path as the app stores it, which is what the tab is compared with.
+    pub path: PathBuf,
+    pub request: CheckOutRequest,
+}
 
 pub struct GitHubList {
     pub remote: String,
@@ -77,9 +87,10 @@ impl NiceGitApp {
         repo.github[slot(kind)] = Some(GitHubList { remote, limit, items, error: None, cancel, task: Some(task) });
     }
 
-    /// Opens the Check out pull request dialog for `item` on `remote`. Nothing runs until the
-    /// dialog's button is pressed, and that action refuses if the checkout or remote has changed.
-    fn open_check_out_pull_request(&mut self, snapshot: &Snapshot, remote: String, item: GitHubItem) {
+    /// Opens the Check out pull request dialog for pull request `number` on `remote`. Nothing runs
+    /// until the dialog's button is pressed, and that action refuses if the checkout or remote has
+    /// changed.
+    fn open_check_out_pull_request(&mut self, snapshot: &Snapshot, remote: String, number: u64, title: String, author: String) {
         if self.busy.is_some() {
             self.notify("Wait for the current Git action to finish before checking out a pull request.", true);
             return;
@@ -88,8 +99,45 @@ impl NiceGitApp {
             self.notify("Finish or abort the current Git operation before checking out a pull request.", true);
             return;
         }
-        let author = item.author.unwrap_or_default();
-        self.dialog = Some(crate::ui::dialogs::Dialog::check_out_pull_request(remote, item.number, item.title, author, snapshot));
+        self.dialog = Some(crate::ui::dialogs::Dialog::check_out_pull_request(remote, number, title, author, snapshot));
+    }
+
+    /// Handles a Check out from the Launchpad. Its repository is shown first, because the dialog
+    /// reads the checkout it would change; when that repository's snapshot has not loaded yet, the
+    /// dialog waits for it in [`Self::finish_pending_check_out`].
+    pub fn check_out_from_launchpad(&mut self, request: CheckOutRequest) {
+        if self.busy.is_some() {
+            self.notify("Wait for the current Git action to finish before checking out a pull request.", true);
+            return;
+        }
+        // The path is compared as `open` stores it, so a folder named by a workspace matches its tab.
+        let path = crate::app::strip_verbatim(request.path.canonicalize().unwrap_or_else(|_| request.path.clone()));
+        let loaded = self.repos.get(self.active).filter(|repo| repo.path == path).and_then(|repo| repo.snapshot.clone());
+        if let Some(snapshot) = loaded {
+            self.open_check_out_pull_request(&snapshot, request.remote, request.number, request.title, request.author);
+            return;
+        }
+        self.pending_check_out = Some(PendingCheckOut { path: path.clone(), request });
+        self.open(path.clone());
+        // When the repository did not open, as when an editor has unsaved text, nothing waits.
+        if !self.repos.get(self.active).is_some_and(|repo| repo.path == path) {
+            self.pending_check_out = None;
+        }
+    }
+
+    /// Opens a waiting Check out dialog once its repository is shown and its snapshot has loaded.
+    /// A waiting request is dropped when the user shows another repository.
+    pub fn finish_pending_check_out(&mut self) {
+        let Some(pending) = self.pending_check_out.as_ref() else { return };
+        let Some(repo) = self.repos.get(self.active) else { return };
+        if repo.path != pending.path {
+            self.pending_check_out = None;
+            return;
+        }
+        let Some(snapshot) = repo.snapshot.clone() else { return };
+        let Some(pending) = self.pending_check_out.take() else { return };
+        let request = pending.request;
+        self.open_check_out_pull_request(&snapshot, request.remote, request.number, request.title, request.author);
     }
 
     pub fn github_section(&mut self, ui: &mut Ui, snapshot: &Snapshot, kind: ItemKind) {
@@ -209,7 +257,8 @@ impl NiceGitApp {
             self.load_github(kind, remote, limit);
         }
         if let Some((remote, item)) = check_out {
-            self.open_check_out_pull_request(snapshot, remote, item);
+            let author = item.author.unwrap_or_default();
+            self.open_check_out_pull_request(snapshot, remote, item.number, item.title, author);
         }
         if let Some(remote) = window {
             let tool = match kind {

@@ -25,6 +25,7 @@ pub mod file_history;
 pub mod gitflow;
 pub mod github;
 pub mod interactive_rebase;
+pub mod launchpad;
 pub mod lfs;
 pub mod line_history;
 pub mod reflog;
@@ -48,6 +49,17 @@ pub type Action = Box<dyn FnOnce(&GitClient, &Path) -> ActionResult + Send>;
 /// An action that returns the undo record it made, like the app's `act_with_record`.
 pub type RecordingAction =
     Box<dyn FnOnce(&GitClient, &Path) -> nicegit_core::Result<(Option<String>, Option<crate::app::Recorded>)> + Send>;
+
+/// A pull request to check out, as a tool names it: the repository it is in, the remote its
+/// pull request reads from, and the number, title, and author shown in the dialog.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckOutRequest {
+    pub path: PathBuf,
+    pub remote: String,
+    pub number: u64,
+    pub title: String,
+    pub author: String,
+}
 
 /// What a tool asks the app to do once the current frame is drawn.
 pub enum Request {
@@ -73,6 +85,8 @@ pub enum Request {
     Refresh,
     /// Open a conflicted file, by its path, in the configured merge tool.
     OpenMergeTool(String),
+    /// Switch to the repository the pull request is in, then open its Check out dialog.
+    CheckOut(CheckOutRequest),
 }
 
 /// What a tool sees of the app each frame.
@@ -110,6 +124,12 @@ impl<'a> Ctx<'a> {
     /// or the editor has unsaved text.
     pub fn open_merge_tool(&mut self, path: impl Into<String>) {
         self.requests.push(Request::OpenMergeTool(path.into()));
+    }
+
+    /// Asks for the Check out dialog of a pull request in the repository at `request.path`. The app
+    /// shows that repository first, and the dialog refuses to run if its checkout has moved.
+    pub fn check_out_pull_request(&mut self, request: CheckOutRequest) {
+        self.requests.push(Request::CheckOut(request));
     }
 
     /// The diff options the app settings ask for: whitespace and context.

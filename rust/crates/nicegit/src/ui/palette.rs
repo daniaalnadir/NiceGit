@@ -184,6 +184,13 @@ impl NiceGitApp {
                 has && snapshot.is_some_and(|s| !s.remotes.is_empty()),
                 Run::Tool("github"),
             ),
+            command(
+                "Launchpad",
+                "Open pull requests across your open repositories and workspaces",
+                icon::GIT_PULL_REQUEST,
+                has,
+                Run::Tool("launchpad"),
+            ),
             command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
         ];
         if let Some((branch, label, cli)) = pull_request {
@@ -410,6 +417,7 @@ impl NiceGitApp {
                         let hosts = self.settings.github_enterprise_hosts.clone();
                         Box::new(tools::github::GitHubWindow::new(r, hosts)) as Box<dyn tools::ToolWindow>
                     }),
+                    "launchpad" => Some(Box::new(tools::launchpad::LaunchpadWindow::for_app(self))),
                     _ => None,
                 };
                 if let Some(tool) = tool {

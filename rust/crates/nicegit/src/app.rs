@@ -639,6 +639,8 @@ pub struct NiceGitApp {
     pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
     /// The Create pull request dialog, while it is open.
     pub pull_request: Option<crate::ui::pull_request::PullRequestDialog>,
+    /// A Check out from the Launchpad waiting for its repository to load.
+    pub pending_check_out: Option<crate::ui::github_section::PendingCheckOut>,
     /// The `glab` program that GitLab merge requests run through. Tests point it at a missing file.
     pub glab: nicegit_core::gitlab::GlabProgram,
     recorded: RecordSlot,
@@ -710,6 +712,7 @@ impl NiceGitApp {
             pending_tag_scan: None,
             clone_picker: None,
             pull_request: None,
+            pending_check_out: None,
             glab: nicegit_core::gitlab::GlabProgram::default(),
             recorded: Arc::new(Mutex::new(None)),
             preview_light: false,
@@ -2627,6 +2630,7 @@ impl NiceGitApp {
                 let context = self.worker.context.clone();
                 self.open_in_merge_tool(&path, &context);
             }
+            Request::CheckOut(request) => self.check_out_from_launchpad(request),
             Request::Refresh => self.load(true),
         }
     }
@@ -2853,7 +2857,7 @@ fn listed_entry(repo: &mut Repo, hash: &str, path: &str) -> Option<nicegit_core:
     listing.entries.iter().find(|entry| entry.path == path).cloned()
 }
 
-fn strip_verbatim(path: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim(path: PathBuf) -> PathBuf {
     let text = path.to_string_lossy();
     match text.strip_prefix(r"\\?\") {
         Some(rest) if !rest.starts_with("UNC") => PathBuf::from(rest),
@@ -2887,6 +2891,7 @@ impl eframe::App for NiceGitApp {
         self.auto_pr_status(&ctx);
         self.debug_open(&ctx);
         self.layout(ui);
+        self.finish_pending_check_out();
         self.tool_windows(&ctx);
         self.dialogs(&ctx);
         self.pull_request_window(&ctx);
