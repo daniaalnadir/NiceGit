@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use nicegit_core::diff::{parse_diff, DiffLine};
-use nicegit_core::{GitClient, GitError, HistoryScope, Snapshot, Stash, StashFile};
+use nicegit_core::{GitClient, GitError, HistoryFilter, HistoryScope, Snapshot, Stash, StashFile};
 
 /// What a background action reports when it finishes.
 pub type ActionResult = Result<Option<String>, GitError>;
@@ -61,8 +61,9 @@ impl Worker {
         });
     }
 
-    /// `hidden` names the branches the graph leaves out, as full ref names, and `solo` the one it
-    /// shows alone (see `load_snapshot_solo`).
+    /// `hidden` names the branches the graph leaves out, as full ref names, `solo` the one it
+    /// shows alone (see `load_snapshot_solo`), and `filter` narrows the history (see
+    /// `load_snapshot_with_filter`).
     #[allow(clippy::too_many_arguments)]
     pub fn load(
         &self,
@@ -73,10 +74,11 @@ impl Worker {
         scope: HistoryScope,
         hidden: Vec<String>,
         solo: Option<String>,
+        filter: HistoryFilter,
     ) {
         self.spawn(move || {
             let client = if deliberate { GitClient::deliberate() } else { GitClient::new() };
-            let snapshot = client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref());
+            let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
     }
@@ -94,13 +96,14 @@ impl Worker {
         scope: HistoryScope,
         hidden: Vec<String>,
         solo: Option<String>,
+        filter: HistoryFilter,
     ) {
         self.spawn(move || {
             let client = GitClient::new();
             let quick = client.quick_snapshot(&previous, &path).ok().flatten();
             let snapshot = match quick {
                 Some(snapshot) => Ok(snapshot),
-                None => client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref()),
+                None => client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter),
             };
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
@@ -117,12 +120,13 @@ impl Worker {
         scope: HistoryScope,
         hidden: Vec<String>,
         solo: Option<String>,
+        filter: HistoryFilter,
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
         self.spawn(move || {
             let client = GitClient::new();
             let result = action(&client, &path);
-            let snapshot = client.load_snapshot_solo(&path, history_limit, scope, &hidden, solo.as_deref());
+            let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
             Message::Loaded { generation, path, action: Some((label, result)), snapshot: Box::new(snapshot) }
         });
     }

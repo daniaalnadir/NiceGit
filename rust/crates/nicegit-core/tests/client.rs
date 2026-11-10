@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 use nicegit_core::client::{GitClient, PullStrategy};
 use nicegit_core::diff::{DiffContext, DiffRequest};
 use nicegit_core::models::{
-    Branch, GitError, HistoryScope, MergeStyle, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind,
+    Branch, GitError, HistoryFilter, HistoryScope, MergeStyle, Operation, Snapshot, StashFile, StashOptions, StatusEntry, StatusKind,
 };
 use tempfile::TempDir;
 
@@ -2519,6 +2519,104 @@ fn solo_branch_that_no_longer_exists_shows_the_history_as_before() {
             .unwrap_or_else(|error| panic!("{solo}: {error}"));
         assert_eq!(history_hashes(&snapshot), history_hashes(&plain), "{solo}");
     }
+}
+
+const ALICE: &str = "Alice Able <alice@example.com>";
+const BOB: &str = "Bob <bob@example.com>";
+
+/// Writes, stages, and commits one file as `author` ("Name <email>"), returning the new HEAD.
+fn commit_as(repo: &Repo, relative: &str, contents: &str, message: &str, author: &str) -> String {
+    repo.write(relative, contents);
+    repo.git(&["add", "--", relative]);
+    repo.git(&["commit", "--quiet", &format!("--author={author}"), "-m", message]);
+    repo.head()
+}
+
+/// A linear history on `main`, oldest first, with three authors and two folders. The newest commit
+/// is by "Axb Person", whose name matches the pattern `a.b` only if the dot matches any character.
+fn repository_with_authors_and_paths() -> (Repo, [String; 6]) {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    let lib_alice = commit_as(&repo, "src/lib.rs", "alice\n", "Lib alice", ALICE);
+    let guide_bob = commit_as(&repo, "docs/guide.md", "guide\n", "Guide bob", BOB);
+    let lib_bob = commit_as(&repo, "src/lib.rs", "bob\n", "Lib bob", BOB);
+    let lib_alice_two = commit_as(&repo, "src/lib.rs", "alice again\n", "Lib alice two", ALICE);
+    let axb = commit_as(&repo, "notes.txt", "note\n", "Axb note", "Axb Person <axb@example.com>");
+    (repo, [first, lib_alice, guide_bob, lib_bob, lib_alice_two, axb])
+}
+
+fn filtered_history(repo: &Repo, filter: &HistoryFilter) -> Snapshot {
+    client().load_snapshot_with_filter(repo.path(), 100, HistoryScope::All, &[], None, filter).expect("filtered snapshot")
+}
+
+#[test]
+fn author_filter_matches_without_regard_to_case_and_as_plain_text() {
+    let (repo, [_, lib_alice, guide_bob, lib_bob, lib_alice_two, axb]) = repository_with_authors_and_paths();
+    let by_author = |author: &str| HistoryFilter { author: author.to_string(), ..Default::default() };
+    let lower = history_hashes(&filtered_history(&repo, &by_author("alice")));
+    assert_eq!(lower, vec![lib_alice_two.clone(), lib_alice.clone()], "HEAD is by someone else, so it is left out");
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_author("ALICE"))), lower);
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_author("bob@example.com"))), vec![lib_bob, guide_bob]);
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_author("axb"))), vec![axb.clone()], "HEAD shows when it matches");
+    assert!(history_hashes(&filtered_history(&repo, &by_author("a.b"))).is_empty(), "the dot is a dot, so 'Axb' does not match 'a.b'");
+}
+
+#[test]
+fn path_filter_shows_the_commits_that_touch_a_file_or_folder() {
+    let (repo, [_, lib_alice, guide_bob, lib_bob, lib_alice_two, _]) = repository_with_authors_and_paths();
+    let by_path = |path: &str| HistoryFilter { path: path.to_string(), ..Default::default() };
+    let lib = vec![lib_alice_two.clone(), lib_bob.clone(), lib_alice.clone()];
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_path("src/lib.rs"))), lib, "a file");
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_path("src"))), lib, "a folder");
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_path("src/"))), lib, "a folder with a trailing slash");
+    assert_eq!(history_hashes(&filtered_history(&repo, &by_path("docs/"))), vec![guide_bob], "another folder");
+    assert!(history_hashes(&filtered_history(&repo, &by_path("missing"))).is_empty(), "a path no commit touches");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn path_filter_matches_glob_characters_in_a_name_literally() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let star = repo.commit("star*.txt", "star\n", "Star file");
+    repo.commit("starred.txt", "red\n", "Red file");
+    let filter = HistoryFilter { path: "star*.txt".to_string(), ..Default::default() };
+    assert_eq!(history_hashes(&filtered_history(&repo, &filter)), vec![star], "starred.txt is not selected by the glob");
+}
+
+#[test]
+fn author_and_path_filters_combine() {
+    let (repo, [_, lib_alice, _, _, lib_alice_two, _]) = repository_with_authors_and_paths();
+    let both = HistoryFilter { author: "alice".to_string(), path: "src/lib.rs".to_string() };
+    assert_eq!(history_hashes(&filtered_history(&repo, &both)), vec![lib_alice_two, lib_alice]);
+    let elsewhere = HistoryFilter { author: "alice".to_string(), path: "docs".to_string() };
+    assert!(history_hashes(&filtered_history(&repo, &elsewhere)).is_empty());
+}
+
+#[test]
+fn head_that_matches_the_filter_is_shown_even_past_the_first_page() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let head = commit_as(&repo, "a.txt", "two\n", "Head work", ALICE);
+    repo.git(&["checkout", "-q", "-b", "newer"]);
+    commit_as(&repo, "b.txt", "b\n", "Newer one", ALICE);
+    commit_as(&repo, "b.txt", "bb\n", "Newer two", ALICE);
+    repo.git(&["checkout", "-q", "main"]);
+    let filter = HistoryFilter { author: "alice".to_string(), ..Default::default() };
+    // The page holds one commit, so HEAD, the third match, is fetched on its own.
+    let snapshot = client().load_snapshot_with_filter(repo.path(), 1, HistoryScope::All, &[], None, &filter).expect("page");
+    let hashes = history_hashes(&snapshot);
+    assert_eq!(hashes.len(), 2, "{hashes:?}");
+    assert!(hashes.contains(&head), "HEAD matches the filter, so it stays visible: {hashes:?}");
+}
+
+#[test]
+fn empty_filter_leaves_the_history_as_before() {
+    let (repo, _) = repository_with_authors_and_paths();
+    let plain = client().load_snapshot_filtered(repo.path(), 100, HistoryScope::All, &[]).expect("plain");
+    let blank = HistoryFilter { author: "  ".to_string(), path: " / ".to_string() };
+    assert!(blank.is_empty());
+    assert_eq!(history_hashes(&filtered_history(&repo, &blank)), history_hashes(&plain));
 }
 
 #[test]

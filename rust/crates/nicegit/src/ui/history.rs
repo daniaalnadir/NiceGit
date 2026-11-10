@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use egui::{Color32, FontId, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
-use nicegit_core::{Branch, Commit, GitClient, Snapshot, StatusEntry, StatusKind};
+use nicegit_core::{Branch, Commit, GitClient, HistoryFilter, Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
 use crate::graph_view::{self, Node};
@@ -128,6 +128,10 @@ impl NiceGitApp {
         } else {
             snapshot.branches.iter().filter(|b| !b.is_detached() && hidden.contains(&b.full_ref())).count()
         };
+        // The filter in use, and the Filter menu's fields: what was typed and not applied, or the filter in use.
+        let applied_filter = repo.history_filter.clone();
+        let mut filter_draft = repo.filter_draft.clone().unwrap_or_else(|| applied_filter.clone());
+        let mut filter_change: Option<HistoryFilter> = None;
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 10, bottom: 6 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Commit history").size(16.0).strong());
@@ -151,6 +155,40 @@ impl NiceGitApp {
                 if scope != shown {
                     scope_change = Some(scope);
                 }
+                // Author and path filters narrow the history whatever the scope or solo branch.
+                let filter_button = ui
+                    .add_enabled(idle, egui::Button::new(format!("{}  Filter…", icon::FUNNEL_SIMPLE)))
+                    .on_hover_text("Show only the commits by an author, or that touch a file or folder")
+                    .on_disabled_hover_text("Wait for the current Git action to finish");
+                egui::Popup::menu(&filter_button).show(|ui| {
+                    ui.set_width(260.0);
+                    ui.label(RichText::new("Show only commits by an author, or that touch a path.").small().color(c.muted));
+                    ui.label("Author");
+                    let author = ui.add(
+                        egui::TextEdit::singleline(&mut filter_draft.author)
+                            .hint_text("Name or email")
+                            .desired_width(f32::INFINITY),
+                    );
+                    author.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter by author"));
+                    ui.label("Path");
+                    let path = ui.add(
+                        egui::TextEdit::singleline(&mut filter_draft.path)
+                            .hint_text("File or folder in the repository")
+                            .desired_width(f32::INFINITY),
+                    );
+                    path.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter by path"));
+                    ui.horizontal(|ui| {
+                        if ui.button("Apply").clicked() {
+                            filter_change = Some(filter_draft.clone());
+                            ui.close();
+                        }
+                        if ui.button("Clear").clicked() {
+                            filter_draft = HistoryFilter::default();
+                            filter_change = Some(HistoryFilter::default());
+                            ui.close();
+                        }
+                    });
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let more = if snapshot.has_more_commits { "+" } else { "" };
                     ui.label(RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted));
@@ -183,6 +221,21 @@ impl NiceGitApp {
                     ui.label(RichText::new(format!("{hidden_count} {branches} hidden.")).small().color(c.muted));
                     if ui.add_enabled(idle, egui::Link::new("Show all")).clicked() {
                         show_hidden = true;
+                    }
+                });
+            }
+            if !applied_filter.is_empty() {
+                ui.horizontal(|ui| {
+                    let mut parts = Vec::new();
+                    if let Some(author) = applied_filter.author_text() {
+                        parts.push(format!("by {author}"));
+                    }
+                    if let Some(path) = applied_filter.path_text() {
+                        parts.push(format!("touching {path}"));
+                    }
+                    ui.label(RichText::new(format!("Showing commits {}.", parts.join(" · "))).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new("Clear filters")).clicked() {
+                        filter_change = Some(HistoryFilter::default());
                     }
                 });
             }
@@ -301,6 +354,14 @@ impl NiceGitApp {
                 });
             }
         });
+        // What the menu shows is kept until it is applied, so a menu closed unapplied keeps its text.
+        if let Some(repo) = self.repos.get_mut(self.active) {
+            repo.filter_draft = Some(filter_draft.clone()).filter(|draft| *draft != repo.history_filter);
+        }
+        if let Some(filter) = filter_change {
+            // Like a scope change, a deliberate reload, so the graph shows the commits at once.
+            self.set_history_filter(filter);
+        }
         if let Some(scope) = scope_change {
             // Like Command-R, a deliberate reload, so the graph shows the new branches at once.
             self.settings.history_scope = scope;

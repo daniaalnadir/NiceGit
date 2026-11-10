@@ -344,6 +344,12 @@ pub struct Repo {
     /// The signing setup being read in the background.
     pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
     pub commit_filter: String,
+    /// The Author and Path filters the history is narrowed by. Kept in memory for this repository
+    /// only, so it is not saved across restarts.
+    pub history_filter: nicegit_core::HistoryFilter,
+    /// The filter fields as typed in the Filter menu, while they differ from `history_filter` and
+    /// the menu has not been applied. `None` when the menu shows `history_filter`.
+    pub filter_draft: Option<nicegit_core::HistoryFilter>,
     pub branch_filter: String,
     /// Local branches chosen with Command/Ctrl-click in the sidebar, as shown when chosen, for deleting
     /// several at once. Cleared by a plain click, Escape, or a deletion.
@@ -523,6 +529,8 @@ impl Repo {
             signing: None,
             signing_read: None,
             commit_filter: String::new(),
+            history_filter: nicegit_core::HistoryFilter::default(),
+            filter_draft: None,
             branch_filter: String::new(),
             selected_branches: Vec::new(),
             trailer_filter: String::new(),
@@ -946,6 +954,21 @@ impl NiceGitApp {
         self.load(true);
     }
 
+    /// Narrows the active repository's commit history by `filter`, then reloads it, as a scope
+    /// change does. Nothing changes while another action runs, or when `filter` is already shown.
+    pub fn set_history_filter(&mut self, filter: nicegit_core::HistoryFilter) {
+        if self.busy.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get_mut(self.active) else { return };
+        repo.filter_draft = None;
+        if repo.history_filter == filter {
+            return;
+        }
+        repo.history_filter = filter;
+        self.load(true);
+    }
+
     fn load_repo(&mut self, index: usize, deliberate: bool) {
         self.start_load(index, deliberate, false);
     }
@@ -976,6 +999,7 @@ impl NiceGitApp {
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
         let hidden = self.settings.hidden_branches_of(&repo.path);
         let solo = self.settings.solo_branch_of(&repo.path);
+        let filter = repo.history_filter.clone();
         let path = repo.path.clone();
         // The tools are read on deliberate loads and on the first load, not on every watched change,
         // so an automatic refresh does not start another Git process.
@@ -995,14 +1019,14 @@ impl NiceGitApp {
                 {
                     self.quick_loads += 1;
                 }
-                self.worker.quick_load(self.generation, path, previous, limit, scope, hidden, solo);
+                self.worker.quick_load(self.generation, path, previous, limit, scope, hidden, solo, filter);
             }
             None => {
                 #[cfg(test)]
                 {
                     self.full_loads += 1;
                 }
-                self.worker.load(self.generation, path, deliberate, limit, scope, hidden, solo);
+                self.worker.load(self.generation, path, deliberate, limit, scope, hidden, solo, filter);
             }
         }
     }
@@ -1091,7 +1115,8 @@ impl NiceGitApp {
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
         let hidden = self.settings.hidden_branches_of(&repo.path);
         let solo = self.settings.solo_branch_of(&repo.path);
-        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, solo, action);
+        let filter = repo.history_filter.clone();
+        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, solo, filter, action);
     }
 
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a
