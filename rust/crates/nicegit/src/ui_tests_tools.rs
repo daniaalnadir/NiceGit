@@ -886,7 +886,8 @@ fn a_pull_request_detail_window_shows_its_checks_conversation_and_files() {
     // The answer is decoded from a fixture and injected, so the window never asks gh for it.
     let json = r#"{"number": 12, "title": "Add the status bar", "body": "Shows the pull request.",
         "author": {"login": "octocat"}, "state": "OPEN", "isDraft": false, "baseRefName": "main",
-        "headRefName": "status-bar", "url": "https://github.com/acme/app/pull/12",
+        "headRefName": "status-bar", "headRefOid": "0123456789abcdef0123456789abcdef01234567",
+        "url": "https://github.com/acme/app/pull/12",
         "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-02T03:04:05Z", "reviewDecision": null,
         "mergeable": "MERGEABLE", "additions": 10, "deletions": 2, "changedFiles": 1, "commits": [],
         "files": [{"path": "src/status_bar.rs", "additions": 10, "deletions": 2}],
@@ -911,6 +912,74 @@ fn a_pull_request_detail_window_shows_its_checks_conversation_and_files() {
     harness.get_by_label_contains("Files (").click();
     settle(&mut harness);
     assert!(shows(&harness, "src/status_bar.rs"), "the changed file is listed");
+}
+
+/// A pull request as `gh pr view` prints it, for the review and merge tests. The draft flag and the
+/// mergeability word are the ones the tests vary. The author is not the signed-in user.
+fn pull_request_view_json(draft: bool, mergeable: &str) -> String {
+    format!(
+        r#"{{"number": 12, "title": "Add the status bar", "body": "", "author": {{"login": "octocat"}},
+        "state": "OPEN", "isDraft": {draft}, "baseRefName": "main", "headRefName": "status-bar",
+        "headRefOid": "0123456789abcdef0123456789abcdef01234567", "url": "https://github.com/acme/app/pull/12",
+        "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-02T03:04:05Z", "reviewDecision": null,
+        "mergeable": "{mergeable}", "additions": 10, "deletions": 2, "changedFiles": 1, "commits": [],
+        "files": [{{"path": "src/status_bar.rs", "additions": 10, "deletions": 2}}], "reviews": [], "comments": [],
+        "statusCheckRollup": [], "labels": []}}"#
+    )
+}
+
+/// Opens the detail window of pull request 12 with the fixture, read as the signed-in user "daniaal".
+/// Nothing reaches GitHub: the detail is decoded here and handed to the window.
+fn open_pull_request_window(harness: &mut App, draft: bool) {
+    use crate::tools::pull_request_detail::PullRequestDetailWindow;
+    use nicegit_core::github::{decode_pull_request_detail, GitHubRepository};
+
+    let github = GitHubRepository { host: "github.com".into(), owner: "acme".into(), name: "app".into() };
+    let detail = decode_pull_request_detail(&pull_request_view_json(draft, "MERGEABLE"), &github, 12).expect("the fixture decodes");
+    harness.state_mut().open_tool(Box::new(PullRequestDetailWindow::loaded_as(github, 12, detail, "daniaal")));
+    wait(harness, "the detail window", |h| h.state().tools.iter().any(|t| t.title() == "Pull request #12"));
+    settle(harness);
+}
+
+#[test]
+fn merge_stays_disabled_for_a_draft_pull_request() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+    open_pull_request_window(&mut harness, true);
+
+    assert!(shows(&harness, "Add the status bar"), "the title is shown");
+    let merge = harness.get_by_label_contains("Merge…");
+    assert!(merge.accesskit_node().is_disabled(), "a draft cannot be merged");
+}
+
+#[test]
+fn review_and_merge_confirmations_name_the_repository_number_and_title() {
+    let repo = repository();
+    let mut harness = open(repo.path());
+    loaded(&mut harness);
+    settle(&mut harness);
+    open_pull_request_window(&mut harness, false);
+
+    harness.get_by_label_contains("Review…").click();
+    settle(&mut harness);
+    assert!(shows(&harness, "Review pull request"), "the review confirmation is open");
+    assert!(shows(&harness, "github.com/acme/app"), "the repository is named");
+    assert!(shows(&harness, "#12"), "the number is named");
+    assert!(shows(&harness, "Add the status bar"), "the title is named");
+    harness.get_by_role_and_label(Role::Button, "Cancel").click();
+    settle(&mut harness);
+    assert!(!shows(&harness, "Submit review"), "cancel closes the review without running it");
+
+    harness.get_by_label_contains("Merge…").click();
+    settle(&mut harness);
+    assert!(shows(&harness, "Merge pull request"), "the merge confirmation is open");
+    assert!(shows(&harness, "github.com/acme/app"), "the repository is named for a merge");
+    assert!(shows(&harness, "Squash and merge"), "the merge methods are offered");
+    harness.get_by_role_and_label(Role::Button, "Cancel").click();
+    settle(&mut harness);
+    assert!(!shows(&harness, "Squash and merge"), "cancel closes the merge without running it");
 }
 
 /// Sets one of the graph's Show menu items on or off, opening the menu first when it is closed.
