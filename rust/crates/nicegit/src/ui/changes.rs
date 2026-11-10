@@ -154,18 +154,17 @@ impl NiceGitApp {
             });
         }
         let tree = self.settings.file_view == FileView::Tree;
-        // Each section lists its files in a scroll area of its own, so a long unstaged list never
-        // pushes the staged files out of sight. A narrow panel drops "files" from the titles so their
+        // The two sections share the room equally, each listing its files in a scroll area of its
+        // own, so a long unstaged list never pushes the staged files out of sight. A narrow panel drops "files" from the titles so their
         // counts stay visible; if even that does not fit, the title is truncated rather than running
         // under the buttons. The accessible label keeps the full wording.
         let compact = ui.available_width() - 20.0 < 380.0;
         let noun = if compact { "" } else { " files" };
         let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
-        let estimate = |count: usize| row * count.max(1) as f32 + 8.0;
-        // The lists' heights from the last frame, so the room can be shared out before drawing them.
-        let heights_id = egui::Id::unique("changes-list-heights").with(self.active);
-        let (want_unstaged, want_staged, last_gap) =
-            ui.data(|d| d.get_temp::<(f32, f32, f32)>(heights_id)).unwrap_or((estimate(unstaged.len()), estimate(staged.len()), 0.0));
+        // The height of the staged header and the gap above it, measured last frame, so the room
+        // can be shared out before they are drawn.
+        let gap_id = egui::Id::unique("changes-staged-gap");
+        let last_gap = ui.data(|d| d.get_temp::<f32>(gap_id)).unwrap_or(0.0);
         let section = egui::Margin { left: 10, right: 10, top: 6, bottom: 4 };
         let header = egui::Frame::new().inner_margin(section).show(ui, |ui| {
             egui::containers::Sides::new().shrink_left().truncate().show(
@@ -233,14 +232,12 @@ impl NiceGitApp {
         .response
         .rect
         .height();
-        // The room left for both lists, after the staged header and the gap above it (measured last
-        // frame). A list that fits keeps its height; when both are long, each gets at least half.
+        // The room left for both lists, after the staged header and the gap above it; egui also
+        // leaves a line of item spacing after the unstaged list. Each list gets half.
         let gap = if last_gap > 0.0 { last_gap } else { header + 24.0 };
-        // egui also leaves a line of item spacing after the unstaged list.
         let lists = (ui.available_height() - gap - ui.spacing().item_spacing.y).max(row * 4.0);
-        let staged_share = want_staged.min((lists - want_unstaged).max(lists * 0.5));
-        let unstaged_height = lists - staged_share;
-        let unstaged_content = list_area(ui, "changes-unstaged", unstaged_height, |ui| {
+        let unstaged_height = lists / 2.0;
+        list_area(ui, "changes-unstaged", unstaged_height, |ui| {
             if unstaged.is_empty() && !all_unstaged.is_empty() {
                 ui.label(RichText::new("   No matching files").small().color(c.muted));
             } else if unstaged.is_empty() {
@@ -295,9 +292,9 @@ impl NiceGitApp {
             );
         });
         let gap = ui.cursor().top() - gap_top;
-        // The staged list takes whatever is left, so it reaches down to the commit box.
+        // The staged list takes the rest, so it reaches down to the commit box.
         let staged_height = ui.available_height().max(row);
-        let staged_content = list_area(ui, "changes-staged", staged_height, |ui| {
+        list_area(ui, "changes-staged", staged_height, |ui| {
             if staged.is_empty() && !all_staged.is_empty() {
                 ui.label(RichText::new("   No matching files").small().color(c.muted));
             } else if staged.is_empty() {
@@ -310,9 +307,8 @@ impl NiceGitApp {
                 }
             }
         });
-        let measured = (unstaged_content, staged_content, gap);
-        if (measured.0 - want_unstaged).abs() > 0.5 || (measured.1 - want_staged).abs() > 0.5 || (gap - last_gap).abs() > 0.5 {
-            ui.data_mut(|d| d.insert_temp(heights_id, measured));
+        if (gap - last_gap).abs() > 0.5 {
+            ui.data_mut(|d| d.insert_temp(gap_id, gap));
             ui.ctx().request_repaint();
         }
     }
@@ -1064,23 +1060,15 @@ fn megabytes(bytes: u64) -> String {
 /// The number of changed files above which the Changes panel offers a filter.
 const FILTER_FROM: usize = 5;
 
-/// One section's file list: a scroll area at most `max_height` tall, shrinking to fit a short list.
-/// Returns the list's full height, so the next frame can share out the room.
-fn list_area(ui: &mut Ui, id: &str, max_height: f32, add: impl FnOnce(&mut Ui)) -> f32 {
+/// One section's file list: a scroll area `height` tall, however long the list.
+fn list_area(ui: &mut Ui, id: &str, height: f32, add: impl FnOnce(&mut Ui)) {
     ui.scope(|ui| {
         // A solid bar rather than egui's floating one, which fades out until hovered.
         ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-        egui::ScrollArea::vertical()
-            .id_salt(id)
-            .auto_shrink([false, true])
-            .max_height(max_height)
-            .show(ui, |ui| {
-                egui::Frame::new().inner_margin(egui::Margin { left: 10, right: 10, top: 2, bottom: 4 }).show(ui, add);
-            })
-            .content_size
-            .y
-    })
-    .inner
+        egui::ScrollArea::vertical().id_salt(id).auto_shrink(false).min_scrolled_height(height).max_height(height).show(ui, |ui| {
+            egui::Frame::new().inner_margin(egui::Margin { left: 10, right: 10, top: 2, bottom: 4 }).show(ui, add);
+        });
+    });
 }
 
 /// Whether a changed file matches the Changes panel's filter. Every whitespace-separated term must
