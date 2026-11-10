@@ -77,6 +77,7 @@ impl NiceGitApp {
                 // A warning is set at body size so it reads as clearly as the setting it explains.
                 let note = RichText::new(note).color(color);
                 ui.label(if too_narrow && self.settings.split_diff { note } else { note.small() });
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.syntax_highlighting, "Syntax highlighting");
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label("External editor");

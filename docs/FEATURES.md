@@ -139,6 +139,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - See whether a commit's GPG or SSH signature is verified, untrusted, bad, or cannot be
   checked on this computer, in the commit inspector.
 - Hide whitespace-only changes in any diff; the choice is remembered.
+- Colour the code in diffs by its language, from the file's extension (or its shebang line
+  when it has none), with the colours of a light or dark theme. Added and removed lines keep
+  their tint. Turn it off under Settings > Diffs > Syntax highlighting. Diffs over 10,000 lines,
+  and files over 1 MB, stay plain.
 - Choose 3, 10, or 25 context lines, or the whole file, for every diff; line staging works with
   each. File history, blame, and compare follow the setting too.
 - Compare changed images side by side with their dimensions and file sizes.

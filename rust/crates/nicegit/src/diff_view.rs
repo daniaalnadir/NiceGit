@@ -14,6 +14,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::diff::{side_by_side, DiffLine, DiffLineKind, SplitRow};
 use nicegit_core::inline::{self, InlineChange};
 
+use crate::syntax;
 use crate::theme;
 use crate::tools::widgets;
 
@@ -63,6 +64,8 @@ pub struct DiffContent {
     wrapped_rows: std::sync::Mutex<Option<WrappedRows>>,
     /// Each run of added and removed lines, as indices into `lines`, worked out when first needed.
     blocks: std::sync::OnceLock<Vec<BTreeSet<usize>>>,
+    /// Which hunks show syntax colours, and in what language.
+    syntax: syntax::Plan,
 }
 
 impl DiffContent {
@@ -82,6 +85,7 @@ impl DiffContent {
         let line_columns: Vec<usize> = lines.iter().map(|line| columns(&line.text)).collect();
         let max_columns = line_columns.iter().copied().max().unwrap_or(0);
         let highlights = inline::highlights(&lines);
+        let syntax = syntax::Plan::new(&lines);
         Self {
             title,
             lines,
@@ -92,6 +96,7 @@ impl DiffContent {
             line_columns,
             wrapped_rows: Default::default(),
             blocks: Default::default(),
+            syntax,
         }
     }
 
@@ -109,7 +114,7 @@ impl DiffContent {
             self.lines
                 .iter()
                 .map(|line| {
-                    let mut job = layout(&line.text, font, Color32::WHITE, &[]);
+                    let mut job = layout(&line.text, font, Color32::WHITE, &[], &[]);
                     wrap_line(&mut job, line.kind, width, char_width);
                     let galley = fonts.layout_job(job);
                     Measured { rows: galley.rows.len().max(1), height: galley.size().y }
@@ -138,6 +143,12 @@ impl DiffContent {
 
     pub fn is_empty(&self) -> bool {
         !self.lines.iter().any(|line| matches!(line.kind, DiffLineKind::Addition | DiffLineKind::Deletion | DiffLineKind::Context))
+    }
+
+    /// How many hunks of the diff are coloured by language, for tests.
+    #[cfg(test)]
+    pub fn coloured_hunks(&self) -> usize {
+        self.syntax.coloured_hunks()
     }
 
     fn row_of(&self, line: usize, split: bool) -> usize {
@@ -443,6 +454,8 @@ struct Style {
     char_width: f32,
     /// Each line of the diff laid out at that width.
     rows: std::sync::Arc<Vec<Measured>>,
+    /// Whether the dark theme is in use, which picks the syntax colours.
+    dark: bool,
 }
 
 impl Style {
@@ -477,6 +490,7 @@ impl Style {
             wrap_width,
             char_width,
             rows,
+            dark: ui.visuals().dark_mode,
         }
     }
 
@@ -585,9 +599,12 @@ impl View<'_> {
         // so the file's name stays whole.
         let columns = (wrap_width_of(diff_line.kind, self.style.wrap_width, self.style.char_width) / self.style.char_width + 0.01) as usize;
         let elided = (wrap && diff_line.kind == DiffLineKind::Metadata).then(|| elide_header(&diff_line.text, columns)).flatten();
+        // Code is coloured by its language, unless a header is elided or the line is not code.
+        let syntax_spans = self.content.syntax.line_spans(ui.ctx(), &self.content.lines, line, self.style.dark);
+        let syntax_line: &[syntax::Span] = syntax_spans.as_ref().map_or(&[], |(spans, index)| spans[*index].as_slice());
         let mut job = match &elided {
-            Some(text) => layout(text, &self.style.font, text_color, &[]),
-            None => layout(&diff_line.text, &self.style.font, text_color, &self.spans(line)),
+            Some(text) => layout(text, &self.style.font, text_color, &[], &[]),
+            None => layout(&diff_line.text, &self.style.font, text_color, &self.spans(line), syntax_line),
         };
         if wrap {
             // Lines wrap between words where they can, as measured for the row heights.
@@ -823,17 +840,28 @@ fn matches_in(text: &str, query: &str) -> Vec<Range<usize>> {
     found
 }
 
-/// A text layout for one line: tabs drawn as spaces, and a background behind each span.
-fn layout(text: &str, font: &FontId, color: Color32, spans: &[(Range<usize>, Color32)]) -> LayoutJob {
+/// A text layout for one line: tabs drawn as spaces, a background behind each span, and the
+/// syntax colour of each span in place of `color`. Both sets of spans are in byte offsets of
+/// `text`, in order.
+fn layout(text: &str, font: &FontId, color: Color32, spans: &[(Range<usize>, Color32)], syntax: &[syntax::Span]) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = f32::INFINITY;
     let mut run = String::new();
-    let mut run_background: Option<Color32> = None;
+    let mut run_style: Option<(Option<Color32>, Color32)> = None;
+    // The syntax span that may hold the current character; spans only move forward.
+    let mut next_syntax = 0;
     for (offset, ch) in text.char_indices() {
         let background = spans.iter().rev().find(|(range, _)| range.contains(&offset)).map(|(_, color)| *color);
-        if background != run_background {
-            append_run(&mut job, &mut run, run_background, font, color);
-            run_background = background;
+        while next_syntax < syntax.len() && syntax[next_syntax].0.end <= offset {
+            next_syntax += 1;
+        }
+        let text_color = syntax.get(next_syntax).filter(|(range, _)| range.start <= offset).map_or(color, |(_, color)| *color);
+        let style = (background, text_color);
+        if run_style != Some(style) {
+            if let Some(previous) = run_style {
+                append_run(&mut job, &mut run, previous, font);
+            }
+            run_style = Some(style);
         }
         if ch == '\t' {
             run.push_str(&" ".repeat(TAB_COLUMNS));
@@ -841,11 +869,13 @@ fn layout(text: &str, font: &FontId, color: Color32, spans: &[(Range<usize>, Col
             run.push(ch);
         }
     }
-    append_run(&mut job, &mut run, run_background, font, color);
+    if let Some(previous) = run_style {
+        append_run(&mut job, &mut run, previous, font);
+    }
     job
 }
 
-fn append_run(job: &mut LayoutJob, run: &mut String, background: Option<Color32>, font: &FontId, color: Color32) {
+fn append_run(job: &mut LayoutJob, run: &mut String, (background, color): (Option<Color32>, Color32), font: &FontId) {
     if run.is_empty() {
         return;
     }
@@ -924,7 +954,7 @@ mod tests {
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a 400-column line wraps on half of a 900-point view");
             // The drawn text, with its highlight colours, wraps onto exactly the rows allowed for.
-            let mut job = layout(&long, &style.font, Color32::RED, &[(3..9, Color32::BLUE)]);
+            let mut job = layout(&long, &style.font, Color32::RED, &[(3..9, Color32::BLUE)], &[]);
             job.wrap.max_width = style.wrap_width;
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), wrapped);
@@ -977,6 +1007,39 @@ mod tests {
             assert!(added
                 .iter()
                 .any(|(range, color)| *color == colors.added_word_bg && content.lines[1].text[range.clone()].contains('2')));
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn rust_code_gets_several_text_colours_on_one_line() {
+        let lines = vec![
+            DiffLine {
+                text: "diff --git a/greeting.rs b/greeting.rs".into(),
+                kind: DiffLineKind::Metadata,
+                old_number: None,
+                new_number: None,
+            },
+            DiffLine { text: "+++ b/greeting.rs".into(), kind: DiffLineKind::Metadata, old_number: None, new_number: None },
+            DiffLine { text: "@@ -0,0 +1 @@".into(), kind: DiffLineKind::Hunk, old_number: None, new_number: None },
+            DiffLine {
+                text: "+let greeting = \"hello\"; // note".into(),
+                kind: DiffLineKind::Addition,
+                old_number: None,
+                new_number: Some(1),
+            },
+        ];
+        let content = DiffContent::new("greeting.rs".into(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 400.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let dark = ui.visuals().dark_mode;
+            // A short file is coloured as soon as the line is first asked for.
+            let (spans, index) = content.syntax.line_spans(ui.ctx(), &content.lines, 3, dark).expect("a Rust hunk is coloured");
+            let font = egui::TextStyle::Monospace.resolve(ui.style());
+            let job = layout(&content.lines[3].text, &font, Color32::RED, &[], &spans[index]);
+            let colours: std::collections::BTreeSet<[u8; 4]> = job.sections.iter().map(|section| section.format.color.to_array()).collect();
+            assert!(colours.len() > 1, "the keyword, string and comment are coloured differently: {colours:?}");
         });
         output.textures_delta.clear();
     }
@@ -1045,14 +1108,14 @@ mod tests {
             let wrapped = style.wrapped_lines(0);
             assert!(wrapped > 1, "a long hunk header wraps in a 700-point view");
             // The drawn header starts one column in, so it wraps onto exactly the rows allowed for.
-            let mut job = layout(&header, &style.font, Color32::RED, &[]);
+            let mut job = layout(&header, &style.font, Color32::RED, &[], &[]);
             job.wrap.max_width = wrap_width_of(DiffLineKind::Hunk, style.wrap_width, style.char_width);
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), wrapped);
             assert_eq!(style.unified_row_height(0), galley.size().y + 2.0, "the row is exactly as tall as the drawn header");
             // The code beside it keeps the full width.
             assert_eq!(style.wrapped_lines(1), {
-                let mut job = layout(&content.lines[1].text, &style.font, Color32::RED, &[]);
+                let mut job = layout(&content.lines[1].text, &style.font, Color32::RED, &[], &[]);
                 job.wrap.max_width = style.wrap_width;
                 ui.ctx().fonts_mut(|fonts| fonts.layout_job(job)).rows.len()
             });
@@ -1071,7 +1134,7 @@ mod tests {
             let style = Style::new(ui, &content, false, 0.0);
             assert_eq!(style.wrapped_lines(0), 1, "a file header is measured as one row");
             // The drawn header is one row too, cut short with an ellipsis.
-            let mut job = layout(&header, &style.font, Color32::RED, &[]);
+            let mut job = layout(&header, &style.font, Color32::RED, &[], &[]);
             wrap_line(&mut job, DiffLineKind::Metadata, style.wrap_width, style.char_width);
             let galley = ui.ctx().fonts_mut(|fonts| fonts.layout_job(job));
             assert_eq!(galley.rows.len(), 1);

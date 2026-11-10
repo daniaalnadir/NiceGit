@@ -2789,6 +2789,7 @@ impl NiceGitApp {
             theme::set_graph_palette(wanted.1);
             self.applied_appearance = Some(wanted);
         }
+        crate::syntax::set_enabled(self.settings.syntax_highlighting);
     }
 
     /// The running bisect, once its status has been read after the last refresh.

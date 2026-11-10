@@ -10,6 +10,14 @@ NiceGit's own source is covered by the root MIT LICENSE.
 - Used for the interface text. The bundled `Inter-Regular.otf` and `Inter-SemiBold.otf`
   are subsets of the original font (see `rust/assets/fonts/README.md`).
 
+## Syntax highlighting grammars and themes
+
+- Source: the default syntax definitions and themes bundled with the `syntect` crate
+  (https://github.com/trishume/syntect, MIT License), which come from Sublime Text's packages
+  (https://github.com/sublimehq/Packages) and the themes InspiredGitHub and base16-ocean.
+- Used for the colours of code in diffs. The grammars and themes are compiled into NiceGit
+  in binary form. The `syntect` crate's own license is listed in `THIRD_PARTY_LICENSES.txt`.
+
 ## Phosphor Icons
 
 - Source: https://phosphoricons.com, used through the `egui-phosphor` crate
