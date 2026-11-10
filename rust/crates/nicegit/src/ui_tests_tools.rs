@@ -651,9 +651,11 @@ fn a_launchpad_check_out_switches_to_its_repository_and_opens_the_dialog() {
         author: "octocat".into(),
     };
     harness.state_mut().check_out_from_launchpad(request);
-    wait(&mut harness, "the check out dialog", |h| {
-        matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::CheckOutPullRequest { local, .. }) if local == "pr/7-add-the-review-file")
-    });
+    wait(
+        &mut harness,
+        "the check out dialog",
+        |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::CheckOutPullRequest { local, .. }) if local == "pr/7-add-the-review-file"),
+    );
     let shown = harness.state().repo().and_then(|r| r.path.canonicalize().ok());
     assert_eq!(shown, first.path().canonicalize().ok(), "the repository of the pull request is the one shown");
     assert!(harness.state().pending_check_out.is_none(), "nothing is left waiting");
