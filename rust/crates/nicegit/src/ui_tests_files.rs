@@ -106,9 +106,20 @@ fn a_large_file_is_read_only_after_open_anyway() {
     settle(&mut harness);
     harness.get_by_label("All files").click();
     // The Changed files row also reads "big.txt", so the wait needs the tree itself to have arrived.
-    wait(&mut harness, "the big file in the tree", |h| !shows(h, "Listing files") && h.query_by_label("big.txt").is_some());
-    settle(&mut harness);
-    harness.get_by_label("big.txt").click();
+    // On a slow machine the tree can be drawn again while the large commit's data still loads,
+    // which drops a click; so the row is clicked until the file starts to open.
+    let start = std::time::Instant::now();
+    loop {
+        wait(&mut harness, "the big file in the tree", |h| !shows(h, "Listing files") && h.query_by_label("big.txt").is_some());
+        if let Some(row) = harness.query_by_label("big.txt") {
+            row.click();
+        }
+        harness.run_steps(5);
+        if shows(&harness, "Large files are not shown") || shows(&harness, "Reading file") {
+            break;
+        }
+        assert!(start.elapsed() < std::time::Duration::from_secs(30), "the big file never opened");
+    }
     wait(&mut harness, "the size note", |h| shows(h, "Large files are not shown"));
     assert!(!shows(&harness, "Reading file"), "nothing is still loading");
 
