@@ -117,6 +117,8 @@ pub struct HookRetry {
     pub kind: HookCommit,
     pub branch: String,
     pub head: Option<String>,
+    /// The signing choice the stopped commit was sent with, so the retry keeps it.
+    pub sign: Option<bool>,
 }
 
 /// Whether Git stopped because uncommitted changes would be overwritten.
@@ -309,6 +311,16 @@ pub struct Repo {
     /// Whether the next commit, amend, or push skips Git hooks. Set from the commit box's options
     /// menu and cleared once a commit is sent, so it is not remembered between commits.
     pub skip_hooks: bool,
+    /// The Sign this commit choice for the next commit, amend, or push. `None` follows
+    /// `commit.gpgSign`. Cleared once a commit is sent, like `skip_hooks`.
+    pub sign_override: Option<bool>,
+    /// The signing choice of the commit last sent, kept so a notice that retries it can make the
+    /// same choice again.
+    pub sent_sign: Option<bool>,
+    /// The repository's signing setup, read once per load. `None` until the read arrives.
+    pub signing: Option<nicegit_core::client::SigningSetup>,
+    /// The signing setup being read in the background.
+    pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
     pub commit_filter: String,
     pub branch_filter: String,
     /// Local branches chosen with Command/Ctrl-click in the sidebar, as shown when chosen, for deleting
@@ -478,6 +490,10 @@ impl Repo {
             draft_key: None,
             amend: false,
             skip_hooks: false,
+            sign_override: None,
+            sent_sign: None,
+            signing: None,
+            signing_read: None,
             commit_filter: String::new(),
             branch_filter: String::new(),
             selected_branches: Vec::new(),
@@ -1182,10 +1198,12 @@ impl NiceGitApp {
                     // A commit that failed gives its message back; one that was made keeps it cleared,
                     // and the box starts from the commit template for the next one.
                     let mut made_commit = false;
+                    let mut sent_sign: Option<bool> = None;
                     if let Some((label, result)) = &action {
                         if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") {
                             let repo = &mut self.repos[index];
                             let sent = repo.sent_draft.take();
+                            sent_sign = repo.sent_sign.take();
                             let committed = match result {
                                 Ok(_) => true,
                                 Err(error) => label == "Commit and push" && error.to_string().contains("The commit was made"),
@@ -1222,11 +1240,25 @@ impl NiceGitApp {
                                     kind,
                                     branch: s.current_branch.clone(),
                                     head: s.head_hash.clone(),
+                                    sign: sent_sign,
                                 });
                                 self.notice = Some(Notice {
                                     text: "A Git hook stopped the commit.".into(),
                                     is_error: true,
                                     action: retry.map(NoticeAction::CommitWithoutHooks),
+                                    detail: Some(output),
+                                });
+                            }
+                            // Git could not sign the commit, so nothing was made. The notice names the
+                            // signing setup and the commit box's Sign toggle, with Git's explanation below.
+                            Err(GitError::SigningRejected { output, .. })
+                                if matches!(label.as_str(), "Commit" | "Amend" | "Commit and push") =>
+                            {
+                                action_failed = true;
+                                self.notice = Some(Notice {
+                                    text: nicegit_core::models::COMMIT_NOT_SIGNED.into(),
+                                    is_error: true,
+                                    action: None,
                                     detail: Some(output),
                                 });
                             }
@@ -1531,6 +1563,12 @@ impl NiceGitApp {
         if read_template {
             self.start_template_read(index);
         }
+        // The signing setup is read once per load, so the commit box's Sign toggle needs no Git process per frame.
+        if self.repos[index].signing.is_none() && self.repos[index].signing_read.is_none() {
+            let path = self.repos[index].path.clone();
+            let context = self.worker.context.clone();
+            self.repos[index].signing_read = Some(Task::spawn(&context, move || GitClient::new().signing_setup(&path).unwrap_or_default()));
+        }
         // Bisect state and submodules are read alongside, without delaying the snapshot. The bar
         // keeps the last state until the new read arrives, so it does not vanish (and take its
         // buttons with it) on every refresh.
@@ -1611,6 +1649,17 @@ impl NiceGitApp {
         let context = self.worker.context.clone();
         let task = Task::spawn(&context, move || GitClient::new().commit_template(&path).ok().flatten());
         self.repos[index].template_read = Some((key, task));
+    }
+
+    /// Keeps each repository's signing setup once its background read arrives.
+    fn receive_signing_setups(&mut self) {
+        for repo in &mut self.repos {
+            let Some(task) = repo.signing_read.as_mut() else { continue };
+            if let Some(setup) = task.get().copied() {
+                repo.signing = Some(setup);
+                repo.signing_read = None;
+            }
+        }
     }
 
     /// Copies each commit message that the commit menu asked for once it has been read. A read
@@ -2045,20 +2094,22 @@ impl NiceGitApp {
         let Some(repo) = self.repo() else { return };
         let message = repo.draft.message();
         let skip = repo.skip_hooks;
+        let sign = repo.sign_override;
         if repo.amend {
             let Some(head) = snapshot.head_hash.clone() else { return };
             let branch = snapshot.current_branch.clone();
             self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
-                client.amend_with_options(&message, &branch, &head, skip, path).map(|_| Some("Amended the last commit.".into()))
+                client.amend_with_options(&message, &branch, &head, skip, sign, path).map(|_| Some("Amended the last commit.".into()))
             });
         } else {
             self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
-                client.commit_with_options(&message, skip, path).map(|_| None)
+                client.commit_with_options(&message, skip, sign, path).map(|_| None)
             });
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.sent_sign = repo.sign_override.take();
                 repo.amend = false;
                 repo.skip_hooks = false;
             }
@@ -2079,28 +2130,30 @@ impl NiceGitApp {
             return;
         }
         let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
+        let sign = retry.sign;
         match retry.kind {
             HookCommit::Commit => {
                 self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
-                    client.commit_with_options(&message, true, path).map(|_| None)
+                    client.commit_with_options(&message, true, sign, path).map(|_| None)
                 });
             }
             HookCommit::Amend => {
                 let Some(head) = retry.head.clone() else { return };
                 let branch = retry.branch.clone();
                 self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
-                    client.amend_with_options(&message, &branch, &head, true, path).map(|_| Some("Amended the last commit.".into()))
+                    client.amend_with_options(&message, &branch, &head, true, sign, path).map(|_| Some("Amended the last commit.".into()))
                 });
             }
             HookCommit::CommitAndPush => {
                 self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
-                    client.commit_and_push_with_options(&message, &snapshot, true, path).map(|_| Some("Committed and pushed.".into()))
+                    client.commit_and_push_with_options(&message, &snapshot, true, sign, path).map(|_| Some("Committed and pushed.".into()))
                 });
             }
         }
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.sent_sign = sign;
                 repo.amend = false;
             }
             self.save_draft();
@@ -2125,17 +2178,20 @@ impl NiceGitApp {
         if !self.can_stage_all_and_commit() {
             return;
         }
-        let Some((message, skip)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks)) else { return };
+        let Some((message, skip, sign)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks, repo.sign_override)) else {
+            return;
+        };
         let count = self.snapshot().map_or(0, |s| s.status.len());
         self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
             client.stage_all(path)?;
             client
-                .commit_with_options(&message, skip, path)
+                .commit_with_options(&message, skip, sign, path)
                 .map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.sent_sign = repo.sign_override.take();
                 repo.skip_hooks = false;
             }
             self.save_draft();
@@ -2148,13 +2204,16 @@ impl NiceGitApp {
             return;
         }
         let Some(snapshot) = self.snapshot().cloned() else { return };
-        let Some((message, skip)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks)) else { return };
+        let Some((message, skip, sign)) = self.repo().map(|repo| (repo.draft.message(), repo.skip_hooks, repo.sign_override)) else {
+            return;
+        };
         self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
-            client.commit_and_push_with_options(&message, &snapshot, skip, path).map(|_| Some("Committed and pushed.".into()))
+            client.commit_and_push_with_options(&message, &snapshot, skip, sign, path).map(|_| Some("Committed and pushed.".into()))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
                 repo.sent_draft = Some(std::mem::take(&mut repo.draft));
+                repo.sent_sign = repo.sign_override.take();
                 repo.skip_hooks = false;
             }
             self.save_draft();
@@ -2694,6 +2753,7 @@ impl eframe::App for NiceGitApp {
         self.receive();
         self.poll_merge_tool();
         self.receive_templates();
+        self.receive_signing_setups();
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_tag_scan();

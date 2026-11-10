@@ -322,10 +322,18 @@ pub enum GitError {
         command: String,
         output: String,
     },
+    /// Git could not sign the commit. `output` is Git's own explanation of the signing failure.
+    SigningRejected {
+        command: String,
+        output: String,
+    },
     EmptyBranchName,
     EmptyCommitMessage,
     GitNotFound,
 }
+
+/// The notice for a commit Git could not sign, followed by Git's explanation as the detail.
+pub const COMMIT_NOT_SIGNED: &str = "The commit could not be signed. Check your signing setup, or untick Sign this commit.";
 
 impl GitError {
     pub fn failed(command: impl Into<String>, message: impl Into<String>) -> Self {
@@ -338,6 +346,7 @@ impl fmt::Display for GitError {
         match self {
             GitError::CommandFailed { command, message } => write!(f, "Git could not run `{command}`: {message}"),
             GitError::HookRejected { command, output } => write!(f, "A Git hook refused `{command}`: {output}"),
+            GitError::SigningRejected { output, .. } => write!(f, "{COMMIT_NOT_SIGNED} {output}"),
             GitError::EmptyBranchName => write!(f, "Branch name cannot be empty."),
             GitError::EmptyCommitMessage => write!(f, "Commit message cannot be empty."),
             GitError::GitNotFound => write!(f, "Git was not found. Install Git and make sure it is on your PATH."),

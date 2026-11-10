@@ -432,7 +432,7 @@ fn a_failing_pre_commit_hook_blocks_the_commit_until_hooks_are_skipped() {
     }
     assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]).trim(), "1", "nothing was committed");
 
-    client().commit_with_options("Second", true, repo.path()).expect("commit with hooks skipped");
+    client().commit_with_options("Second", true, None, repo.path()).expect("commit with hooks skipped");
     assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Second");
 }
 
@@ -449,13 +449,13 @@ fn a_failing_commit_msg_hook_blocks_the_commit_and_amend_until_hooks_are_skipped
         Err(GitError::HookRejected { output, .. }) => assert!(output.contains("needs a Ticket line"), "{output}"),
         other => panic!("expected a hook refusal, got {other:?}"),
     }
-    match client().amend_with_options("Amended", "main", &first, false, repo.path()) {
+    match client().amend_with_options("Amended", "main", &first, false, None, repo.path()) {
         Err(GitError::HookRejected { .. }) => {}
         other => panic!("expected a hook refusal from amend, got {other:?}"),
     }
     assert_eq!(repo.head(), first, "the refused amend did not move HEAD");
 
-    client().amend_with_options("Amended", "main", &first, true, repo.path()).expect("amend with hooks skipped");
+    client().amend_with_options("Amended", "main", &first, true, None, repo.path()).expect("amend with hooks skipped");
     assert_eq!(git(repo.path(), &["log", "-1", "--format=%s"]).trim(), "Amended");
     assert_eq!(git(repo.path(), &["rev-list", "--count", "HEAD"]).trim(), "1");
 }
@@ -506,7 +506,9 @@ fn commit_and_push_skipping_hooks_also_skips_the_pre_push_hook() {
 
     repo.write("b.txt", "three\n");
     repo.git(&["add", "b.txt"]);
-    client().commit_and_push_with_options("Third", &snapshot(repo.path()), true, repo.path()).expect("commit and push, skipping hooks");
+    client()
+        .commit_and_push_with_options("Third", &snapshot(repo.path()), true, None, repo.path())
+        .expect("commit and push, skipping hooks");
     let head = git(repo.path(), &["rev-parse", "HEAD"]);
     assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), head.trim());
 }
@@ -2526,4 +2528,74 @@ fn current_scope_ignores_hidden_branches() {
     let with_hidden =
         client().load_snapshot_filtered(repo.path(), 100, HistoryScope::Current, &hidden(&["refs/heads/main"])).expect("hidden");
     assert_eq!(history_hashes(&with_hidden), history_hashes(&plain));
+}
+
+/// Whether Git can sign a commit in `directory` with its settings. It writes a throwaway signed
+/// commit object, which no branch points to.
+fn can_sign_commits(directory: &Path) -> bool {
+    let tree = git(directory, &["rev-parse", "HEAD^{tree}"]);
+    git_output(directory, &["commit-tree", "-S", "-m", "probe", tree.trim()]).status.success()
+}
+
+#[test]
+fn commit_with_signing_off_is_unsigned_even_when_config_signs() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    repo.git(&["config", "commit.gpgsign", "true"]);
+    repo.write("b.txt", "two\n");
+    repo.git(&["add", "b.txt"]);
+
+    client().commit_with_options("Second", false, Some(false), repo.path()).expect("unsigned commit");
+
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "Second");
+    assert!(!repo.git(&["cat-file", "commit", "HEAD"]).contains("gpgsig"), "the commit is not signed");
+}
+
+#[test]
+fn commit_with_signing_on_is_signed_with_the_repository_key() {
+    let repo = Repo::new();
+    repo.commit("a.txt", "one\n", "First");
+    let keys = tempfile::tempdir().expect("temp dir");
+    let key = keys.path().join("signing");
+    let Ok(made) = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-C", "test", "-f"]).arg(&key).output() else {
+        eprintln!("ssh-keygen is not installed; skipping");
+        return;
+    };
+    assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stderr));
+    // Repository-local settings, so a machine's own signing program is not used.
+    let key_path = key.to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "gpg.ssh.program", "ssh-keygen"]);
+    repo.git(&["config", "user.signingkey", &key_path]);
+    if !can_sign_commits(repo.path()) {
+        eprintln!("Git cannot sign commits with this machine's settings; skipping");
+        return;
+    }
+    repo.write("b.txt", "two\n");
+    repo.git(&["add", "b.txt"]);
+
+    client().commit_with_options("Signed", false, Some(true), repo.path()).expect("signed commit");
+
+    assert!(repo.git(&["cat-file", "commit", "HEAD"]).contains("-----BEGIN SSH SIGNATURE-----"), "the commit is signed");
+}
+
+#[test]
+fn commit_that_cannot_be_signed_is_reported_as_a_signing_failure_and_not_made() {
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    let keys = tempfile::tempdir().expect("temp dir");
+    let missing = keys.path().join("no-such-key").to_string_lossy().replace('\\', "/");
+    repo.git(&["config", "gpg.format", "ssh"]);
+    repo.git(&["config", "gpg.ssh.program", "ssh-keygen"]);
+    repo.git(&["config", "user.signingkey", &missing]);
+    repo.write("b.txt", "two\n");
+    repo.git(&["add", "b.txt"]);
+
+    match client().commit_with_options("Second", false, Some(true), repo.path()) {
+        Err(error @ GitError::SigningRejected { .. }) => {
+            assert!(error.to_string().starts_with(nicegit_core::models::COMMIT_NOT_SIGNED), "{error}");
+        }
+        other => panic!("expected a signing failure, got {other:?}"),
+    }
+    assert_eq!(repo.head(), first, "a commit that failed to sign is not made");
 }
