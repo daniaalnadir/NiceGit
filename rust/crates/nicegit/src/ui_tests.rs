@@ -1021,8 +1021,20 @@ fn start_work_on_an_issue_creates_its_branch_at_head() {
         |h| matches!(&h.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { local, .. }) if local == "12-login-fails-on-safari"),
     );
     settle(&mut harness);
-    harness.get_by_label("Start work").click();
+    // The button can still be waiting for the dialog's background read on a slow runner, so the
+    // click is repeated until the dialog closes.
+    let start = std::time::Instant::now();
+    while matches!(harness.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { .. })) {
+        if let Some(button) = harness.query_by_label("Start work") {
+            button.click();
+        }
+        harness.run_steps(5);
+        assert!(start.elapsed() < std::time::Duration::from_secs(30), "the Start work button never ran");
+    }
     idle(&mut harness);
+    wait(&mut harness, "the new branch to be checked out", |_| {
+        git(repo.path(), &["symbolic-ref", "--short", "HEAD"]) == "12-login-fails-on-safari"
+    });
 
     assert_eq!(git(repo.path(), &["symbolic-ref", "--short", "HEAD"]), "12-login-fails-on-safari");
     assert_eq!(git(repo.path(), &["rev-parse", "HEAD"]), head);
