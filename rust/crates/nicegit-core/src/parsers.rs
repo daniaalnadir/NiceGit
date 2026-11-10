@@ -8,10 +8,11 @@ pub const BRANCH_FORMAT: &str = "%(refname)%09%(HEAD)%09%(objectname)%09%(conten
 pub const LOG_FORMAT: &str =
     "%H%x1f%h%x1f%P%x1f%(decorate:prefix=,suffix=,separator=%x1d,pointer=%x1c,tag=tag: )%x1f%s%x1f%an%x1f%ae%x1f%cr%x1f%ct%x1e";
 
-/// The stash list's fields: the commit, its reference, and its reflog message. The message is the
-/// reflog's, not the commit's subject, because `git stash store -m` changes only the reflog, which
-/// is how a stash is renamed without changing its commit.
-pub const STASH_FORMAT: &str = "%H%x09%gd%x09%gs";
+/// The stash list's fields: the commit, its parents, its reference, and its reflog message. The
+/// parents come before the message, which may hold a tab. The message is the reflog's, not the
+/// commit's subject, because `git stash store -m` changes only the reflog, which is how a stash is
+/// renamed without changing its commit.
+pub const STASH_FORMAT: &str = "%H%x09%P%x09%gd%x09%gs";
 
 fn entry(path: String, original: Option<String>, x: char, y: char, conflicted: bool) -> StatusEntry {
     let kind = if conflicted {
@@ -300,11 +301,15 @@ pub fn parse_stashes(output: &str) -> Vec<Stash> {
     output
         .split('\n')
         .filter_map(|line| {
-            let mut fields = line.splitn(3, '\t');
-            let (Some(hash), Some(reference), Some(message)) = (fields.next(), fields.next(), fields.next()) else {
+            let mut fields = line.splitn(4, '\t');
+            let (Some(hash), Some(parents), Some(reference), Some(message)) = (fields.next(), fields.next(), fields.next(), fields.next())
+            else {
                 return None;
             };
-            Some(Stash { hash: hash.to_string(), reference: reference.to_string(), message: message.to_string() })
+            // The first parent is the commit the stash was made on; the others hold its index and
+            // untracked files.
+            let base = parents.split_whitespace().next().map(str::to_string);
+            Some(Stash { hash: hash.to_string(), reference: reference.to_string(), message: message.to_string(), base })
         })
         .collect()
 }
@@ -531,5 +536,17 @@ mod tests {
         assert_eq!(worktrees.len(), 2);
         assert_eq!(worktrees[0].branch.as_deref(), Some("main"));
         assert!(worktrees[1].is_locked && worktrees[1].is_prunable);
+    }
+
+    #[test]
+    fn stash_list_gives_the_base_commit_and_keeps_tabs_in_the_message() {
+        let output = "aaa111\tbbb222 ccc333\tstash@{0}\tWIP on main:\todd message\nddd444\teee555\tstash@{1}\tMessage\n";
+        let stashes = parse_stashes(output);
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[0].base.as_deref(), Some("bbb222"), "the first parent is the base");
+        assert_eq!(stashes[0].reference, "stash@{0}");
+        assert_eq!(stashes[0].message, "WIP on main:\todd message", "a tab in the message stays in it");
+        assert_eq!(stashes[1].base.as_deref(), Some("eee555"));
+        assert!(parse_stashes("fff666\t\tstash@{0}\tNo parents\n")[0].base.is_none());
     }
 }

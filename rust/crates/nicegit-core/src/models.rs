@@ -137,6 +137,9 @@ pub struct Stash {
     pub hash: String,
     pub reference: String,
     pub message: String,
+    /// The commit the stash was made on, which is the stash commit's first parent. `None` when Git
+    /// lists no parent for it. The commit graph draws the stash above this commit.
+    pub base: Option<String>,
 }
 
 /// Which working changes a stash takes. The default is Git's own `stash push`: tracked changes

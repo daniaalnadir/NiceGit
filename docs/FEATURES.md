@@ -64,6 +64,13 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   shows only the matching commits, and a note above it says what is filtered, with "Clear
   filters" to show everything again. HEAD stays in the graph only when it matches. The filter
   applies whatever the branches shown are, and it is not remembered across restarts.
+- Choose what the graph draws from the header's Show menu, which changes nothing in Git. "Remote
+  branch labels" hides labels such as `origin/main`; a local branch that tracks one keeps its
+  label, and the commits stay in the graph. "Tag labels" hides tag labels. "Stashes", off by
+  default, draws each stash as a row directly above the commit it was made on, when that commit
+  is loaded, with `stash@{n}` and its message. Clicking the row selects the stash, as the
+  sidebar does, and lists its files in the inspector. Stashes are not drawn while a filter is
+  on, and Up and Down skip them. The choices are remembered across restarts.
 - Review staged and unstaged file changes.
 - Filter changed files by path in the Changes panel once there are more than a few: type a few words, or press Command-Shift-L, and both lists show only matching files. Stage all and the other bulk buttons still act on every file, and say so while a filter is on.
 - Inspect color-highlighted diffs for staged, unstaged, and untracked files.
