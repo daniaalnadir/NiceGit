@@ -79,7 +79,9 @@ impl NiceGitApp {
             && self.palette.is_none()
             && self.go_to_file.is_none()
         {
-            if self.tools.last().is_some_and(|tool| tool.has_unsaved_changes()) {
+            if self.show_settings {
+                self.show_settings = false;
+            } else if self.tools.last().is_some_and(|tool| tool.has_unsaved_changes()) {
                 self.notify("Save or close the file you are editing first.", true);
             } else if !self.tools.is_empty() {
                 self.tools.pop();

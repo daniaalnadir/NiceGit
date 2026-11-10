@@ -2504,6 +2504,22 @@ fn the_interface_size_changes_from_settings_or_the_keyboard_and_is_remembered() 
     let mut harness = open(repo.path());
     loaded(&mut harness);
     harness.state_mut().show_settings = true;
+    settle(&mut harness);
+    // The interface size is at the end of Settings, which scrolls in a window of this height.
+    harness.run_steps(4);
+    let over = harness.get_by_label("APPEARANCE").rect().center();
+    for _ in 0..10 {
+        harness.hover_at(over);
+        harness.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -400.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: Modifiers::NONE,
+        });
+        harness.step();
+    }
+    settle(&mut harness);
     wait(&mut harness, "settings", |h| h.query_by_label("100%").is_some());
     harness.get_by_label("+").click();
     wait(&mut harness, "a larger interface", |h| {
