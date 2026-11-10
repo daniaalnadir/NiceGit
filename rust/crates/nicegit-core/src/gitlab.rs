@@ -5,7 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::client::GitClient;
-use crate::github::{self, clean_text, run_program, Cancel, Checks, PrState, PullRequestStatus};
+use crate::github::{
+    self, clean_text, run_program, timestamp_seconds, Cancel, Checks, OpenPullRequest, PrState, PullRequestStatus, ReviewRequest,
+};
 use crate::hosting::{Host, HostedRepository};
 use crate::json::{parse_json, Json};
 use crate::models::{GitError, Result};
@@ -39,6 +41,21 @@ pub enum GlabStatus {
     /// Installed, but not signed in to the host; carries `glab`'s explanation.
     SignedOut(String),
     SignedIn,
+}
+
+impl GlabStatus {
+    /// Why `glab` cannot read `host`, as one line for a list, or `None` when it is installed and
+    /// signed in. The explanation from `glab` is kept, without control characters.
+    pub fn reason(&self, host: &str) -> Option<String> {
+        match self {
+            GlabStatus::SignedIn => None,
+            GlabStatus::NotInstalled => Some(not_installed_message(host)),
+            GlabStatus::SignedOut(explanation) => {
+                let text = format!("The GitLab CLI is not signed in to {host}. Run {} in a terminal. {explanation}", sign_in_command(host));
+                Some(clean_text(&text, github::MESSAGE_LIMIT))
+            }
+        }
+    }
 }
 
 /// The values for a new merge request.
@@ -141,15 +158,37 @@ impl GitClient {
 /// are disabled by the closed standard input, and `GITLAB_HOST` is removed so the host named in each
 /// call is the one used.
 fn run_glab(executable: &Path, arguments: &[&str], directory: &Path) -> std::result::Result<String, String> {
-    run_program(
-        executable,
-        arguments,
-        directory,
-        &Cancel::default(),
-        SERVICE,
-        &[("NO_COLOR", "1"), ("GLAB_CHECK_UPDATE", "false")],
-        &["GITLAB_HOST"],
-    )
+    run_glab_cancellable(executable, arguments, directory, &Cancel::default())
+}
+
+/// [`run_glab`] that stops the process when `cancel` is set, as the Launchpad's reads do when closed.
+fn run_glab_cancellable(executable: &Path, arguments: &[&str], directory: &Path, cancel: &Cancel) -> std::result::Result<String, String> {
+    run_program(executable, arguments, directory, cancel, SERVICE, &[("NO_COLOR", "1"), ("GLAB_CHECK_UPDATE", "false")], &["GITLAB_HOST"])
+}
+
+/// The signed-in username on `host`, read through `glab api user`. The answer is checked before it
+/// is returned.
+pub fn glab_login(host: &str, program: &GlabProgram, directory: &Path) -> Result<String> {
+    let executable = program.executable().ok_or_else(|| failed(not_installed_message(host)))?;
+    let output = run_glab(&executable, &["api", "--hostname", host, "user"], directory).map_err(failed)?;
+    decode_username(&output)
+}
+
+/// The open merge requests of `repository` for the Launchpad, from one read-only `glab mr list`
+/// call. The list is open merge requests only, which is `glab`'s default, and `--per-page` caps it
+/// at the Launchpad's limit.
+pub fn gitlab_open_merge_requests(
+    repository: &HostedRepository,
+    program: &GlabProgram,
+    cancel: &Cancel,
+    directory: &Path,
+) -> Result<Vec<OpenPullRequest>> {
+    let executable = program.executable().ok_or_else(|| not_installed(repository))?;
+    let repo = repo_argument(repository);
+    let per_page = github::OPEN_PULL_REQUEST_LIMIT.to_string();
+    let arguments = ["mr", "list", "--repo", &repo, "--output", "json", "--per-page", &per_page];
+    let output = run_glab_cancellable(&executable, &arguments, directory, cancel).map_err(failed)?;
+    decode_open_merge_requests(&output, repository)
 }
 
 fn failed(message: String) -> GitError {
@@ -227,6 +266,96 @@ pub fn decode_merge_request_status(json: &str, repository: &HostedRepository) ->
     let statuses = entries.iter().map(|entry| decode_merge_request_entry(entry, repository)).collect::<Result<Vec<_>>>()?;
     let chosen = statuses.iter().position(|status| matches!(status.state, PrState::Open | PrState::Draft)).unwrap_or(0);
     Ok(statuses.into_iter().nth(chosen))
+}
+
+/// The username in `glab api user` output. It must be a plain GitLab username, or the answer is
+/// refused.
+pub fn decode_username(json: &str) -> Result<String> {
+    let value = parse_json(json).map_err(|_| failed("GitLab did not report your username.".to_string()))?;
+    value
+        .get("username")
+        .and_then(Json::as_str)
+        .filter(|name| valid_username(name))
+        .map(str::to_string)
+        .ok_or_else(|| failed("GitLab did not report your username.".to_string()))
+}
+
+/// Whether `name` can be a GitLab username: 1 to 255 letters, digits, `_`, `-`, or `.`.
+pub fn valid_username(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 255 && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+/// Decodes `glab mr list --output json` for the Launchpad, for `repository`. Every entry is checked:
+/// its link must be the repository's own merge request page, and its state, date, branch, draft
+/// flag, reviewers, and pipeline must have the expected shapes. A missing author is kept as none,
+/// and a missing reviewer list as none. Approvals are not in the list output, so no review decision
+/// is reported.
+pub fn decode_open_merge_requests(json: &str, repository: &HostedRepository) -> Result<Vec<OpenPullRequest>> {
+    let unexpected = || failed("GitLab returned unexpected merge requests.".to_string());
+    let value = parse_json(json).map_err(|_| unexpected())?;
+    let Json::Array(entries) = value else { return Err(unexpected()) };
+    entries.iter().map(|entry| decode_open_merge_request(entry, repository)).collect()
+}
+
+/// One entry of [`decode_open_merge_requests`].
+fn decode_open_merge_request(entry: &Json, repository: &HostedRepository) -> Result<OpenPullRequest> {
+    let unexpected = || failed("GitLab returned unexpected merge requests.".to_string());
+    let Json::Object(_) = entry else { return Err(unexpected()) };
+    let number = entry.get("iid").and_then(Json::as_number).filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n < 9.0e15);
+    let number = number.ok_or_else(unexpected)? as u64;
+    let title = entry.get("title").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let url = entry.get("web_url").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let expected = format!("{}/{}/-/merge_requests/{number}", repository.web_base(), repository.slug()).to_ascii_lowercase();
+    if url.to_ascii_lowercase() != expected {
+        return Err(unexpected());
+    }
+    let head_branch = entry.get("source_branch").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let updated_at = entry.get("updated_at").and_then(Json::as_str).and_then(timestamp_seconds).ok_or_else(unexpected)?;
+    let is_draft = ["draft", "work_in_progress"]
+        .iter()
+        .find_map(|key| entry.get(key))
+        .map(|value| value.as_bool().ok_or_else(unexpected))
+        .transpose()?
+        .unwrap_or(false);
+    match entry.get("state").and_then(Json::as_str) {
+        Some("opened" | "locked") => {}
+        _ => return Err(unexpected()),
+    }
+    let author = match entry.get("author") {
+        None | Some(Json::Null) => None,
+        Some(author) => {
+            let name = author.get("username").and_then(Json::as_str).filter(|name| valid_username(name)).ok_or_else(unexpected)?;
+            Some(name.to_string())
+        }
+    };
+    let review_requests = match entry.get("reviewers") {
+        None | Some(Json::Null) => Vec::new(),
+        Some(Json::Array(reviewers)) => reviewers
+            .iter()
+            .map(|reviewer| {
+                reviewer
+                    .get("username")
+                    .and_then(Json::as_str)
+                    .filter(|name| valid_username(name))
+                    .map(|name| ReviewRequest::User(name.to_string()))
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(unexpected)?,
+        Some(_) => return Err(unexpected()),
+    };
+    let checks = pipeline_checks(entry).ok_or_else(unexpected)?;
+    Ok(OpenPullRequest {
+        number,
+        title: clean_text(title, TITLE_LIMIT),
+        url: url.to_string(),
+        author,
+        head_branch: clean_text(head_branch, TITLE_LIMIT),
+        is_draft,
+        review_decision: None,
+        review_requests,
+        updated_at,
+        checks,
+    })
 }
 
 /// One merge request in `glab mr list` output.
@@ -482,5 +611,182 @@ esac
         assert!(lines.contains(&"--title=Add it"), "{calls}");
         let create_end = lines.iter().enumerate().filter(|(_, line)| **line == "--end-of-call--").map(|(index, _)| index).nth(3).unwrap();
         assert_eq!(lines[create_end - 1], "--yes", "the merge request is created without a prompt: {calls}");
+    }
+
+    /// One merge request of the Launchpad's list, with every field, and `changes` applied: a value
+    /// replaces its field, an empty value leaves the field out.
+    fn listed_entry(changes: &[(&str, &str)]) -> String {
+        let mut fields: Vec<(&str, String)> = vec![
+            ("iid", "7".into()),
+            ("title", "\"Title\"".into()),
+            ("web_url", "\"https://gitlab.com/group/sub/proj/-/merge_requests/7\"".into()),
+            ("state", "\"opened\"".into()),
+            ("draft", "false".into()),
+            ("source_branch", "\"feature/x\"".into()),
+            ("updated_at", "\"2026-01-02T03:04:05Z\"".into()),
+            ("author", "{\"username\": \"alice\"}".into()),
+            ("reviewers", "[]".into()),
+            ("head_pipeline", "null".into()),
+        ];
+        for (key, value) in changes {
+            match fields.iter().position(|(name, _)| name == key) {
+                Some(index) => fields[index].1 = value.to_string(),
+                None => fields.push((*key, value.to_string())),
+            }
+        }
+        let body: Vec<String> =
+            fields.iter().filter(|(_, value)| !value.is_empty()).map(|(name, value)| format!("\"{name}\": {value}")).collect();
+        format!("[{{{}}}]", body.join(", "))
+    }
+
+    /// A list of three merge requests as `glab mr list --output json` shows them.
+    const LISTED: &str = r#"[
+        {"iid": 4, "title": "Draft work", "web_url": "https://gitlab.com/group/sub/proj/-/merge_requests/4", "state": "opened",
+         "draft": true, "source_branch": "wip", "updated_at": "2026-11-09T10:30:00.123Z", "author": {"username": "alice"},
+         "reviewers": [], "head_pipeline": {"status": "running"}},
+        {"iid": 7, "title": "Needs you", "web_url": "https://gitlab.com/group/sub/proj/-/merge_requests/7", "state": "opened",
+         "draft": false, "source_branch": "feature/x", "updated_at": "2026-11-08T09:00:00Z", "author": {"username": "bob"},
+         "reviewers": [{"username": "daniaal"}], "head_pipeline": {"status": "success"}},
+        {"iid": 9, "title": "Orphan", "web_url": "https://gitlab.com/group/sub/proj/-/merge_requests/9", "state": "opened",
+         "draft": false, "source_branch": "old", "updated_at": "2026-11-01T00:00:00Z", "reviewers": [], "head_pipeline": null}
+    ]"#;
+
+    #[test]
+    fn open_merge_requests_decode_from_a_captured_list() {
+        let repository = repository();
+        let list = decode_open_merge_requests(LISTED, &repository).unwrap();
+        assert_eq!(list.len(), 3);
+
+        let draft = &list[0];
+        assert_eq!(draft.number, 4);
+        assert!(draft.is_draft, "a draft flag is read");
+        assert_eq!(draft.author.as_deref(), Some("alice"));
+        assert_eq!(draft.checks, Checks { passed: 0, failed: 0, pending: 1 }, "a running pipeline is pending");
+        assert_eq!(draft.updated_at, timestamp_seconds("2026-11-09T10:30:00Z").unwrap(), "fractional seconds are ignored");
+
+        let asked = &list[1];
+        assert_eq!(asked.review_requests, [ReviewRequest::User("daniaal".into())], "a reviewer is a user request");
+        assert_eq!(asked.head_branch, "feature/x");
+        assert_eq!(asked.url, "https://gitlab.com/group/sub/proj/-/merge_requests/7");
+        assert_eq!(asked.review_decision, None, "approvals are not in the list output");
+        assert_eq!(asked.checks, Checks { passed: 1, failed: 0, pending: 0 });
+
+        let orphan = &list[2];
+        assert_eq!(orphan.author, None, "a missing author is kept as none");
+        assert!(orphan.review_requests.is_empty());
+        assert_eq!(orphan.checks, Checks::default(), "no pipeline, no checks");
+        assert!(decode_open_merge_requests("[]", &repository).unwrap().is_empty());
+    }
+
+    #[test]
+    fn open_merge_requests_refuse_a_foreign_link_and_unexpected_entries() {
+        let repository = repository();
+        assert!(decode_open_merge_requests(&listed_entry(&[]), &repository).is_ok());
+        let refused = [
+            listed_entry(&[("web_url", "\"https://gitlab.com/other/proj/-/merge_requests/7\"")]),
+            listed_entry(&[("web_url", "\"https://gitlab.example.com/group/sub/proj/-/merge_requests/7\"")]),
+            listed_entry(&[("web_url", "\"https://gitlab.com/group/sub/proj/-/merge_requests/8\"")]),
+            listed_entry(&[("state", "\"merged\"")]),
+            listed_entry(&[("state", "\"weird\"")]),
+            listed_entry(&[("draft", "\"yes\"")]),
+            listed_entry(&[("author", "{\"username\": \"bad name\"}")]),
+            listed_entry(&[("reviewers", "[{\"name\": \"x\"}]")]),
+            listed_entry(&[("reviewers", "\"daniaal\"")]),
+            listed_entry(&[("head_pipeline", "{\"id\": 1}")]),
+            listed_entry(&[("updated_at", "\"last Tuesday\"")]),
+            listed_entry(&[("iid", "")]),
+            listed_entry(&[("title", "")]),
+            listed_entry(&[("source_branch", "")]),
+            "[1]".to_string(),
+            "{}".to_string(),
+        ];
+        for json in refused {
+            assert!(decode_open_merge_requests(&json, &repository).is_err(), "{json} must be refused");
+        }
+        let missing_field = |field: &str| listed_entry(&[(field, "")]);
+        for field in ["web_url", "state", "updated_at", "title", "iid", "source_branch"] {
+            assert!(decode_open_merge_requests(&missing_field(field), &repository).is_err(), "without {field} the list is refused");
+        }
+    }
+
+    #[test]
+    fn a_reviewer_who_is_you_is_read_as_a_user_request() {
+        let json = listed_entry(&[("reviewers", "[{\"username\": \"daniaal\", \"name\": \"Daniaal\"}]"), ("draft", "true")]);
+        let list = decode_open_merge_requests(&json, &repository()).unwrap();
+        assert_eq!(list[0].review_requests, [ReviewRequest::User("daniaal".into())]);
+        assert!(list[0].is_draft);
+    }
+
+    #[test]
+    fn usernames_are_checked_before_they_are_used() {
+        assert_eq!(decode_username(r#"{"id": 3, "username": "daniaal"}"#).unwrap(), "daniaal");
+        assert_eq!(decode_username(r#"{"username": "a.b-c_d"}"#).unwrap(), "a.b-c_d");
+        assert!(decode_username(r#"{"username": ""}"#).is_err());
+        assert!(decode_username(r#"{"username": "two words"}"#).is_err());
+        assert!(decode_username(r#"{"name": "Daniaal"}"#).is_err());
+        assert!(decode_username("not json").is_err());
+        assert!(valid_username(&"a".repeat(255)));
+        assert!(!valid_username(&"a".repeat(256)));
+    }
+
+    #[test]
+    fn a_missing_or_signed_out_glab_gives_a_reason_for_the_host() {
+        assert_eq!(GlabStatus::SignedIn.reason("gitlab.com"), None);
+        let missing = GlabStatus::NotInstalled.reason("gitlab.com").unwrap();
+        assert!(missing.contains("not installed"), "{missing}");
+        assert!(missing.contains("glab auth login --hostname gitlab.com"), "{missing}");
+        let signed_out = GlabStatus::SignedOut("To sign in,\nuse a token.\n".into()).reason("git.example.com").unwrap();
+        assert!(signed_out.contains("glab auth login --hostname git.example.com"), "{signed_out}");
+        assert!(!signed_out.contains('\n'), "the explanation is one line");
+    }
+
+    /// A stand-in `glab` for the Launchpad's reads. It answers the calls NiceGit makes and appends
+    /// each call's arguments to `calls.txt` beside itself, one per line. Only the test uses it.
+    #[cfg(unix)]
+    const FAKE_GLAB_READS: &str = r#"#!/bin/sh
+{ printf '%s\n' "$@"; echo '--end-of-call--'; } >> "$(dirname "$0")/calls.txt"
+case "$1" in
+  auth) echo "Logged in to gitlab.com" ;;
+  api) echo '{"id": 3, "username": "daniaal"}' ;;
+  mr) cat "$(dirname "$0")/merge_requests.json" ;;
+esac
+"#;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_launchpad_gitlab_reads_run_only_read_only_glab_commands() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = crate::rebase::Scratch::new("launchpad gitlab test").unwrap();
+        let script = scratch.write("launchpad gitlab test", "glab", FAKE_GLAB_READS.as_bytes()).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let folder = script.parent().unwrap().to_path_buf();
+        std::fs::write(folder.join("merge_requests.json"), LISTED).unwrap();
+        let program = GlabProgram::Given(script);
+        let repository = repository();
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+
+        assert_eq!(client.glab_status(&repository, &program, &directory), GlabStatus::SignedIn);
+        assert_eq!(glab_login("gitlab.com", &program, &directory).unwrap(), "daniaal");
+        let list = gitlab_open_merge_requests(&repository, &program, &Cancel::default(), &directory).unwrap();
+        assert_eq!(list.len(), 3);
+
+        let calls = std::fs::read_to_string(folder.join("calls.txt")).unwrap();
+        let calls: Vec<Vec<&str>> =
+            calls.split("--end-of-call--\n").filter(|call| !call.is_empty()).map(|call| call.lines().collect()).collect();
+        assert_eq!(calls[0], ["auth", "status", "--hostname", "gitlab.com"]);
+        assert_eq!(calls[1], ["api", "--hostname", "gitlab.com", "user"]);
+        assert_eq!(calls[2], ["mr", "list", "--repo", "gitlab.com/group/sub/proj", "--output", "json", "--per-page", "50"]);
+        for call in &calls {
+            let verb = call.first().copied().unwrap_or_default();
+            assert!(matches!(verb, "auth" | "api" | "mr"), "{call:?} is not a read");
+            assert!(
+                !call.iter().any(|word| matches!(*word, "create" | "merge" | "close" | "update" | "POST" | "PUT" | "PATCH" | "DELETE")),
+                "{call:?}"
+            );
+            if verb == "api" {
+                assert!(!call.iter().any(|word| word.starts_with("-X") || *word == "--method"), "{call:?} is a GET");
+            }
+        }
     }
 }
