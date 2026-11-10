@@ -388,6 +388,13 @@ Open in browser), and four sections: Description (the body as plain text), Check
 and an Open check link, for links to the repository's host or its GitHub Actions pages), Conversation
 (reviews and comments, oldest first), and Files (paths with additions and deletions). Refresh reads it
 again, and closing the window stops the read. Nothing in it runs, and nothing opens unless you click a link.
+The window's Review… button opens a confirmation that names the repository, number, and title. Choose Approve,
+Request changes, or Comment, and write the comment (required for the last two). Approve and Request changes are
+off for a pull request you wrote. Merge… opens a confirmation with a choice of merge commit, squash, or rebase, and
+shows the head and base branches. Merge… is enabled only for an open pull request that is not a draft and that
+GitHub reports as mergeable. The merge runs only if the head commit is still the one shown, and a changed head is
+refused before anything is merged. Each action runs only after you confirm it, and it never deletes branches or
+uses admin or auto-merge.
 A pull request's right-click menu also has Check out locally…, which fetches the pull request into a
 new local branch and switches to it. The dialog suggests `pr/<number>-<title>` and lets you
 change it, and the name is checked as you type. The branch is created at the pull request's head

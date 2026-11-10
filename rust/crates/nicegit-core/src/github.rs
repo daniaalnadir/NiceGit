@@ -2,7 +2,7 @@
 //! host), read through the `gh` command-line tool. NiceGit never stores a token; `gh` keeps its own sign-in.
 
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -1113,7 +1113,7 @@ fn tally_checks(rollup: &[Json]) -> Option<Checks> {
 /// The fields `gh pr view --json` reads for the pull request detail view. Each one is a field
 /// `gh pr view` lists; the decoder refuses an answer that lacks any of them.
 const PULL_REQUEST_DETAIL_FIELDS: &str = "number,title,body,author,state,isDraft,baseRefName,headRefName,url,createdAt,updatedAt,\
-     reviewDecision,mergeable,additions,deletions,changedFiles,files,commits,reviews,comments,statusCheckRollup,labels";
+     reviewDecision,mergeable,additions,deletions,changedFiles,files,commits,reviews,comments,statusCheckRollup,labels,headRefOid";
 
 /// The longest body, review, or comment text kept, in characters.
 const TEXT_LIMIT: usize = 50_000;
@@ -1133,6 +1133,8 @@ pub struct PullRequestDetail {
     pub state: PrState,
     pub base_ref: String,
     pub head_ref: String,
+    /// The commit the head branch pointed to when GitHub read the pull request, as a full object ID.
+    pub head_oid: String,
     /// The UTC times GitHub reports, such as `2026-01-02T03:04:05Z`.
     pub created_at: String,
     pub updated_at: String,
@@ -1249,6 +1251,89 @@ fn pr_state(word: Option<&str>, is_draft: bool) -> Option<PrState> {
     }
 }
 
+/// The way a review is submitted, as `gh pr review` names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReviewChoice {
+    Approve,
+    RequestChanges,
+    Comment,
+}
+
+impl ReviewChoice {
+    fn flag(self) -> &'static str {
+        match self {
+            ReviewChoice::Approve => "--approve",
+            ReviewChoice::RequestChanges => "--request-changes",
+            ReviewChoice::Comment => "--comment",
+        }
+    }
+
+    /// Whether GitHub needs a comment with this review. Approving does not.
+    pub fn needs_body(self) -> bool {
+        !matches!(self, ReviewChoice::Approve)
+    }
+}
+
+/// How a pull request is merged, as `gh pr merge` names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MergeMethod {
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl MergeMethod {
+    fn flag(self) -> &'static str {
+        match self {
+            MergeMethod::Merge => "--merge",
+            MergeMethod::Squash => "--squash",
+            MergeMethod::Rebase => "--rebase",
+        }
+    }
+}
+
+/// Whether `text` is a full object ID: 40 hexadecimal digits, or 64 for SHA-256 repositories.
+fn object_id(text: &str) -> Option<&str> {
+    let hex = text.len() == 40 || text.len() == 64;
+    (hex && text.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(text)
+}
+
+/// The `gh pr review` arguments for pull request `number` on `repository`. The comment is not in
+/// them: it is read from standard input through `--body-file -`.
+pub fn pull_request_review_arguments(repository: &GitHubRepository, number: u64, choice: ReviewChoice) -> Vec<String> {
+    vec![
+        "pr".to_string(),
+        "review".to_string(),
+        number.to_string(),
+        "--repo".to_string(),
+        repository.gh_repo(),
+        choice.flag().to_string(),
+        "--body-file".to_string(),
+        "-".to_string(),
+    ]
+}
+
+/// The `gh pr merge` arguments for pull request `number`. The merge only goes ahead when the head
+/// commit is still `head_oid`, so `--match-head-commit` carries it. Admin, auto, and branch
+/// deletion are never passed.
+pub fn pull_request_merge_arguments(repository: &GitHubRepository, number: u64, method: MergeMethod, head_oid: &str) -> Vec<String> {
+    vec![
+        "pr".to_string(),
+        "merge".to_string(),
+        number.to_string(),
+        "--repo".to_string(),
+        repository.gh_repo(),
+        method.flag().to_string(),
+        "--match-head-commit".to_string(),
+        head_oid.to_string(),
+    ]
+}
+
+/// The message GitHub's CLI printed, without control characters, for the user to read.
+fn gh_message(message: &str) -> String {
+    message.chars().filter(|c| !c.is_control() || *c == '\n').collect::<String>().trim().to_string()
+}
+
 impl GitClient {
     /// The full detail of pull request `number` on `repository`, read through `gh pr view`. The
     /// answer is refused unless it names that number on the repository's own page.
@@ -1259,12 +1344,26 @@ impl GitClient {
         cancel: &Cancel,
         directory: &Path,
     ) -> Result<PullRequestDetail> {
+        self.pull_request_detail_with(&GhProgram::Search, repository, number, cancel, directory)
+    }
+
+    /// [`Self::pull_request_detail`], reading through `program`.
+    fn pull_request_detail_with(
+        &self,
+        program: &GhProgram,
+        repository: &GitHubRepository,
+        number: u64,
+        cancel: &Cancel,
+        directory: &Path,
+    ) -> Result<PullRequestDetail> {
         if number == 0 {
             return Err(GitError::failed("GitHub", "The pull request number is not valid."));
         }
+        let executable = program.executable().ok_or_else(|| GitError::failed("GitHub", NOT_INSTALLED))?;
         let number_text = number.to_string();
         let repo = repository.gh_repo();
-        let output = run_gh(
+        let output = run_gh_with(
+            &executable,
             &["pr", "view", &number_text, "--repo", &repo, "--json", PULL_REQUEST_DETAIL_FIELDS],
             directory,
             cancel,
@@ -1272,6 +1371,65 @@ impl GitClient {
         )
         .map_err(|message| GitError::failed("GitHub", message))?;
         decode_pull_request_detail(&output, repository, number)
+    }
+
+    /// Submits a review of pull request `number` through `gh pr review`. `body` is sent on standard
+    /// input, never on the command line. Requesting changes and commenting need a non-empty body.
+    pub fn pull_request_review(
+        &self,
+        repository: &GitHubRepository,
+        number: u64,
+        choice: ReviewChoice,
+        body: &str,
+        program: &GhProgram,
+        directory: &Path,
+    ) -> Result<()> {
+        if number == 0 {
+            return Err(GitError::failed("GitHub", "The pull request number is not valid."));
+        }
+        if choice.needs_body() && body.trim().is_empty() {
+            return Err(GitError::failed("GitHub", "Write a comment for this review."));
+        }
+        let executable = program.executable().ok_or_else(|| GitError::failed("GitHub", NOT_INSTALLED))?;
+        let arguments = pull_request_review_arguments(repository, number, choice);
+        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        run_gh_with_input(&executable, &arguments, directory, &Cancel::default(), Some(repository.host.as_str()), Some(body.as_bytes()))
+            .map(|_| ())
+            .map_err(|message| GitError::failed("GitHub", gh_message(&message)))
+    }
+
+    /// Merges pull request `number` through `gh pr merge`, but only when it is still open, not a
+    /// draft, and mergeable, and its head commit is still `shown_head`. The pull request is read
+    /// again first, so a head that moved since it was shown is refused before any merge call.
+    pub fn pull_request_merge(
+        &self,
+        repository: &GitHubRepository,
+        number: u64,
+        method: MergeMethod,
+        shown_head: &str,
+        program: &GhProgram,
+        directory: &Path,
+    ) -> Result<()> {
+        let shown_head = object_id(shown_head).ok_or_else(|| GitError::failed("GitHub", "The shown head commit is not valid."))?;
+        let executable = program.executable().ok_or_else(|| GitError::failed("GitHub", NOT_INSTALLED))?;
+        let current = self.pull_request_detail_with(program, repository, number, &Cancel::default(), directory)?;
+        if !current.head_oid.eq_ignore_ascii_case(shown_head) {
+            return Err(GitError::failed(
+                "GitHub",
+                "The pull request's head commit changed after it was shown. Refresh the pull request and review it again before merging.",
+            ));
+        }
+        if current.state != PrState::Open || current.mergeable.as_deref() != Some("MERGEABLE") {
+            return Err(GitError::failed(
+                "GitHub",
+                "GitHub does not report this pull request as open, not a draft, and mergeable. Refresh the pull request to check again.",
+            ));
+        }
+        let arguments = pull_request_merge_arguments(repository, number, method, shown_head);
+        let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+        run_gh_with(&executable, &arguments, directory, &Cancel::default(), Some(repository.host.as_str()))
+            .map(|_| ())
+            .map_err(|message| GitError::failed("GitHub", gh_message(&message)))
     }
 }
 
@@ -1315,6 +1473,7 @@ fn decode_detail(entry: &Json, repository: &GitHubRepository, number: u64) -> Op
         state: pr_state(entry.get("state")?.as_str(), is_draft)?,
         base_ref: clean_text(entry.get("baseRefName")?.as_str()?, 255),
         head_ref: clean_text(entry.get("headRefName")?.as_str()?, 255),
+        head_oid: object_id(entry.get("headRefOid")?.as_str()?)?.to_string(),
         created_at: created_at.to_string(),
         updated_at: updated_at.to_string(),
         review_decision: optional_word(entry, "reviewDecision")?,
@@ -1554,6 +1713,18 @@ fn run_gh_with(
     cancel: &Cancel,
     host: Option<&str>,
 ) -> std::result::Result<String, String> {
+    run_gh_with_input(executable, arguments, directory, cancel, host, None)
+}
+
+/// [`run_gh_with`], also writing `input` to the program's standard input when it is given.
+fn run_gh_with_input(
+    executable: &Path,
+    arguments: &[&str],
+    directory: &Path,
+    cancel: &Cancel,
+    host: Option<&str>,
+    input: Option<&[u8]>,
+) -> std::result::Result<String, String> {
     let host = match host {
         Some(host) => Some(gh_host_variable(host).ok_or_else(|| "The GitHub host is not supported.".to_string())?),
         None => None,
@@ -1564,7 +1735,7 @@ fn run_gh_with(
     if let Some(host) = host.as_deref() {
         env.push(("GH_HOST", host));
     }
-    run_program(executable, arguments, directory, cancel, "GitHub", &env, &["GH_REPO", "GH_HOST"])
+    run_program_with_input(executable, arguments, directory, cancel, "GitHub", &env, &["GH_REPO", "GH_HOST"], input)
 }
 
 /// Runs a CLI program to completion, its timeout, or cancellation, returning its standard output.
@@ -1579,8 +1750,25 @@ pub(crate) fn run_program(
     env: &[(&str, &str)],
     removed: &[&str],
 ) -> std::result::Result<String, String> {
+    run_program_with_input(executable, arguments, directory, cancel, service, env, removed, None)
+}
+
+/// [`run_program`], also writing `input` to the program's standard input and then closing it, when
+/// `input` is given. Without it, standard input is empty.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_program_with_input(
+    executable: &Path,
+    arguments: &[&str],
+    directory: &Path,
+    cancel: &Cancel,
+    service: &str,
+    env: &[(&str, &str)],
+    removed: &[&str],
+    input: Option<&[u8]>,
+) -> std::result::Result<String, String> {
     let mut command = Command::new(executable);
-    command.args(arguments).current_dir(directory).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let stdin = if input.is_some() { Stdio::piped() } else { Stdio::null() };
+    command.args(arguments).current_dir(directory).stdin(stdin).stdout(Stdio::piped()).stderr(Stdio::piped());
     command.env("PATH", runner::search_path());
     for name in removed {
         command.env_remove(name);
@@ -1596,6 +1784,14 @@ pub(crate) fn run_program(
         command.creation_flags(CREATE_NO_WINDOW);
     }
     let mut child = command.spawn().map_err(|error| error.to_string())?;
+    // The input is written on its own thread, so a large body cannot block the process. Dropping
+    // the pipe at the end closes standard input for the program.
+    let writer = child.stdin.take().map(|mut pipe| {
+        let data = input.map(<[u8]>::to_vec).unwrap_or_default();
+        std::thread::spawn(move || {
+            let _ = pipe.write_all(&data);
+        })
+    });
     // Read both pipes while waiting, so a large output cannot block the process.
     let mut stdout = child.stdout.take();
     let mut stderr = child.stderr.take();
@@ -1631,6 +1827,9 @@ pub(crate) fn run_program(
             Err(error) => return Err(error.to_string()),
         }
     };
+    if let Some(writer) = writer {
+        let _ = writer.join();
+    }
     let stdout = out_reader.join().unwrap_or_default();
     let stderr = err_reader.join().unwrap_or_default();
     if status.success() {
@@ -2386,7 +2585,8 @@ mod tests {
     const DETAIL_JSON: &str = r#"{
         "number": 21, "title": "Draft: add\u0007 the detail view", "body": "Line one\r\nLine two\u001b[31m\n\n",
         "author": {"login": "octocat"}, "state": "OPEN", "isDraft": true,
-        "baseRefName": "main", "headRefName": "feature/detail", "url": "https://github.com/acme/app/pull/21",
+        "baseRefName": "main", "headRefName": "feature/detail", "headRefOid": "0123456789abcdef0123456789abcdef01234567",
+        "url": "https://github.com/acme/app/pull/21",
         "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-03T04:05:06Z",
         "reviewDecision": "", "mergeable": "MERGEABLE", "additions": 120, "deletions": 4, "changedFiles": 3,
         "files": [{"path": "src/app.rs", "additions": 100, "deletions": 2}, {"path": "docs/a b.md", "additions": 20, "deletions": 2}],
@@ -2434,6 +2634,7 @@ mod tests {
         assert_eq!(detail.author.as_deref(), Some("octocat"));
         assert_eq!(detail.state, PrState::Draft);
         assert_eq!((detail.base_ref.as_str(), detail.head_ref.as_str()), ("main", "feature/detail"));
+        assert_eq!(detail.head_oid, "0123456789abcdef0123456789abcdef01234567");
         assert_eq!(detail.review_decision, None, "an empty review decision is none");
         assert_eq!(detail.mergeable.as_deref(), Some("MERGEABLE"));
         assert_eq!(detail.labels, vec![GitHubLabel { name: "bug".into(), color: "d73a4a".into() }]);
@@ -2472,7 +2673,7 @@ mod tests {
     fn pull_request_detail_reads_an_empty_pull_request() {
         let github = repository("github.com", "acme", "app");
         let json = r#"{"number": 2, "title": "Empty", "body": null, "author": null, "state": "OPEN", "isDraft": false,
-            "baseRefName": "main", "headRefName": "empty", "url": "https://github.com/acme/app/pull/2",
+            "baseRefName": "main", "headRefName": "empty", "headRefOid": "89abcdef0123456789abcdef0123456789abcdef", "url": "https://github.com/acme/app/pull/2",
             "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-02T03:04:05Z", "reviewDecision": null, "mergeable": null,
             "additions": 0, "deletions": 0, "changedFiles": 0, "files": [], "commits": [], "reviews": [], "comments": [],
             "statusCheckRollup": [], "labels": []}"#;
@@ -2497,6 +2698,8 @@ mod tests {
             DETAIL_JSON.replace(r#""state": "OPEN""#, r#""state": "WEIRD""#),
             DETAIL_JSON.replace(r#""author": {"login": "octocat"}"#, r#""author": "octocat""#),
             DETAIL_JSON.replace(r#""changedFiles": 3,"#, ""),
+            DETAIL_JSON.replace("0123456789abcdef0123456789abcdef01234567", "not-a-commit"),
+            DETAIL_JSON.replace(r#""headRefOid": "0123456789abcdef0123456789abcdef01234567","#, ""),
             DETAIL_JSON.replace("2026-01-02T10:00:00Z", "yesterday"),
             // A check with neither shape, and a comment without a time.
             DETAIL_JSON.replace(r#""name": "build", "status": "COMPLETED", "conclusion": "SUCCESS""#, r#""name": "build""#),
@@ -2624,6 +2827,175 @@ esac
                 assert!(!call.iter().any(|word| word.starts_with("-X") || *word == "--method"), "{call:?} is a GET");
             }
         }
+    }
+
+    #[test]
+    fn review_and_merge_arguments_name_each_choice_and_never_carry_the_body() {
+        let repository = open_repository();
+        let head = "0123456789abcdef0123456789abcdef01234567";
+        let review = |choice| pull_request_review_arguments(&repository, 21, choice);
+        assert_eq!(review(ReviewChoice::Approve), ["pr", "review", "21", "--repo", "github.com/acme/app", "--approve", "--body-file", "-"]);
+        assert_eq!(
+            review(ReviewChoice::RequestChanges),
+            ["pr", "review", "21", "--repo", "github.com/acme/app", "--request-changes", "--body-file", "-"]
+        );
+        assert_eq!(review(ReviewChoice::Comment), ["pr", "review", "21", "--repo", "github.com/acme/app", "--comment", "--body-file", "-"]);
+        for (method, flag) in [(MergeMethod::Merge, "--merge"), (MergeMethod::Squash, "--squash"), (MergeMethod::Rebase, "--rebase")] {
+            let arguments = pull_request_merge_arguments(&repository, 21, method, head);
+            assert_eq!(arguments, ["pr", "merge", "21", "--repo", "github.com/acme/app", flag, "--match-head-commit", head]);
+            assert!(!arguments.iter().any(|a| matches!(a.as_str(), "--admin" | "--auto" | "--delete-branch")));
+        }
+        assert!(!ReviewChoice::Approve.needs_body());
+        assert!(ReviewChoice::RequestChanges.needs_body() && ReviewChoice::Comment.needs_body());
+    }
+
+    #[test]
+    fn object_ids_are_full_hexadecimal_names() {
+        assert!(object_id("0123456789abcdef0123456789abcdef01234567").is_some());
+        assert!(object_id(&"a".repeat(64)).is_some(), "a SHA-256 object ID is 64 digits");
+        assert!(object_id("0123456789abcdef").is_none(), "a short ID is refused");
+        assert!(object_id("--admin-0123456789abcdef0123456789abcdef").is_none(), "a flag-like value is refused");
+    }
+
+    #[test]
+    fn gh_messages_lose_control_characters_and_keep_their_lines() {
+        assert_eq!(gh_message("  bad\u{7}thing\u{1b}[31m\nsecond line \n"), "badthing[31m\nsecond line");
+        assert_eq!(gh_message("plain"), "plain");
+    }
+
+    /// A stand-in `gh` for the write tests. It records each call's arguments in `calls.txt`, prints
+    /// `view.json` for `pr view`, and copies standard input to `stdin.txt` for `pr review`.
+    #[cfg(unix)]
+    const WRITE_GH: &str = r#"#!/bin/sh
+dir="$(dirname "$0")"
+{ printf '%s\n' "$@"; echo '--end-of-call--'; } >> "$dir/calls.txt"
+case "$1 $2" in
+  "pr view") cat "$dir/view.json" ;;
+  "pr review") cat > "$dir/stdin.txt" ;;
+  "pr merge") echo "merged" ;;
+esac
+"#;
+
+    #[cfg(unix)]
+    const SHOWN_HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    /// A detail that `gh pr view` could print for an open, mergeable pull request with `head` as its head commit.
+    #[cfg(unix)]
+    fn open_pull_request_view(head: &str, draft: bool) -> String {
+        format!(
+            r#"{{"number": 21, "title": "Add the detail view", "body": "", "author": {{"login": "octocat"}},
+            "state": "OPEN", "isDraft": {draft}, "baseRefName": "main", "headRefName": "feature/detail",
+            "headRefOid": "{head}", "url": "https://github.com/acme/app/pull/21",
+            "createdAt": "2026-01-02T03:04:05Z", "updatedAt": "2026-01-03T04:05:06Z", "reviewDecision": null,
+            "mergeable": "MERGEABLE", "additions": 1, "deletions": 0, "changedFiles": 0, "files": [], "commits": [],
+            "reviews": [], "comments": [], "statusCheckRollup": [], "labels": []}}"#
+        )
+    }
+
+    /// Writes the stand-in `gh` and its `view.json` into a fresh folder, returning the folder's
+    /// guard, the program, and the folder.
+    #[cfg(unix)]
+    fn write_stand_in(view: &str) -> (crate::rebase::Scratch, GhProgram, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = crate::rebase::Scratch::new("pull request write test").unwrap();
+        let script = scratch.write("pull request write test", "gh", WRITE_GH.as_bytes()).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        scratch.write("pull request write test", "view.json", view.as_bytes()).unwrap();
+        let folder = script.parent().unwrap().to_path_buf();
+        (scratch, GhProgram::Given(script), folder)
+    }
+
+    /// The calls the stand-in recorded, each as its arguments in order.
+    #[cfg(unix)]
+    fn recorded_calls(folder: &Path) -> Vec<Vec<String>> {
+        let text = std::fs::read_to_string(folder.join("calls.txt")).unwrap_or_default();
+        text.split("--end-of-call--\n").filter(|call| !call.is_empty()).map(|call| call.lines().map(str::to_string).collect()).collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_review_runs_its_choice_with_the_body_on_standard_input() {
+        let (_scratch, program, folder) = write_stand_in(&open_pull_request_view(SHOWN_HEAD, false));
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+        let body = "Please rename the helper.\n\n--admin --body-file /etc/passwd\n";
+        let cases = [
+            (ReviewChoice::RequestChanges, "--request-changes", body),
+            (ReviewChoice::Comment, "--comment", body),
+            (ReviewChoice::Approve, "--approve", ""),
+        ];
+        for (choice, flag, text) in cases {
+            client.pull_request_review(&repository, 21, choice, text, &program, &directory).unwrap();
+            let calls = recorded_calls(&folder);
+            let last = calls.last().unwrap();
+            assert_eq!(last, &["pr", "review", "21", "--repo", "github.com/acme/app", flag, "--body-file", "-"], "{flag}");
+            let stdin = std::fs::read_to_string(folder.join("stdin.txt")).unwrap();
+            assert_eq!(stdin, text, "the body arrives on standard input, unchanged");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_request_for_changes_or_a_comment_without_a_body_is_refused_before_gh_runs() {
+        let (_scratch, program, folder) = write_stand_in(&open_pull_request_view(SHOWN_HEAD, false));
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+        for choice in [ReviewChoice::RequestChanges, ReviewChoice::Comment] {
+            let message = client.pull_request_review(&repository, 21, choice, "  \n", &program, &directory).unwrap_err().to_string();
+            assert!(message.contains("Write a comment"), "{message}");
+        }
+        assert!(recorded_calls(&folder).is_empty(), "gh was not run");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_merge_passes_the_shown_head_and_each_method_and_nothing_else() {
+        let (_scratch, program, folder) = write_stand_in(&open_pull_request_view(SHOWN_HEAD, false));
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+        for (method, flag) in [(MergeMethod::Merge, "--merge"), (MergeMethod::Squash, "--squash"), (MergeMethod::Rebase, "--rebase")] {
+            client.pull_request_merge(&repository, 21, method, SHOWN_HEAD, &program, &directory).unwrap();
+            let calls = recorded_calls(&folder);
+            assert_eq!(
+                calls.last().unwrap(),
+                &["pr", "merge", "21", "--repo", "github.com/acme/app", flag, "--match-head-commit", SHOWN_HEAD]
+            );
+        }
+        let calls = recorded_calls(&folder);
+        assert_eq!(calls[0][..2], ["pr", "view"], "the pull request is read again before each merge");
+        assert!(calls.iter().all(|call| !call.iter().any(|word| matches!(word.as_str(), "--admin" | "--auto" | "--delete-branch"))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_merge_is_refused_before_any_merge_call_when_the_head_moved() {
+        let moved = "fedcba9876543210fedcba9876543210fedcba98";
+        let (_scratch, program, folder) = write_stand_in(&open_pull_request_view(moved, false));
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+        let message =
+            client.pull_request_merge(&repository, 21, MergeMethod::Squash, SHOWN_HEAD, &program, &directory).unwrap_err().to_string();
+        assert!(message.contains("head commit changed"), "{message}");
+        let calls = recorded_calls(&folder);
+        assert_eq!(calls.len(), 1, "only the re-read ran");
+        assert!(calls.iter().all(|call| call[1] != "merge"), "no merge call was made");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_merge_is_refused_for_a_draft_before_any_merge_call() {
+        let (_scratch, program, folder) = write_stand_in(&open_pull_request_view(SHOWN_HEAD, true));
+        let client = GitClient::new();
+        let directory = std::env::temp_dir();
+        let repository = open_repository();
+        let message =
+            client.pull_request_merge(&repository, 21, MergeMethod::Merge, SHOWN_HEAD, &program, &directory).unwrap_err().to_string();
+        assert!(message.contains("not a draft"), "{message}");
+        assert!(recorded_calls(&folder).iter().all(|call| call[1] != "merge"));
     }
 
     #[test]
