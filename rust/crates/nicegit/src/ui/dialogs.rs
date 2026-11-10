@@ -3,12 +3,13 @@
 
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
+use nicegit_core::github::{issue_branch_name, DefaultBranchStart};
 use nicegit_core::models::short;
 use nicegit_core::{Branch, GitError, MergeStyle, Operation, Snapshot, Stash, StashOptions, StatusEntry};
 
 use crate::app::NiceGitApp;
 use crate::theme;
-use crate::tools::widgets;
+use crate::tools::{widgets, Task};
 use crate::ui::clone_picker::{ClonePicker, Picked};
 
 pub enum Pending {
@@ -300,6 +301,19 @@ pub enum Dialog {
         branch: String,
         head: Option<String>,
     },
+    /// Starting work on a GitHub issue: a branch named `local` for it, created at the checkout's
+    /// HEAD or at the remote's default branch. The checkout is captured when the dialog opens. The
+    /// default branch is read in the background, and `default` holds its result once it arrives.
+    StartIssueWork {
+        remote: String,
+        number: u64,
+        title: String,
+        local: String,
+        from_default: bool,
+        default: Task<Result<DefaultBranchStart, String>>,
+        branch: String,
+        head: Option<String>,
+    },
 }
 
 impl Dialog {
@@ -344,6 +358,29 @@ impl Dialog {
             title,
             author,
             local,
+            branch: snapshot.current_branch.clone(),
+            head: snapshot.head_hash.clone(),
+        }
+    }
+
+    /// The Start work dialog for issue `number` on `remote`, with its branch named from the title.
+    /// The checkout's branch and HEAD are captured now; `default` is the remote's default branch,
+    /// read in the background by the caller.
+    pub fn start_issue_work(
+        remote: String,
+        number: u64,
+        title: String,
+        snapshot: &Snapshot,
+        default: Task<Result<DefaultBranchStart, String>>,
+    ) -> Self {
+        let local = issue_branch_name(number, &title);
+        Dialog::StartIssueWork {
+            remote,
+            number,
+            title,
+            local,
+            from_default: false,
+            default,
             branch: snapshot.current_branch.clone(),
             head: snapshot.head_hash.clone(),
         }
@@ -937,6 +974,69 @@ impl NiceGitApp {
                         }
                     });
                 }
+                Dialog::StartIssueWork { remote, number, title, local, from_default, default, .. } => {
+                    ui.heading(format!("Start work on issue #{number}"));
+                    ui.add_space(8.0);
+                    ui.add(egui::Label::new(RichText::new(title.as_str()).strong()).wrap());
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Branch").color(c.muted));
+                    let field = widgets::text_field(ui, local, "");
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Branch"));
+                    // The name is checked as it is typed, as the branch dialogs check theirs.
+                    let problem = crate::git_ext::ref_name_problem(local.trim());
+                    if let Some(problem) = problem {
+                        ui.label(RichText::new(problem).small().color(c.warning));
+                    }
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Start from").color(c.muted));
+                    // The remote's default branch is read in the background, so its choice waits for it.
+                    let default_state = default.get().cloned();
+                    if ui.radio(!*from_default, "Current HEAD").clicked() {
+                        *from_default = false;
+                    }
+                    match &default_state {
+                        None => {
+                            ui.add_enabled(false, egui::RadioButton::new(false, "Default branch (loading…)"));
+                        }
+                        Some(Ok(start)) => {
+                            if ui.radio(*from_default, format!("{}/{} (the default branch)", remote, start.branch)).clicked() {
+                                *from_default = true;
+                            }
+                        }
+                        Some(Err(message)) => {
+                            ui.add_enabled(false, egui::RadioButton::new(false, format!("{remote}'s default branch")));
+                            ui.add(egui::Label::new(RichText::new(message).small().color(c.danger)).wrap());
+                        }
+                    }
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(
+                            "Creates the branch and switches to it, carrying your changes across as Create branch does. \
+                             The branch gets no upstream. A branch that already exists is not replaced.",
+                        )
+                        .small()
+                        .color(c.muted),
+                    );
+                    // The Start work button waits for the built-in editor's unsaved text, as the
+                    // other actions that change the checkout do.
+                    let editing = self.has_unsaved_editor();
+                    if editing {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                    }
+                    ui.add_space(16.0);
+                    let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                    let start_ready = !*from_default || matches!(default_state, Some(Ok(_)));
+                    let ready = !local.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none() && start_ready;
+                    ui.horizontal(|ui| {
+                        if widgets::primary_button(ui, "Start work", ready).clicked() || (enter && ready) {
+                            run = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                }
             }
         });
         if modal.should_close() && !picker_open {
@@ -997,6 +1097,19 @@ impl NiceGitApp {
                             .checkout_pull_request(&remote, number, &local, &fetch_addresses, &branch, head.as_deref(), path)
                             .map(|_| Some(notice))
                     });
+                }
+                Dialog::StartIssueWork { number, local, from_default, mut default, branch, head, .. } => {
+                    // The default branch is used only with its tip as it was read, which the core checks again.
+                    let source = if from_default { default.get().and_then(|result| result.as_ref().ok()).cloned() } else { None };
+                    if from_default && source.is_none() {
+                        self.notify("The remote's default branch is not ready yet. Try again in a moment.", true);
+                    } else {
+                        let local = local.trim().to_string();
+                        let notice = format!("Started work on issue #{number} on {local}.");
+                        self.act(&format!("Start work on issue #{number}"), move |client, path| {
+                            client.start_issue_branch(&local, source.as_ref(), &branch, head.as_deref(), path).map(|_| Some(notice))
+                        });
+                    }
                 }
                 Dialog::Publish { remote } => {
                     if let Some(snapshot) = self.snapshot().cloned() {

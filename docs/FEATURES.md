@@ -366,6 +366,14 @@ change it, and the name is checked as you type. The branch is created at the pul
 and gets no upstream, since the pull request may come from a fork. Checkout needs a clean working
 tree, and it is refused if the remote's address has changed or if a branch with that name already
 exists and points elsewhere. Nothing is stashed.
+An issue's right-click menu has Start work…, which creates a branch for the issue and switches to
+it. The dialog suggests `<number>-<title>`, such as `12-login-fails-on-safari`, and lets you change
+it, with the name checked as you type. The branch starts at the checkout's HEAD by default, or at
+the remote's default branch, which NiceGit reads from GitHub when the dialog opens. A default branch
+that has moved since it was shown is refused, and so is a name that already exists, with a message
+to check that branch out instead. The branch gets no upstream, nothing is pushed or fetched, and
+the same checks as Create and checkout branch apply: the working changes are carried across, and
+the branch is not made while a Git operation is unfinished or the built-in editor has unsaved text.
 Pull requests and issues are GitHub-only. Remotes on GitLab (gitlab.com, and self-hosted
 servers listed under GitLab in Settings) and Bitbucket (bitbucket.org) get browser links only,
 as described below; NiceGit makes no API calls for them and stores no token.

@@ -1157,19 +1157,44 @@ impl GitClient {
 
     /// Creates a branch at HEAD and checks it out.
     pub fn create_branch(&self, name: &str, expected_branch: &str, expected_head: Option<&str>, directory: &Path) -> Result<()> {
+        self.create_and_checkout_branch(name, None, expected_branch, expected_head, "create branch", directory)
+    }
+
+    /// Creates a branch at `start`, a commit, or at HEAD when `start` is None, and checks it out.
+    /// The checkout must still be `expected_branch` at `expected_head`, and no Git operation may be
+    /// unfinished. A name that already exists is refused rather than replaced. The new branch
+    /// tracks nothing, so the start point's remote branch is not made its upstream.
+    pub(crate) fn create_and_checkout_branch(
+        &self,
+        name: &str,
+        start: Option<&str>,
+        expected_branch: &str,
+        expected_head: Option<&str>,
+        command: &str,
+        directory: &Path,
+    ) -> Result<()> {
         let name = name.trim();
         if name.is_empty() {
             return Err(GitError::EmptyBranchName);
         }
-        let state = self.require_checkout(expected_branch, expected_head, "create branch", directory)?;
+        let state = self.require_checkout(expected_branch, expected_head, command, directory)?;
         if state.operation.is_some() {
-            return Err(GitError::failed(
-                "create branch",
-                "Finish or abort the current Git operation before creating and checking out a branch.",
-            ));
+            return Err(GitError::failed(command, "Finish or abort the current Git operation before creating and checking out a branch."));
         }
         self.run(&["check-ref-format", "--branch", name], directory)?;
-        self.run(&["switch", "--create", name], directory).map(drop)
+        let reference = format!("refs/heads/{name}");
+        if self.try_trimmed(&["rev-parse", "--verify", "--quiet", &reference], directory).is_some() {
+            return Err(GitError::failed(
+                command,
+                format!("A branch named {name} already exists. Check it out instead, or choose another name."),
+            ));
+        }
+        // `--create` takes the new name as its own argument, so the name directly follows it.
+        let arguments: Vec<&str> = match start {
+            Some(commit) => vec!["switch", "--create", name, "--no-track", "--no-overwrite-ignore", commit],
+            None => vec!["switch", "--create", name, "--no-overwrite-ignore"],
+        };
+        self.run(&arguments, directory).map(drop)
     }
 
     /// Creates a branch at a selected branch's displayed tip, without checking it out.
