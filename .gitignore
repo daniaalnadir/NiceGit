@@ -7,3 +7,8 @@
 *.p8
 *.mobileprovision
 *.provisionprofile
+
+# Build output
+/.build/
+/.swiftpm/
+/dist/
