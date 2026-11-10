@@ -536,6 +536,69 @@ fn fixup_steps(commits: &[Commit], target: &str, fixup: &Commit) -> Vec<RebaseSt
     steps
 }
 
+/// Arranges a plan the way Git's autosquash does, for a plan the user is editing. `commits` are
+/// oldest first. A `fixup! X` or `squash! X` commit moves directly after the nearest earlier commit
+/// whose subject is `X`, or whose object ID starts with `X`, and takes the Fixup or Squash action.
+/// Chains work: `fixup! fixup! X` follows the `fixup! X` commit it names, and several fixups for one
+/// target keep their order. Other commits, and fixups with no earlier match, keep their place.
+/// `amend!` commits are not moved. Returns each commit's index in `commits` in its new order,
+/// with the action it takes when it was matched, and `None` for commits that keep their own action.
+pub fn autosquash(commits: &[Commit]) -> Vec<(usize, Option<RebaseAction>)> {
+    // The commit each moved fixup was attached to, by index in `commits`.
+    let mut attached_to: Vec<Option<usize>> = vec![None; commits.len()];
+    let mut actions: Vec<Option<RebaseAction>> = vec![None; commits.len()];
+    let mut order: Vec<usize> = Vec::with_capacity(commits.len());
+    for (index, commit) in commits.iter().enumerate() {
+        let target = fixup_target(commit).and_then(|(action, remainder)| {
+            let target = (0..index).rev().find(|&earlier| names_commit(&commits[earlier], remainder))?;
+            Some((action, target))
+        });
+        let Some((action, target)) = target else {
+            order.push(index);
+            continue;
+        };
+        // Insert below the target and every fixup already attached to it, directly or through a chain.
+        // Every earlier commit is placed before this one, so the target is always in `order`.
+        let position = order.iter().position(|&placed| placed == target).expect("an earlier commit is placed before its fixup");
+        let mut at = position + 1;
+        while at < order.len() && descends_from(order[at], target, &attached_to) {
+            at += 1;
+        }
+        order.insert(at, index);
+        attached_to[index] = Some(target);
+        actions[index] = Some(action);
+    }
+    order.into_iter().map(|index| (index, actions[index].clone())).collect()
+}
+
+/// The action a `fixup!` or `squash!` subject takes, and the subject it names. `None` for any
+/// other subject, including `amend!`, and for a prefix with nothing after it.
+fn fixup_target(commit: &Commit) -> Option<(RebaseAction, &str)> {
+    let (action, remainder) = if let Some(rest) = commit.subject.strip_prefix("fixup! ") {
+        (RebaseAction::Fixup, rest)
+    } else {
+        (RebaseAction::Squash, commit.subject.strip_prefix("squash! ")?)
+    };
+    (!remainder.is_empty()).then_some((action, remainder))
+}
+
+/// Whether `commit` is what a fixup's remainder names: the same subject, or an object ID that starts with it.
+fn names_commit(commit: &Commit, remainder: &str) -> bool {
+    commit.subject == remainder || commit.hash.starts_with(remainder)
+}
+
+/// Whether the commit at `index` is `ancestor` or is attached to it, through a chain of fixups.
+fn descends_from(index: usize, ancestor: usize, attached_to: &[Option<usize>]) -> bool {
+    let mut current = Some(index);
+    while let Some(next) = current {
+        if next == ancestor {
+            return true;
+        }
+        current = attached_to[next];
+    }
+    false
+}
+
 /// The result of a fixup rebase. Its steps hold no `edit`, so a stop is unexpected, and it is an
 /// error rather than a success: the rebase is still in progress, and the fixup is not yet folded in.
 fn fixup_finished(outcome: RebaseOutcome) -> Result<()> {
@@ -663,5 +726,80 @@ mod tests {
         let mut hashes: Vec<&str> = steps.iter().map(|step| step.commit.hash.as_str()).collect();
         hashes.sort_unstable();
         assert_eq!(hashes, ["a", "b", "f"]);
+    }
+
+    /// The subject and action of each arranged commit, in the order autosquash gives them.
+    fn arranged(commits: &[Commit]) -> Vec<(String, Option<RebaseAction>)> {
+        autosquash(commits).into_iter().map(|(index, action)| (commits[index].subject.clone(), action)).collect()
+    }
+
+    fn arranged_of(items: &[(&str, Option<RebaseAction>)]) -> Vec<(String, Option<RebaseAction>)> {
+        items.iter().map(|(subject, action)| (subject.to_string(), action.clone())).collect()
+    }
+
+    #[test]
+    fn autosquash_moves_a_fixup_directly_after_its_target() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("c", "C"), commit("f", "fixup! B")];
+        assert_eq!(arranged(&commits), arranged_of(&[("A", None), ("B", None), ("fixup! B", Some(RebaseAction::Fixup)), ("C", None),]));
+    }
+
+    #[test]
+    fn autosquash_gives_a_squash_the_squash_action() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("c", "C"), commit("s", "squash! A")];
+        assert_eq!(arranged(&commits), arranged_of(&[("A", None), ("squash! A", Some(RebaseAction::Squash)), ("B", None), ("C", None),]));
+    }
+
+    #[test]
+    fn autosquash_follows_a_nested_chain_below_its_first_fixup() {
+        // "fixup! fixup! A" names the "fixup! A" commit, which itself names A, so the chain folds into A.
+        let commits = [commit("a", "A"), commit("b", "B"), commit("c", "fixup! A"), commit("d", "fixup! fixup! A")];
+        assert_eq!(
+            arranged(&commits),
+            arranged_of(&[
+                ("A", None),
+                ("fixup! A", Some(RebaseAction::Fixup)),
+                ("fixup! fixup! A", Some(RebaseAction::Fixup)),
+                ("B", None),
+            ])
+        );
+    }
+
+    #[test]
+    fn autosquash_keeps_several_fixups_for_one_target_in_their_order() {
+        let commits = [commit("a", "A"), commit("b", "B"), commit("c", "fixup! A"), commit("d", "squash! A")];
+        assert_eq!(
+            arranged(&commits),
+            arranged_of(&[("A", None), ("fixup! A", Some(RebaseAction::Fixup)), ("squash! A", Some(RebaseAction::Squash)), ("B", None),])
+        );
+    }
+
+    #[test]
+    fn autosquash_matches_the_nearest_earlier_commit() {
+        // Two commits share the subject; the fixup belongs to the later of them, so nothing moves.
+        let commits = [commit("a", "Same"), commit("b", "Same"), commit("c", "fixup! Same")];
+        assert_eq!(arranged(&commits), arranged_of(&[("Same", None), ("Same", None), ("fixup! Same", Some(RebaseAction::Fixup))]));
+        // The nearest earlier "X" is the third commit, not the first, so the fixup follows that one.
+        let commits = [commit("a", "X"), commit("b", "Y"), commit("c", "X"), commit("d", "fixup! X")];
+        assert_eq!(arranged(&commits), arranged_of(&[("X", None), ("Y", None), ("X", None), ("fixup! X", Some(RebaseAction::Fixup))]));
+    }
+
+    #[test]
+    fn autosquash_matches_a_target_by_its_object_id_prefix() {
+        let commits = [commit("abcdef0123", "Target"), commit("b", "B"), commit("f", "fixup! abcdef")];
+        assert_eq!(arranged(&commits), arranged_of(&[("Target", None), ("fixup! abcdef", Some(RebaseAction::Fixup)), ("B", None),]));
+    }
+
+    #[test]
+    fn autosquash_leaves_unmatched_fixups_and_other_prefixes_in_place() {
+        // No earlier commit has the subject, and "amend!" commits are left alone.
+        let commits = [commit("a", "A"), commit("b", "fixup! Missing"), commit("c", "amend! A"), commit("d", "fixup! ")];
+        assert_eq!(arranged(&commits), arranged_of(&[("A", None), ("fixup! Missing", None), ("amend! A", None), ("fixup! ", None)]));
+    }
+
+    #[test]
+    fn autosquash_does_not_match_a_later_commit() {
+        // A fixup names only earlier commits, so "fixup! B" before B stays where it is.
+        let commits = [commit("a", "fixup! B"), commit("b", "B")];
+        assert_eq!(arranged(&commits), arranged_of(&[("fixup! B", None), ("B", None)]));
     }
 }

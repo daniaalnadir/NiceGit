@@ -656,6 +656,139 @@ fn fixup_into_is_taken_back_when_git_refuses_the_rebase() {
     assert!(client().checkout_state(repo.path()).expect("state").operation.is_none(), "no rebase is in progress");
 }
 
+// MARK: Fixup commits
+
+/// Commits the staged changes as a fixup for `target`, with HEAD as the checkout's expected head.
+fn commit_fixup(repo: &Repo, target: &str, skip_hooks: bool) -> Result<(), GitError> {
+    let head = repo.head();
+    client().commit_fixup(target, "main", &head, skip_hooks, None, repo.path())
+}
+
+#[test]
+fn commit_fixup_records_a_fixup_commit_for_an_earlier_commit() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+
+    commit_fixup(&repo, &a, false).expect("commit the fixup");
+
+    assert_ne!(repo.head(), before, "HEAD moved to the new commit");
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "fixup! Add a", "the subject names the target");
+    assert_eq!(full_message(repo.path(), "HEAD").trim(), "fixup! Add a", "the message is Git's fixup message alone");
+    assert_eq!(repo.git(&["show", "HEAD:a.txt"]), "1\n2\n", "the staged change is in the fixup commit");
+    assert_eq!(repo.git(&["rev-parse", "HEAD^"]).trim(), before, "the fixup sits on the old HEAD");
+    assert!(repo.git(&["status", "--porcelain"]).is_empty(), "the working tree is clean");
+}
+
+#[test]
+fn commit_fixup_targets_head_itself() {
+    let repo = Repo::new();
+    let (_, _, c) = fixup_history(&repo);
+    repo.write("c.txt", "c\n2\n");
+    repo.git(&["add", "--", "c.txt"]);
+
+    commit_fixup(&repo, &c, false).expect("commit a fixup for HEAD");
+
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "fixup! Add c");
+}
+
+#[test]
+fn commit_fixup_is_folded_in_by_an_autosquash_rebase() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    let (a, _, _) = fixup_history(&repo);
+    stage_fix_to_a(&repo);
+    commit_fixup(&repo, &a, false).expect("commit the fixup");
+
+    // Git's own autosquash, with the todo list accepted as written, folds the commit into its target.
+    git(repo.path(), &["-c", "sequence.editor=true", "rebase", "--interactive", "--autosquash", &base]);
+
+    assert_eq!(all_subjects(repo.path()), ["Base", "Add a", "Add b", "Add c"].map(str::to_string), "the fixup is gone");
+    assert_eq!(repo.git(&["show", "HEAD~2:a.txt"]), "1\n2\n", "the change is in Add a");
+}
+
+#[test]
+fn commit_fixup_refuses_without_staged_changes() {
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    let before = repo.head();
+    repo.write("scratch.txt", "not tracked\n");
+
+    let message = refusal(commit_fixup(&repo, &a, false));
+    assert!(message.contains("Stage the changes to commit as a fixup first"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+}
+
+#[test]
+fn commit_fixup_refuses_a_stale_head() {
+    let repo = Repo::new();
+    let (a, b, _) = fixup_history(&repo);
+    let before = repo.head();
+    stage_fix_to_a(&repo);
+
+    let message = refusal(client().commit_fixup(&a, "main", &b, false, None, repo.path()));
+    assert!(message.contains("changed since this action"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "a.txt\n", "the staged change is still staged");
+}
+
+#[test]
+fn commit_fixup_refuses_a_commit_that_is_not_on_the_branch() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side", &base]);
+    let side = repo.commit("side.txt", "side\n", "Side work");
+    repo.git(&["switch", "main"]);
+    repo.commit("main.txt", "main\n", "Main work");
+    let before = repo.head();
+    repo.write("side.txt", "side\n2\n");
+    repo.git(&["add", "--", "side.txt"]);
+
+    let message = refusal(commit_fixup(&repo, &side, false));
+    assert!(message.contains("not part of the current branch's history"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+}
+
+#[test]
+fn commit_fixup_refuses_a_merge_commit() {
+    let repo = Repo::new();
+    let base = repo.commit("base.txt", "base\n", "Base");
+    repo.git(&["switch", "-c", "side", &base]);
+    repo.commit("side.txt", "side\n", "Side work");
+    repo.git(&["switch", "main"]);
+    repo.commit("main.txt", "main\n", "Main work");
+    repo.git(&["merge", "--no-ff", "--no-edit", "side"]);
+    let merge = repo.head();
+    let before = repo.head();
+    repo.write("main.txt", "main\n2\n");
+    repo.git(&["add", "--", "main.txt"]);
+
+    let message = refusal(commit_fixup(&repo, &merge, false));
+    assert!(message.contains("Merge commits can't be fixed up here"), "{message}");
+    assert_eq!(repo.head(), before, "HEAD is unchanged");
+}
+
+#[cfg(unix)]
+#[test]
+fn commit_fixup_runs_hooks_unless_they_are_skipped() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo = Repo::new();
+    let (a, _, _) = fixup_history(&repo);
+    stage_fix_to_a(&repo);
+    let hook = repo.path().join(".git").join("hooks").join("pre-commit");
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write hook");
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("make hook executable");
+    let before = repo.head();
+
+    refusal(commit_fixup(&repo, &a, false));
+    assert_eq!(repo.head(), before, "a refused fixup makes no commit");
+
+    commit_fixup(&repo, &a, true).expect("skipping hooks commits the fixup");
+    assert_eq!(repo.git(&["log", "-1", "--format=%s"]).trim(), "fixup! Add a");
+}
+
 #[test]
 fn rebase_onto_branch_replays_the_current_branch() {
     let repo = Repo::new();
