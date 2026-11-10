@@ -1355,3 +1355,27 @@ fn a_long_commit_description_scrolls_in_a_box_of_about_eight_lines() {
     let short_gap = gap(&harness, "A short description");
     assert!(short_gap < 100.0, "a short description is shown whole, with no box: {short_gap}");
 }
+
+#[test]
+fn staged_files_stay_in_view_below_a_long_unstaged_list() {
+    let repo = repository();
+    let path = repo.path();
+    for n in 0..200 {
+        std::fs::write(path.join(format!("untracked-{n:03}.txt")), "new\n").unwrap();
+    }
+    std::fs::write(path.join("zz-staged.txt"), "staged\n").unwrap();
+    git(path, &["add", "zz-staged.txt"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+    wait(&mut harness, "both sections", |h| has_label(h, "Staged files (1)") && has_label(h, "Unstaged files (200)"));
+    settle(&mut harness);
+    let screen = harness.ctx.content_rect();
+    let header = harness.get_by_label("Staged files (1)").rect();
+    let row = harness.get_by_label("zz-staged.txt").rect();
+    assert!(row.bottom() <= screen.bottom(), "the staged file is on screen: {row:?} in {screen:?}");
+    assert!(row.top() >= header.bottom() - 1.0, "the staged file sits under its own header");
+    // The unstaged list scrolls in its own area: its last file is out of sight, above the staged header.
+    let last = harness.get_by_label("untracked-199.txt").rect();
+    assert!(last.top() > header.top(), "the unstaged list runs on past its area, which scrolls");
+    assert!(header.top() < screen.center().y + screen.height() * 0.25, "the staged section keeps a fair share of the room");
+}
