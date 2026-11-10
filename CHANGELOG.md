@@ -150,6 +150,22 @@
 - Sign or leave unsigned each commit from the commit options menu (Sign this commit).
 - Browse every file in a commit's tree from the inspector's All files view, and read
   any file as it was at that commit.
+- Colour the code in diffs by its language, in light and dark themes, from the file extension
+  or shebang. Turn it off under Settings > Diffs.
+- Filter the commit history by author or by a file or folder from the header's Filter menu.
+- Edit this repository's own Git settings from Repository > Git settings; global values are
+  shown read-only.
+- Commit staged changes as fixup, in a commit's right-click menu, records a fixup! commit
+  for it. Apply fixups in the interactive rebase window moves fixup! and squash! commits
+  into place.
+- Start work… on a GitHub issue creates and checks out a branch named for it, at HEAD or at the
+  remote's default branch.
+- Launchpad (Repository menu or command palette) lists open pull requests across open
+  repositories and a chosen workspace, grouped into yours, needs your review, and other.
+- View details… on a pull request (sidebar or status bar) opens a read-only window with its
+  description, checks, conversation, and changed files.
+- The graph's Show menu hides remote branch and tag labels, and can draw each stash as a row
+  above the commit it was made on. Stashes are off by default.
 
 ## 1.5.0 - Fewer surprises
 
