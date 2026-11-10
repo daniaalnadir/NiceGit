@@ -2234,7 +2234,18 @@ fn sign_argument(sign: Option<bool>) -> Option<&'static str> {
 /// Whether Git's failure text says it could not sign a commit: the signing program failed or could
 /// not run, or the `gpg.format` setting is broken.
 fn is_signing_refusal(message: &str) -> bool {
-    ["gpg failed to sign", "error: cannot run gpg", "bad config variable 'gpg.format'"].iter().any(|sign| message.contains(sign))
+    // GnuPG reports through Git's own words; SSH signing reports ssh-keygen's, such as a key
+    // file that cannot be loaded.
+    [
+        "gpg failed to sign",
+        "error: cannot run gpg",
+        "bad config variable 'gpg.format'",
+        "Couldn't load public key",
+        "ssh-keygen -Y sign is needed",
+        "Failed to sign the data",
+    ]
+    .iter()
+    .any(|sign| message.contains(sign))
 }
 
 /// Git's own reasons to refuse a commit, which no hook causes: nothing to commit, no identity,
@@ -2301,6 +2312,7 @@ mod tests {
             "error: gpg failed to sign the data\nfatal: failed to write commit object",
             "error: cannot run gpg: No such file or directory",
             "fatal: bad config variable 'gpg.format' in file '.git/config' at line 3",
+            "error: Couldn't load public key /tmp/no-such-key: No such file or directory?\n\nfatal: failed to write commit object",
         ] {
             assert!(is_signing_refusal(message), "{message}");
         }
