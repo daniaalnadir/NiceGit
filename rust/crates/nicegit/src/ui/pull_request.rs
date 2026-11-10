@@ -571,6 +571,10 @@ pub struct PrBadge {
     hover: String,
     /// The pull request's page, opened when the badge is clicked.
     pub url: String,
+    /// The pull request's number, for its detail view.
+    pub number: u64,
+    /// Whether the detail view can show it: GitHub pull requests only, not GitLab merge requests.
+    details: bool,
 }
 
 impl PrBadge {
@@ -599,6 +603,8 @@ impl PrBadge {
             checks: checks_label,
             hover: format!("{}\n{} passed, {} failed, {} pending", status.title, checks.passed, checks.failed, checks.pending),
             url: status.url.clone(),
+            number: status.number,
+            details: status.kind == Host::GitHub,
         }
     }
 
@@ -615,17 +621,38 @@ impl PrBadge {
     }
 }
 
-/// Draws the badge as two buttons, the pull request and its checks. Returns whether either was clicked.
-pub fn show_pull_request_badge(ui: &mut egui::Ui, badge: &PrBadge) -> bool {
-    let mut clicked = ui
+/// What the badge was asked to do in one frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BadgeAction {
+    None,
+    /// The pull request's page should open in the browser.
+    Open,
+    /// The pull request's detail view should open. Offered from the label's right-click menu.
+    Details,
+}
+
+/// Draws the badge as two buttons, the pull request and its checks. A click on either opens the
+/// pull request; the pull request's right-click menu offers its detail view.
+pub fn show_pull_request_badge(ui: &mut egui::Ui, badge: &PrBadge) -> BadgeAction {
+    let label = ui
         .add(egui::Button::new(RichText::new(&badge.label).small().color(badge.label_color)).frame(false))
-        .on_hover_text(badge.hover.as_str())
-        .clicked();
-    if let Some((text, color)) = &badge.checks {
-        clicked |=
-            ui.add(egui::Button::new(RichText::new(text).small().color(*color)).frame(false)).on_hover_text(badge.hover.as_str()).clicked();
+        .on_hover_text(badge.hover.as_str());
+    let mut action = if label.clicked() { BadgeAction::Open } else { BadgeAction::None };
+    if badge.details {
+        label.context_menu(|ui| {
+            if ui.button(format!("{}  View details…", icon::GIT_PULL_REQUEST)).clicked() {
+                ui.close();
+                action = BadgeAction::Details;
+            }
+        });
     }
-    clicked
+    if let Some((text, color)) = &badge.checks {
+        let checks = ui.add(egui::Button::new(RichText::new(text).small().color(*color)).frame(false)).on_hover_text(badge.hover.as_str());
+        if checks.clicked() {
+            action = BadgeAction::Open;
+        }
+    }
+    action
 }
 
 #[cfg(test)]

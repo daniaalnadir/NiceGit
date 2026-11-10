@@ -466,8 +466,10 @@ impl NiceGitApp {
                     .on_hover_text(checkout.as_str());
             });
             if let Some(badge) = &badge {
-                if crate::ui::pull_request::show_pull_request_badge(ui, badge) {
-                    crate::ui::changes::open_url(&badge.url);
+                match crate::ui::pull_request::show_pull_request_badge(ui, badge) {
+                    crate::ui::pull_request::BadgeAction::Open => crate::ui::changes::open_url(&badge.url),
+                    crate::ui::pull_request::BadgeAction::Details => self.open_current_pull_request_details(badge.number),
+                    crate::ui::pull_request::BadgeAction::None => {}
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

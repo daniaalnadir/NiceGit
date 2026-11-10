@@ -375,7 +375,13 @@ loaded titles/authors/numbers, refresh, cancellation, links to GitHub, and loadi
 1,000 items in batches of 100. Counts reflect loaded items, not a server-side total.
 GitHub Enterprise Server hosts can be listed in Settings, and their remotes then work like
 github.com remotes, including gh-based lists that use your `gh auth login --hostname` sign-in.
-A pull request's right-click menu has Check out locally…, which fetches the pull request into a
+A pull request row's right-click menu has View details…, which opens a read-only window for it. The window
+has its header (title, number, state, author, base ← head, additions and deletions, file count, and
+Open in browser), and four sections: Description (the body as plain text), Checks (each with its state
+and an Open check link, for links to the repository's host or its GitHub Actions pages), Conversation
+(reviews and comments, oldest first), and Files (paths with additions and deletions). Refresh reads it
+again, and closing the window stops the read. Nothing in it runs, and nothing opens unless you click a link.
+A pull request's right-click menu also has Check out locally…, which fetches the pull request into a
 new local branch and switches to it. The dialog suggests `pr/<number>-<title>` and lets you
 change it, and the name is checked as you type. The branch is created at the pull request's head
 and gets no upstream, since the pull request may come from a fork. Checkout needs a clean working
@@ -448,7 +454,8 @@ or its merge request on a GitLab remote, and gh or glab is installed and signed 
 number (#12 for a pull request, !12 for a merge request) and state (open, draft, merged, or closed).
 On GitHub its checks are counted as failing, pending, or passing ones. On GitLab the checks are the
 merge request's head pipeline, counted as one check. Clicking it opens the pull request in your
-browser, and hovering shows its title and the check totals. The status is read through gh when a
+browser, and hovering shows its title and the check totals. On GitHub, the right-click menu also has
+View details…, which opens the same detail window as the sidebar. The status is read through gh when a
 repository opens, after fetching, pulling, pushing, publishing, or creating a pull request, and
 every five minutes while NiceGit is focused. Without gh or glab, or when signed out, the status bar
 shows nothing.
