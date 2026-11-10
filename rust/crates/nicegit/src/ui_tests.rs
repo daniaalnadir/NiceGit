@@ -1357,7 +1357,7 @@ fn a_long_commit_description_scrolls_in_a_box_of_about_eight_lines() {
 }
 
 #[test]
-fn staged_files_stay_in_view_below_a_long_unstaged_list() {
+fn staged_files_keep_half_the_room_below_a_long_unstaged_list() {
     let repo = repository();
     let path = repo.path();
     for n in 0..200 {
@@ -1377,5 +1377,15 @@ fn staged_files_stay_in_view_below_a_long_unstaged_list() {
     // The unstaged list scrolls in its own area: its last file is out of sight, above the staged header.
     let last = harness.get_by_label("untracked-199.txt").rect();
     assert!(last.top() > header.top(), "the unstaged list runs on past its area, which scrolls");
-    assert!(header.top() < screen.center().y + screen.height() * 0.25, "the staged section keeps a fair share of the room");
+    // The two lists share the room equally, though only one file is staged: the unstaged list runs
+    // from its header to the separator above the staged header, and the staged list from its header
+    // to the commit box.
+    let unstaged_top = harness.get_by_label("Unstaged files (200)").rect().bottom();
+    let commit_top = harness.get_by_label("Commit summary").rect().top();
+    let unstaged_room = header.top() - unstaged_top;
+    let staged_room = commit_top - header.bottom();
+    assert!(
+        (unstaged_room - staged_room).abs() < 60.0,
+        "the lists get about the same room: unstaged {unstaged_room}, staged {staged_room}"
+    );
 }
