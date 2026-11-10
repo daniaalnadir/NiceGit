@@ -729,3 +729,50 @@ fn resolve_in_the_merge_tool_resolves_the_conflict() {
     idle(&mut harness);
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "resolved\n");
 }
+
+#[test]
+fn git_settings_adds_lists_and_removes_a_local_setting() {
+    let repo = repository();
+    let path = repo.path();
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    open_repository_tool(&mut harness, path, "Git settings", "Git Settings");
+    wait(&mut harness, "the add row", |h| h.query_by_role_and_label(Role::TextInput, "Setting name").is_some());
+
+    harness.get_by_role_and_label(Role::TextInput, "Setting name").focus();
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Setting name").type_text("nicegit.test");
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Setting value").focus();
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Setting value").type_text("1");
+    harness.step();
+    harness.get_by_role_and_label(Role::Button, "Add").click();
+    // `--get-all` exits 1 while the key is unset, so the value is read without asserting success.
+    let local_value = |dir: &Path| {
+        let output = Command::new("git")
+            .args(["config", "--local", "--get-all", "nicegit.test"])
+            .current_dir(dir)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .output()
+            .expect("run git");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    };
+    wait(&mut harness, "the new setting to be written", |_| local_value(path) == "1");
+    idle(&mut harness);
+    wait(&mut harness, "the new setting to be listed", |h| h.query_by_label("Remove nicegit.test").is_some());
+
+    // The new setting is last in the list, below the visible rows, so the filter brings it up.
+    harness.get_by_role_and_label(Role::TextInput, "Filter settings").focus();
+    harness.step();
+    harness.get_by_role_and_label(Role::TextInput, "Filter settings").type_text("nicegit");
+    settle(&mut harness);
+    harness.get_by_role_and_label(Role::Button, "Remove nicegit.test").click();
+    wait(&mut harness, "the removal confirmation", |h| h.query_by_role_and_label(Role::Button, "Remove").is_some());
+    harness.get_by_role_and_label(Role::Button, "Remove").click();
+    wait(&mut harness, "the setting to be removed", |_| !git(path, &["config", "--local", "--list"]).contains("nicegit.test="));
+    idle(&mut harness);
+    wait(&mut harness, "the removed setting to leave the list", |h| h.query_by_label("Remove nicegit.test").is_none());
+}
