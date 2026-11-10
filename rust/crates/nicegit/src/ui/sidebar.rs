@@ -142,7 +142,6 @@ impl NiceGitApp {
                 } else {
                     ui.add_space(6.0);
                 }
-                ui.label(RichText::new(icon::CUBE).size(16.0).color(c.accent));
                 ui.menu_button(
                     RichText::new(format!("{} {}", snapshot.name, icon::CARET_DOWN)).strong().size(15.0).color(c.accent),
                     |ui| self.repository_menu(ui),
