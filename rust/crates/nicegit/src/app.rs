@@ -287,7 +287,11 @@ pub struct CommitTree {
 /// One open repository tab.
 pub struct Repo {
     pub path: PathBuf,
-    pub snapshot: Option<Snapshot>,
+    /// Shared so the Changes panel can hold it while drawing, without copying the whole snapshot.
+    pub snapshot: Option<Arc<Snapshot>>,
+    /// The Changes panel's sorted and filtered file lists and folder trees, rebuilt only when the
+    /// snapshot, the filter, or the file view changes.
+    pub(crate) change_lists: Option<Arc<crate::ui::changes::ChangeLists>>,
     pub error: Option<String>,
     pub rows: Vec<GraphRow>,
     pub lanes: usize,
@@ -494,6 +498,7 @@ impl Repo {
         Self {
             path,
             snapshot: None,
+            change_lists: None,
             error: None,
             rows: Vec::new(),
             lanes: 1,
@@ -746,7 +751,7 @@ impl NiceGitApp {
     }
 
     pub fn snapshot(&self) -> Option<&Snapshot> {
-        self.repo().and_then(|r| r.snapshot.as_ref())
+        self.repo().and_then(|r| r.snapshot.as_deref())
     }
 
     pub fn idle(&self) -> bool {
@@ -1018,7 +1023,7 @@ impl NiceGitApp {
             repo.external_tools =
                 Some(Task::spawn_with(&context, previous, move || GitClient::new().configured_tools(&tools_path).unwrap_or_default()));
         }
-        let previous = if quick { repo.snapshot.clone() } else { None };
+        let previous = if quick { repo.snapshot.as_deref().cloned() } else { None };
         // Any load started now reads the checkout as it is, so changes noticed before it are covered.
         self.watched_git_change = false;
         match previous {
@@ -1623,7 +1628,7 @@ impl NiceGitApp {
             .retain(|name, (tip, _)| snapshot.tag_tips.get(name).is_some_and(|current| current.as_str() == tip.as_str()));
         let tracking = tracking_key(&snapshot);
         self.repos[index].lfs_paths.clear();
-        self.repos[index].snapshot = Some(snapshot);
+        self.repos[index].snapshot = Some(Arc::new(snapshot));
         // The pull request is read for a new branch, and whenever a read is due.
         if branch_changed || self.repos[index].pr_checked_at.is_none() {
             self.refresh_pr_status(index);
@@ -2859,23 +2864,27 @@ impl NiceGitApp {
     /// Whether the branch tip is in the loaded history of the current checkout.
     pub fn branch_is_merged(branch: &Branch, snapshot: &Snapshot) -> bool {
         let Some(head) = snapshot.head_hash.as_deref() else { return false };
-        let by_hash: std::collections::HashMap<&str, &nicegit_core::Commit> =
-            snapshot.commits.iter().map(|c| (c.hash.as_str(), c)).collect();
-        let mut stack = vec![head];
-        let mut seen = std::collections::HashSet::new();
-        while let Some(hash) = stack.pop() {
-            if hash == branch.tip {
-                return true;
-            }
-            if !seen.insert(hash) {
-                continue;
-            }
-            if let Some(commit) = by_hash.get(hash) {
-                stack.extend(commit.parents.iter().map(String::as_str));
-            }
-        }
-        false
+        commit_reaches(&snapshot.commits, head, &branch.tip)
     }
+}
+
+/// Whether `target` can be reached from `from` by following parents through `commits`.
+pub(crate) fn commit_reaches(commits: &[nicegit_core::Commit], from: &str, target: &str) -> bool {
+    let by_hash: std::collections::HashMap<&str, &nicegit_core::Commit> = commits.iter().map(|c| (c.hash.as_str(), c)).collect();
+    let mut stack = vec![from];
+    let mut seen = std::collections::HashSet::new();
+    while let Some(hash) = stack.pop() {
+        if hash == target {
+            return true;
+        }
+        if !seen.insert(hash) {
+            continue;
+        }
+        if let Some(commit) = by_hash.get(hash) {
+            stack.extend(commit.parents.iter().map(String::as_str));
+        }
+    }
+    false
 }
 
 /// Windows' canonical paths start with `\\?\`, which Git and users do not expect.

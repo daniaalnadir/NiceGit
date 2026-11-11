@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use egui::{Color32, RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::line_counts::LineCount;
 use nicegit_core::{Snapshot, StatusEntry, StatusKind};
 
-use crate::app::{NiceGitApp, Repo, Selection};
+use crate::app::{commit_reaches, NiceGitApp, Repo, Selection};
 use crate::settings::FileView;
 use crate::theme;
 use crate::tools::{self, widgets};
@@ -73,23 +74,65 @@ impl Folder {
     }
 }
 
+/// The Changes panel's file lists for one snapshot, narrowed by one filter and shown in one view:
+/// both sections sorted, the filtered matches of each, and their folder trees in the Tree view.
+/// Kept on the repository and rebuilt only when the snapshot, the filter, or the view changes.
+pub(crate) struct ChangeLists {
+    /// The snapshot the lists were built from. Held so its identity can be compared by pointer.
+    snapshot: Arc<Snapshot>,
+    filter: String,
+    tree: bool,
+    all_unstaged: Vec<StatusEntry>,
+    all_staged: Vec<StatusEntry>,
+    unstaged: Vec<StatusEntry>,
+    staged: Vec<StatusEntry>,
+    unstaged_tree: Folder,
+    staged_tree: Folder,
+}
+
+impl ChangeLists {
+    fn new(snapshot: Arc<Snapshot>, filter: &str, tree: bool) -> Self {
+        let all_unstaged = sorted(snapshot.status.iter().filter(|e| e.is_unstaged()).cloned().collect());
+        let all_staged = sorted(snapshot.status.iter().filter(|e| e.is_staged()).cloned().collect());
+        let unstaged: Vec<StatusEntry> = all_unstaged.iter().filter(|e| matches_filter(e, filter)).cloned().collect();
+        let staged: Vec<StatusEntry> = all_staged.iter().filter(|e| matches_filter(e, filter)).cloned().collect();
+        // Folders are only built for the Tree view, which is the only one that draws them.
+        let (unstaged_tree, staged_tree) =
+            if tree { (Folder::build(&unstaged), Folder::build(&staged)) } else { (Folder::default(), Folder::default()) };
+        Self { snapshot, filter: filter.to_string(), tree, all_unstaged, all_staged, unstaged, staged, unstaged_tree, staged_tree }
+    }
+}
+
 impl NiceGitApp {
+    /// The Changes panel's lists for `snapshot`, filter, and view: the cached ones when those have
+    /// not changed since they were built, otherwise rebuilt and cached.
+    fn change_lists(&mut self, snapshot: &Arc<Snapshot>, filter: &str, tree: bool) -> Arc<ChangeLists> {
+        let repo = &mut self.repos[self.active];
+        if let Some(lists) = &repo.change_lists {
+            if Arc::ptr_eq(&lists.snapshot, snapshot) && lists.filter == filter && lists.tree == tree {
+                return lists.clone();
+            }
+        }
+        let lists = Arc::new(ChangeLists::new(snapshot.clone(), filter, tree));
+        repo.change_lists = Some(lists.clone());
+        lists
+    }
+
     pub fn changes_panel(&mut self, ui: &mut Ui) {
-        let Some(snapshot) = self.snapshot().cloned() else { return };
+        // Shares the snapshot rather than copying it, so drawing leaves the repository free to change.
+        let Some(snapshot) = self.repo().and_then(|r| r.snapshot.clone()) else { return };
         let c = theme::of(ui);
         let idle = self.idle();
-        let all_unstaged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_unstaged()).cloned().collect());
-        let all_staged: Vec<StatusEntry> = sorted(snapshot.status.iter().filter(|e| e.is_staged()).cloned().collect());
         // A long list of changes can be narrowed by path. The field shows once there are many, and
         // stays while the filter holds text or the field has focus, so it never hides itself.
         let filter = self.repo().map(|r| r.change_filter.clone()).unwrap_or_default();
         let filtering = !filter.trim().is_empty();
+        let tree = self.settings.file_view == FileView::Tree;
+        let lists = self.change_lists(&snapshot, &filter, tree);
+        let (all_unstaged, all_staged) = (&lists.all_unstaged, &lists.all_staged);
+        let (unstaged, staged) = (&lists.unstaged, &lists.staged);
         let focus_requested = filter_focus_requested(ui.ctx());
         let show_filter = snapshot.status.len() > FILTER_FROM || filtering || filter_had_focus(ui.ctx()) || focus_requested;
-        let matches =
-            |entries: &[StatusEntry]| -> Vec<StatusEntry> { entries.iter().filter(|e| matches_filter(e, &filter)).cloned().collect() };
-        let unstaged = matches(&all_unstaged);
-        let staged = matches(&all_staged);
         let shown = |part: &[StatusEntry], whole: &[StatusEntry]| {
             if filtering {
                 format!("{} of {}", part.len(), whole.len())
@@ -153,7 +196,6 @@ impl NiceGitApp {
                 });
             });
         }
-        let tree = self.settings.file_view == FileView::Tree;
         // The two sections share the room equally, each listing its files in a scroll area of its
         // own, so a long unstaged list never pushes the staged files out of sight. A narrow panel drops "files" from the titles so their
         // counts stay visible; if even that does not fit, the title is truncated rather than running
@@ -170,7 +212,7 @@ impl NiceGitApp {
             egui::containers::Sides::new().shrink_left().truncate().show(
                 ui,
                 |ui| {
-                    let count = shown(&unstaged, &all_unstaged);
+                    let count = shown(unstaged, all_unstaged);
                     let full = format!("Unstaged files ({count})");
                     ui.label(RichText::new(format!("{}  Unstaged{noun} ({count})", icon::CARET_DOWN)).strong())
                         .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
@@ -194,25 +236,28 @@ impl NiceGitApp {
                         }
                         // Keeps the discard icon clear of the Stage All button.
                         ui.add_space(8.0);
-                        let discardable: Vec<StatusEntry> = all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
-                        let discard_all_enabled = idle && !discardable.is_empty();
+                        // Counted every frame, but only collected when the button is clicked.
+                        let discardable = all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).count();
+                        let discard_all_enabled = idle && discardable > 0;
                         let discard_tip = if filtering {
-                            format!("Discards changes to all {} unstaged files, including those hidden by the filter", discardable.len())
+                            format!("Discards changes to all {discardable} unstaged files, including those hidden by the filter")
                         } else {
                             "Discard all changes…".to_string()
                         };
                         let discard_all = widgets::icon_button(ui, icon::TRASH, &discard_tip, discard_all_enabled);
                         discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, discard_all_enabled, "Discard all changes…"));
                         if discard_all.clicked() {
+                            let entries: Vec<StatusEntry> =
+                                all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
                             let hidden = if filtering { " Files hidden by the filter are included." } else { "" };
                             self.confirm(
                                 "Discard all changes?",
                                 format!(
                                     "Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}",
-                                    discardable.len()
+                                    entries.len()
                                 ),
                                 "Discard all",
-                                Pending::DiscardAll(discardable),
+                                Pending::DiscardAll(entries),
                             );
                         }
                         // Saves every unstaged change, untracked files included, for the person to keep or share.
@@ -235,18 +280,18 @@ impl NiceGitApp {
         // The room left for both lists, after the staged header and the gap above it; egui also
         // leaves a line of item spacing after the unstaged list. Each list gets half.
         let gap = if last_gap > 0.0 { last_gap } else { header + 24.0 };
-        let lists = (ui.available_height() - gap - ui.spacing().item_spacing.y).max(row * 4.0);
-        let unstaged_height = lists / 2.0;
+        let room = (ui.available_height() - gap - ui.spacing().item_spacing.y).max(row * 4.0);
+        let unstaged_height = room / 2.0;
         list_area(ui, "changes-unstaged", unstaged_height, |ui| {
             if unstaged.is_empty() && !all_unstaged.is_empty() {
                 ui.label(RichText::new("   No matching files").small().color(c.muted));
             } else if unstaged.is_empty() {
                 ui.label(RichText::new("   No unstaged changes").small().color(c.muted));
             } else if tree {
-                self.folder_rows(ui, &Folder::build(&unstaged), "", false, idle, &snapshot, 0);
+                self.folder_rows(ui, &lists.unstaged_tree, "", false, idle, &snapshot, 0);
             } else {
-                for entry in &unstaged {
-                    self.change_row(ui, entry, false, idle, &snapshot, entry.path.clone());
+                for entry in unstaged {
+                    self.change_row(ui, entry, false, idle, &snapshot, &entry.path);
                 }
             }
         });
@@ -257,7 +302,7 @@ impl NiceGitApp {
             egui::containers::Sides::new().shrink_left().truncate().show(
                 ui,
                 |ui| {
-                    let count = shown(&staged, &all_staged);
+                    let count = shown(staged, all_staged);
                     let full = format!("Staged files ({count})");
                     ui.label(RichText::new(format!("{}  Staged{noun} ({count})", icon::CARET_DOWN)).strong())
                         .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
@@ -300,10 +345,10 @@ impl NiceGitApp {
             } else if staged.is_empty() {
                 ui.label(RichText::new("   Stage files to include them in the next commit").small().color(c.muted));
             } else if tree {
-                self.folder_rows(ui, &Folder::build(&staged), "", true, idle, &snapshot, 0);
+                self.folder_rows(ui, &lists.staged_tree, "", true, idle, &snapshot, 0);
             } else {
-                for entry in &staged {
-                    self.change_row(ui, entry, true, idle, &snapshot, entry.path.clone());
+                for entry in staged {
+                    self.change_row(ui, entry, true, idle, &snapshot, &entry.path);
                 }
             }
         });
@@ -340,7 +385,7 @@ impl NiceGitApp {
                 .body(|ui| self.folder_rows(ui, child, &path, staged, idle, snapshot, depth + 1));
         }
         for entry in &folder.files {
-            self.change_row(ui, entry, staged, idle, snapshot, entry.file_name().to_string());
+            self.change_row(ui, entry, staged, idle, snapshot, entry.file_name());
         }
     }
 
@@ -396,12 +441,23 @@ impl NiceGitApp {
         }
     }
 
-    fn change_row(&mut self, ui: &mut Ui, entry: &StatusEntry, staged: bool, idle: bool, snapshot: &Snapshot, label: String) {
+    fn change_row(&mut self, ui: &mut Ui, entry: &StatusEntry, staged: bool, idle: bool, snapshot: &Snapshot, label: &str) {
+        // A row scrolled out of view keeps its room but draws nothing. The test is the clip rect, not
+        // visibility: egui reports a pass it is about to discard as invisible throughout.
+        let width = ui.available_width();
+        let row = egui::Rect::from_min_size(ui.next_widget_position(), egui::vec2(width, ROW_HEIGHT));
+        if !row.intersects(ui.clip_rect()) {
+            // Still described to screen readers and tests, as the history rows are, so the file stays
+            // findable while it is out of view.
+            let (_, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), egui::Sense::hover());
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, row_text(entry, label)));
+            return;
+        }
         let _c = theme::of(ui);
         let selected =
             matches!(self.repo().map(|r| &r.selection), Some(Selection::Change { entry: e, staged: s }) if e == entry && *s == staged);
-        let height = 28.0;
-        let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click());
+        let height = ROW_HEIGHT;
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
         if selected {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().selection.bg_fill);
         } else if response.hovered() {
@@ -412,12 +468,7 @@ impl NiceGitApp {
         );
         let (glyph, color) = kind_icon(&child, entry.kind);
         child.label(RichText::new(glyph).color(color)).on_hover_text(entry.kind.title());
-        let text = match &entry.original_path {
-            Some(original) if entry.kind == StatusKind::Renamed => {
-                format!("{} {} {label}", original.rsplit('/').next().unwrap_or(original), egui_phosphor::regular::ARROW_RIGHT)
-            }
-            _ => label,
-        };
+        let text = row_text(entry, label);
         let mut stage_clicked = false;
         let mut discard_clicked = false;
         let mut resolve_clicked = false;
@@ -957,18 +1008,10 @@ impl NiceGitApp {
             .any(|remote| &remote.tip == head || Self::branch_contains(snapshot, &remote.tip, head))
     }
 
+    /// Whether `target` is reachable from `tip`. Called for each remote branch every frame, so it
+    /// walks the loaded commits rather than copying the snapshot.
     fn branch_contains(snapshot: &Snapshot, tip: &str, target: &str) -> bool {
-        let fake = nicegit_core::Branch {
-            name: String::new(),
-            is_current: false,
-            is_remote: true,
-            tip: target.to_string(),
-            subject: String::new(),
-            upstream: None,
-        };
-        let mut shifted = snapshot.clone();
-        shifted.head_hash = Some(tip.to_string());
-        Self::branch_is_merged(&fake, &shifted)
+        commit_reaches(&snapshot.commits, tip, target)
     }
 }
 
@@ -1059,6 +1102,19 @@ fn megabytes(bytes: u64) -> String {
 
 /// The number of changed files above which the Changes panel offers a filter.
 const FILTER_FROM: usize = 5;
+
+/// The height of a changed file's row. Rows also sit a line's spacing apart, which egui adds.
+const ROW_HEIGHT: f32 = 28.0;
+
+/// The text a changed file's row shows: its label, led by a rename's original name.
+fn row_text(entry: &StatusEntry, label: &str) -> String {
+    match &entry.original_path {
+        Some(original) if entry.kind == StatusKind::Renamed => {
+            format!("{} {} {label}", original.rsplit('/').next().unwrap_or(original), egui_phosphor::regular::ARROW_RIGHT)
+        }
+        _ => label.to_string(),
+    }
+}
 
 /// One section's file list: a scroll area `height` tall, however long the list.
 fn list_area(ui: &mut Ui, id: &str, height: f32, add: impl FnOnce(&mut Ui)) {

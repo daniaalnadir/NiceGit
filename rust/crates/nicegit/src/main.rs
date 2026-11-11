@@ -34,6 +34,8 @@ mod ui_tests_parity_e;
 #[cfg(test)]
 mod ui_tests_parity_f;
 #[cfg(test)]
+mod ui_tests_perf;
+#[cfg(test)]
 mod ui_tests_tools;
 #[cfg(test)]
 mod ui_tests_welcome;
