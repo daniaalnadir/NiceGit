@@ -630,6 +630,15 @@ impl NiceGitApp {
             ui.close();
             self.fetch_remote(remote.to_string());
         }
+        // Every local branch to the same name, after a confirmation that lists them.
+        let has_local_branches = snapshot.branches.iter().any(|branch| !branch.is_remote && !branch.is_detached());
+        if ui
+            .add_enabled(idle && has_local_branches, egui::Button::new(format!("{}  Push all branches to {remote}…", icon::ARROW_LINE_UP)))
+            .clicked()
+        {
+            ui.close();
+            self.open_push_branches(remote.to_string());
+        }
         if let Some(address) = snapshot.remote_fetch_addresses.get(remote).and_then(|addresses| addresses.first()) {
             if ui.button(format!("{}  Copy fetch URL", icon::COPY)).clicked() {
                 ui.close();

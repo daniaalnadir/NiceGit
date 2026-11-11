@@ -69,6 +69,37 @@ pub struct TagsToPush {
     pub conflicting: Vec<String>,
 }
 
+/// What happened to each branch in a push to one remote, as Git reported it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BranchPushReport {
+    /// Branches the remote took: created there, or fast-forwarded.
+    pub pushed: Vec<String>,
+    /// Branches the remote already had at the same commit.
+    pub up_to_date: Vec<String>,
+    /// Branches the remote refused, such as one that would need a forced update.
+    pub rejected: Vec<String>,
+}
+
+/// Reads the per-ref lines of `git push --porcelain`: a status flag, a tab, the `from:to` refspec,
+/// a tab, and a summary. The flag is the line's first character. The remote's address, the closing
+/// "Done", and any other line are skipped. Only branches under `refs/heads/` are counted.
+pub fn parse_branch_push_report(output: &str) -> BranchPushReport {
+    let mut report = BranchPushReport::default();
+    for line in output.lines() {
+        let mut fields = line.split('\t');
+        let (Some(flag), Some(refspec), Some(_summary)) = (fields.next(), fields.next(), fields.next()) else { continue };
+        let Some(name) = refspec.split_once(':').and_then(|(_, to)| to.strip_prefix("refs/heads/")) else { continue };
+        let name = name.to_string();
+        match flag {
+            " " | "*" => report.pushed.push(name),
+            "=" => report.up_to_date.push(name),
+            "!" => report.rejected.push(name),
+            _ => {}
+        }
+    }
+    report
+}
+
 /// The addresses one remote was shown with, in the shape `require_remote_addresses` compares.
 fn expected_addresses_for(remote: &str, addresses: &[String]) -> BTreeMap<String, Vec<String>> {
     BTreeMap::from([(remote.to_string(), addresses.to_vec())])
@@ -334,6 +365,46 @@ impl GitClient {
         let mut arguments = vec!["-c", &mirror, "push", "--no-follow-tags", "--recurse-submodules=no", "--", remote];
         arguments.extend(refspecs.iter().map(String::as_str));
         self.run(&arguments, directory).map(drop)
+    }
+
+    /// Pushes local branches to a remote, each to the branch of the same name there, from the
+    /// commit it pointed to when listed. Each branch must still point to that commit, and the
+    /// remote's push addresses must still match. Explicit refspecs are used, with no force, so a
+    /// remote branch that would not fast-forward is rejected and the others still go. Tags are not
+    /// pushed. Git exits 1 when a branch is rejected; that report is read, not treated as failure.
+    pub fn push_branches(
+        &self,
+        remote: &str,
+        branches: &[(String, String)],
+        expected_push_addresses: &[String],
+        directory: &Path,
+    ) -> Result<BranchPushReport> {
+        const COMMAND: &str = "push branches";
+        if branches.is_empty() {
+            return Err(GitError::failed(COMMAND, "There are no local branches to push."));
+        }
+        let mut refspecs = Vec::with_capacity(branches.len());
+        for (name, expected_tip) in branches {
+            let reference = format!("refs/heads/{name}");
+            let current = self.try_trimmed(&["rev-parse", "--verify", "--end-of-options", &reference], directory);
+            if current.as_deref() != Some(expected_tip.as_str()) {
+                return Err(GitError::failed(
+                    COMMAND,
+                    format!("The branch {name} changed since it was listed. Refresh and review the branches again."),
+                ));
+            }
+            refspecs.push(format!("{expected_tip}:{reference}"));
+        }
+        self.require_remote_addresses(&expected_addresses_for(remote, expected_push_addresses), remote, true, COMMAND, directory)?;
+        let mirror = format!("remote.{remote}.mirror=false");
+        let mut arguments = vec!["-c", &mirror, "push", "--porcelain", "--no-follow-tags", "--recurse-submodules=no", "--", remote];
+        arguments.extend(refspecs.iter().map(String::as_str));
+        let output = self.run_accepting(&arguments, directory, &[0, 1])?;
+        let report = parse_branch_push_report(&output);
+        if report.pushed.is_empty() && report.up_to_date.is_empty() && report.rejected.is_empty() {
+            return Err(GitError::failed(COMMAND, format!("Git did not report what happened when pushing to {remote}.")));
+        }
+        Ok(report)
     }
 
     /// Deletes a tag from a remote, but only while the remote still has the object shown locally.

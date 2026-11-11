@@ -2724,6 +2724,29 @@ impl NiceGitApp {
         }
     }
 
+    /// Opens the confirmation for pushing every local branch to `remote`. The branches, with the
+    /// commit each points to, and the remote's push addresses are those shown now, so the push
+    /// refuses if any of them has changed by the time it is confirmed. Detached HEAD is not a branch.
+    pub fn open_push_branches(&mut self, remote: String) {
+        if !self.idle() {
+            return;
+        }
+        let Some(snapshot) = self.snapshot() else { return };
+        let branches: Vec<(String, String)> = snapshot
+            .branches
+            .iter()
+            .filter(|branch| !branch.is_remote && !branch.is_detached())
+            .map(|b| (b.name.clone(), b.tip.clone()))
+            .collect();
+        let addresses = snapshot.remote_push_addresses.get(&remote).cloned().unwrap_or_default();
+        if branches.is_empty() {
+            self.notify("There are no local branches to push.", true);
+            return;
+        }
+        let (title, message) = crate::ui::dialogs::push_branches_confirmation(&remote, &branches);
+        self.confirm(title, message, "Push branches", Pending::PushBranches { remote, branches, addresses });
+    }
+
     // MARK: Refresh
 
     /// Watches the active repository for changes made in other apps, and its Git directory too

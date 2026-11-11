@@ -58,7 +58,7 @@ pub struct Row {
 pub fn number_text(kind: Host, number: u64) -> String {
     match kind {
         Host::GitLab => format!("!{number}"),
-        Host::GitHub | Host::Bitbucket => format!("#{number}"),
+        Host::GitHub | Host::Bitbucket | Host::AzureDevOps => format!("#{number}"),
     }
 }
 
@@ -503,6 +503,7 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
     let host_name = match row.kind {
         Host::GitLab => "GitLab",
         Host::GitHub | Host::Bitbucket => "GitHub",
+        Host::AzureDevOps => "Azure DevOps",
     };
     egui::Frame::new()
         .fill(c.card_bg)
@@ -611,6 +612,7 @@ fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Can
         }
         Host::GitLab => read_gitlab(client, path, &hosted, sources, cancel),
         Host::Bitbucket => Err("Bitbucket pull requests are not listed here.".to_string()),
+        Host::AzureDevOps => Err("Azure DevOps pull requests are not listed here.".to_string()),
     }
 }
 

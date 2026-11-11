@@ -137,6 +137,13 @@ pub enum Pending {
         tags: Vec<(String, String)>,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
+    /// Pushing every local branch to `remote`, each to the branch of the same name. The branches
+    /// carry the commit each pointed to when listed, and `addresses` are the remote's push addresses shown.
+    PushBranches {
+        remote: String,
+        branches: Vec<(String, String)>,
+        addresses: Vec<String>,
+    },
     PopStash(Stash),
     /// Saving open tabs under the name of a workspace that already exists. The repositories are
     /// those shown when the name was entered.
@@ -526,6 +533,40 @@ pub fn push_tags_confirmation(remote: &str, missing: &[(String, String)], confli
         message.push('.');
     }
     (title, message)
+}
+
+/// The title and message of the confirmation for pushing every local branch to `remote`, each to
+/// the branch of the same name, with its short tip. Tags are not pushed.
+pub fn push_branches_confirmation(remote: &str, branches: &[(String, String)]) -> (String, String) {
+    let count = branches.len();
+    let title = if count == 1 { format!("Push 1 branch to {remote}?") } else { format!("Push {count} branches to {remote}?") };
+    let mut message = format!(
+        "Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed."
+    );
+    for (name, tip) in branches {
+        message.push_str(&format!("\n• {name} ({})", short(tip)));
+    }
+    (title, message)
+}
+
+/// The notice after a branch push: what went up, what was already there, and what the remote refused.
+fn branch_push_notice(remote: &str, report: &nicegit_core::settings::BranchPushReport) -> String {
+    let count = |n: usize| if n == 1 { "1 branch".to_string() } else { format!("{n} branches") };
+    let mut parts = Vec::new();
+    if !report.pushed.is_empty() {
+        parts.push(format!("Pushed {} to {remote}.", count(report.pushed.len())));
+    }
+    if !report.up_to_date.is_empty() {
+        parts.push(format!("{} already up to date on {remote}.", count(report.up_to_date.len())));
+    }
+    if !report.rejected.is_empty() {
+        parts.push(format!(
+            "{remote} refused {}: {}. Nothing was forced, so fetch and review them.",
+            count(report.rejected.len()),
+            report.rejected.join(", ")
+        ));
+    }
+    parts.join(" ")
 }
 
 /// The notice for a bulk resolution: how many files took the side, and which could not be
@@ -1285,6 +1326,16 @@ impl NiceGitApp {
                     client.push_tags(&remote, &tags, expected, path).map(|_| Some(format!("Pushed {summary} to {remote}.")))
                 })
             }
+            Pending::PushBranches { remote, branches, addresses } => self.act("Push branches", move |client, path| {
+                let report = client.push_branches(&remote, &branches, &addresses, path)?;
+                let text = branch_push_notice(&remote, &report);
+                // A refused branch means the push did not do all that was asked, so it is shown as an error.
+                if report.rejected.is_empty() {
+                    Ok(Some(text))
+                } else {
+                    Err(GitError::failed("push branches", text))
+                }
+            }),
             Pending::ForcePush { branch, head, upstream, expected_remote_tip, addresses } => {
                 self.act("Force push", move |client, path| {
                     // The push reads only these fields, so it runs against what was shown.
@@ -1455,7 +1506,7 @@ impl NiceGitApp {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_push_remote, push_tags_confirmation, repository_folder_name, CloneDestination};
+    use super::{default_push_remote, push_branches_confirmation, push_tags_confirmation, repository_folder_name, CloneDestination};
 
     #[test]
     fn the_push_tags_confirmation_lists_at_most_twenty_names_and_the_skipped_ones() {
@@ -1471,6 +1522,21 @@ mod tests {
         let (title, message) = push_tags_confirmation("origin", &one, &conflicting);
         assert_eq!(title, "Push 1 tag to origin?");
         assert!(message.ends_with("Skipped, because origin has a different tag with the same name: old."), "{message}");
+    }
+
+    #[test]
+    fn the_push_branches_confirmation_lists_each_branch_with_its_short_tip() {
+        let branches = vec![("main".to_string(), "a".repeat(40)), ("feature/x".to_string(), "b".repeat(40))];
+        let (title, message) = push_branches_confirmation("origin", &branches);
+        assert_eq!(title, "Push 2 branches to origin?");
+        assert!(message.contains("fast-forwarded, never forced"), "{message}");
+        assert!(message.contains("Tags are not pushed."), "{message}");
+        let short = nicegit_core::models::short(&"b".repeat(40)).to_string();
+        assert!(message.ends_with(&format!("\n• feature/x ({short})")), "{message}");
+        assert!(message.contains("\n• main ("), "{message}");
+
+        let one = [("main".to_string(), "c".repeat(40))];
+        assert_eq!(push_branches_confirmation("origin", &one).0, "Push 1 branch to origin?");
     }
 
     #[test]
