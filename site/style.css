@@ -194,6 +194,23 @@ pre {
   overflow-x: auto;
 }
 
+/* Guide */
+
+.guide { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; padding-top: 48px; padding-bottom: 80px; }
+.toc { position: sticky; top: 84px; align-self: start; display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; }
+.toc strong { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.toc a { color: var(--muted); }
+.toc a:hover { color: var(--text); text-decoration: none; }
+.doc h1 { text-align: left; margin: 0 0 12px; max-width: none; font-size: clamp(2rem, 4vw, 2.6rem); }
+.doc h2 { margin-top: 48px; }
+.doc section { scroll-margin-top: 72px; }
+.doc li { margin: 6px 0; }
+.doc .shot { margin: 20px 0; }
+.lead-left { color: var(--muted); font-size: 1.1rem; margin: 0 0 12px; }
+.note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 0.92rem; color: var(--muted); }
+kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.85em; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); white-space: nowrap; }
+nav a[aria-current="page"] { color: var(--text); }
+
 /* Footer */
 
 footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--muted); font-size: 0.9rem; }
@@ -202,6 +219,9 @@ footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--mute
 /* Narrow screens */
 
 @media (max-width: 860px) {
+  .guide { grid-template-columns: 1fr; gap: 24px; }
+  .toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px 14px; }
+  .toc strong { width: 100%; }
   .feature { grid-template-columns: 1fr; gap: 24px; margin-bottom: 64px; }
   .feature.flip .text { order: 0; }
   .cards { grid-template-columns: 1fr 1fr; }
@@ -211,7 +231,7 @@ footer { border-top: 1px solid var(--border); padding: 28px 0; color: var(--mute
 @media (max-width: 560px) {
   .wrap { padding: 0 16px; }
   nav { gap: 14px; }
-  nav a:not(:last-child):not([href="#download"]) { display: none; }
+  nav a:not(:last-child):not([href$="#download"]) { display: none; }
   .hero { padding-top: 48px; }
   .cards { grid-template-columns: 1fr; }
 }

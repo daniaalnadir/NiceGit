@@ -1,0 +1,95 @@
+name: Package managers
+
+# When a release is published, points the Homebrew cask and the winget package at it.
+# Each job skips itself until its token is set; see docs/RELEASING.md, "Package managers".
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish to the package managers, such as v2.0.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Read the release
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.read.outputs.tag }}
+      version: ${{ steps.read.outputs.version }}
+      stable: ${{ steps.read.outputs.stable }}
+    steps:
+      - id: read
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          stable=false
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then stable=true; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "Release $TAG, version $version, stable: $stable"
+
+  homebrew:
+    name: Homebrew cask
+    needs: version
+    if: needs.version.outputs.stable == 'true'
+    runs-on: ubuntu-22.04
+    environment: release
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Skip without a tap token
+        if: env.TAP_TOKEN == ''
+        run: echo "::notice::HOMEBREW_TAP_TOKEN is not set, so the Homebrew cask was not updated."
+
+      - name: Update the cask
+        if: env.TAP_TOKEN != ''
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt
+          dmg="NiceGit-$VERSION-macos-universal.dmg"
+          sha="$(awk -v f="$dmg" '$2 == f { print $1 }' SHA256SUMS.txt)"
+          if [ -z "$sha" ]; then echo "::error::$dmg is not in SHA256SUMS.txt"; exit 1; fi
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/daniaalnadir/homebrew-nicegit.git" tap
+          cd tap
+          sed -i -E "s/^  version \".*\"/  version \"$VERSION\"/; s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/nicegit.rb
+          if git diff --quiet; then echo "The cask is already at $VERSION."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "NiceGit $VERSION"
+          git push origin HEAD:main
+
+  winget:
+    name: winget package
+    needs: version
+    if: needs.version.outputs.stable == 'true'
+    runs-on: windows-latest
+    environment: release
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Skip without a winget token
+        if: env.WINGET_TOKEN == ''
+        shell: pwsh
+        run: Write-Host "::notice::WINGET_TOKEN is not set, so no winget update was submitted."
+
+      # Opens a pull request to microsoft/winget-pkgs from the token owner's fork.
+      - name: Submit the new version
+        if: env.WINGET_TOKEN != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          $url = "https://github.com/daniaalnadir/NiceGit/releases/download/v$env:VERSION/NiceGit-$env:VERSION-windows-x64.zip"
+          .\wingetcreate.exe update DaniaalNadir.NiceGit --version $env:VERSION --urls $url --submit --token $env:WINGET_TOKEN

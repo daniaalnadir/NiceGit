@@ -62,4 +62,38 @@ hardened runtime and a secure timestamp; with a notarization set too, it is nota
 the ticket stapled to the DMG. When signing secrets are present, `verify-macos.sh` fails the
 run unless the app is signed with Developer ID by `APPLE_TEAM_ID`, Gatekeeper accepts it as
 notarized, and the DMG carries its ticket. Without them it warns, and the run's summary says
-the build is unsigned. Windows and Linux builds are unsigned.
+the build is unsigned. Linux builds are unsigned.
+
+### Signing the Windows app
+
+With a code-signing certificate in the `release` environment, the Windows job signs
+`nicegit.exe` with SHA-256 and a DigiCert timestamp, then verifies the signature. Without one
+the run warns and the app stays unsigned, so Windows SmartScreen shows an unknown publisher.
+
+| Secret | Contents |
+| --- | --- |
+| `WINDOWS_CERT_PFX` | Base64 of the code-signing certificate and private key (`.pfx`) |
+| `WINDOWS_CERT_PASSWORD` | The password of that `.pfx` |
+
+An OV or EV certificate from a certificate authority works. A certificate whose key lives only
+in a hardware token or a cloud service (such as Azure Trusted Signing) needs a different
+signing step.
+
+## Package managers
+
+`.github/workflows/package-managers.yml` runs when a release is published, and can also be run
+by hand with a tag. It skips pre-releases, and each job skips itself, with a notice, until its
+token is in the `release` environment.
+
+- **Homebrew:** the cask lives in https://github.com/daniaalnadir/homebrew-nicegit
+  (`Casks/nicegit.rb`; `packaging/homebrew/nicegit.rb` here is a copy). The job sets the
+  cask's version and the DMG's checksum from `SHA256SUMS.txt` and pushes the change. Secret
+  `HOMEBREW_TAP_TOKEN`: a fine-grained token with Contents read and write on the tap only.
+  People install with `brew install --cask daniaalnadir/nicegit/nicegit`.
+- **winget:** the job runs `wingetcreate update DaniaalNadir.NiceGit`, which opens a pull
+  request to microsoft/winget-pkgs from the token owner's fork. Secret `WINGET_TOKEN`: a
+  classic token with `public_repo`. The package must exist in winget-pkgs first: submit
+  `packaging/winget/2.0.0/` once by hand (`wingetcreate submit packaging/winget/2.0.0`), and
+  after Microsoft merges it, later versions follow automatically. People install with
+  `winget install DaniaalNadir.NiceGit`.
+
