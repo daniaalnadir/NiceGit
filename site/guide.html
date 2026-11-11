@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NiceGit Guide</title>
+  <meta name="description" content="How to install NiceGit and use it day to day: open repositories, stage and commit, work with branches, rewrite history, and undo.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="images/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <a class="brand" href="./">
+        <img src="images/icon.png" alt="" width="28" height="28">
+        <span>NiceGit</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="./#features">Features</a>
+        <a href="guide.html" aria-current="page">Guide</a>
+        <a href="./#download">Download</a>
+        <a href="https://github.com/daniaalnadir/NiceGit">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap guide">
+    <aside class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#install">Install</a>
+      <a href="#open">Open a repository</a>
+      <a href="#window">The window</a>
+      <a href="#commit">Stage and commit</a>
+      <a href="#branches">Branches and remotes</a>
+      <a href="#history">Rewrite history</a>
+      <a href="#undo">Undo and recovery</a>
+      <a href="#keyboard">Keyboard</a>
+      <a href="#github">GitHub and GitLab</a>
+      <a href="#help">Help and feedback</a>
+    </aside>
+
+    <article class="doc">
+      <h1>NiceGit guide</h1>
+      <p class="lead-left">Everything you need to get going. The <a href="https://github.com/daniaalnadir/NiceGit/blob/main/docs/FEATURES.md">feature guide</a> describes every feature in detail.</p>
+      <p class="note">Shortcuts are written with Command. On Windows and Linux, use Ctrl instead.</p>
+
+      <section id="install">
+        <h2>Install</h2>
+        <p>NiceGit needs <a href="https://git-scm.com/downloads">Git</a> installed and on your <code>PATH</code>. Download NiceGit from the <a href="https://github.com/daniaalnadir/NiceGit/releases/latest">latest release</a>:</p>
+        <ul>
+          <li><strong>macOS 11 or newer:</strong> open the <code>.dmg</code> and drag NiceGit to Applications. The app is signed and notarized by Apple.</li>
+          <li><strong>Windows 10 or newer:</strong> extract the <code>.zip</code> and run <code>nicegit.exe</code>. If SmartScreen warns about an unknown publisher, choose <em>More info</em>, then <em>Run anyway</em>.</li>
+          <li><strong>Debian and Ubuntu:</strong> install the <code>.deb</code> with <code>sudo apt install ./NiceGit-*-linux-amd64.deb</code>.</li>
+          <li><strong>Other Linux:</strong> extract the <code>.tar.gz</code> and run <code>nicegit</code>. It needs <code>libxkbcommon-x11-0</code> and OpenGL (<code>libgl1</code>, <code>libegl1</code>).</li>
+        </ul>
+        <p>Every download includes the licences of the open-source components built into NiceGit. <code>SHA256SUMS.txt</code> on the release page lets you check a download.</p>
+      </section>
+
+      <section id="open">
+        <h2>Open a repository</h2>
+        <p>Use the repository menu at the top of the branches sidebar:</p>
+        <ul>
+          <li><strong>Open</strong> a folder that is already a Git repository (Command-O), or drag the folder onto the window.</li>
+          <li><strong>Clone</strong> from a remote address or a local path. Clones go into a default folder you can set in Settings.</li>
+          <li><strong>Create</strong> a new repository in an empty or existing folder.</li>
+        </ul>
+        <p>Each repository opens in its own tab. Switch with Command-1 to Command-9, and close one with Command-W or a middle-click. The <strong>Repositories</strong> column on the left lists open tabs and recent repositories. Hide or show it with the framed button at the top left of the sidebar.</p>
+      </section>
+
+      <section id="window">
+        <h2>The window</h2>
+        <figure class="shot">
+          <img src="images/history.png" width="1920" height="1080" loading="lazy"
+               alt="The NiceGit window: repositories on the far left, branches next to them, the commit history in the middle, and the Changes panel on the right">
+        </figure>
+        <ul>
+          <li><strong>Branches sidebar:</strong> local and remote branches, worktrees, tags, stashes, pull requests and issues. Type in <em>Filter references</em> to narrow the lists.</li>
+          <li><strong>Commit history:</strong> the graph of every branch. The top row, <em>Working tree</em>, stands for your uncommitted changes. Click a commit to see its details and files in the inspector.</li>
+          <li><strong>Changes panel:</strong> your unstaged and staged files, each in its own list, and the commit box below them.</li>
+        </ul>
+      </section>
+
+      <section id="commit">
+        <h2>Stage and commit</h2>
+        <ol>
+          <li>Click a changed file to see its diff.</li>
+          <li>Stage the whole file with the <strong>+</strong> beside it, or <strong>Stage All</strong>. To stage part of a file, press <strong>+</strong> beside a line, drag over several lines, or hover a change and choose <strong>Stage</strong>.</li>
+          <li>Write a summary, and optionally a description, in the commit box.</li>
+          <li>Press <strong>Commit</strong> (Command-Enter), or <strong>Commit and push</strong> (Shift-Command-Enter).</li>
+        </ol>
+        <p>Turn on <strong>Amend last commit</strong> to fold staged changes into your previous commit. Discarding a file's changes can be undone from the bar that appears afterwards.</p>
+      </section>
+
+      <section id="branches">
+        <h2>Branches and remotes</h2>
+        <ul>
+          <li>Double-click a branch in the sidebar to check it out. NiceGit saves uncommitted changes in a stash first, so nothing is lost.</li>
+          <li>Create a branch with the <strong>Branch</strong> button in the toolbar, or from any commit's right-click menu.</li>
+          <li>Drag a branch onto the current branch to merge or rebase it. NiceGit previews which files will conflict before you start.</li>
+          <li><strong>Fetch</strong>, <strong>Pull</strong> and <strong>Push</strong> are in the toolbar. NiceGit also fetches in the background every 15 minutes.</li>
+          <li>Right-click a branch, tag or commit for everything else: rename, delete, set upstream, cherry-pick, revert, reset and more.</li>
+        </ul>
+      </section>
+
+      <section id="history">
+        <h2>Rewrite history</h2>
+        <ul>
+          <li><strong>Interactive rebase:</strong> right-click the commit to start from and choose <em>Interactive rebase from here</em>. Drag commits into order, and pick, reword, edit, squash, fix up or drop each one.</li>
+          <li><strong>Edit a message:</strong> right-click any commit on the current branch and choose <em>Edit message</em>.</li>
+          <li><strong>Fix up:</strong> stage a change, right-click an older commit and choose <em>Fix up</em> to fold the change into it.</li>
+        </ul>
+        <p>When the commits are already on a remote, NiceGit warns you first. Afterwards it offers a force push with a lease, which is refused if someone else pushed in the meantime.</p>
+      </section>
+
+      <section id="undo">
+        <h2>Undo and recovery</h2>
+        <p><strong>Undo</strong> in the toolbar steps back through your last 20 NiceGit actions that moved the current branch, including commits, merges, rebases, resets, pulls and cherry-picks. <strong>Redo</strong> steps forward again.</p>
+        <p>Commits left behind by a reset or rebase can be found again with <em>Recover lost work…</em> in the repository menu. Create a branch at any of them to keep them.</p>
+      </section>
+
+      <section id="keyboard">
+        <h2>Keyboard</h2>
+        <ul>
+          <li><kbd>Shift-Command-P</kbd> opens the command palette, for actions, branches and repositories.</li>
+          <li><kbd>Command-P</kbd> goes to a file. <kbd>Shift-Command-F</kbd> searches the history of every branch.</li>
+          <li><kbd>Control-`</kbd> shows or hides the terminal for the current checkout.</li>
+          <li><kbd>Command-/</kbd> lists every shortcut.</li>
+        </ul>
+      </section>
+
+      <section id="github">
+        <h2>GitHub and GitLab</h2>
+        <p>Pull requests and issues for GitHub use the <a href="https://cli.github.com">GitHub CLI</a>. Install it, sign in once with <code>gh auth login</code>, then choose a remote under <strong>Pull Requests</strong> or <strong>Issues</strong> in the sidebar.</p>
+        <p>The <strong>Launchpad</strong>, in the repository menu, lists open pull requests across your repositories. It also lists GitLab merge requests when the <a href="https://gitlab.com/gitlab-org/cli">GitLab CLI</a> is installed and signed in with <code>glab auth login</code>. NiceGit reuses those logins and stores no token of its own. Remotes on GitLab and Bitbucket also get links to open commits, branches and files in your browser.</p>
+      </section>
+
+      <section id="help">
+        <h2>Help and feedback</h2>
+        <ul>
+          <li>Ask a question or share an idea in <a href="https://github.com/daniaalnadir/NiceGit/discussions">Discussions</a>.</li>
+          <li>Found a problem? <a href="https://github.com/daniaalnadir/NiceGit/issues/new?template=bug_report.md">Report it</a>, using a disposable repository to show the steps where you can.</li>
+          <li>Security problems go privately through the <a href="https://github.com/daniaalnadir/NiceGit/security/policy">security policy</a>.</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <footer>
+    <div class="wrap footer-row">
+      <span>NiceGit is free software under the <a href="https://github.com/daniaalnadir/NiceGit/blob/main/LICENSE">MIT License</a>.</span>
+      <span>
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/docs/FEATURES.md">Feature guide</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/CHANGELOG.md">Changelog</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/discussions">Discussions</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -168,8 +168,12 @@ jobs:
     needs: check
     runs-on: windows-latest
     timeout-minutes: 60
+    # The release environment holds the optional Windows code-signing certificate.
+    environment: release
     env:
       VERSION: ${{ needs.check.outputs.version }}
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -180,6 +184,34 @@ jobs:
       - name: Build
         working-directory: rust
         run: cargo build --release --locked
+
+      # Signs nicegit.exe when a code-signing certificate is set, so Windows SmartScreen shows
+      # the publisher. Without one the app is unsigned, as before. See docs/RELEASING.md.
+      - name: Sign the app
+        if: env.WINDOWS_CERT_PFX != ''
+        shell: pwsh
+        working-directory: rust
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfx = Join-Path $env:RUNNER_TEMP 'nicegit-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX))
+          try {
+            $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
+              Sort-Object FullName -Descending | Select-Object -First 1
+            if (-not $signtool) { throw 'signtool.exe was not found' }
+            & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD `
+              /tr http://timestamp.digicert.com /td SHA256 /d NiceGit 'target/release/nicegit.exe'
+            if ($LASTEXITCODE -ne 0) { throw 'signing failed' }
+            & $signtool.FullName verify /pa 'target/release/nicegit.exe'
+            if ($LASTEXITCODE -ne 0) { throw 'the signature did not verify' }
+          } finally {
+            Remove-Item -Force $pfx -ErrorAction SilentlyContinue
+          }
+
+      - name: Note an unsigned build
+        if: env.WINDOWS_CERT_PFX == ''
+        shell: pwsh
+        run: Write-Host "::warning::WINDOWS_CERT_PFX is not set, so nicegit.exe is unsigned."
 
       - name: Install cargo-about
         run: cargo install cargo-about --locked --version 0.9.2 --features cli
