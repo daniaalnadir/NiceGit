@@ -16,6 +16,7 @@ pub mod repositories;
 pub mod settings_window;
 pub mod shortcuts_window;
 pub mod sidebar;
+pub mod tips;
 pub mod toolbar;
 pub mod workspaces;
 
@@ -26,6 +27,15 @@ use crate::app::{NiceGitApp, Selection};
 use crate::settings::DiffContextSetting;
 use crate::theme;
 use crate::tools::widgets;
+
+/// What a click on the welcome screen asks for, applied once the screen is drawn.
+enum WelcomeAction {
+    Open,
+    Clone,
+    Create,
+    Recent(std::path::PathBuf),
+    NextTip,
+}
 
 /// Room kept at the right of the status bar for the head commit and when the remotes were fetched,
 /// so a long checkout name is shortened before they are pushed out of view.
@@ -308,7 +318,111 @@ impl NiceGitApp {
         restore_on_double_click(ui.ctx(), &edges);
     }
 
+    /// The window shown while no repository is open: the three ways to start one, the recent
+    /// repositories that still exist, and a tip. The buttons call what the repository menu's
+    /// items call. The content scrolls, so a small window never clips it.
+    fn welcome_screen(&mut self, ui: &mut egui::Ui) {
+        let c = theme::of(ui);
+        let recent: Vec<std::path::PathBuf> =
+            self.settings.recent.iter().filter(|path| repositories::is_repository_folder(path)).take(8).cloned().collect();
+        let tip = tips::text(self.welcome_tip);
+        let mut action = None;
+        egui::ScrollArea::vertical().id_salt("welcome").auto_shrink([false, false]).show(ui, |ui| {
+            let width = (ui.available_width() - 32.0).clamp(200.0, 560.0);
+            ui.horizontal(|ui| {
+                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                ui.vertical(|ui| {
+                    ui.set_width(width);
+                    ui.add_space(28.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(RichText::new(icon::GIT_BRANCH).size(48.0).color(c.accent));
+                        ui.add_space(6.0);
+                        ui.label(RichText::new("Welcome to NiceGit").size(26.0).strong());
+                        ui.label(RichText::new("A fast Git client that keeps your work safe.").color(c.muted));
+                    });
+                    ui.add_space(18.0);
+                    let gap = 10.0;
+                    let narrow = width < 3.0 * 150.0 + 2.0 * gap;
+                    let button_width = if narrow { width } else { (width - 2.0 * gap) / 3.0 };
+                    // The first button is the primary one; the others are ordinary buttons.
+                    let start_button = |ui: &mut egui::Ui, label: String, primary: bool| -> bool {
+                        let text = RichText::new(label).size(15.0);
+                        let widget =
+                            if primary { egui::Button::new(text.color(c.accent_text)).fill(c.accent) } else { egui::Button::new(text) };
+                        ui.add(widget.min_size(egui::vec2(button_width, 44.0))).clicked()
+                    };
+                    let starts = [
+                        (format!("{}  Open repository…", icon::FOLDER_OPEN), true, WelcomeAction::Open),
+                        (format!("{}  Clone repository…", icon::DOWNLOAD_SIMPLE), false, WelcomeAction::Clone),
+                        (format!("{}  Create repository…", icon::PLUS), false, WelcomeAction::Create),
+                    ];
+                    if narrow {
+                        // Too narrow for a row: the three buttons stack as a column.
+                        ui.vertical_centered(|ui| {
+                            for (label, primary, to) in starts {
+                                if start_button(ui, label, primary) {
+                                    action = Some(to);
+                                }
+                                ui.add_space(gap);
+                            }
+                        });
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = gap;
+                            for (label, primary, to) in starts {
+                                if start_button(ui, label, primary) {
+                                    action = Some(to);
+                                }
+                            }
+                        });
+                    }
+                    if !recent.is_empty() {
+                        ui.add_space(24.0);
+                        widgets::section(ui, "Recent repositories");
+                        ui.add_space(4.0);
+                        for path in &recent {
+                            if repositories::recent_start_row(ui, path, c) {
+                                action = Some(WelcomeAction::Recent(path.clone()));
+                            }
+                        }
+                    }
+                    ui.add_space(18.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(RichText::new("Or drag a folder onto this window.").color(c.muted));
+                    });
+                    ui.add_space(14.0);
+                    egui::Frame::new().fill(c.card_bg).corner_radius(10.0).inner_margin(egui::Margin::symmetric(14, 12)).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(icon::LIGHTBULB).size(22.0).color(c.accent));
+                            ui.vertical(|ui| {
+                                ui.add(egui::Label::new(RichText::new(&tip)).wrap());
+                                ui.add_space(6.0);
+                                if ui.button("Next tip").clicked() {
+                                    action = Some(WelcomeAction::NextTip);
+                                }
+                            });
+                        });
+                    });
+                    ui.add_space(24.0);
+                });
+            });
+        });
+        match action {
+            Some(WelcomeAction::Open) => self.choose_folder(),
+            Some(WelcomeAction::Clone) => self.dialog = Some(dialogs::Dialog::clone_repository()),
+            Some(WelcomeAction::Create) => self.create_repository(),
+            Some(WelcomeAction::Recent(path)) => self.open(path),
+            Some(WelcomeAction::NextTip) => self.next_tip(),
+            None => {}
+        }
+    }
+
     fn empty_window(&mut self, ui: &mut egui::Ui) {
+        if self.repos.is_empty() && !self.git_missing {
+            self.welcome_screen(ui);
+            return;
+        }
         let c = theme::of(ui);
         let error = self.repo().and_then(|r| r.error.clone());
         let loading = self.repo().is_some_and(|r| r.loading);

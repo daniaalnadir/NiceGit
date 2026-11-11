@@ -263,6 +263,43 @@ impl NiceGitApp {
     }
 }
 
+/// Whether a folder is a repository NiceGit can open: it is a folder and holds a `.git` entry.
+pub fn is_repository_folder(path: &Path) -> bool {
+    path.is_dir() && path.join(".git").exists()
+}
+
+/// One row of the welcome screen's Recent repositories: the folder name, with its parent path
+/// muted under it. A click returns true; the row fills while the pointer is over it.
+pub fn recent_start_row(ui: &mut Ui, path: &Path, c: theme::Colors) -> bool {
+    let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+    let parent = path.parent().map(|parent| middle_truncate(&parent.display().to_string(), 56)).unwrap_or_default();
+    // The fill is drawn behind the row once its hover is known, so it is reserved first.
+    let background = ui.painter().add(egui::Shape::Noop);
+    let response = ui
+        .scope_builder(egui::UiBuilder::new().sense(egui::Sense::click()), |ui| {
+            egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+                // Selectable labels sense clicks and drags, so they would take the row's clicks.
+                ui.style_mut().interaction.selectable_labels = false;
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(icon::FOLDER).size(17.0).color(c.muted));
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.add(egui::Label::new(RichText::new(&name)).truncate());
+                        ui.add(egui::Label::new(RichText::new(&parent).small().color(c.muted)).truncate());
+                    });
+                });
+            });
+        })
+        .response;
+    let fill = if response.hovered() { c.card_bg } else { egui::Color32::TRANSPARENT };
+    ui.painter().set(background, egui::Shape::rect_filled(response.rect, 8.0, fill));
+    // Not "Recent repository", which the Repositories column's own Recent rows use.
+    let label = format!("Open recent repository {name}");
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+    response.clone().on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(path.display().to_string()).clicked()
+}
+
 /// A remembered repository in the Recent list, with what its row shows.
 struct RecentRow {
     path: PathBuf,
@@ -281,7 +318,7 @@ impl RecentRow {
             name: path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned()),
             parent: path.parent().map(|parent| parent.display().to_string()).unwrap_or_default(),
             opened,
-            missing: !(path.is_dir() && path.join(".git").exists()),
+            missing: !is_repository_folder(path),
         }
     }
 }

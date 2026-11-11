@@ -611,6 +611,8 @@ pub struct NiceGitApp {
     /// Whether the saved interface size has been applied since launch.
     pub(crate) zoom_applied: bool,
     pub git_missing: bool,
+    /// The tip the welcome screen shows, as an index into `ui::tips::TIPS`.
+    pub welcome_tip: usize,
     /// The repository path and exit channel of a merge tool that was opened and has not closed yet.
     /// It carries the tool's exit status, or nothing if the tool never started.
     pub merge_tool_exit: Option<(String, Receiver<std::io::Result<ExitStatus>>)>,
@@ -698,6 +700,7 @@ impl NiceGitApp {
             integrate_after_fetch: false,
             zoom_applied: false,
             git_missing: nicegit_core::runner::git_executable().is_none(),
+            welcome_tip: crate::ui::tips::starting_index(),
             generation: 0,
             was_focused: true,
             activation_refresh: false,
