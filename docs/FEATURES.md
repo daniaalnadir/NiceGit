@@ -25,6 +25,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 ## Current Features
 
 - Open any local Git repository.
+- With no repository open, a welcome screen offers Open repository, Clone repository, and
+  Create repository, the same as the Repository menu; it lists up to eight recent repositories
+  whose folders still exist, which open on a click, and says that folders can be dropped onto
+  the window. A tip card shows one of NiceGit's tips, and Next tip cycles through them. The
+  command palette's Show a tip shows the next tip as a notice.
 - Initialize repositories with a chosen first branch name, an optional README, and an optional
   first commit. A folder that is already a repository is refused rather than reinitialized, so
   open it instead.

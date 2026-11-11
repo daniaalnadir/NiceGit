@@ -24,6 +24,7 @@ enum Run {
     /// Opens a page of the repository on its host, as its full address.
     OpenHosted(String),
     Shortcuts,
+    ShowTip,
     Fetch,
     FetchRemote(String),
     Pull,
@@ -139,6 +140,7 @@ impl NiceGitApp {
             command("Show terminal", "Ctrl-`", icon::TERMINAL_WINDOW, has, Run::Terminal),
             command("Settings", "Appearance, graph colours, and diffs", icon::GEAR, true, Run::Settings),
             command("Keyboard shortcuts", "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
+            command("Show a tip", "The next tip about NiceGit, as a notice", icon::LIGHTBULB, true, Run::ShowTip),
             command("Open repository…", "Ctrl/Cmd-O", icon::FOLDER_OPEN, self.busy.is_none(), Run::Open),
             command("Clone repository…", "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
             command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
@@ -370,6 +372,7 @@ impl NiceGitApp {
             }
             Run::OpenHosted(url) => crate::ui::changes::open_url(&url),
             Run::Shortcuts => self.show_shortcuts = true,
+            Run::ShowTip => self.show_tip(),
             Run::Open => self.choose_folder(),
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
             Run::NewRepository => self.create_repository(),

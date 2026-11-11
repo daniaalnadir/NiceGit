@@ -70,7 +70,7 @@ fn create_a_repository_from_the_empty_window() {
     settle(&mut harness);
     assert!(harness.state().repos.is_empty(), "no repository is open at first");
 
-    harness.get_by_label_contains("New repository").click();
+    harness.get_by_label_contains("Create repository").click();
     wait(&mut harness, "the new repository dialog", |h| h.state().dialog.is_some());
     // Choose… fills in the folder, which does not exist yet; Create makes it.
     crate::file_dialog::answer_next(&folder);
