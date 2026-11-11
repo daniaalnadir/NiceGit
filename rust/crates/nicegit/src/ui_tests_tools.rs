@@ -621,7 +621,11 @@ fn the_launchpad_says_why_each_repository_is_not_available() {
         .with_program(missing)
         .with_glab_program(missing_glab);
     harness.state_mut().open_tool(Box::new(launchpad));
-    wait(&mut harness, "the Launchpad's answers", |h| shows(h, "Not available"));
+    // Each repository answers on its own; "Not available" shows with the first, so the wait is
+    // for both answers and for nothing still loading.
+    wait(&mut harness, "both repositories' answers", |h| {
+        shows(h, "The GitHub CLI (gh) is not installed") && shows(h, "The GitLab CLI (glab) is not installed") && !shows(h, "Loading")
+    });
     settle(&mut harness);
 
     assert!(shows(&harness, "Needs your review (0)"), "the sections are listed, empty");
