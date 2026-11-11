@@ -123,7 +123,7 @@ pub fn github_repository_for_remote(
     nicegit_core::github::GitHubRepository::parse_with_hosts(address, enterprise_hosts).ok()
 }
 
-/// The repository behind a remote's first fetch address, on GitHub, GitLab, or Bitbucket.
+/// The repository behind a remote's first fetch address, on GitHub, GitLab, Bitbucket, or Azure DevOps.
 pub fn hosted_repository_for_remote(snapshot: &nicegit_core::Snapshot, remote: &str, hosts: ListedHosts) -> Option<HostedRepository> {
     let address = snapshot.remote_fetch_addresses.get(remote)?.first()?;
     HostedRepository::parse(address, hosts).ok()
@@ -268,15 +268,17 @@ impl Forge {
     pub fn request_noun(&self) -> &'static str {
         match self.kind() {
             Host::GitLab => "merge request",
-            Host::GitHub | Host::Bitbucket => "pull request",
+            Host::GitHub | Host::Bitbucket | Host::AzureDevOps => "pull request",
         }
     }
 
-    /// The command-line tool that creates and reads the requests.
+    /// The command-line tool that creates and reads the requests. A forge is only ever GitHub or
+    /// GitLab here, so the other services have no tool to name.
     pub fn cli_name(&self) -> &'static str {
         match self.kind() {
             Host::GitLab => "GitLab CLI",
             Host::GitHub | Host::Bitbucket => "GitHub CLI",
+            Host::AzureDevOps => "Azure DevOps CLI",
         }
     }
 
@@ -346,12 +348,12 @@ fn single_host(links: &[WebLink]) -> Option<Host> {
     links.iter().all(|link| link.host == first).then_some(first)
 }
 
-/// The icon for a host: GitHub's and GitLab's logos, and a branch for Bitbucket, which has no logo here.
+/// The icon for a host: GitHub's and GitLab's logos, and a branch for Bitbucket and Azure DevOps, which have no logo here.
 pub fn host_glyph(host: Host) -> &'static str {
     match host {
         Host::GitHub => egui_phosphor::regular::GITHUB_LOGO,
         Host::GitLab => egui_phosphor::regular::GITLAB_LOGO,
-        Host::Bitbucket => egui_phosphor::regular::GIT_BRANCH,
+        Host::Bitbucket | Host::AzureDevOps => egui_phosphor::regular::GIT_BRANCH,
     }
 }
 
@@ -359,7 +361,7 @@ pub fn host_glyph(host: Host) -> &'static str {
 pub fn pull_request_label(host: Host) -> &'static str {
     match host {
         Host::GitLab => "Merge requests",
-        Host::GitHub | Host::Bitbucket => "Pull requests",
+        Host::GitHub | Host::Bitbucket | Host::AzureDevOps => "Pull requests",
     }
 }
 
@@ -836,6 +838,9 @@ mod tests {
         assert_eq!(super::open_label("Open file", std::slice::from_ref(&gitlab)), "Open file on GitLab");
         assert_eq!(super::open_label("Open", &[github.clone(), gitlab.clone()]), "Open in browser");
         assert_eq!(super::copy_commit_link_label(std::slice::from_ref(&github)), "Copy GitHub commit link");
+        let azure = WebLink { remote: "azure".into(), url: "https://dev.azure.com/a/b/_git/c/commit/1".into(), host: Host::AzureDevOps };
+        assert_eq!(super::open_label("Open", std::slice::from_ref(&azure)), "Open on Azure DevOps");
+        assert_eq!(super::copy_commit_link_label(std::slice::from_ref(&azure)), "Copy Azure DevOps commit link");
         assert_eq!(super::copy_commit_link_label(&[github, gitlab]), "Copy commit link");
     }
 

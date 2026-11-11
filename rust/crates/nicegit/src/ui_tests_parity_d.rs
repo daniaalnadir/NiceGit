@@ -339,6 +339,39 @@ fn push_the_missing_tags_to_a_remote_after_confirming() {
 }
 
 #[test]
+fn push_all_branches_to_a_remote_after_confirming() {
+    let repo = repository();
+    let path = repo.path();
+    let remote = bare_remote();
+    git(path, &["remote", "add", "origin", &remote.path().to_string_lossy()]);
+    // The fixture's `feature` branch is local only, so only it is new on the remote; `main` is already there.
+    git(path, &["push", "-q", "origin", "main"]);
+    let remote_branches = || git(remote.path(), &["for-each-ref", "--format=%(refname)", "refs/heads"]);
+    let mut harness = open(path);
+    loaded(&mut harness);
+
+    harness.get_by_label(&format!("{}  origin", icon::CLOUD)).click_secondary();
+    settle(&mut harness);
+    harness.get_by_label_contains("Push all branches to origin").click();
+    wait(&mut harness, "the push confirmation", |h| h.state().dialog.is_some());
+    settle(&mut harness);
+    match &harness.state().dialog {
+        Some(crate::ui::dialogs::Dialog::Confirm { title, message, .. }) => {
+            assert_eq!(title, "Push 2 branches to origin?");
+            assert!(message.contains("• feature (") && message.contains("• main ("), "{message}");
+        }
+        _ => panic!("the push confirmation should be open"),
+    }
+    assert!(!remote_branches().contains("feature"), "nothing is pushed before confirming");
+
+    harness.get_by_role_and_label(Role::Button, "Push branches").click();
+    idle(&mut harness);
+    wait(&mut harness, "the branches on the remote", |_| remote_branches().contains("refs/heads/feature"));
+    let notice = harness.state().notice.as_ref().map(|notice| notice.text.clone()).unwrap_or_default();
+    assert_eq!(notice, "Pushed 1 branch to origin. 1 branch already up to date on origin.");
+}
+
+#[test]
 fn delete_a_branch_from_its_remote() {
     let repo = repository();
     let path = repo.path();

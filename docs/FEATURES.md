@@ -201,6 +201,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Rename or remove remotes and edit their fetch URL in Repository Settings. A separate push URL
   can be set, changed, or cleared so pushes use the fetch URL.
 - Push a tag to a remote, or delete it from a remote, from the tag's context menu.
+- Push all local branches to a remote from the remote's right-click menu in the sidebar ("Push
+  all branches to <remote>…"). A confirmation lists each branch with its short tip. Each branch goes to the
+  branch of the same name on the remote; a remote branch is only fast-forwarded, never forced,
+  and tags are not pushed. A branch the remote refuses is named, and the others still go.
 - Ignore untracked files from the Changes panel: the exact path or its extension in
   `.gitignore`, or only on this computer via `info/exclude`.
 - Show a file's history, following renames, from a changed file's context menu in the
@@ -364,10 +368,11 @@ literally; message and author searches ignore case, and code-change search finds
 commits that add or remove the exact text. Comparisons with working files include
 staged and unstaged edits to tracked files but not untracked files.
 
-Remote edits and tag pushes check that the remote's addresses still match what was
+Remote edits, tag pushes, and branch pushes check that the remote's addresses still match what was
 shown. Tags are pushed with an explicit refspec and never replace a different tag of
 the same name on the remote; deleting a remote tag succeeds only while it still matches
-the local tag.
+the local tag. A push of all branches refuses if any branch has moved since its confirmation
+listed it, naming that branch, and it never forces a branch on the remote.
 
 File history lists up to 200 commits reachable from the current checkout that changed
 the file, newest first, and follows renames. Commits recorded under an earlier name
@@ -426,8 +431,9 @@ to check that branch out instead. The branch gets no upstream, nothing is pushed
 the same checks as Create and checkout branch apply: the working changes are carried across, and
 the branch is not made while a Git operation is unfinished or the built-in editor has unsaved text.
 Pull requests and issues are GitHub-only. Remotes on GitLab (gitlab.com, and self-hosted
-servers listed under GitLab in Settings) and Bitbucket (bitbucket.org) get browser links only,
-as described below; NiceGit makes no API calls for them and stores no token.
+servers listed under GitLab in Settings), Bitbucket (bitbucket.org), and Azure DevOps (dev.azure.com,
+ssh.dev.azure.com, and visualstudio.com addresses) get browser links only, as described below;
+NiceGit makes no API calls for them and stores no token.
 
 The Launchpad (Repository menu, or the command palette) lists open pull requests and GitLab merge
 requests across every repository open as a tab, and across a saved workspace's folders when you
@@ -453,13 +459,15 @@ merge/rebase, safe local rename/delete, deleting a remote branch from its remote
 since your last fetch), and copying the branch name or full commit SHA. They do not yet reproduce every GitKraken action.
 The Copy commit link submenu (named Copy GitHub commit link when every remote is on GitHub)
 uses an explicitly selected remote and a full commit hash. Remotes on github.com, gitlab.com,
-bitbucket.org, and the GitHub Enterprise and GitLab hosts listed in Settings are supported;
+bitbucket.org, dev.azure.com (and Azure DevOps addresses on visualstudio.com), and the GitHub
+Enterprise and GitLab hosts listed in Settings are supported;
 creating a link neither publishes the commit nor verifies that it already exists on the remote.
 Commits, branches, and the files in a commit can also be opened on the remote's host from their
-menus (Open on GitHub, Open on GitLab, or Open on Bitbucket; Open in browser when your remotes
-are on different hosts). With several remotes, you choose which one. Opening does not check
-that the commit or branch has been pushed. GitLab links use GitLab's `/-/` pages, and Bitbucket
-links use its commits, branch, and source pages.
+menus (Open on GitHub, Open on GitLab, Open on Bitbucket, or Open on Azure DevOps; Open in browser
+when your remotes are on different hosts). With several remotes, you choose which one. Opening does
+not check that the commit or branch has been pushed. GitLab links use GitLab's `/-/` pages, Bitbucket
+links use its commits, branch, and source pages, and Azure DevOps links use its `_git` repository
+pages, with branches and files named in the query.
 A remote on one of these hosts has an Open on <host> submenu in the sidebar's right-click menu:
 the repository's home page and its pull requests (merge requests on GitLab), plus issues and
 Actions on GitHub. The command palette opens the repository and its pull or merge requests (and

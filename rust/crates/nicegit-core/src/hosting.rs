@@ -1,7 +1,7 @@
-//! Web addresses for repositories on GitHub, GitLab, and Bitbucket: a repository's home page, its
-//! commits, branches, files, and pull or merge requests. A remote address is read into its parts
-//! and every link is built from those parts alone, so a credential or port in the remote never
-//! appears in a link. Nothing here calls the network or uses a token.
+//! Web addresses for repositories on GitHub, GitLab, Bitbucket, and Azure DevOps: a repository's
+//! home page, its commits, branches, files, and pull or merge requests. A remote address is read
+//! into its parts and every link is built from those parts alone, so a credential or port in the
+//! remote never appears in a link. Nothing here calls the network or uses a token.
 
 use crate::models::{GitError, Result};
 
@@ -11,6 +11,7 @@ pub enum Host {
     GitHub,
     GitLab,
     Bitbucket,
+    AzureDevOps,
 }
 
 impl Host {
@@ -20,6 +21,7 @@ impl Host {
             Host::GitHub => "GitHub",
             Host::GitLab => "GitLab",
             Host::Bitbucket => "Bitbucket",
+            Host::AzureDevOps => "Azure DevOps",
         }
     }
 }
@@ -91,6 +93,9 @@ fn classify(host: &str, hosts: ListedHosts) -> Option<Host> {
         "github.com" => Some(Host::GitHub),
         "gitlab.com" => Some(Host::GitLab),
         "bitbucket.org" => Some(Host::Bitbucket),
+        "dev.azure.com" | "ssh.dev.azure.com" | "vs-ssh.visualstudio.com" => Some(Host::AzureDevOps),
+        // An organization's own address, such as `contoso.visualstudio.com`.
+        _ if host.ends_with(".visualstudio.com") => Some(Host::AzureDevOps),
         _ if listed(hosts.github) => Some(Host::GitHub),
         _ if listed(hosts.gitlab) => Some(Host::GitLab),
         _ => None,
@@ -114,18 +119,80 @@ pub fn encode_path(text: &str) -> String {
     encoded
 }
 
+/// Undoes percent-encoding in a remote's address part. `None` for a malformed escape or bytes that
+/// are not UTF-8.
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = bytes.get(index + 1..index + 3)?;
+            if !hex.iter().all(u8::is_ascii_hexdigit) {
+                return None;
+            }
+            decoded.push(u8::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+/// An Azure DevOps organization, project, or repository name from an address, decoded once. It is
+/// encoded again when a link is built, so `%20` in the address is not encoded twice. Names cannot
+/// hold a slash, a percent sign, or a control character, and cannot be a dot segment.
+fn azure_name(part: &str) -> Option<String> {
+    let decoded = percent_decode(part)?;
+    let valid = !decoded.is_empty()
+        && decoded != "."
+        && decoded != ".."
+        && !decoded.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | '?' | '#' | '%'));
+    valid.then_some(decoded)
+}
+
 impl HostedRepository {
-    /// Reads the repository from a remote address on GitHub, GitLab, or Bitbucket. GitHub and
-    /// Bitbucket repositories are `owner/name`; GitLab repositories may sit in nested groups.
+    /// Reads an Azure DevOps repository from the host and path of its address. The web forms are
+    /// `dev.azure.com/{org}/{project}/_git/{repo}` and `{org}.visualstudio.com/{project}/_git/{repo}`;
+    /// the SSH forms are `v3/{org}/{project}/{repo}` on `ssh.dev.azure.com` and `vs-ssh.visualstudio.com`.
+    /// The owner is `{org}/{project}`, with each name decoded once.
+    fn parse_azure(host: &str, path: &str) -> Result<Self> {
+        let invalid = || GitError::failed("Hosting", "The repository address is invalid.");
+        let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+        let (organization, project, repository) = match (host, parts.as_slice()) {
+            ("dev.azure.com", [organization, project, "_git", repository]) => (*organization, *project, *repository),
+            ("ssh.dev.azure.com" | "vs-ssh.visualstudio.com", ["v3", organization, project, repository]) => {
+                (*organization, *project, *repository)
+            }
+            (_, [project, "_git", repository]) if host.ends_with(".visualstudio.com") && host != "vs-ssh.visualstudio.com" => {
+                let organization = host.strip_suffix(".visualstudio.com").filter(|name| !name.is_empty() && !name.contains('.'));
+                (organization.ok_or_else(invalid)?, *project, *repository)
+            }
+            _ => return Err(invalid()),
+        };
+        let organization = azure_name(organization).ok_or_else(invalid)?;
+        let project = azure_name(project).ok_or_else(invalid)?;
+        let repository = azure_name(repository.strip_suffix(".git").unwrap_or(repository)).ok_or_else(invalid)?;
+        Ok(Self { host: host.to_string(), kind: Host::AzureDevOps, owner_path: format!("{organization}/{project}"), name: repository })
+    }
+
+    /// Reads the repository from a remote address on GitHub, GitLab, Bitbucket, or Azure DevOps.
+    /// GitHub and Bitbucket repositories are `owner/name`; GitLab repositories may sit in nested
+    /// groups; Azure DevOps repositories are `organization/project` and a repository name.
     pub fn parse(address: &str, hosts: ListedHosts) -> Result<Self> {
         let unsupported = || GitError::failed("Hosting", "This remote is not a supported repository address.");
         let (host, path) = split_address(address).ok_or_else(unsupported)?;
         let Some(kind) = classify(&host, hosts) else {
             return Err(GitError::failed(
                 "Hosting",
-                "This remote is not on GitHub, GitLab, or Bitbucket, or a GitHub or GitLab host listed in Settings.",
+                "This remote is not on GitHub, GitLab, Bitbucket, or Azure DevOps, or a GitHub or GitLab host listed in Settings.",
             ));
         };
+        if kind == Host::AzureDevOps {
+            return Self::parse_azure(&host, path);
+        }
         let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
         let Some((last, owner)) = parts.split_last() else {
             return Err(GitError::failed("Hosting", "The remote must identify an owner and repository."));
@@ -134,6 +201,8 @@ impl HostedRepository {
         let owner_ok = match kind {
             Host::GitLab => !owner.is_empty(),
             Host::GitHub | Host::Bitbucket => owner.len() == 1,
+            // Azure DevOps addresses are read by `parse_azure`, before this point.
+            Host::AzureDevOps => false,
         };
         if !owner_ok {
             return Err(GitError::failed("Hosting", "The remote must identify an owner and repository."));
@@ -149,34 +218,50 @@ impl HostedRepository {
         format!("{}/{}", self.owner_path, self.name)
     }
 
-    /// The address of the site, such as `https://git.example.com`.
+    /// The address of the site, such as `https://git.example.com`. Azure DevOps links all use
+    /// `dev.azure.com`, whichever address the remote had.
     pub fn web_base(&self) -> String {
-        format!("https://{}", self.host)
+        match self.kind {
+            Host::AzureDevOps => "https://dev.azure.com".to_string(),
+            _ => format!("https://{}", self.host),
+        }
     }
 
     /// The repository's home page.
     pub fn home_url(&self) -> String {
-        format!("{}/{}", self.web_base(), self.slug())
+        match self.kind {
+            Host::AzureDevOps => format!("{}/{}/_git/{}", self.web_base(), encode_path(&self.owner_path), encode_path(&self.name)),
+            _ => format!("{}/{}", self.web_base(), self.slug()),
+        }
     }
 
-    /// The repository's pull requests (GitHub, Bitbucket) or merge requests (GitLab) list.
+    /// The repository's pull requests (GitHub, Bitbucket, Azure DevOps) or merge requests (GitLab) list.
     pub fn pull_requests_url(&self) -> String {
-        format!("{}/{}", self.home_url(), self.route("pulls", "-/merge_requests", "pull-requests"))
+        format!("{}/{}", self.home_url(), self.route("pulls", "-/merge_requests", "pull-requests", "pullrequests"))
     }
 
     /// A commit's page. It exists only once the commit is on the remote.
     pub fn commit_url(&self, commit: &str) -> String {
-        format!("{}/{}{}", self.home_url(), self.route("commit/", "-/commit/", "commits/"), encode_path(commit))
+        format!("{}/{}{}", self.home_url(), self.route("commit/", "-/commit/", "commits/", "commit/"), encode_path(commit))
     }
 
-    /// A branch's page, with its slashes kept.
+    /// A branch's page, with its slashes kept. Azure DevOps names the branch in a `version` query.
     pub fn branch_url(&self, branch: &str) -> String {
-        format!("{}/{}{}", self.home_url(), self.route("tree/", "-/tree/", "branch/"), encode_path(branch))
+        match self.kind {
+            Host::AzureDevOps => format!("{}?version=GB{}", self.home_url(), encode_path(branch)),
+            _ => format!("{}/{}{}", self.home_url(), self.route("tree/", "-/tree/", "branch/", ""), encode_path(branch)),
+        }
     }
 
-    /// A file's page as it was in `commit`, with the path's slashes kept.
+    /// A file's page as it was in `commit`, with the path's slashes kept. Azure DevOps names the
+    /// path and the commit in its query.
     pub fn file_url(&self, commit: &str, path: &str) -> String {
-        format!("{}/{}{}/{}", self.home_url(), self.route("blob/", "-/blob/", "src/"), encode_path(commit), encode_path(path))
+        match self.kind {
+            Host::AzureDevOps => {
+                format!("{}?path=/{}&version=GC{}", self.home_url(), encode_path(path), encode_path(commit))
+            }
+            _ => format!("{}/{}{}/{}", self.home_url(), self.route("blob/", "-/blob/", "src/", ""), encode_path(commit), encode_path(path)),
+        }
     }
 
     /// Another page of a GitHub repository, such as `issues` or `actions`. Other hosts have no
@@ -185,12 +270,13 @@ impl HostedRepository {
         (self.kind == Host::GitHub).then(|| format!("{}/{page}", self.home_url()))
     }
 
-    /// The path segment for this host's service: `github`, `gitlab`, or `bitbucket`.
-    fn route<'a>(&self, github: &'a str, gitlab: &'a str, bitbucket: &'a str) -> &'a str {
+    /// The path segment for this host's service, given for each service in turn.
+    fn route<'a>(&self, github: &'a str, gitlab: &'a str, bitbucket: &'a str, azure: &'a str) -> &'a str {
         match self.kind {
             Host::GitHub => github,
             Host::GitLab => gitlab,
             Host::Bitbucket => bitbucket,
+            Host::AzureDevOps => azure,
         }
     }
 }
@@ -325,5 +411,71 @@ mod tests {
         assert_eq!(split_address("me@host:a/b"), Some(("host".to_string(), "a/b")));
         assert_eq!(split_address("/srv/a:b"), Some(("/srv/a".to_string(), "b")), "a colon in a path reads as a host");
         assert_eq!(split_address("/srv/repo"), None);
+    }
+
+    fn azure(address: &str) -> HostedRepository {
+        let repository = parse(address).unwrap_or_else(|| panic!("{address} should be read"));
+        assert_eq!(repository.kind, Host::AzureDevOps, "{address}");
+        repository
+    }
+
+    #[test]
+    fn azure_devops_reads_each_of_its_address_forms() {
+        for address in [
+            "https://dev.azure.com/acme/Web/_git/shop",
+            "https://octo@dev.azure.com/acme/Web/_git/shop.git",
+            "git@ssh.dev.azure.com:v3/acme/Web/shop",
+            "https://acme.visualstudio.com/Web/_git/shop",
+            "acme@vs-ssh.visualstudio.com:v3/acme/Web/shop",
+        ] {
+            let repository = azure(address);
+            assert_eq!((repository.owner_path.as_str(), repository.name.as_str()), ("acme/Web", "shop"), "{address}");
+            assert_eq!(repository.home_url(), "https://dev.azure.com/acme/Web/_git/shop", "{address}");
+            assert_eq!(repository.kind.name(), "Azure DevOps");
+        }
+    }
+
+    #[test]
+    fn azure_devops_decodes_names_once_and_encodes_them_once_in_links() {
+        let encoded = azure("https://dev.azure.com/acme/My%20Project/_git/My%20Repo");
+        assert_eq!(encoded.owner_path, "acme/My Project");
+        assert_eq!(encoded.name, "My Repo");
+        assert_eq!(encoded.home_url(), "https://dev.azure.com/acme/My%20Project/_git/My%20Repo");
+        let spaced = azure("git@ssh.dev.azure.com:v3/acme/My Project/My Repo");
+        assert_eq!(spaced.home_url(), encoded.home_url(), "a space and %20 give the same link");
+        assert_eq!(encoded.pull_requests_url(), "https://dev.azure.com/acme/My%20Project/_git/My%20Repo/pullrequests");
+    }
+
+    #[test]
+    fn azure_devops_urls_use_its_own_routes() {
+        let repository = azure("https://dev.azure.com/acme/Web/_git/shop");
+        assert_eq!(repository.home_url(), "https://dev.azure.com/acme/Web/_git/shop");
+        assert_eq!(repository.pull_requests_url(), "https://dev.azure.com/acme/Web/_git/shop/pullrequests");
+        assert_eq!(repository.commit_url("abc123"), "https://dev.azure.com/acme/Web/_git/shop/commit/abc123");
+        assert_eq!(repository.branch_url("feature/x"), "https://dev.azure.com/acme/Web/_git/shop?version=GBfeature/x");
+        assert_eq!(repository.branch_url("feat #1?/a+b%"), "https://dev.azure.com/acme/Web/_git/shop?version=GBfeat%20%231%3F/a%2Bb%25");
+        assert_eq!(
+            repository.file_url("abc123", "dir/a b.txt"),
+            "https://dev.azure.com/acme/Web/_git/shop?path=/dir/a%20b.txt&version=GCabc123"
+        );
+        assert_eq!(repository.github_page_url("issues"), None, "Azure DevOps has no GitHub pages");
+    }
+
+    #[test]
+    fn azure_devops_refuses_other_shapes_and_bad_names() {
+        for address in [
+            "https://dev.azure.com/acme/Web/shop",
+            "https://dev.azure.com/acme/Web/_git",
+            "https://dev.azure.com/acme/Web/_git/a/b",
+            "git@ssh.dev.azure.com:acme/Web/shop",
+            "https://vs-ssh.visualstudio.com/acme/Web/_git/shop",
+            "https://acme.visualstudio.com/Web/shop",
+            "https://dev.azure.com/acme/Web/_git/%2E%2E",
+            "https://dev.azure.com/acme/Web/_git/a%2Fb",
+            "https://dev.azure.com/acme/Web/_git/a%ZZ",
+            "https://dev.azure.com:443/acme/Web/_git/shop",
+        ] {
+            assert_eq!(parse(address), None, "{address}");
+        }
     }
 }

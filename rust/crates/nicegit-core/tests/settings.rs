@@ -523,6 +523,86 @@ fn push_tags_reports_a_different_remote_tag_as_conflicting_and_never_moves_it() 
     assert_eq!(git(remote.path(), &["rev-parse", "refs/tags/v2"]).trim(), second);
 }
 
+/// The local branches of a repository with the commit each points to, as the push confirmation lists them.
+fn local_tips(directory: &Path) -> Vec<(String, String)> {
+    snapshot(directory).branches.iter().filter(|b| !b.is_remote && !b.is_detached()).map(|b| (b.name.clone(), b.tip.clone())).collect()
+}
+
+fn sorted(mut names: Vec<String>) -> Vec<String> {
+    names.sort();
+    names
+}
+
+#[test]
+fn push_branches_pushes_each_branch_and_reports_a_diverged_one_as_rejected() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    repo.git(&["branch", "feature", &first]);
+    repo.git(&["branch", "topic", &first]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+
+    let report = client().push_branches("origin", &local_tips(repo.path()), &expected, repo.path()).expect("push the three branches");
+    assert_eq!(sorted(report.pushed), ["feature", "main", "topic"]);
+
+    // main and feature move ahead, so they fast-forward. The remote's topic moves to a commit of its
+    // own, so the local topic, which also moves ahead, diverges and must be rejected.
+    let second = repo.commit("a.txt", "two\n", "Second");
+    repo.git(&["branch", "-f", "feature", &second]);
+    repo.git(&["branch", "-f", "topic", &second]);
+    let tree = git(remote.path(), &["rev-parse", &format!("{first}^{{tree}}")]).trim().to_string();
+    let other = git(
+        remote.path(),
+        &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit-tree", &tree, "-p", &first, "-m", "Remote"],
+    )
+    .trim()
+    .to_string();
+    git(remote.path(), &["update-ref", "refs/heads/topic", &other]);
+
+    let report = client().push_branches("origin", &local_tips(repo.path()), &expected, repo.path()).expect("push the listed branches");
+    assert_eq!(sorted(report.pushed), ["feature", "main"], "the fast-forwards went up");
+    assert_eq!(report.rejected, ["topic"], "the diverged branch is named as rejected");
+    assert!(report.up_to_date.is_empty());
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/topic"]).trim(), other, "the remote's topic is not replaced");
+    assert_eq!(git(remote.path(), &["rev-parse", "refs/heads/main"]).trim(), second);
+}
+
+#[test]
+fn the_branch_push_report_reads_each_status_flag_and_skips_other_lines() {
+    use nicegit_core::settings::parse_branch_push_report;
+    let output = "To /srv/remote.git\n*\tabc:refs/heads/new\t[new branch]\n \tdef:refs/heads/main\tabc..def\n\
+        =\t111:refs/heads/same\t[up to date]\n!\t222:refs/heads/topic\t[rejected] (non-fast-forward)\n\
+        *\tabc:refs/tags/v1\t[new tag]\nDone\n";
+    let report = parse_branch_push_report(output);
+    assert_eq!(report.pushed, ["new", "main"]);
+    assert_eq!(report.up_to_date, ["same"]);
+    assert_eq!(report.rejected, ["topic"], "a tag line is not a branch");
+}
+
+#[test]
+fn push_branches_refuses_a_branch_moved_after_listing_and_a_changed_push_url() {
+    let remote = bare_remote();
+    let repo = Repo::new();
+    let first = repo.commit("a.txt", "one\n", "First");
+    repo.git(&["remote", "add", "origin", &path_string(remote.path())]);
+    let expected = snapshot(repo.path()).remote_push_addresses["origin"].clone();
+    let listed = local_tips(repo.path());
+    assert_eq!(listed, [("main".to_string(), first)]);
+
+    repo.commit("a.txt", "two\n", "Second");
+    let message = error_text(client().push_branches("origin", &listed, &expected, repo.path()));
+    assert!(message.contains("main changed"), "{message}");
+    assert!(!branch_exists(remote.path(), "main"), "nothing was pushed");
+
+    let other = bare_remote();
+    repo.git(&["remote", "set-url", "--push", "origin", &path_string(other.path())]);
+    let fresh = local_tips(repo.path());
+    assert!(client().push_branches("origin", &fresh, &expected, repo.path()).is_err(), "a changed push URL is refused");
+    assert!(!branch_exists(other.path(), "main"), "nothing reached the new address");
+    assert!(error_text(client().push_branches("origin", &[], &expected, repo.path())).contains("no local branches"));
+}
+
 #[test]
 fn push_tags_refuses_a_tag_moved_after_listing_and_a_changed_push_url() {
     let remote = bare_remote();
