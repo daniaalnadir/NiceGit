@@ -333,6 +333,20 @@ pub struct Settings {
     /// Saved workspaces, in the order they were saved.
     #[serde(default)]
     pub workspaces: Vec<Workspace>,
+    /// Whether NiceGit asks GitHub once a day for the newest version number.
+    #[serde(default = "default_true")]
+    pub check_for_updates: bool,
+    /// When the newest version was last read from GitHub, in seconds since the Unix epoch; 0 when
+    /// it never was.
+    #[serde(default)]
+    pub last_update_check: u64,
+    /// The newest version the last check found, when it is newer than this build. Kept so the
+    /// notice still shows after a restart, before the next check.
+    #[serde(default)]
+    pub latest_version: Option<String>,
+    /// A version the person dismissed the update notice for; the notice stays hidden for it.
+    #[serde(default)]
+    pub dismissed_update: Option<String>,
 }
 
 /// How many recently opened repositories are remembered.
@@ -380,6 +394,10 @@ impl Default for Settings {
             hidden_branches: BTreeMap::new(),
             solo_branch: BTreeMap::new(),
             workspaces: Vec::new(),
+            check_for_updates: true,
+            last_update_check: 0,
+            latest_version: None,
+            dismissed_update: None,
         }
     }
 }
@@ -690,6 +708,50 @@ mod tests {
         let (valid, invalid) = parse_gitlab_hosts("GitLab.Example.com\ngitlab.com\nnot a host\ngitlab.example.com");
         assert_eq!(valid, vec!["gitlab.example.com"]);
         assert_eq!(invalid, vec!["not a host"]);
+    }
+
+    #[test]
+    fn update_check_settings_start_on_and_round_trip() {
+        let defaults = Settings::default();
+        assert!(defaults.check_for_updates, "checks are on until the person turns them off");
+        assert_eq!(defaults.last_update_check, 0);
+        assert_eq!(defaults.latest_version, None);
+        assert_eq!(defaults.dismissed_update, None);
+
+        let mut storage = MemoryStorage::default();
+        let settings = Settings {
+            check_for_updates: false,
+            last_update_check: 1_780_000_000,
+            latest_version: Some("2.1.0".into()),
+            dismissed_update: Some("2.0.5".into()),
+            ..Settings::default()
+        };
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("settings load");
+        assert!(!loaded.check_for_updates);
+        assert_eq!(loaded.last_update_check, 1_780_000_000);
+        assert_eq!(loaded.latest_version.as_deref(), Some("2.1.0"));
+        assert_eq!(loaded.dismissed_update.as_deref(), Some("2.0.5"));
+    }
+
+    #[test]
+    fn settings_saved_before_update_checks_still_load() {
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        // Each field is written after a comma, so removing it leaves a file from before the feature.
+        let older = saved
+            .replacen(",check_for_updates:true", "", 1)
+            .replacen(",last_update_check:0", "", 1)
+            .replacen(",latest_version:None", "", 1)
+            .replacen(",dismissed_update:None", "", 1);
+        assert_ne!(older, saved, "the fields are in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.check_for_updates, "an older file gets checks on");
+        assert_eq!(loaded.last_update_check, 0);
+        assert_eq!(loaded.latest_version, None);
+        assert_eq!(loaded.dismissed_update, None);
     }
 
     #[test]

@@ -129,6 +129,13 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   a repository from Repository Settings or the command palette.
 - Settings (Command-comma): System, Light, or Dark appearance; Standard, colour-blind safe,
   or Muted graph colours; and default diff options.
+- Updates: NiceGit asks GitHub once a day for the newest release's version number, through the
+  system `curl`, and sends nothing else. When a newer version exists, a notice along the bottom
+  of the window offers Download, which opens the releases page, and Dismiss, which hides that
+  version's notice. Turn checks off, or run Check now, under Settings > General. Settings also
+  links Report a problem, which opens a new bug report with NiceGit's version, your operating
+  system and its architecture, and the template's sections filled in, and Request a feature.
+  Both are in the command palette too. Neither includes repository paths or names.
 - GitFlow (Repository > GitFlow): set up, start feature, release, and hotfix branches, and
   finish them with no-fast-forward merges and version tags, compatible with git-flow.
 - Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose

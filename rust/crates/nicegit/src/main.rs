@@ -38,7 +38,10 @@ mod ui_tests_perf;
 #[cfg(test)]
 mod ui_tests_tools;
 #[cfg(test)]
+mod ui_tests_updates;
+#[cfg(test)]
 mod ui_tests_welcome;
+mod updates;
 mod worker;
 
 use std::path::PathBuf;

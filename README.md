@@ -12,7 +12,8 @@ with confidence: destructive actions confirm first, check that nothing changed b
 your back, and can usually be undone.
 
 There is no account, subscription, or paid tier, and nothing is sent anywhere except by
-Git itself. Built with Rust, and released under the [MIT License](LICENSE).
+Git itself and an optional daily check for a new version, which you can turn off in Settings.
+Built with Rust, and released under the [MIT License](LICENSE).
 
 > **Preview software:** NiceGit is under active development. Back up important work
 > before trying history-changing operations. The current version is 2.0.0.

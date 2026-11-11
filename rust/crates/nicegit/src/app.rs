@@ -656,6 +656,10 @@ pub struct NiceGitApp {
     /// The terminal panel under the history, when shown.
     pub terminal: Option<crate::tools::terminal::TerminalWindow>,
     fitted_to_monitor: bool,
+    /// The check for a newer NiceGit running in the background, if any.
+    pub update_check: Option<crate::updates::UpdateCheck>,
+    /// What the latest check the person asked for found, shown beside Settings' Check now button.
+    pub update_status: Option<crate::updates::UpdateStatus>,
 }
 
 /// A read of the tags one remote lacks. The repository and the remote's push addresses are
@@ -728,6 +732,8 @@ impl NiceGitApp {
             preview_light: false,
             terminal: None,
             fitted_to_monitor: false,
+            update_check: None,
+            update_status: None,
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
         app.active = app.settings.active.min(open.len().saturating_sub(1));
@@ -737,6 +743,8 @@ impl NiceGitApp {
         } else if !app.repos.is_empty() {
             app.load_repo(app.active, true);
         }
+        #[cfg(not(test))]
+        app.start_due_update_check();
         app
     }
 
@@ -2944,6 +2952,7 @@ impl eframe::App for NiceGitApp {
         self.receive_signing_setups();
         self.receive_message_copies(&ctx);
         self.finish_clone();
+        self.finish_update_check();
         self.finish_tag_scan();
         self.shortcuts(&ctx);
         self.drop_folders(&ctx);

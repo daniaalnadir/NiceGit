@@ -18,6 +18,7 @@ pub mod shortcuts_window;
 pub mod sidebar;
 pub mod tips;
 pub mod toolbar;
+pub mod updates;
 pub mod workspaces;
 
 use egui::{Key, KeyboardShortcut, Modifiers, RichText};
@@ -248,6 +249,8 @@ impl NiceGitApp {
     pub fn layout(&mut self, ui: &mut egui::Ui) {
         let c = theme::of(ui);
         let panel = egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::ZERO);
+        // The update notice spans the bottom of the window, so it is declared before the side panels.
+        self.update_notice(ui);
         // Side panels scale with the window so the history keeps a usable width on small screens.
         let width = ui.ctx().content_rect().width();
         // Each panel's draggable edge; double-clicking one restores that panel's default size.

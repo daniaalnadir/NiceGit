@@ -38,6 +38,14 @@ impl NiceGitApp {
             .show(ctx, |ui| {
               egui::ScrollArea::vertical().id_salt("settings-scroll").max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
                 let c = theme::of(ui);
+                widgets::section(ui, "General");
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.check_for_updates, "Check for new versions");
+                ui.label(
+                    RichText::new("Asks GitHub once a day for the latest version number. Nothing else is sent.").small().color(c.muted),
+                );
+                ui.add_space(4.0);
+                self.update_check_controls(ui);
+                ui.add_space(10.0);
                 widgets::section(ui, "Appearance");
                 ui.horizontal(|ui| {
                     for (value, label) in [(Appearance::System, "System"), (Appearance::Light, "Light"), (Appearance::Dark, "Dark")] {
@@ -251,8 +259,16 @@ impl NiceGitApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("NiceGit {}", env!("CARGO_PKG_VERSION"))).small().color(c.muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Laid out from the right, so the links read Report a problem, Request a feature,
+                        // Keyboard shortcuts.
                         if ui.link("Keyboard shortcuts").clicked() {
                             show_shortcuts = true;
+                        }
+                        if ui.link("Request a feature").clicked() {
+                            crate::ui::changes::open_url(nicegit_core::feedback::FEATURE_REQUEST_URL);
+                        }
+                        if ui.link("Report a problem").clicked() {
+                            crate::ui::changes::open_url(&crate::updates::bug_report_url());
                         }
                     });
                 });
