@@ -89,7 +89,9 @@ token is in the `release` environment.
   (`Casks/nicegit.rb`; `packaging/homebrew/nicegit.rb` here is a copy). The job sets the
   cask's version and the DMG's checksum from `SHA256SUMS.txt` and pushes the change. Secret
   `HOMEBREW_TAP_TOKEN`: a fine-grained token with Contents read and write on the tap only.
-  People install with `brew install --cask daniaalnadir/nicegit/nicegit`.
+  People install with `brew trust daniaalnadir/nicegit`, then
+  `brew install --cask daniaalnadir/nicegit/nicegit`; Homebrew requires the trust step for
+  any tap outside Homebrew itself.
 - **winget:** the job runs `wingetcreate update DaniaalNadir.NiceGit`, which opens a pull
   request to microsoft/winget-pkgs from the token owner's fork. Secret `WINGET_TOKEN`: a
   classic token with `public_repo`. The package must exist in winget-pkgs first: submit

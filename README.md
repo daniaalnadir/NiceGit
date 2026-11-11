@@ -90,6 +90,16 @@ Download the latest build for your system from
 | Debian, Ubuntu, and derivatives | `NiceGit-…-linux-amd64.deb` |
 | Other Linux (x86_64) | `NiceGit-…-linux-x86_64.tar.gz` |
 
+On macOS you can also install with [Homebrew](https://brew.sh):
+
+```sh
+brew trust daniaalnadir/nicegit
+brew install --cask daniaalnadir/nicegit/nicegit
+```
+
+`brew trust` is needed once, because the cask lives in NiceGit's own tap rather than in
+Homebrew itself.
+
 NiceGit is written in Rust; its source is in [`rust/`](rust). It includes the commit graph
 and inspector, line-by-line staging, interactive rebase, conflict editing, undo, blame,
 file history, search, bisect, comparisons, worktrees, submodules, GitFlow, Git LFS, pull
