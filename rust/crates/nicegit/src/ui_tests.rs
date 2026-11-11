@@ -125,6 +125,16 @@ pub(crate) fn open(path: &Path) -> Harness<'static, NiceGitApp> {
     })
 }
 
+/// How long a test waits for the app before failing. The Windows CI runner is several times slower
+/// than a developer machine, so it gets three times the time.
+pub(crate) fn test_timeout() -> Duration {
+    if cfg!(windows) {
+        Duration::from_secs(90)
+    } else {
+        Duration::from_secs(30)
+    }
+}
+
 /// Runs frames until `done` holds, failing after a generous timeout.
 pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done: impl Fn(&Harness<'static, NiceGitApp>) -> bool) {
     let start = Instant::now();
@@ -143,8 +153,24 @@ pub(crate) fn wait(harness: &mut Harness<'static, NiceGitApp>, what: &str, done:
             note_progress(|| format!("finished waiting for {what}"));
             return;
         }
-        assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for {what}");
+        assert!(start.elapsed() < test_timeout(), "timed out waiting for {what}");
         std::thread::sleep(Duration::from_millis(15));
+    }
+}
+
+/// Clicks with `click` every few frames until `done` holds, for buttons that stay disabled while
+/// the app is busy, or that are redrawn while loading. Fails after the same limit as `wait`.
+pub(crate) fn click_until(
+    harness: &mut Harness<'static, NiceGitApp>,
+    what: &str,
+    click: impl Fn(&Harness<'static, NiceGitApp>),
+    done: impl Fn(&Harness<'static, NiceGitApp>) -> bool,
+) {
+    let start = Instant::now();
+    while !done(harness) {
+        click(harness);
+        harness.run_steps(5);
+        assert!(start.elapsed() < test_timeout(), "timed out waiting for {what}");
     }
 }
 
@@ -1120,14 +1146,16 @@ fn start_work_on_an_issue_creates_its_branch_at_head() {
     settle(&mut harness);
     // The button can still be waiting for the dialog's background read on a slow runner, so the
     // click is repeated until the dialog closes.
-    let start = std::time::Instant::now();
-    while matches!(harness.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { .. })) {
-        if let Some(button) = harness.query_by_label("Start work") {
-            button.click();
-        }
-        harness.run_steps(5);
-        assert!(start.elapsed() < std::time::Duration::from_secs(30), "the Start work button never ran");
-    }
+    click_until(
+        &mut harness,
+        "the Start work button to run",
+        |h| {
+            if let Some(button) = h.query_by_label("Start work") {
+                button.click();
+            }
+        },
+        |h| !matches!(h.state().dialog, Some(crate::ui::dialogs::Dialog::StartIssueWork { .. })),
+    );
     idle(&mut harness);
     wait(&mut harness, "the new branch to be checked out", |_| {
         git(repo.path(), &["symbolic-ref", "--short", "HEAD"]) == "12-login-fails-on-safari"
@@ -1180,6 +1208,8 @@ fn start_work_refuses_a_default_branch_that_moved_after_it_was_shown() {
     settle(&mut harness);
     harness.get_by_label_contains("(the default branch)").click();
     settle(&mut harness);
+    // Choosing the default branch starts a background read, so the button is clicked once idle.
+    idle(&mut harness);
     harness.get_by_label("Start work").click();
     idle(&mut harness);
 

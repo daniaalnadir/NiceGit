@@ -2106,7 +2106,7 @@ fn the_change_buttons_stay_while_a_refresh_reloads_the_diff() {
                 break;
             }
         }
-        assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for the refresh to reload the diff");
+        assert!(start.elapsed() < test_timeout(), "timed out waiting for the refresh to reload the diff");
         std::thread::sleep(Duration::from_millis(5));
     }
     wait_for_stageable_lines(&mut harness);
@@ -2718,7 +2718,7 @@ fn copy_a_commits_message_read_in_the_background() {
     while copied.is_empty() {
         harness.step();
         copied = copied_in_last_frame(&mut harness);
-        assert!(start.elapsed() < Duration::from_secs(30), "the message was never copied");
+        assert!(start.elapsed() < test_timeout(), "the message was never copied");
         std::thread::sleep(Duration::from_millis(15));
     }
     assert_eq!(copied, vec![message.to_string()]);

@@ -774,7 +774,10 @@ fn context_selector_shows_the_whole_file() {
     assert_eq!(harness.state().settings.diff_context, crate::settings::DiffContextSetting::WholeFile);
 
     // Lines can still be staged with the whole file shown.
+    // Showing the whole file reloads the diff in the background, which can leave Stage disabled.
+    idle(&mut harness);
     crate::ui_tests_more::hover_change_until(&mut harness, "Stage this change");
+    idle(&mut harness);
     harness.get_by_label("Stage this change").click();
     idle(&mut harness);
     wait(&mut harness, "the change staged", |_| git(path, &["diff", "--cached"]).contains("-line 5\n+five"));
