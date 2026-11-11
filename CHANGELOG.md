@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- The Changes panel stays fast with thousands of changed files; only visible rows are drawn.
+- A welcome screen with start buttons, recent repositories, and tips when no repository
+  is open.
+- NiceGit checks once a day for a newer version (Settings can turn it off), and Settings and
+  the command palette can report a problem or request a feature.
+- Push all local branches to a remote from its menu, and open Azure DevOps repositories
+  in the browser.
+- The website has a guide, the repository has Discussions and a feature request template, and
+  release builds can be signed for Windows and published to Homebrew and winget.
+
 ## 2.0.0 - Room to work
 
 NiceGit 2.0 is the first release since 1.0.0. It brings together everything below, including
