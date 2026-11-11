@@ -757,6 +757,7 @@ fn saving_a_copied_version_in_the_conflict_editor_resolves_the_file() {
     wait(&mut harness, "the save button to be enabled", |h| {
         h.query_by_label("Save and mark resolved").is_some_and(|button| !button.accesskit_node().is_disabled())
     });
+    idle(&mut harness);
     harness.get_by_label("Save and mark resolved").click();
     wait(&mut harness, "the conflict to be resolved", |h| {
         h.state().snapshot().is_some_and(|s| !s.status.iter().any(|e| e.kind == nicegit_core::StatusKind::Conflicted))
@@ -859,22 +860,6 @@ fn git_settings_adds_lists_and_removes_a_local_setting() {
     );
     idle(&mut harness);
     wait(&mut harness, "the removed setting to leave the list", |h| h.query_by_label("Remove nicegit.test").is_none());
-}
-
-/// Clicks with `click` every few frames until `done` holds, for buttons that stay disabled while
-/// the app is busy. Fails after 30 seconds.
-fn click_until(
-    harness: &mut Harness<'static, NiceGitApp>,
-    what: &str,
-    click: impl Fn(&Harness<'static, NiceGitApp>),
-    done: impl Fn(&Harness<'static, NiceGitApp>) -> bool,
-) {
-    let start = std::time::Instant::now();
-    while !done(harness) {
-        click(harness);
-        harness.run_steps(5);
-        assert!(start.elapsed() < std::time::Duration::from_secs(30), "timed out waiting for {what}");
-    }
 }
 
 #[test]
