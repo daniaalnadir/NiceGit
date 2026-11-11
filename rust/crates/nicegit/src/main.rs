@@ -36,7 +36,10 @@ mod ui_tests_parity_f;
 #[cfg(test)]
 mod ui_tests_tools;
 #[cfg(test)]
+mod ui_tests_updates;
+#[cfg(test)]
 mod ui_tests_welcome;
+mod updates;
 mod worker;
 
 use std::path::PathBuf;

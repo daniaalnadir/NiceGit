@@ -308,7 +308,8 @@ fn palette_switches_to_a_branch_by_its_name() {
 
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
-    harness.event(egui::Event::Text("feature".into()));
+    // Typed in full: "feature" alone also matches Request a feature, which now ranks first.
+    harness.event(egui::Event::Text("switch to feature".into()));
     wait(&mut harness, "the switch command", |h| h.query_by_label_contains("Switch to feature").is_some());
     harness.key_press(Key::Enter);
     idle(&mut harness);

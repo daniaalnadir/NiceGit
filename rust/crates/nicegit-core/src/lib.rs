@@ -14,6 +14,7 @@ pub mod conflict;
 pub mod containing;
 pub mod diff;
 pub mod external;
+pub mod feedback;
 pub mod file_history;
 pub mod git_config;
 pub mod gitflow;
@@ -39,6 +40,7 @@ pub mod staging;
 pub mod submodule;
 pub mod tracked;
 pub mod undo;
+pub mod updates;
 pub mod worktree;
 
 pub use client::{GitClient, NewRepository, PullStrategy};

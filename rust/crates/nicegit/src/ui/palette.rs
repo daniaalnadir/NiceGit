@@ -23,6 +23,8 @@ enum Run {
     PullRequest(String),
     /// Opens a page of the repository on its host, as its full address.
     OpenHosted(String),
+    /// Opens a web address that is not a page of the repository, such as a feedback form.
+    Link(String),
     Shortcuts,
     ShowTip,
     Fetch,
@@ -141,6 +143,20 @@ impl NiceGitApp {
             command("Settings", "Appearance, graph colours, and diffs", icon::GEAR, true, Run::Settings),
             command("Keyboard shortcuts", "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
             command("Show a tip", "The next tip about NiceGit, as a notice", icon::LIGHTBULB, true, Run::ShowTip),
+            command(
+                "Report a problem",
+                "Open a GitHub issue with NiceGit's version and your platform filled in",
+                icon::BUG,
+                true,
+                Run::Link(crate::updates::bug_report_url()),
+            ),
+            command(
+                "Request a feature",
+                "Open a GitHub feature request",
+                icon::LIGHTBULB,
+                true,
+                Run::Link(nicegit_core::feedback::FEATURE_REQUEST_URL.to_string()),
+            ),
             command("Open repository…", "Ctrl/Cmd-O", icon::FOLDER_OPEN, self.busy.is_none(), Run::Open),
             command("Clone repository…", "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
             command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
@@ -370,7 +386,7 @@ impl NiceGitApp {
                     self.open_pull_request(ctx, &branch);
                 }
             }
-            Run::OpenHosted(url) => crate::ui::changes::open_url(&url),
+            Run::OpenHosted(url) | Run::Link(url) => crate::ui::changes::open_url(&url),
             Run::Shortcuts => self.show_shortcuts = true,
             Run::ShowTip => self.show_tip(),
             Run::Open => self.choose_folder(),
