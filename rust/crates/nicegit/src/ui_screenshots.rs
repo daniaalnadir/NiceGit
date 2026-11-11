@@ -58,9 +58,9 @@ fn screenshots() {
         // Commits waiting to be pulled, counted on the Fetch button.
         let active = harness.state().active;
         let behind = harness.state().repos[active].snapshot.as_ref().and_then(|s| s.behind);
-        harness.state_mut().repos[active].snapshot.as_mut().unwrap().behind = Some(3);
+        harness.state_mut().repos[active].snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().behind = Some(3);
         save(&mut harness, &folder, &format!("toolbar-badge-{theme}"));
-        harness.state_mut().repos[active].snapshot.as_mut().unwrap().behind = behind;
+        harness.state_mut().repos[active].snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().behind = behind;
 
         // The menu that chooses what the Fetch and Pull button does.
         harness.get_by_label("Fetch and Pull options").click();
@@ -138,9 +138,9 @@ fn screenshots() {
         wide.state_mut().clear_selection();
         let active = wide.state().active;
         let behind = wide.state().repos[active].snapshot.as_ref().and_then(|s| s.behind);
-        wide.state_mut().repos[active].snapshot.as_mut().unwrap().behind = Some(3);
+        wide.state_mut().repos[active].snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().behind = Some(3);
         save(&mut wide, &folder, &format!("toolbar-badge-wide-{theme}"));
-        wide.state_mut().repos[active].snapshot.as_mut().unwrap().behind = behind;
+        wide.state_mut().repos[active].snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().behind = behind;
         wide.get_by_label("History columns").click_secondary();
         wait(&mut wide, "the columns menu", |h| h.query_by_label("Restore column widths").is_some());
         save(&mut wide, &folder, &format!("history-columns-menu-{theme}"));
