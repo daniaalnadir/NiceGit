@@ -30,9 +30,14 @@
         <Component Id="App">
           <File Id="NiceGitExe" Source="$(var.SourceDir)\nicegit.exe" KeyPath="yes" />
         </Component>
-        <Component Id="Notices">
-          <File Id="License" Source="$(var.SourceDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+        <!-- One file each, so WiX can give the unversioned files stable component GUIDs. -->
+        <Component Id="License">
+          <File Id="License" Source="$(var.SourceDir)\LICENSE" Name="LICENSE.txt" />
+        </Component>
+        <Component Id="ThirdPartyLicenses">
           <File Id="ThirdPartyLicenses" Source="$(var.SourceDir)\THIRD_PARTY_LICENSES.txt" />
+        </Component>
+        <Component Id="Readme">
           <File Id="Readme" Source="$(var.SourceDir)\README.md" />
         </Component>
       </Directory>
@@ -52,7 +57,9 @@
 
     <Feature Id="Main">
       <ComponentRef Id="App" />
-      <ComponentRef Id="Notices" />
+      <ComponentRef Id="License" />
+      <ComponentRef Id="ThirdPartyLicenses" />
+      <ComponentRef Id="Readme" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
   </Package>

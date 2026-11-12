@@ -60,7 +60,7 @@ cargo deb -p nicegit --no-build --output "$dist/NiceGit-$version-linux-$debarch.
 
 # RPM package. Pre-release versions such as 2.1.0-rc.1 use RPM's ~ so they sort before 2.1.0.
 rpm_version="$(printf '%s' "$version" | tr - '~')"
-cargo generate-rpm -p nicegit \
+cargo generate-rpm -p crates/nicegit \
     --set-metadata "version = \"$rpm_version\"" \
     --output "$dist/$name.rpm"
 
