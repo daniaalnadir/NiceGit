@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The NiceGit Windows installer, built with WiX Toolset 6 by rust/scripts/package-windows.ps1.
+  It installs for all users into Program Files\NiceGit and adds a Start menu shortcut. Installing
+  a newer version replaces the older one. Keep UpgradeCode unchanged: Windows uses it to recognise
+  every NiceGit version as the same product.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="NiceGit"
+           Manufacturer="Daniaal Nadir"
+           Version="$(var.Version)"
+           UpgradeCode="{20711CC9-24B2-4A73-9AD2-CCC463165FC1}"
+           Scope="perMachine"
+           Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of NiceGit is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="NiceGit.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="NiceGit.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://daniaalnadir.github.io/NiceGit/" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/daniaalnadir/NiceGit/issues" />
+
+    <!-- A licence page, then Install. -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="NiceGit">
+        <Component Id="App">
+          <File Id="NiceGitExe" Source="$(var.SourceDir)\nicegit.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="Notices">
+          <File Id="License" Source="$(var.SourceDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+          <File Id="ThirdPartyLicenses" Source="$(var.SourceDir)\THIRD_PARTY_LICENSES.txt" />
+          <File Id="Readme" Source="$(var.SourceDir)\README.md" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="NiceGitShortcut"
+                  Name="NiceGit"
+                  Description="A fast, free and open-source Git client"
+                  Target="[INSTALLFOLDER]nicegit.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKLM" Key="Software\NiceGit" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main">
+      <ComponentRef Id="App" />
+      <ComponentRef Id="Notices" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

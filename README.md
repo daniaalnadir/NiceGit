@@ -86,9 +86,14 @@ Download the latest build for your system from
 | System | File |
 | --- | --- |
 | macOS 11 or newer (Apple Silicon and Intel) | `NiceGit-…-macos-universal.dmg` |
-| Windows 10 or newer (64-bit) | `NiceGit-…-windows-x64.zip` |
-| Debian, Ubuntu, and derivatives | `NiceGit-…-linux-amd64.deb` |
-| Other Linux (x86_64) | `NiceGit-…-linux-x86_64.tar.gz` |
+| Windows 10 or newer, installer | `NiceGit-…-windows-x64.msi` (ARM: `…-windows-arm64.msi`) |
+| Windows 10 or newer, portable | `NiceGit-…-windows-x64.zip` (ARM: `…-windows-arm64.zip`) |
+| Debian, Ubuntu, and derivatives | `NiceGit-…-linux-amd64.deb` (ARM: `…-linux-arm64.deb`) |
+| Fedora, RHEL, and openSUSE | `NiceGit-…-linux-x86_64.rpm` (ARM: `…-linux-aarch64.rpm`) |
+| Any Linux, no installation | `NiceGit-…-linux-x86_64.AppImage` (ARM: `…-linux-aarch64.AppImage`) |
+| Any Linux, archive | `NiceGit-…-linux-x86_64.tar.gz` (ARM: `…-linux-aarch64.tar.gz`) |
+
+The Linux downloads need glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36, or later).
 
 On macOS you can also install with [Homebrew](https://brew.sh):
 
@@ -117,9 +122,9 @@ cargo run --release
 ```
 
 On Linux, first install the GTK 3, xkbcommon, and Wayland or X11 development
-packages (for example `libgtk-3-dev libxkbcommon-dev libwayland-dev`). The tarball build
-also needs `libxkbcommon-x11-0` and OpenGL (`libgl1`, `libegl1`) at run time; the `.deb`
-installs them for you.
+packages (for example `libgtk-3-dev libxkbcommon-dev libwayland-dev`). The AppImage and
+tarball also need `libxkbcommon-x11-0` and OpenGL (`libgl1`, `libegl1`) at run time; the
+`.deb` and `.rpm` install them for you.
 
 ### Optional: GitHub pull requests and issues
 
@@ -165,7 +170,8 @@ records hard-won rules about Git edge cases that changes must respect.
   Bitbucket. Pushing and pulling work with any Git remote.
 - Undo steps back through the last 20 recorded actions in this session; changes made outside
   NiceGit stop the chain.
-- There are no automatic updates; download new versions from the Releases page.
+- NiceGit tells you when a new version is out, but doesn't install it; download it from the
+  Releases page, or upgrade through Homebrew or winget.
 - The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
   can run code. Only open repositories you trust.
 
