@@ -50,9 +50,10 @@
         <p>NiceGit needs <a href="https://git-scm.com/downloads">Git</a> installed and on your <code>PATH</code>. Download NiceGit from the <a href="https://github.com/daniaalnadir/NiceGit/releases/latest">latest release</a>:</p>
         <ul>
           <li><strong>macOS 11 or newer:</strong> open the <code>.dmg</code> and drag NiceGit to Applications. The app is signed and notarized by Apple. With <a href="https://brew.sh">Homebrew</a>, run <code>brew trust daniaalnadir/nicegit</code> once, then <code>brew install --cask daniaalnadir/nicegit/nicegit</code>.</li>
-          <li><strong>Windows 10 or newer:</strong> extract the <code>.zip</code> and run <code>nicegit.exe</code>. If SmartScreen warns about an unknown publisher, choose <em>More info</em>, then <em>Run anyway</em>.</li>
-          <li><strong>Debian and Ubuntu:</strong> install the <code>.deb</code> with <code>sudo apt install ./NiceGit-*-linux-amd64.deb</code>.</li>
-          <li><strong>Other Linux:</strong> extract the <code>.tar.gz</code> and run <code>nicegit</code>. It needs <code>libxkbcommon-x11-0</code> and OpenGL (<code>libgl1</code>, <code>libegl1</code>).</li>
+          <li><strong>Windows 10 or newer:</strong> run the <code>.msi</code> installer, which adds NiceGit to the Start menu, or extract the <code>.zip</code> and run <code>nicegit.exe</code> without installing. Pick <code>arm64</code> for Windows on ARM, otherwise <code>x64</code>. If SmartScreen warns about an unknown publisher, choose <em>More info</em>, then <em>Run anyway</em>.</li>
+          <li><strong>Debian and Ubuntu:</strong> install the <code>.deb</code> with <code>sudo apt install ./NiceGit-*.deb</code>.</li>
+          <li><strong>Fedora, RHEL and openSUSE:</strong> install the <code>.rpm</code> with <code>sudo dnf install ./NiceGit-*.rpm</code> (or <code>zypper install</code>).</li>
+          <li><strong>Any other Linux:</strong> make the <code>.AppImage</code> executable and run it, or extract the <code>.tar.gz</code> and run <code>nicegit</code>. Both need <code>libxkbcommon-x11-0</code> and OpenGL (<code>libgl1</code>, <code>libegl1</code>).</li>
         </ul>
         <p>NiceGit asks GitHub once a day whether a newer version exists, and shows a notice with a download link when one does. Nothing else is sent. Turn it off, or check by hand, under <strong>Settings › General</strong>.</p>
         <p>Every download includes the licences of the open-source components built into NiceGit. <code>SHA256SUMS.txt</code> on the release page lets you check a download.</p>

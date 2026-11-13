@@ -47,3 +47,19 @@ assets = [
     ["../../assets/icon-256.png", "usr/share/icons/hicolor/256x256/apps/nicegit.png", "644"],
     ["../../dist/THIRD_PARTY_LICENSES.txt", "usr/share/doc/nicegit/THIRD_PARTY_LICENSES.txt", "644"],
 ]
+
+# The .rpm download, made by cargo-generate-rpm in rust/scripts/package-linux.sh. Library
+# dependencies are found from the binary; Git is needed at run time.
+[package.metadata.generate-rpm]
+name = "nicegit"
+summary = "A fast, free and open-source Git client"
+url = "https://daniaalnadir.github.io/NiceGit/"
+assets = [
+    { source = "target/release/nicegit", dest = "/usr/bin/nicegit", mode = "755" },
+    { source = "../../packaging/linux/nicegit.desktop", dest = "/usr/share/applications/nicegit.desktop", mode = "644" },
+    { source = "../../assets/icon-256.png", dest = "/usr/share/icons/hicolor/256x256/apps/nicegit.png", mode = "644" },
+    { source = "../../dist/THIRD_PARTY_LICENSES.txt", dest = "/usr/share/doc/nicegit/THIRD_PARTY_LICENSES.txt", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+git = "*"
