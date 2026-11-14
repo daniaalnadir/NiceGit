@@ -6,6 +6,7 @@ mod diff_view;
 mod file_dialog;
 mod git_ext;
 mod graph_view;
+mod preload;
 mod settings;
 mod syntax;
 mod theme;
@@ -39,6 +40,8 @@ mod ui_tests_parity_f;
 #[cfg(test)]
 mod ui_tests_perf;
 #[cfg(test)]
+mod ui_tests_speed;
+#[cfg(test)]
 mod ui_tests_tools;
 #[cfg(test)]
 mod ui_tests_updates;
@@ -59,6 +62,8 @@ fn main() -> eframe::Result {
     timing::start();
     // A folder passed on the command line opens straight away, as `nicegit .` would.
     let initial = std::env::args_os().nth(1).map(PathBuf::from);
+    // Read the first repository while the window and renderer are created.
+    preload::start(initial.as_deref());
     // Folders dropped onto the window open as repositories.
     let mut viewport = egui::ViewportBuilder::default()
         .with_drag_and_drop(true)
@@ -71,12 +76,9 @@ fn main() -> eframe::Result {
     }
     #[allow(unused_mut)]
     let mut options = eframe::NativeOptions { viewport, ..Default::default() };
-    // On Windows, draw with wgpu (Direct3D 12) unless NICEGIT_RENDERER=glow asks otherwise.
-    #[cfg(not(windows))]
-    if std::env::var("NICEGIT_RENDERER").as_deref() == Ok("wgpu") {
-        options.renderer = eframe::Renderer::Wgpu;
-    }
-    #[cfg(windows)]
+    // On Windows and macOS, draw with wgpu (Direct3D 12 or Metal) unless NICEGIT_RENDERER=glow
+    // asks for OpenGL.
+    #[cfg(any(windows, target_os = "macos"))]
     if std::env::var("NICEGIT_RENDERER").as_deref() != Ok("glow") {
         options.renderer = eframe::Renderer::Wgpu;
     }

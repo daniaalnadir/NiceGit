@@ -12,12 +12,14 @@ publish = false
 
 [dependencies]
 nicegit-core = { path = "../nicegit-core" }
-eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wgpu", "persistence", "wayland", "x11"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "persistence", "wayland", "x11"] }
 egui = "0.37"
 rfd = "0.17"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "tiff", "ico"] }
 egui-phosphor = "0.14.0"
 serde = { version = "1.0.229", features = ["derive"] }
+# The start-up hint file (see preload.rs), in the format eframe already uses for settings.
+ron = "0.12"
 notify = "8.2.0"
 alacritty_terminal = "0.26.0"
 # Pure-Rust regex (no C toolchain) with the default Sublime Text syntaxes and themes, for diff colours.
@@ -26,6 +28,11 @@ syntect = { version = "5.3", default-features = false, features = ["default-synt
 # Windows machines without GPU drivers (virtual machines, Remote Desktop) lack the OpenGL 2.0
 # the default renderer needs; wgpu draws through Direct3D 12, with a software fallback.
 [target.'cfg(windows)'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["wgpu"] }
+
+# On macOS, wgpu draws through Metal and has the window ready sooner than OpenGL, which macOS
+# deprecated. NICEGIT_RENDERER=glow switches back.
+[target.'cfg(target_os = "macos")'.dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wgpu"] }
 
 [target.'cfg(windows)'.build-dependencies]

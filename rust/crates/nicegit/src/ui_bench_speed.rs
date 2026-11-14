@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use egui_kittest::Harness;
 
 use crate::app::{NiceGitApp, Repo};
-use crate::ui_tests::{arm_watchdog, git, idle, loaded, open, repository, wait};
+use crate::ui_tests::{arm_watchdog, idle, loaded, open, repository};
 
 /// Open repositories switched between.
 const REPOSITORIES: usize = 20;
@@ -112,18 +112,32 @@ fn committing_thousands_of_staged_files() {
         for n in 0..STAGED {
             std::fs::write(path.join(format!("many/f{n:05}.txt")), format!("file {n} of run {run}\n")).unwrap();
         }
-        git(path, &["add", "many"]);
         let mut harness = open(path);
         loaded(&mut harness);
+        idle(&mut harness);
+        // Staged through NiceGit, as a person would, so the work NiceGit does after staging counts.
+        harness.state_mut().act("Stage all", |client, path| client.stage_all(path).map(|_| None));
         idle(&mut harness);
         let before = harness.state().snapshot().and_then(|s| s.head_hash.clone());
         harness.state_mut().repo_mut().unwrap().draft.summary = "Add many files".into();
         let start = Instant::now();
         harness.state_mut().commit();
-        wait(&mut harness, "the commit to be shown", |h| {
-            h.state().busy.is_none() && h.state().snapshot().is_some_and(|s| s.head_hash != before && s.status.is_empty())
-        });
+        // Frames run back to back, as the app draws when the worker wakes it, so no test pause is
+        // counted.
+        loop {
+            harness.step();
+            let state = harness.state();
+            if state.busy.is_none() && state.snapshot().is_some_and(|s| s.head_hash != before && s.status.is_empty()) {
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(30), "the commit was never shown");
+        }
         times.push(milliseconds(start.elapsed()));
+        let frames = Instant::now();
+        for _ in 0..20 {
+            harness.step();
+        }
+        eprintln!("frame after the commit: {:.1} ms", milliseconds(frames.elapsed()) / 20.0);
     }
     eprintln!();
     summary(&format!("Commit {STAGED} staged files, until shown"), times);

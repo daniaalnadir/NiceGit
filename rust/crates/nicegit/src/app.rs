@@ -749,6 +749,8 @@ impl NiceGitApp {
         } else if !app.repos.is_empty() {
             app.load_repo(app.active, true);
         }
+        // A repository read during window creation shows in the first frame.
+        app.receive();
         #[cfg(not(test))]
         app.start_due_update_check();
         crate::timing::report("app created", crate::timing::since_start());
@@ -864,6 +866,9 @@ impl NiceGitApp {
         if repo.snapshot.is_none() || repo.last_load.elapsed() > Duration::from_secs(2) {
             self.load_repo(index, true);
         } else {
+            // A tab read moments ago in the background shows as it is, and counts as opened now.
+            let path = repo.path.clone();
+            self.settings.remember(path);
             self.watch_active();
         }
     }
@@ -1040,8 +1045,13 @@ impl NiceGitApp {
                 Some(Task::spawn_with(&context, previous, move || GitClient::new().configured_tools(&tools_path).unwrap_or_default()));
         }
         let previous = if quick { repo.snapshot.as_deref().cloned() } else { None };
-        // Any load started now reads the checkout as it is, so changes noticed before it are covered.
-        self.watched_git_change = false;
+        // The root a previous snapshot reported saves asking Git for it again.
+        let root = repo.snapshot.as_ref().map(|snapshot| PathBuf::from(&snapshot.root_path));
+        // Any load of the active repository started now reads the checkout as it is, so changes
+        // noticed before it are covered. A background read of another tab covers nothing watched.
+        if index == self.active {
+            self.watched_git_change = false;
+        }
         match previous {
             Some(previous) => {
                 #[cfg(test)]
@@ -1055,8 +1065,42 @@ impl NiceGitApp {
                 {
                     self.full_loads += 1;
                 }
-                self.worker.load(self.generation, path, deliberate, limit, scope, hidden, solo, filter);
+                let key = crate::preload::Key {
+                    path: path.clone(),
+                    limit,
+                    scope: self.settings.history_scope,
+                    hidden: hidden.clone(),
+                    solo: solo.clone(),
+                };
+                let preloaded =
+                    if deliberate && filter == nicegit_core::HistoryFilter::default() { crate::preload::take(&key) } else { None };
+                match preloaded {
+                    Some(result) => self.worker.load_preloaded(self.generation, path, result),
+                    None => self.worker.load(self.generation, path, root, deliberate, limit, scope, hidden, solo, filter),
+                }
             }
+        }
+    }
+
+    /// Reads the other open tabs in the background once the active one is shown, a couple at a
+    /// time, so switching to any of them shows it at once. These reads never write the index, and
+    /// each tab refreshes again when it is switched to, as before.
+    fn read_other_tabs(&mut self) {
+        const AT_ONCE: usize = 2;
+        if self.busy.is_some() || !self.repo().is_some_and(|repo| repo.snapshot.is_some() && !repo.loading) {
+            return;
+        }
+        let reading = self.repos.iter().enumerate().filter(|(index, repo)| *index != self.active && repo.loading).count();
+        let waiting: Vec<usize> = self
+            .repos
+            .iter()
+            .enumerate()
+            .filter(|(index, repo)| *index != self.active && repo.snapshot.is_none() && !repo.loading && repo.error.is_none())
+            .map(|(index, _)| index)
+            .take(AT_ONCE.saturating_sub(reading))
+            .collect();
+        for index in waiting {
+            self.start_load(index, false, false);
         }
     }
 
@@ -1146,7 +1190,8 @@ impl NiceGitApp {
         let hidden = self.settings.hidden_branches_of(&repo.path);
         let solo = self.settings.solo_branch_of(&repo.path);
         let filter = repo.history_filter.clone();
-        self.worker.act(self.generation, repo.path.clone(), label.to_string(), limit, scope, hidden, solo, filter, action);
+        let root = repo.snapshot.as_ref().map(|snapshot| PathBuf::from(&snapshot.root_path));
+        self.worker.act(self.generation, repo.path.clone(), root, label.to_string(), limit, scope, hidden, solo, filter, action);
     }
 
     /// Runs an action that moves the current branch, recording it so it can be undone. Only a
@@ -1576,7 +1621,11 @@ impl NiceGitApp {
     }
 
     fn apply(&mut self, index: usize, snapshot: Snapshot) {
-        self.settings.remember(PathBuf::from(&snapshot.root_path));
+        // A tab read in the background has not been opened by the person, so the recent list keeps
+        // its order until it is switched to.
+        if index == self.active {
+            self.settings.remember(PathBuf::from(&snapshot.root_path));
+        }
         let repo = &mut self.repos[index];
         repo.error = None;
         // A filter narrows the files of one branch; a different branch starts with the full list.
@@ -2848,7 +2897,10 @@ impl NiceGitApp {
         }
         // Returning to the app always refreshes, as in the Mac app; the setting covers changes
         // noticed while NiceGit is in use.
-        let regained = std::mem::take(&mut self.activation_refresh);
+        // A snapshot read moments ago is current: the window gaining focus as it first opens, or
+        // straight after a load, needs no second read.
+        let regained =
+            std::mem::take(&mut self.activation_refresh) && self.repo().is_some_and(|r| r.last_load.elapsed() >= Duration::from_secs(1));
         let auto = self.settings.auto_refresh;
         let watched = auto && self.watched_change.is_some_and(|at| at.elapsed() >= WATCH_DEBOUNCE);
         let periodic = auto && focused && self.repo().is_some_and(|r| r.last_load.elapsed() >= AUTO_REFRESH);
@@ -2953,10 +3005,15 @@ fn next_id() -> u64 {
 impl eframe::App for NiceGitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        let first = ctx.cumulative_pass_nr() == 0;
+        if first {
+            crate::timing::report("first frame: started", crate::timing::since_start());
+        }
         self.apply_theme(&ctx);
         self.keep_zoom(&ctx);
         self.fit_to_monitor(&ctx);
         self.receive();
+        self.read_other_tabs();
         self.poll_merge_tool();
         self.receive_templates();
         self.receive_signing_setups();
@@ -2970,7 +3027,13 @@ impl eframe::App for NiceGitApp {
         self.auto_fetch(&ctx);
         self.auto_pr_status(&ctx);
         self.debug_open(&ctx);
+        if first {
+            crate::timing::report("first frame: before layout", crate::timing::since_start());
+        }
         self.layout(ui);
+        if first {
+            crate::timing::report("first frame: after layout", crate::timing::since_start());
+        }
         self.finish_pending_check_out();
         self.tool_windows(&ctx);
         self.dialogs(&ctx);
@@ -2989,6 +3052,17 @@ impl eframe::App for NiceGitApp {
         self.settings.open = self.repos.iter().map(|r| r.path.clone()).collect();
         self.settings.active = self.active;
         eframe::set_value(storage, STORAGE_KEY, &self.settings);
+        #[cfg(not(test))]
+        {
+            let hint = self.repos.get(self.active).map(|repo| crate::preload::Key {
+                path: repo.path.clone(),
+                limit: PAGE,
+                scope: self.settings.history_scope,
+                hidden: self.settings.hidden_branches_of(&repo.path),
+                solo: self.settings.solo_branch_of(&repo.path),
+            });
+            crate::preload::save_hint(hint.as_ref());
+        }
     }
 }
 
