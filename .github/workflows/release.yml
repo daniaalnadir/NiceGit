@@ -4,9 +4,9 @@ name: Release
 # GitHub release to check and publish by hand. Running this workflow by hand on main is a dry
 # run: it builds, signs, notarizes, and checks everything without creating a release.
 #
-# The macOS and Windows jobs run in the `release` environment, which holds the signing secrets
-# and only admits main and v* tags. Without the secrets the apps are built unsigned, and the
-# signing checks report it as such. See docs/RELEASING.md.
+# The macOS job runs in the `release` environment, which holds the Apple signing secrets and
+# only admits main and v* tags. Without the secrets the app is built unsigned, and the signing
+# check reports it as such. The Windows and Linux downloads are unsigned. See docs/RELEASING.md.
 #
 # A pull request that changes the Windows or Linux packaging builds and checks those downloads
 # unsigned, outside the release environment, so packaging changes are tested before they merge.
@@ -184,7 +184,7 @@ jobs:
     name: Windows ${{ matrix.arch }}
     needs: check
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -193,14 +193,9 @@ jobs:
             runner: windows-latest
           - arch: arm64
             runner: windows-11-arm
-    # The release environment holds the SignPath token that signs the Windows app and installer.
-    # Pull requests cannot use it, so they build unsigned without an environment.
-    environment: ${{ github.event_name != 'pull_request' && 'release' || '' }}
     env:
       VERSION: ${{ needs.check.outputs.version }}
       ARCH: ${{ matrix.arch }}
-      # Signing runs when the token and the SignPath organisation are both set. See docs/RELEASING.md.
-      SIGN: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -215,48 +210,6 @@ jobs:
       - name: Build
         working-directory: rust
         run: cargo build --release --locked
-
-      # SignPath signs nicegit.exe before packaging, so the zip and the installer both carry the
-      # signed app. Without SignPath set up the app is unsigned, as before.
-      - name: Upload the app for signing
-        id: unsigned-app
-        if: env.SIGN == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-app-${{ matrix.arch }}
-          path: rust/target/release/nicegit.exe
-          if-no-files-found: error
-
-      - name: Sign the app
-        if: env.SIGN == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: app
-          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
-          wait-for-completion: true
-          # Each request waits for an approver in SignPath.
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: rust/target/signed-app
-
-      - name: Use the signed app
-        if: env.SIGN == 'true'
-        shell: pwsh
-        working-directory: rust
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Copy-Item -Force 'target/signed-app/nicegit.exe' 'target/release/nicegit.exe'
-          $signature = Get-AuthenticodeSignature 'target/release/nicegit.exe'
-          if ($signature.Status -ne 'Valid') { throw "nicegit.exe is not validly signed: $($signature.StatusMessage)" }
-          Write-Host "nicegit.exe is signed by $($signature.SignerCertificate.Subject)"
-
-      - name: Note an unsigned build
-        if: env.SIGN != 'true'
-        shell: pwsh
-        run: Write-Host "::warning::SignPath is not set up, so nicegit.exe and the installer are unsigned."
 
       - name: Install cargo-about and WiX
         shell: pwsh
@@ -273,42 +226,6 @@ jobs:
       - name: Package the zip and installer
         shell: pwsh
         run: pwsh rust/scripts/package-windows.ps1 -Version $env:VERSION -Arch $env:ARCH
-
-      - name: Upload the installer for signing
-        id: unsigned-installer
-        if: env.SIGN == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-installer-${{ matrix.arch }}
-          path: rust/dist/*.msi
-          if-no-files-found: error
-
-      - name: Sign the installer
-        if: env.SIGN == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: installer
-          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
-          wait-for-completion: true
-          # Each request waits for an approver in SignPath.
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: rust/target/signed-installer
-
-      - name: Use the signed installer
-        if: env.SIGN == 'true'
-        shell: pwsh
-        working-directory: rust
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $msi = "dist/NiceGit-$env:VERSION-windows-$env:ARCH.msi"
-          Copy-Item -Force "target/signed-installer/$(Split-Path -Leaf $msi)" $msi
-          $signature = Get-AuthenticodeSignature $msi
-          if ($signature.Status -ne 'Valid') { throw "$msi is not validly signed: $($signature.StatusMessage)" }
-          Write-Host "$msi is signed by $($signature.SignerCertificate.Subject)"
 
       - name: Check the zip and installer
         shell: pwsh
