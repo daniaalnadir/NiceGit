@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 - Faster, and more of it
 
+NiceGit 2.1 opens and switches repositories faster, stages and commits large changes in a
+fraction of the time, and adds a set of everyday tools: custom actions, issue links, folder
+scanning, notifications, identity switching, Conventional Commits help, and installing updates
+from inside the app.
+
+- Run your own commands from the Repository, commit and file menus with custom actions, with
+  placeholders for the repository, branch, commit and file.
+- Issue references in commit messages link to the repository's host (#123, GitLab's !123), and
+  rules in Settings link others, such as Jira keys.
+- Find every repository in a folder and add them to Recent or open them as tabs; dropping a
+  folder that isn't a repository offers the same.
 - The Changes panel stays fast with thousands of changed files; only visible rows are drawn.
 - A welcome screen with start buttons, recent repositories, and tips when no repository
   is open.
