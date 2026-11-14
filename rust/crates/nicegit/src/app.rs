@@ -347,6 +347,11 @@ pub struct Repo {
     pub signing: Option<nicegit_core::client::SigningSetup>,
     /// The signing setup being read in the background.
     pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
+    /// Whether the checkout is shallow or limited to some folders, as last read. The Repository
+    /// menu offers its fetch and show-all items only when these apply.
+    pub shape: Option<nicegit_core::client::RepositoryShape>,
+    /// The shape being read in the background. Each load replaces it, so the newest read wins.
+    pub shape_read: Option<Task<nicegit_core::client::RepositoryShape>>,
     pub commit_filter: String,
     /// The Author and Path filters the history is narrowed by. Kept in memory for this repository
     /// only, so it is not saved across restarts.
@@ -533,6 +538,8 @@ impl Repo {
             sent_sign: None,
             signing: None,
             signing_read: None,
+            shape: None,
+            shape_read: None,
             commit_filter: String::new(),
             history_filter: nicegit_core::HistoryFilter::default(),
             filter_draft: None,
@@ -1650,6 +1657,14 @@ impl NiceGitApp {
             let context = self.worker.context.clone();
             self.repos[index].signing_read = Some(Task::spawn(&context, move || GitClient::new().signing_setup(&path).unwrap_or_default()));
         }
+        // Whether the checkout is shallow or limited to folders is read on every load, so a fetch
+        // or checkout made from the menu is seen. It is file checks against the snapshot's Git
+        // directory, so a refresh starts no Git process for it.
+        let shape_path = self.repos[index].path.clone();
+        let shape_git_dir = self.repos[index].snapshot.as_ref().and_then(|s| s.absolute_git_dir.clone());
+        let shape_context = self.worker.context.clone();
+        self.repos[index].shape_read =
+            Some(Task::spawn(&shape_context, move || GitClient::new().repository_shape(&shape_path, shape_git_dir.as_deref())));
         // Bisect state and submodules are read alongside, without delaying the snapshot. The bar
         // keeps the last state until the new read arrives, so it does not vanish (and take its
         // buttons with it) on every refresh.
@@ -1739,6 +1754,17 @@ impl NiceGitApp {
             if let Some(setup) = task.get().copied() {
                 repo.signing = Some(setup);
                 repo.signing_read = None;
+            }
+        }
+    }
+
+    /// Keeps each repository's shallow and sparse state once its background read arrives.
+    fn receive_repository_shapes(&mut self) {
+        for repo in &mut self.repos {
+            let Some(task) = repo.shape_read.as_mut() else { continue };
+            if let Some(shape) = task.get().copied() {
+                repo.shape = Some(shape);
+                repo.shape_read = None;
             }
         }
     }
@@ -2950,6 +2976,7 @@ impl eframe::App for NiceGitApp {
         self.poll_merge_tool();
         self.receive_templates();
         self.receive_signing_setups();
+        self.receive_repository_shapes();
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();
