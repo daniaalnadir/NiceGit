@@ -24,26 +24,11 @@ fn opened_urls(harness: &Harness<'static, NiceGitApp>) -> Vec<String> {
         .collect()
 }
 
-/// Scrolls the Settings window, from its middle, until the widget labelled `label` is in the part
-/// of the window the scroll area shows. The Issue links section sits below the other sections.
+/// Scrolls the Settings window until the widget labelled `label` is in view, wherever its section
+/// sits among the others.
 fn scroll_settings_to(harness: &mut Harness<'static, NiceGitApp>, label: &str) {
-    let middle = egui::pos2(720.0, 450.0);
-    for _ in 0..200 {
-        let shown = harness.query_by_label(label).is_some_and(|node| (100.0..800.0).contains(&node.rect().center().y));
-        if shown {
-            return;
-        }
-        harness.hover_at(middle);
-        harness.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, -300.0),
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-            modifiers: Modifiers::NONE,
-        });
-        harness.step();
-    }
-    panic!("the Settings window never shows {label}");
+    harness.get_all_by_label(label).last().unwrap_or_else(|| panic!("the Settings window has {label}")).scroll_to_me();
+    settle(harness);
 }
 
 /// A repository on a GitHub remote whose newest commit has a subject with `#42` and a body with a
