@@ -16,7 +16,7 @@ Git itself and an optional daily check for a new version, which you can turn off
 Built with Rust, and released under the [MIT License](LICENSE).
 
 > **Preview software:** NiceGit is under active development. Back up important work
-> before trying history-changing operations. The current version is 2.0.0.
+> before trying history-changing operations. The current version is 2.1.0.
 
 ## Highlights
 

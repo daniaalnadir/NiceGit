@@ -47,12 +47,12 @@ fn new_log() -> Log {
 }
 
 fn show_update(harness: &mut egui_kittest::Harness<'static, crate::app::NiceGitApp>) {
-    harness.state_mut().receive_latest_release("v2.1.0");
-    wait(harness, "the update notice", |h| h.query_by_label("NiceGit 2.1.0 is available").is_some());
+    harness.state_mut().receive_latest_release("v99.1.0");
+    wait(harness, "the update notice", |h| h.query_by_label("NiceGit 99.1.0 is available").is_some());
 }
 
 fn confirmation_open(harness: &egui_kittest::Harness<'static, crate::app::NiceGitApp>) -> bool {
-    matches!(&harness.state().dialog, Some(Dialog::Confirm { title, .. }) if title == "Install NiceGit 2.1.0?")
+    matches!(&harness.state().dialog, Some(Dialog::Confirm { title, .. }) if title == "Install NiceGit 99.1.0?")
 }
 
 #[test]
@@ -109,10 +109,10 @@ fn an_install_whose_download_fails_its_checksum_is_refused_and_leaves_nothing_be
         h.state().install.is_none() && h.state().notice.as_ref().is_some_and(|notice| notice.text == CHECKSUM_MISMATCH)
     });
 
-    let name = asset_name("2.1.0", "macos", "aarch64").unwrap();
+    let name = asset_name("99.1.0", "macos", "aarch64").unwrap();
     let downloads = log.lock().unwrap().clone();
     assert_eq!(downloads.len(), 1, "one release file was asked for");
-    assert_eq!(downloads[0].0, release_url("2.1.0", &name));
+    assert_eq!(downloads[0].0, release_url("99.1.0", &name));
     assert!(!downloads[0].1.exists(), "the file that failed the check is deleted");
     assert!(!bundle.exists(), "the app was never touched");
     assert!(harness.state().installed_update.is_none());
@@ -157,7 +157,7 @@ fn an_install_does_not_start_while_an_action_is_busy() {
     show_update(&mut harness);
 
     harness.state_mut().busy = Some("Fetch".into());
-    harness.state_mut().start_install("2.1.0".into());
+    harness.state_mut().start_install("99.1.0".into());
     settle(&mut harness);
     assert!(harness.state().install.is_none());
     assert!(log.lock().unwrap().is_empty(), "nothing is downloaded while busy");
