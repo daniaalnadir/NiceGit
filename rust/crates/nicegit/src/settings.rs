@@ -231,6 +231,43 @@ fn same_trailer(line: &str, trailer: &str) -> bool {
     }
 }
 
+/// Where a custom action is offered: the repository menu, a commit's menu, or a file's menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ActionScope {
+    #[default]
+    Repository,
+    Commit,
+    File,
+}
+
+impl ActionScope {
+    pub const ALL: [ActionScope; 3] = [ActionScope::Repository, ActionScope::Commit, ActionScope::File];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            ActionScope::Repository => "Repository",
+            ActionScope::Commit => "Commit",
+            ActionScope::File => "File",
+        }
+    }
+}
+
+/// A command the person adds to NiceGit's menus, as Sourcetree's custom actions are. The program
+/// runs directly, never through a shell; `arguments` is split into words, and placeholders such as
+/// `{short_sha}` are filled in each word. See `custom_actions`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomAction {
+    pub name: String,
+    pub program: String,
+    pub arguments: String,
+    pub scope: ActionScope,
+    /// Whether the output is shown in a window once the program finishes.
+    pub show_output: bool,
+    /// Whether a confirmation shows the exact command before it runs.
+    pub confirm: bool,
+}
+
 /// A named group of repositories that open together, as GitKraken's workspaces do. The folders
 /// are kept in tab order and are never changed on disk by saving, opening, or deleting one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +392,9 @@ pub struct Settings {
     /// is in the background.
     #[serde(default = "default_true")]
     pub notify_when_finished: bool,
+    /// Commands the person added to the menus, in the order they were added.
+    #[serde(default)]
+    pub custom_actions: Vec<CustomAction>,
 }
 
 /// How many recently opened repositories are remembered.
@@ -408,6 +448,7 @@ impl Default for Settings {
             last_update_check: 0,
             latest_version: None,
             dismissed_update: None,
+            custom_actions: Vec::new(),
         }
     }
 }

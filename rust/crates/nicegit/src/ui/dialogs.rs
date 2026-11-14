@@ -39,6 +39,16 @@ pub enum Pending {
         tip: String,
     },
     DropStash(Stash),
+    /// A custom action the person asked to confirm. The arguments are the words after expansion,
+    /// as the confirmation showed them, and the branch and HEAD are those shown then.
+    RunCustomAction {
+        name: String,
+        program: String,
+        arguments: Vec<String>,
+        show_output: bool,
+        branch: String,
+        head: Option<String>,
+    },
     Merge {
         source: Branch,
         branch: String,
@@ -748,6 +758,18 @@ impl NiceGitApp {
                     });
                     ui.add_space(8.0);
                     ui.label(message.as_str());
+                    // A custom action's exact command: the program, then each argument on its own line.
+                    if let Pending::RunCustomAction { program, arguments, .. } = pending {
+                        ui.add_space(8.0);
+                        egui::ScrollArea::vertical().id_salt("custom-action-command").max_height(180.0).auto_shrink([false, true]).show(
+                            ui,
+                            |ui| {
+                                for line in std::iter::once(program.as_str()).chain(arguments.iter().map(String::as_str)) {
+                                    ui.label(RichText::new(line).monospace());
+                                }
+                            },
+                        );
+                    }
                     // A merge can be made in three ways, and the confirm button says what the chosen one does.
                     if let Pending::Merge { style, .. } = pending {
                         ui.add_space(12.0);
@@ -1521,6 +1543,9 @@ impl NiceGitApp {
                     .delete_remote_branch(&remote, &branch, &tip, expected, path)
                     .map(|_| Some(format!("Deleted {branch} from {remote}.")))
             }),
+            Pending::RunCustomAction { name, program, arguments, show_output, branch, head } => {
+                self.run_custom_action(name, program, arguments, show_output, branch, head)
+            }
             Pending::ShowAllFolders => {
                 self.act("Show all folders", |client, path| client.show_all_folders(path).map(|_| Some("Checked out every folder.".into())))
             }

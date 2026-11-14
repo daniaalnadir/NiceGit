@@ -64,6 +64,8 @@ enum Run {
     Bisect(nicegit_core::bisect::BisectMark),
     EndBisect,
     PruneWorktrees,
+    /// Runs the Repository-scope custom action at this position in the settings.
+    CustomAction(usize),
 }
 
 struct Command {
@@ -351,6 +353,15 @@ impl NiceGitApp {
                 run: Run::Identity { name: profile.name, email: profile.email, signing_key: profile.signing_key },
             });
         }
+        for (index, action) in self.custom_actions_in(crate::settings::ActionScope::Repository) {
+            list.push(command(
+                &format!("Run {}", action.name),
+                "Custom action",
+                icon::TERMINAL_WINDOW,
+                has && idle,
+                Run::CustomAction(index),
+            ));
+        }
         let open: Vec<PathBuf> = self.repos.iter().map(|r| r.path.clone()).collect();
         for path in self.settings.recent.iter().chain(open.iter()) {
             if self.repo().is_some_and(|r| &r.path == path) || list.iter().any(|c| matches!(&c.run, Run::Repository(p) if p == path)) {
@@ -395,6 +406,10 @@ impl NiceGitApp {
             Run::Redo => self.confirm_redo(),
             Run::Terminal => self.toggle_terminal(ctx),
             Run::Settings => self.show_settings = true,
+            Run::CustomAction(index) => {
+                let values = self.repository_values();
+                self.start_custom_action(index, values);
+            }
             Run::GoToFile => self.open_go_to_file(ctx),
             Run::GoToHead => self.go_to_head(),
             Run::GoToUpstream => self.go_to_upstream(),

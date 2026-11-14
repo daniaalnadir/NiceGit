@@ -20,6 +20,7 @@ pub mod commit_search;
 pub mod compare;
 pub mod conflict;
 pub mod content_search;
+pub mod custom_output;
 pub mod editor;
 pub mod file_history;
 pub mod git_settings;

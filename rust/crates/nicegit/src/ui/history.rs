@@ -1072,6 +1072,13 @@ impl NiceGitApp {
             ui.close();
             self.open_tool(Box::new(tools::bisect::BisectWindow::start_from(commit.hash.clone())));
         }
+        let values = crate::custom_actions::Values {
+            sha: commit.hash.clone(),
+            short_sha: commit.short_hash.clone(),
+            branch: snapshot.current_branch.clone(),
+            ..self.repository_values()
+        };
+        self.custom_actions_submenu(ui, crate::settings::ActionScope::Commit, &values, idle);
         ui.separator();
         ui.menu_button(format!("{}  Copy", icon::COPY), |ui| {
             if ui.button("Commit ID").clicked() {

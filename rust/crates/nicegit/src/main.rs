@@ -3,6 +3,7 @@
 
 mod app;
 mod conventional;
+mod custom_actions;
 mod diff_view;
 mod file_dialog;
 mod git_ext;
@@ -28,6 +29,8 @@ mod ui_tests;
 mod ui_tests_clone;
 #[cfg(test)]
 mod ui_tests_conventional;
+#[cfg(test)]
+mod ui_tests_custom_actions;
 #[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]

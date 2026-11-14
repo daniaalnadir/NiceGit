@@ -668,6 +668,8 @@ pub struct NiceGitApp {
     /// The `glab` program that GitLab merge requests run through. Tests point it at a missing file.
     pub glab: nicegit_core::gitlab::GlabProgram,
     recorded: RecordSlot,
+    /// What the custom action now running reports when it finishes.
+    pub custom_outcome: Arc<Mutex<Option<crate::custom_actions::Outcome>>>,
     /// When the action now running started, so its duration can be told when it finishes.
     action_started: Option<Instant>,
     /// The desktop notifications sent, as title and body. Tests read these instead of the
@@ -759,6 +761,7 @@ impl NiceGitApp {
             pending_check_out: None,
             glab: nicegit_core::gitlab::GlabProgram::default(),
             recorded: Arc::new(Mutex::new(None)),
+            custom_outcome: Arc::new(Mutex::new(None)),
             action_started: None,
             #[cfg(test)]
             sent_notifications: Vec::new(),
@@ -1364,6 +1367,12 @@ impl NiceGitApp {
                     self.repos[index].loading = false;
                     let mut action_failed = false;
                     let history_note = if action.is_some() { self.take_record(index) } else { None };
+                    // A custom action reports its own outcome, which the action itself could not carry back.
+                    if action.is_some() {
+                        if let Some(outcome) = self.take_custom_outcome() {
+                            action_failed = self.report_custom_outcome(outcome);
+                        }
+                    }
                     if let Some((label, result)) = &action {
                         // Fetching, by hand, in the background, or as part of Pull, resets the timer. A fetch of one
                         // remote leaves the others unfetched, so it does not.
