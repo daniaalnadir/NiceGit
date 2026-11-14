@@ -46,6 +46,8 @@ enum Run {
     Clone,
     NewRepository,
     Tool(&'static str),
+    /// Turns Git's conflict memory (`rerere`) on or off for this repository.
+    RememberResolutions(bool),
     Checkout(Branch),
     Repository(PathBuf),
     /// Opens a saved workspace's folders as tabs, by its name.
@@ -162,6 +164,20 @@ impl NiceGitApp {
             command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
             command("Repository settings", "Identity, profiles, and remotes", icon::GEAR_SIX, has, Run::Tool("settings")),
             command("Git settings", "This repository's Git configuration", icon::SLIDERS_HORIZONTAL, has, Run::Tool("git_settings")),
+            command(
+                "Remember conflict resolutions: turn on",
+                "Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase",
+                icon::GIT_DIFF,
+                has && idle,
+                Run::RememberResolutions(true),
+            ),
+            command(
+                "Remember conflict resolutions: turn off",
+                "Stop recording how you resolve conflicts in this repository",
+                icon::GIT_DIFF,
+                has && idle,
+                Run::RememberResolutions(false),
+            ),
             command("Stashes", "Save selected files, preview, apply, or delete stashes", icon::ARCHIVE, has, Run::Tool("stashes")),
             command("Search history", "Shift-Ctrl/Cmd-F · every branch", icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
             command("Search file contents", "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
@@ -369,6 +385,9 @@ impl NiceGitApp {
             Run::Push => self.push(),
             Run::ForcePush => self.request_force_push(),
             Run::Refresh => self.load(true),
+            Run::RememberResolutions(enabled) => self.act("Remember conflict resolutions", move |client, path| {
+                client.set_rerere_enabled(enabled, path).map(|()| Some(crate::tools::conflict::remember_notice(enabled).to_string()))
+            }),
             Run::StageAll => self.act("Stage all", |client, path| client.stage_all(path).map(|_| None)),
             Run::UnstageAll => self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None)),
             // The same confirmation as the toolbar's buttons.

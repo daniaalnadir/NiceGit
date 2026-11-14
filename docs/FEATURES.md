@@ -273,6 +273,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Take either side of a conflicted file from its right-click menu in the Changes panel, or of
   every conflicted file at once from the Resolve all menu beside Continue and Abort.
 - Resolve a conflicted file in the merge tool Git is set to use (`merge.tool`), from its Changes panel menu or the conflict editor. NiceGit refreshes when the tool closes, and it refuses while the built-in editor has unsaved text. Without a merge tool, the item is disabled and says how to set one.
+- Remember conflict resolutions (Git's `rerere`): the conflict editor's checkbox turns it on or off for the repository, and the command palette has the same toggle. When Git reuses a recorded resolution, the file is marked "Resolved from memory" in the Changes panel, the editor asks you to check it, and the notice after a stopped merge or rebase says how many were reused. Git leaves such files unmerged until you stage them. A file whose markers you removed by hand, and have not staged, is also marked.
 
 ## Run
 

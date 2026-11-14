@@ -1461,9 +1461,16 @@ impl NiceGitApp {
                                 let conflicts = snapshot.status.iter().filter(|e| e.kind == nicegit_core::StatusKind::Conflicted).count();
                                 if conflicts > 0 {
                                     let plural = if conflicts == 1 { "" } else { "s" };
+                                    // Files Git resolved from a recorded resolution still need checking.
+                                    let reused = snapshot.reused_resolutions.len();
+                                    let reused_note = match reused {
+                                        0 => String::new(),
+                                        1 => " Git reused 1 recorded resolution. Check it before continuing.".to_string(),
+                                        count => format!(" Git reused {count} recorded resolutions. Check them before continuing."),
+                                    };
                                     self.notice = Some(Notice {
                                         text: format!(
-                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.",
+                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.{reused_note}",
                                             operation.name()
                                         ),
                                         is_error: true,
