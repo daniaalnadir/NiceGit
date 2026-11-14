@@ -603,6 +603,34 @@ impl NiceGitApp {
             ui.close();
             self.push();
         }
+        // Only a shallow or sparse checkout offers these, and each acts on the repository shown now.
+        let shape = self.repo().and_then(|repo| repo.shape).unwrap_or_default();
+        let idle = self.idle();
+        if shape.shallow
+            && ui
+                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  Fetch full history", icon::DOWNLOAD_SIMPLE)))
+                .on_disabled_hover_text("Wait for the current action to finish")
+                .clicked()
+        {
+            ui.close();
+            self.act("Fetch full history", |client, path| {
+                client.fetch_full_history(path).map(|_| Some("Fetched the full history.".into()))
+            });
+        }
+        if shape.sparse
+            && ui
+                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  Show all folders…", icon::FOLDERS)))
+                .on_disabled_hover_text("Wait for the current action to finish")
+                .clicked()
+        {
+            ui.close();
+            self.confirm(
+                "Show all folders?",
+                "Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change.",
+                "Show all folders",
+                crate::ui::dialogs::Pending::ShowAllFolders,
+            );
+        }
         if ui.add_enabled(has_repo, egui::Button::new(format!("{}  Apply patch…", icon::FILE_PLUS))).clicked() {
             ui.close();
             self.apply_patch();
