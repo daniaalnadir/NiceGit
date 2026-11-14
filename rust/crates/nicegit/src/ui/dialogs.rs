@@ -13,6 +13,10 @@ use crate::tools::{widgets, Task};
 use crate::ui::clone_picker::{ClonePicker, Picked};
 
 pub enum Pending {
+    /// Downloading and installing a newer NiceGit, after the person confirms it.
+    InstallUpdate {
+        version: String,
+    },
     Discard(StatusEntry),
     DiscardAll(Vec<StatusEntry>),
     /// Discarding some of a file's unstaged lines, as indices into the review's lines.
@@ -1174,6 +1178,7 @@ impl NiceGitApp {
 
     pub fn run_pending(&mut self, pending: Pending) {
         match pending {
+            Pending::InstallUpdate { version } => self.start_install(version),
             Pending::Discard(entry) => {
                 let name = entry.path.clone();
                 self.act_with_record("Discard", move |client, path| {

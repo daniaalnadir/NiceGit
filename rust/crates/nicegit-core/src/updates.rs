@@ -81,7 +81,7 @@ pub fn latest_release_tag() -> Result<String, String> {
 }
 
 /// The last non-empty line of curl's error output, shortened so it fits beside Settings' button.
-fn failure_reason(stderr: &str) -> String {
+pub(crate) fn failure_reason(stderr: &str) -> String {
     const LIMIT: usize = 120;
     let line = stderr.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("curl stopped without a message.").trim();
     if line.chars().count() <= LIMIT {

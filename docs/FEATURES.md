@@ -132,7 +132,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Updates: NiceGit asks GitHub once a day for the newest release's version number, through the
   system `curl`, and sends nothing else. When a newer version exists, a notice along the bottom
   of the window offers Download, which opens the releases page, and Dismiss, which hides that
-  version's notice. Turn checks off, or run Check now, under Settings > General. Settings also
+  version's notice. Where NiceGit can replace itself (the macOS app bundle, the Windows MSI
+  install, and the Linux AppImage), Download and install also appears. After you confirm, it
+  downloads the release file, checks it against the release's SHA256SUMS.txt, and installs
+  only a file that matches; then Restart NiceGit starts the new copy. Homebrew, portable, and
+  package copies keep the link only. Turn checks off, or run Check now, under Settings > General. Settings also
   links Report a problem, which opens a new bug report with NiceGit's version, your operating
   system and its architecture, and the template's sections filled in, and Request a feature.
   Both are in the command palette too. Neither includes repository paths or names.
