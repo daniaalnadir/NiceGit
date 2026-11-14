@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod conventional;
 mod diff_view;
 mod file_dialog;
 mod git_ext;
@@ -17,6 +18,8 @@ mod ui_bench;
 mod ui_screenshots;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]

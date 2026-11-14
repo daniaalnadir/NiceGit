@@ -91,6 +91,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Add trailers from the commit box's menu: Signed-off-by from your Git identity, and
   Co-authored-by from recent authors (the current user and bots left out). The menu edits
   the description text, so the exact lines show before you commit.
+- Conventional Commits help above the summary: a type menu (feat, fix, and nine more, each
+  with a one-line description), a scope field, and a Breaking toggle. They write the prefix
+  into the summary itself, so the summary stays the only copy of the message. Settings, under
+  Committing, sets it to Off, Automatic (the default, on when at least five of the last
+  twenty non-merge commits use the convention), or Always. Automatic also hints that the
+  repository uses the convention while a summary has no type.
+- The summary shows a character count past 50 characters, in a warning colour past 72, and
+  never blocks a commit.
 - Skip Git hooks for a commit from the commit box's options menu (the gear beside Add
   trailers). The note under the Commit button shows while it is on, and it resets after each
   commit. Skipping passes `--no-verify` to the commit, amend, or Commit and push, and also

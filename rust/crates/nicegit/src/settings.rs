@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use nicegit_core::client::PullStrategy;
 use serde::{Deserialize, Serialize};
 
+use crate::conventional::ConventionalCommits;
 use crate::theme::{Appearance, GraphPalette};
 
 pub const STORAGE_KEY: &str = "nicegit.settings";
@@ -322,6 +323,9 @@ pub struct Settings {
     /// `git cherry-pick -x` does.
     #[serde(default)]
     pub cherry_pick_record_origin: bool,
+    /// Whether the commit box offers Conventional Commits help: its type menu, scope, and Breaking.
+    #[serde(default)]
+    pub conventional_commits: ConventionalCommits,
     /// Branches hidden from the commit graph, keyed like `drafts`. Each entry is a full ref name,
     /// such as `refs/heads/feature`, so a local and a remote branch never collide.
     #[serde(default)]
@@ -391,6 +395,7 @@ impl Default for Settings {
             stash_include_untracked: true,
             stash_staged_only: false,
             cherry_pick_record_origin: false,
+            conventional_commits: ConventionalCommits::default(),
             hidden_branches: BTreeMap::new(),
             solo_branch: BTreeMap::new(),
             workspaces: Vec::new(),

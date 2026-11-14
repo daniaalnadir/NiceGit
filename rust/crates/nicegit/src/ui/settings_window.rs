@@ -108,6 +108,19 @@ impl NiceGitApp {
                     "The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.",
                 );
                 ui.add_space(10.0);
+                widgets::section(ui, "Committing");
+                ui.horizontal(|ui| {
+                    ui.label("Conventional Commits");
+                    for choice in crate::conventional::ConventionalCommits::ALL {
+                        ui.selectable_value(&mut self.settings.conventional_commits, choice, choice.title());
+                    }
+                })
+                .response
+                .on_hover_text(
+                    "Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. \
+                     Automatic turns this on when at least five of the last twenty commits use the convention.",
+                );
+                ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(
                     ui,
