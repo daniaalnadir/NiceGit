@@ -46,6 +46,11 @@ impl NiceGitApp {
                 ui.add_space(4.0);
                 self.update_check_controls(ui);
                 ui.add_space(10.0);
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.notify_when_finished, "Notify me when work finishes in the background");
+                ui.label(
+                    RichText::new("Shows a desktop notification when an action you started finishes while NiceGit is not in focus.").small().color(c.muted),
+                );
+                ui.add_space(10.0);
                 widgets::section(ui, "Appearance");
                 ui.horizontal(|ui| {
                     for (value, label) in [(Appearance::System, "System"), (Appearance::Light, "Light"), (Appearance::Dark, "Dark")] {
