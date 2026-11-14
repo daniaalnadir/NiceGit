@@ -9,10 +9,13 @@ mod graph_view;
 mod settings;
 mod syntax;
 mod theme;
+mod timing;
 mod tools;
 mod ui;
 #[cfg(test)]
 mod ui_bench;
+#[cfg(test)]
+mod ui_bench_speed;
 #[cfg(test)]
 mod ui_screenshots;
 #[cfg(test)]
@@ -53,6 +56,7 @@ fn icon() -> Option<egui::IconData> {
 }
 
 fn main() -> eframe::Result {
+    timing::start();
     // A folder passed on the command line opens straight away, as `nicegit .` would.
     let initial = std::env::args_os().nth(1).map(PathBuf::from);
     // Folders dropped onto the window open as repositories.
@@ -68,6 +72,10 @@ fn main() -> eframe::Result {
     #[allow(unused_mut)]
     let mut options = eframe::NativeOptions { viewport, ..Default::default() };
     // On Windows, draw with wgpu (Direct3D 12) unless NICEGIT_RENDERER=glow asks otherwise.
+    #[cfg(not(windows))]
+    if std::env::var("NICEGIT_RENDERER").as_deref() == Ok("wgpu") {
+        options.renderer = eframe::Renderer::Wgpu;
+    }
     #[cfg(windows)]
     if std::env::var("NICEGIT_RENDERER").as_deref() != Ok("glow") {
         options.renderer = eframe::Renderer::Wgpu;

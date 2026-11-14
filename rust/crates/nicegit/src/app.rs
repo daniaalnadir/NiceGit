@@ -594,6 +594,8 @@ impl Repo {
 }
 
 pub struct NiceGitApp {
+    /// Start-up, switch, and action timings, printed when NICEGIT_TIMING is set.
+    pub timings: crate::timing::Timings,
     pub worker: Worker,
     pub repos: Vec<Repo>,
     pub active: usize,
@@ -686,10 +688,13 @@ struct Watch {
 
 impl NiceGitApp {
     pub fn new(creation: &eframe::CreationContext<'_>, initial: Option<PathBuf>) -> Self {
+        crate::timing::report("window and renderer ready", crate::timing::since_start());
         let mut settings: Settings = creation.storage.and_then(|storage| eframe::get_value(storage, STORAGE_KEY)).unwrap_or_default();
         // Repositories deleted or moved since the last run drop out of the recent list.
         settings.forget_missing_recent();
+        crate::timing::report("settings read", crate::timing::since_start());
         theme::install_fonts(&creation.egui_ctx);
+        crate::timing::report("fonts installed", crate::timing::since_start());
         let mut app = Self {
             worker: Worker::new(creation.egui_ctx.clone()),
             repos: Vec::new(),
@@ -734,6 +739,7 @@ impl NiceGitApp {
             fitted_to_monitor: false,
             update_check: None,
             update_status: None,
+            timings: crate::timing::Timings::default(),
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
         app.active = app.settings.active.min(open.len().saturating_sub(1));
@@ -745,6 +751,7 @@ impl NiceGitApp {
         }
         #[cfg(not(test))]
         app.start_due_update_check();
+        crate::timing::report("app created", crate::timing::since_start());
         app
     }
 
@@ -850,6 +857,7 @@ impl NiceGitApp {
             return;
         }
         self.save_draft();
+        self.timings.switch = Some((index, Instant::now()));
         self.active = index;
         self.tools.clear();
         let repo = &self.repos[index];
@@ -1128,6 +1136,7 @@ impl NiceGitApp {
         // The reload after an action reads the whole checkout, so earlier Git changes are covered.
         self.watched_git_change = false;
         self.busy = Some(label.to_string());
+        self.timings.action = Some((label.to_string(), Instant::now()));
         // A background fetch leaves the last message for the person to read.
         if label != BACKGROUND_FETCH {
             self.notice = None;
@@ -1240,6 +1249,7 @@ impl NiceGitApp {
                 Message::Loaded { generation, path, action, snapshot } => {
                     if action.is_some() {
                         self.busy = None;
+                        self.timings.action_done();
                     }
                     let Some(index) = self.repos.iter().position(|r| r.path == path && r.generation == generation) else { continue };
                     self.repos[index].loading = false;
@@ -2970,6 +2980,8 @@ impl eframe::App for NiceGitApp {
         self.settings_window(&ctx);
         self.workspaces_window(&ctx);
         self.shortcuts_window(&ctx);
+        let shown = self.repo().is_some_and(|repo| repo.snapshot.is_some());
+        self.timings.frame(self.active, shown);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

@@ -78,7 +78,9 @@ impl Worker {
     ) {
         self.spawn(move || {
             let client = if deliberate { GitClient::deliberate() } else { GitClient::new() };
+            let started = std::time::Instant::now();
             let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
+            crate::timing::report_since("load: full snapshot read", started);
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
     }
@@ -100,7 +102,9 @@ impl Worker {
     ) {
         self.spawn(move || {
             let client = GitClient::new();
+            let started = std::time::Instant::now();
             let quick = client.quick_snapshot(&previous, &path).ok().flatten();
+            crate::timing::report_since("load: quick status read", started);
             let snapshot = match quick {
                 Some(snapshot) => Ok(snapshot),
                 None => client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter),
@@ -125,8 +129,12 @@ impl Worker {
     ) {
         self.spawn(move || {
             let client = GitClient::new();
+            let started = std::time::Instant::now();
             let result = action(&client, &path);
+            crate::timing::report_since(&format!("{label}: Git action"), started);
+            let started = std::time::Instant::now();
             let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
+            crate::timing::report_since(&format!("{label}: refresh read"), started);
             Message::Loaded { generation, path, action: Some((label, result)), snapshot: Box::new(snapshot) }
         });
     }
