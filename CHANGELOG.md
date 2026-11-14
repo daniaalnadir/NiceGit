@@ -10,7 +10,7 @@
 - Push all local branches to a remote from its menu, and open Azure DevOps repositories
   in the browser.
 - The website has a guide, the repository has Discussions and a feature request template, and
-  release builds can be signed for Windows and published to Homebrew and winget.
+  release builds can be published to Homebrew and winget.
 - Faster: the first repository shows in the first frame, switching between open tabs is
   immediate, Stage all is up to eight times faster with thousands of new files, and committing
   them takes half the time. macOS draws with Metal.
@@ -22,7 +22,7 @@
 - Switch a repository's identity from the Repository menu; the commit box shows who commits.
 - Download and install updates from inside NiceGit, checked against the release's checksums.
 - New downloads: a Windows installer (.msi), Windows and Linux builds for ARM, and .rpm and
-  AppImage packages; Windows releases are ready to be signed through SignPath Foundation.
+  AppImage packages.
 
 ## 2.0.0 - Room to work
 
