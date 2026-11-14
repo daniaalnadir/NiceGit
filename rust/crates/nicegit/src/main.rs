@@ -8,6 +8,7 @@ mod file_dialog;
 mod git_ext;
 mod graph_view;
 mod install;
+mod issue_links;
 mod notifications;
 mod preload;
 mod settings;
@@ -34,6 +35,8 @@ mod ui_tests_files;
 mod ui_tests_identity;
 #[cfg(test)]
 mod ui_tests_install;
+#[cfg(test)]
+mod ui_tests_issue_links;
 #[cfg(test)]
 mod ui_tests_more;
 #[cfg(test)]
