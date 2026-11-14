@@ -2,10 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod conventional;
 mod diff_view;
 mod file_dialog;
 mod git_ext;
 mod graph_view;
+mod install;
 mod notifications;
 mod preload;
 mod settings;
@@ -25,7 +27,11 @@ mod ui_tests;
 #[cfg(test)]
 mod ui_tests_clone;
 #[cfg(test)]
+mod ui_tests_conventional;
+#[cfg(test)]
 mod ui_tests_files;
+#[cfg(test)]
+mod ui_tests_install;
 #[cfg(test)]
 mod ui_tests_more;
 #[cfg(test)]
