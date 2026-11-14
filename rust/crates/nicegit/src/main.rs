@@ -7,6 +7,7 @@ mod diff_view;
 mod file_dialog;
 mod git_ext;
 mod graph_view;
+mod install;
 mod notifications;
 mod settings;
 mod syntax;
@@ -25,6 +26,8 @@ mod ui_tests_clone;
 mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_files;
+#[cfg(test)]
+mod ui_tests_install;
 #[cfg(test)]
 mod ui_tests_more;
 #[cfg(test)]
