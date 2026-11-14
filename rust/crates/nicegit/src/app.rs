@@ -353,6 +353,11 @@ pub struct Repo {
     pub shape: Option<nicegit_core::client::RepositoryShape>,
     /// The shape being read in the background. Each load replaces it, so the newest read wins.
     pub shape_read: Option<Task<nicegit_core::client::RepositoryShape>>,
+    /// The Git name and email commits use here, as Git reads them: read with each snapshot, and
+    /// empty for a field that is not set.
+    pub identity: Option<(String, String)>,
+    /// The identity being read in the background.
+    pub identity_read: Option<Task<(String, String)>>,
     pub commit_filter: String,
     /// The Author and Path filters the history is narrowed by. Kept in memory for this repository
     /// only, so it is not saved across restarts.
@@ -541,6 +546,8 @@ impl Repo {
             signing_read: None,
             shape: None,
             shape_read: None,
+            identity: None,
+            identity_read: None,
             commit_filter: String::new(),
             history_filter: nicegit_core::HistoryFilter::default(),
             filter_draft: None,
@@ -1103,6 +1110,9 @@ impl NiceGitApp {
                 }
             }
         }
+        if deliberate || self.repos[index].identity.is_none() {
+            self.start_identity_read(index);
+        }
     }
 
     /// Reads the other open tabs in the background once the active one is shown, a couple at a
@@ -1393,6 +1403,9 @@ impl NiceGitApp {
                             self.notify_finished(event);
                         }
                     }
+                    // An action that changes the commit identity is followed by a fresh read of it.
+                    let identity_changed =
+                        matches!(&action, Some((label, _)) if crate::tools::repository_settings::changes_identity(label));
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     // A commit that failed gives its message back; one that was made keeps it cleared,
                     // and the box starts from the commit template for the next one.
@@ -1607,6 +1620,9 @@ impl NiceGitApp {
                                 }
                             }
                             self.apply(index, snapshot);
+                            if identity_changed {
+                                self.start_identity_read(index);
+                            }
                             // After fetching for a refused push, the upstream's commits are offered
                             // through the usual merge or rebase choice, with its preview.
                             if offer_integration && !action_failed && index == self.active {
@@ -1898,6 +1914,27 @@ impl NiceGitApp {
                 repo.shape_read = None;
             }
         }
+    }
+
+    /// Keeps each repository's commit identity once its background read arrives.
+    fn receive_identities(&mut self) {
+        for repo in &mut self.repos {
+            let Some(task) = repo.identity_read.as_mut() else { continue };
+            if let Some(identity) = task.get().cloned() {
+                repo.identity = Some(identity);
+                repo.identity_read = None;
+            }
+        }
+    }
+
+    /// Starts reading the repository's commit identity, which the commit box and the Identity menu
+    /// show. Read only on deliberate loads, a repository's first load, and after an action that
+    /// changes the identity, so automatic refreshes start no Git process for it. The last value stays
+    /// shown until the new read arrives.
+    fn start_identity_read(&mut self, index: usize) {
+        let path = self.repos[index].path.clone();
+        let context = self.worker.context.clone();
+        self.repos[index].identity_read = Some(Task::spawn(&context, move || GitClient::new().identity(&path)));
     }
 
     /// Copies each commit message that the commit menu asked for once it has been read. A read
@@ -3121,6 +3158,7 @@ impl eframe::App for NiceGitApp {
         self.receive_templates();
         self.receive_signing_setups();
         self.receive_repository_shapes();
+        self.receive_identities();
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();

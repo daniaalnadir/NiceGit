@@ -7,11 +7,12 @@ use std::path::{Path, PathBuf};
 use egui::{Color32, Context, RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::settings::{IdentityProfile, PushUrlChange};
-use nicegit_core::{GitError, Snapshot};
+use nicegit_core::{GitClient, GitError, Snapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
+use crate::worker::ActionResult;
 
 /// Where saved identity profiles are kept in egui's persisted memory. Profiles belong to the
 /// application rather than to any one repository.
@@ -35,6 +36,28 @@ impl StoredProfile {
     fn matches(&self, other: &StoredProfile) -> bool {
         self.name == other.name && self.email == other.email
     }
+}
+
+/// The label prefix of every action that applies a saved profile.
+const APPLY_PROFILE_LABEL: &str = "Apply identity";
+
+/// Whether an action with this label changes the repository's commit identity, so the identity is
+/// read again after it.
+pub fn changes_identity(label: &str) -> bool {
+    label == "Save identity" || label.starts_with(APPLY_PROFILE_LABEL)
+}
+
+/// The action that applies a saved profile to the open repository, and its label. The window's Apply
+/// button and the Identity menu both run this, so they apply a profile the same way.
+pub fn apply_profile(profile: &StoredProfile) -> (String, impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
+    let profile = profile.to_core();
+    let label = format!("{APPLY_PROFILE_LABEL} {}", profile.label);
+    let message = format!("Applied {} to this repository.", profile.label);
+    let run = move |client: &GitClient, dir: &Path| {
+        client.apply_identity(&profile.name, &profile.email, profile.signing_key.as_deref(), dir)?;
+        Ok(Some(message))
+    };
+    (label, run)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,6 +147,11 @@ impl RepositorySettingsWindow {
     /// The window opened on its Remotes section, from a remote's menu in the sidebar.
     pub fn on_remotes() -> Self {
         Self { section: Section::Remotes, ..Self::new() }
+    }
+
+    /// The window opened on its Saved profiles section, from the Identity menu.
+    pub fn on_profiles() -> Self {
+        Self { section: Section::Profiles, ..Self::new() }
     }
 
     /// Starts reading the identity when the repository changes, and stores the result when it
@@ -314,16 +342,13 @@ impl RepositorySettingsWindow {
         }
 
         if let Some(index) = apply {
-            let profile = self.profiles[index].to_core();
-            self.name = profile.name.clone();
-            self.email = profile.email.clone();
+            let stored = self.profiles[index].clone();
+            self.name = stored.name.clone();
+            self.email = stored.email.clone();
             self.identity_refresh_pending = true;
             self.section = Section::Identity;
-            let label = profile.label.clone();
-            cx.act(format!("Apply {label}"), move |client, dir| {
-                client.apply_identity(&profile.name, &profile.email, profile.signing_key.as_deref(), dir)?;
-                Ok(Some(format!("Applied {label} to this repository.")))
-            });
+            let (label, run) = apply_profile(&stored);
+            cx.act(label, run);
         }
         if let Some(index) = delete {
             self.profiles.remove(index);

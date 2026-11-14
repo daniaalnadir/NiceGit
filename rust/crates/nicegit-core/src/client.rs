@@ -2527,9 +2527,20 @@ impl GitClient {
             .map_err(|_| GitError::failed("delete tag", "This tag changed since it was selected. Refresh and review it again."))
     }
 
+    /// The name and email commits use in this checkout, as Git resolves them, each empty when unset.
+    /// One Git process reads both: `-z` gives each entry as its key, a newline, and its value, and
+    /// a later entry overrides an earlier one, as Git's own precedence does.
     pub fn identity(&self, directory: &Path) -> (String, String) {
-        let name = self.try_trimmed(&["config", "user.name"], directory).unwrap_or_default();
-        let email = self.try_trimmed(&["config", "user.email"], directory).unwrap_or_default();
+        let output = self.run_accepting(&["config", "-z", "--get-regexp", "^user\\.(name|email)$"], directory, &[0, 1]).unwrap_or_default();
+        let (mut name, mut email) = (String::new(), String::new());
+        for record in output.split_terminator('\0') {
+            let Some((key, value)) = record.split_once('\n') else { continue };
+            match key {
+                "user.name" => name = value.trim().to_string(),
+                "user.email" => email = value.trim().to_string(),
+                _ => {}
+            }
+        }
         (name, email)
     }
 
@@ -2690,6 +2701,16 @@ mod tests {
                 "branch.rebase={branch_rebase:?} pull.rebase={pull_rebase:?} pull.ff={pull_ff:?}"
             );
         }
+    }
+
+    #[test]
+    fn identity_reads_the_local_name_and_email() {
+        let dir = tempfile::tempdir().expect("temporary folder");
+        let client = GitClient::new();
+        client.run(&["init", "-q"], dir.path()).unwrap();
+        client.run(&["config", "--local", "--", "user.name", "Ana Work"], dir.path()).unwrap();
+        client.run(&["config", "--local", "--", "user.email", "ana@work.example"], dir.path()).unwrap();
+        assert_eq!(client.identity(dir.path()), ("Ana Work".to_string(), "ana@work.example".to_string()));
     }
 
     #[test]

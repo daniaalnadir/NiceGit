@@ -136,6 +136,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   first bad commit.
 - Save commit identities as profiles (name, email, optional signing key) and apply one to
   a repository from Repository Settings or the command palette.
+- A repository's Identity menu lists its saved profiles, marks the one its commits use, and
+  applies a chosen profile the same way Repository Settings' Apply does; Manage identities opens
+  the Saved profiles section. The commit box shows "Committing as" with the author it will use,
+  or warns when no identity is set.
 - Settings (Command-comma): System, Light, or Dark appearance; Standard, colour-blind safe,
   or Muted graph colours; and default diff options.
 - Updates: NiceGit asks GitHub once a day for the newest release's version number, through the
