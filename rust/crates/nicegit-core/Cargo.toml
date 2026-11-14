@@ -11,6 +11,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+# Checks the installer download against the release's published SHA-256 sums.
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
