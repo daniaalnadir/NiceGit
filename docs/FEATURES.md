@@ -30,6 +30,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   whose folders still exist, which open on a click, and says that folders can be dropped onto
   the window. A tip card shows one of NiceGit's tips, and Next tip cycles through them. The
   command palette's Show a tip shows the next tip as a notice.
+- Find repositories in a folder, from the Repository menu or the command palette, to add many
+  at once, as Sourcetree's folder scan does. The search runs in the background with a Cancel
+  button. It looks up to five folders deep, skips hidden folders, node_modules, target, and
+  similar build folders, and never follows symbolic links; a repository's own folders are not
+  searched for more repositories. It lists up to 1000 repositories, all checked, as paths
+  relative to the folder. Add to Recent adds the checked ones (at most the 30 Recent keeps), and
+  Also open them as tabs opens them too. Dropping a folder that is not a repository offers to
+  look inside it.
 - Initialize repositories with a chosen first branch name, an optional README, and an optional
   first commit. A folder that is already a repository is refused rather than reinitialized, so
   open it instead.
@@ -84,6 +92,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Search diffs with previous/next matching-line navigation and Command-F.
 - Select a commit to inspect its metadata, changed files, and patches in a persistent side panel. The inspector also lists the branches that contain the commit, the first tag that includes it, and any Git notes attached to the commit.
 - Read the complete commit message, including multiline descriptions, in the inspector.
+- Issue references in commit and stash messages are links: `#123` opens the issue on the origin remote's host (GitHub, GitHub Enterprise, GitLab, or Bitbucket), GitLab's `!123` opens the merge request, and Azure DevOps' `AB#123` opens the work item. Settings > Issue links turns these off, and adds custom rules: a regular expression, and an address with `$0` to `$9` for its matches, such as `https://example.atlassian.net/browse/$1` for `JIRA-7`. A rule can apply only to repositories whose remote address contains some text. Links are underlined; hovering shows the address, and a click opens it in the browser.
 - Browse every file in a commit's tree from the inspector's All files view, as a folder tree. Choose a file to read it as it was at that commit, read-only, with its lines numbered; binary files show their size, and files over 2 MB wait for Open anyway. A file's menu offers its history, blame at the commit, opening it on GitHub or GitLab, saving a copy, and copying its path. Changed files returns to the commit's changes.
 - Restore a file from a commit's changed-file list to that commit's version, or to its
   version before the commit, then review and commit the staged result.

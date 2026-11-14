@@ -8,6 +8,7 @@ use nicegit_core::client::PullStrategy;
 use serde::{Deserialize, Serialize};
 
 use crate::conventional::ConventionalCommits;
+use crate::issue_links::IssueLinkRule;
 use crate::theme::{Appearance, GraphPalette};
 
 pub const STORAGE_KEY: &str = "nicegit.settings";
@@ -392,6 +393,14 @@ pub struct Settings {
     /// is in the background.
     #[serde(default = "default_true")]
     pub notify_when_finished: bool,
+    /// Custom rules that link text in commit and stash messages, such as `JIRA-7`, in the order they
+    /// were added.
+    #[serde(default)]
+    pub issue_links: Vec<IssueLinkRule>,
+    /// Whether `#123` in messages links to the repository's host: its issues on GitHub, GitLab, and
+    /// Bitbucket, merge requests for GitLab's `!123`, and work items for Azure DevOps' `AB#123`.
+    #[serde(default = "default_true")]
+    pub link_host_issues: bool,
     /// Commands the person added to the menus, in the order they were added.
     #[serde(default)]
     pub custom_actions: Vec<CustomAction>,
@@ -445,6 +454,8 @@ impl Default for Settings {
             workspaces: Vec::new(),
             check_for_updates: true,
             notify_when_finished: true,
+            issue_links: Vec::new(),
+            link_host_issues: true,
             last_update_check: 0,
             latest_version: None,
             dismissed_update: None,

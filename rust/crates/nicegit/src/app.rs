@@ -869,8 +869,13 @@ impl NiceGitApp {
             return;
         }
         let (folders, files): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|path| path.is_dir());
-        for folder in folders {
+        // A folder that is not a repository is offered a search inside it, once; the others open.
+        let (repositories, others): (Vec<PathBuf>, Vec<PathBuf>) = folders.into_iter().partition(|folder| folder.join(".git").exists());
+        for folder in repositories {
             self.open(folder);
+        }
+        if let Some(folder) = others.into_iter().next() {
+            self.dialog = Some(crate::ui::dialogs::Dialog::FindOffer { folder });
         }
         if !files.is_empty() {
             self.notify("Drop a folder, not a file, to open it as a repository.", true);

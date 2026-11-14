@@ -22,6 +22,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 ron = "0.12"
 notify = "8.2.0"
 alacritty_terminal = "0.26.0"
+# Issue links in commit messages and the custom rules Settings holds.
+regex = "1"
 # Pure-Rust regex (no C toolchain) with the default Sublime Text syntaxes and themes, for diff colours.
 syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 notify-rust = "4"
