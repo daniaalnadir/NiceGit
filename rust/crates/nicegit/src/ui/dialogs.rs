@@ -11,6 +11,7 @@ use crate::app::NiceGitApp;
 use crate::theme;
 use crate::tools::{widgets, Task};
 use crate::ui::clone_picker::{ClonePicker, Picked};
+use crate::ui::find_repositories::{self, Choice, FindState};
 
 pub enum Pending {
     /// Checking out every folder of a sparse checkout, which ends the limit to some folders.
@@ -461,6 +462,17 @@ pub enum Dialog {
         default: Task<Result<DefaultBranchStart, String>>,
         branch: String,
         head: Option<String>,
+    },
+    /// Looking for repositories inside `folder`, then listing the ones found, all checked, for the
+    /// person to choose from. `open_tabs` says whether the chosen ones also open as tabs.
+    FindRepositories {
+        folder: std::path::PathBuf,
+        state: FindState,
+        open_tabs: bool,
+    },
+    /// A folder dropped on the window that is not a repository: offers to look inside it.
+    FindOffer {
+        folder: std::path::PathBuf,
     },
 }
 
@@ -1226,6 +1238,18 @@ impl NiceGitApp {
                         }
                     });
                 }
+                Dialog::FindRepositories { folder, state, open_tabs } => {
+                    match find_repositories::show(ui, folder.as_path(), state, open_tabs) {
+                        Choice::Pending => {}
+                        Choice::Close => close = true,
+                        Choice::Add => run = true,
+                    }
+                }
+                Dialog::FindOffer { .. } => match find_repositories::show_offer(ui) {
+                    Choice::Pending => {}
+                    Choice::Close => close = true,
+                    Choice::Add => run = true,
+                },
             }
         });
         if modal.should_close() && !picker_open {
@@ -1260,6 +1284,14 @@ impl NiceGitApp {
                 Dialog::Confirm { pending, .. } => self.run_pending(pending),
                 Dialog::Input { kind, value, second, .. } => self.run_input(kind, value, second),
                 Dialog::Integrate { .. } => {}
+                Dialog::FindOffer { folder } => self.start_find(ctx, folder),
+                Dialog::FindRepositories { state, open_tabs, .. } => {
+                    if let FindState::Done { found, .. } = state {
+                        let chosen: Vec<std::path::PathBuf> =
+                            found.into_iter().filter(|repository| repository.checked).map(|repository| repository.path).collect();
+                        self.add_found_repositories(chosen, open_tabs);
+                    }
+                }
                 Dialog::ChooseParent { commit, selected, revert, branch, head, .. } => {
                     let operation = if revert { Operation::Revert } else { Operation::CherryPick };
                     let title = if revert { "Revert" } else { "Cherry-pick" };
