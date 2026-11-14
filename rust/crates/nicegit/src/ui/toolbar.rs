@@ -528,6 +528,11 @@ impl NiceGitApp {
             ui.close();
             self.choose_folder();
         }
+        if ui.button(format!("{}  Find repositories in a folder…", icon::MAGNIFYING_GLASS)).clicked() {
+            ui.close();
+            let ctx = ui.ctx().clone();
+            self.choose_folder_to_find(&ctx);
+        }
         if ui.button(format!("{}  Clone repository…", icon::DOWNLOAD_SIMPLE)).clicked() {
             ui.close();
             self.dialog = Some(Dialog::clone_repository());

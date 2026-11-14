@@ -31,6 +31,8 @@ mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]
+mod ui_tests_find_repositories;
+#[cfg(test)]
 mod ui_tests_identity;
 #[cfg(test)]
 mod ui_tests_install;

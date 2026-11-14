@@ -30,6 +30,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   whose folders still exist, which open on a click, and says that folders can be dropped onto
   the window. A tip card shows one of NiceGit's tips, and Next tip cycles through them. The
   command palette's Show a tip shows the next tip as a notice.
+- Find repositories in a folder, from the Repository menu or the command palette, to add many
+  at once, as Sourcetree's folder scan does. The search runs in the background with a Cancel
+  button. It looks up to five folders deep, skips hidden folders, node_modules, target, and
+  similar build folders, and never follows symbolic links; a repository's own folders are not
+  searched for more repositories. It lists up to 1000 repositories, all checked, as paths
+  relative to the folder. Add to Recent adds the checked ones (at most the 30 Recent keeps), and
+  Also open them as tabs opens them too. Dropping a folder that is not a repository offers to
+  look inside it.
 - Initialize repositories with a chosen first branch name, an optional README, and an optional
   first commit. A folder that is already a repository is refused rather than reinitialized, so
   open it instead.

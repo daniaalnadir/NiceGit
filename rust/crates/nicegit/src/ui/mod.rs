@@ -5,6 +5,7 @@ pub mod changes;
 pub mod clone_picker;
 pub mod commit_tree;
 pub mod dialogs;
+pub mod find_repositories;
 pub mod github_section;
 pub mod go_to_file;
 pub mod history;

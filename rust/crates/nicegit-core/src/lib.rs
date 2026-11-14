@@ -13,6 +13,7 @@ pub mod compare;
 pub mod conflict;
 pub mod containing;
 pub mod diff;
+pub mod discover;
 pub mod external;
 pub mod feedback;
 pub mod file_history;
