@@ -84,3 +84,9 @@
 - Let `git status` write the index only on deliberate loads (opening, and Command-R, which is Ctrl-R on Windows and Linux); automatic refreshes keep `GIT_OPTIONAL_LOCKS=0`.
 - Measure against a generated repository before and after performance changes.
 - Skip off-screen rows by testing the clip rect, not `is_rect_visible`: in a pass egui will discard (a new Grid requests one), everything reports invisible, and widgets skipped there lose their open context menus.
+- Start reading the first repository at the top of `main`, before eframe creates the window (see `preload.rs`); the result is used only when its load key matches exactly, so a stale hint costs nothing.
+- Read other open tabs in the background, a couple at a time, once the active one shows. These reads never write the index and must not reorder the recent list; switching to a tab marks it opened.
+- Reuse the root a previous snapshot reported (`load_snapshot_from`) when its `.git` still exists; asking Git for it again adds a process before the parallel reads can start.
+- Stage all, and staging 50 or more paths, set `core.bigFileThreshold=1` for that `git add` only, so new files stream into one pack: creating thousands of loose objects took seconds on macOS. Keep single-file staging on Git's usual path.
+- Commits run with `maintenance.auto=false` (through `GIT_CONFIG_COUNT`, never `-c`, which would change the runner's first argument) and run `git maintenance run --auto` after the result is delivered. After a staging action, build the commit tree with `git write-tree` in parallel with the refresh.
+- Time changes with `NICEGIT_TIMING=1` and the `ui_bench_speed` benchmarks; test helpers that sleep between frames inflate timings, so benchmarks step frames back to back.

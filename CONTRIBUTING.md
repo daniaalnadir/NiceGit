@@ -73,6 +73,22 @@ or without bash, they skip with a message. Each operation runs once to warm up a
 times, and the table shows the median, the fastest, and the slowest run. Timings vary with
 what else the machine is doing, so compare runs made under similar conditions.
 
+Two more benchmarks time what a person waits for, headless and with real Git: switching
+between twenty open repositories, and staging then committing 5,000 files. Each time runs from
+the action to the first frame that shows its result:
+
+```sh
+cargo test --release -p nicegit ui_bench_speed -- --ignored --nocapture --test-threads 1
+```
+
+To see the same timings in the running app, start it with `NICEGIT_TIMING=1`. It prints, to
+standard error, when the window is ready, when the first repository shows, how long each switch
+takes to show a repository, and for each action how long Git took and how long the refresh read:
+
+```sh
+NICEGIT_TIMING=1 ./target/release/nicegit <folder>
+```
+
 Measure before and after any performance change against the same generated repository:
 run the benchmark on the code as it was, make the change, run it again, and report both
 tables in the pull request. Changes to how the history is drawn also need the interface

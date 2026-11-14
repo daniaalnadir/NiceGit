@@ -2083,6 +2083,7 @@ dependencies = [
  "notify",
  "notify-rust",
  "rfd",
+ "ron",
  "serde",
  "syntect",
  "tempfile",

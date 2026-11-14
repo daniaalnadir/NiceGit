@@ -69,6 +69,7 @@ impl Worker {
         &self,
         generation: u64,
         path: PathBuf,
+        root: Option<PathBuf>,
         deliberate: bool,
         history_limit: usize,
         scope: HistoryScope,
@@ -78,9 +79,25 @@ impl Worker {
     ) {
         self.spawn(move || {
             let client = if deliberate { GitClient::deliberate() } else { GitClient::new() };
-            let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
+            let started = std::time::Instant::now();
+            let snapshot = client.load_snapshot_from(root.as_deref(), &path, history_limit, scope, &hidden, solo.as_deref(), &filter);
+            crate::timing::report_since("load: full snapshot read", started);
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
+    }
+
+    /// Delivers a load that `preload` started before the window existed. A result that is already
+    /// in is delivered at once, so the next `receive` shows it; otherwise a thread waits for it.
+    pub fn load_preloaded(&self, generation: u64, path: PathBuf, result: Receiver<Result<Snapshot, GitError>>) {
+        match result.try_recv() {
+            Ok(snapshot) => {
+                let _ = self.sender.send(Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) });
+            }
+            Err(_) => self.spawn(move || {
+                let snapshot = result.recv().unwrap_or_else(|_| Err(GitError::failed("load", "The first read stopped unexpectedly.")));
+                Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
+            }),
+        }
     }
 
     /// Refreshes the working-tree status of `previous` and keeps the rest, when the checkout is
@@ -100,10 +117,15 @@ impl Worker {
     ) {
         self.spawn(move || {
             let client = GitClient::new();
+            let started = std::time::Instant::now();
             let quick = client.quick_snapshot(&previous, &path).ok().flatten();
+            crate::timing::report_since("load: quick status read", started);
             let snapshot = match quick {
                 Some(snapshot) => Ok(snapshot),
-                None => client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter),
+                None => {
+                    let root = PathBuf::from(&previous.root_path);
+                    client.load_snapshot_from(Some(&root), &path, history_limit, scope, &hidden, solo.as_deref(), &filter)
+                }
             };
             Message::Loaded { generation, path, action: None, snapshot: Box::new(snapshot) }
         });
@@ -115,6 +137,7 @@ impl Worker {
         &self,
         generation: u64,
         path: PathBuf,
+        root: Option<PathBuf>,
         label: String,
         history_limit: usize,
         scope: HistoryScope,
@@ -123,11 +146,36 @@ impl Worker {
         filter: HistoryFilter,
         action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static,
     ) {
-        self.spawn(move || {
+        let sender = self.sender.clone();
+        let context = self.context.clone();
+        std::thread::spawn(move || {
             let client = GitClient::new();
+            let started = std::time::Instant::now();
             let result = action(&client, &path);
-            let snapshot = client.load_snapshot_with_filter(&path, history_limit, scope, &hidden, solo.as_deref(), &filter);
-            Message::Loaded { generation, path, action: Some((label, result)), snapshot: Box::new(snapshot) }
+            crate::timing::report_since(&format!("{label}: Git action"), started);
+            let started = std::time::Instant::now();
+            // After staging changes, the tree a commit would record is built while the refresh
+            // reads, so the commit itself does not build it. Both only read what staging wrote.
+            let staging = result.is_ok() && (label.starts_with("Stage") || label.starts_with("Unstage"));
+            let snapshot = std::thread::scope(|threads| {
+                if staging {
+                    threads.spawn(|| client.prepare_commit_tree(&path));
+                }
+                client.load_snapshot_from(root.as_deref(), &path, history_limit, scope, &hidden, solo.as_deref(), &filter)
+            });
+            crate::timing::report_since(&format!("{label}: refresh read"), started);
+            let committed = result.is_ok() && matches!(label.as_str(), "Commit" | "Amend" | "Commit and push" | "Fixup commit");
+            let _ = sender.send(Message::Loaded {
+                generation,
+                path: path.clone(),
+                action: Some((label, result)),
+                snapshot: Box::new(snapshot),
+            });
+            context.request_repaint();
+            // Housekeeping a commit skipped runs once its result is on screen.
+            if committed {
+                client.run_due_maintenance(&path);
+            }
         });
     }
 
