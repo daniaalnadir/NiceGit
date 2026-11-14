@@ -11,6 +11,18 @@
   in the browser.
 - The website has a guide, the repository has Discussions and a feature request template, and
   release builds can be signed for Windows and published to Homebrew and winget.
+- Faster: the first repository shows in the first frame, switching between open tabs is
+  immediate, Stage all is up to eight times faster with thousands of new files, and committing
+  them takes half the time. macOS draws with Metal.
+- Desktop notifications when long work finishes while NiceGit is in the background.
+- Remember conflict resolutions with Git's rerere, and see which files Git resolved from
+  memory.
+- Shallow, partial and sparse clones, with Fetch full history and Show all folders afterwards.
+- Conventional Commits help in the commit box, and a summary length warning past 72 characters.
+- Switch a repository's identity from the Repository menu; the commit box shows who commits.
+- Download and install updates from inside NiceGit, checked against the release's checksums.
+- New downloads: a Windows installer (.msi), Windows and Linux builds for ARM, and .rpm and
+  AppImage packages; Windows releases are ready to be signed through SignPath Foundation.
 
 ## 2.0.0 - Room to work
 
