@@ -11,6 +11,7 @@ use egui::{RichText, ScrollArea, TextEdit, Ui};
 use nicegit_core::conflict::{has_conflict_markers, ConflictDocument};
 use nicegit_core::{GitClient, Operation};
 
+use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 /// The names for a conflict's two sides, which the editor and the Changes panel both show. During
@@ -21,6 +22,15 @@ pub fn side_names(operation: Option<Operation>) -> (&'static str, &'static str) 
         ("Destination", "Replayed commit")
     } else {
         ("Current", "Incoming")
+    }
+}
+
+/// The notice for turning Git's conflict memory on or off, shared with the command palette.
+pub fn remember_notice(enabled: bool) -> &'static str {
+    if enabled {
+        "Git will remember how you resolve conflicts and reuse it when the same conflict happens again."
+    } else {
+        "Git will no longer remember how you resolve conflicts."
     }
 }
 
@@ -64,6 +74,12 @@ pub struct ConflictWindow {
     /// Set by a background resolution that succeeded, so the window closes after it.
     resolved: Arc<AtomicBool>,
     close_requested: bool,
+    /// Whether the editor has asked Git for its `rerere.enabled` setting, which it does once.
+    remember_asked: bool,
+    /// Reads the setting in the background, once.
+    remember_read: Option<Task<nicegit_core::Result<bool>>>,
+    /// The checkbox's value: the setting as read, or as last written. None until it is read.
+    remember: Option<bool>,
 }
 
 impl ConflictWindow {
@@ -78,12 +94,40 @@ impl ConflictWindow {
             pending: None,
             resolved: Arc::new(AtomicBool::new(false)),
             close_requested: false,
+            remember_asked: false,
+            remember_read: None,
+            remember: None,
         }
     }
 
     /// Whether the result differs from the text the file had when it was read.
     fn edited(&self) -> bool {
         self.document.as_ref().is_some_and(|document| self.result != document.content)
+    }
+}
+
+/// The checkbox that turns Git's conflict memory on or off, with what that means. `remember` is
+/// the setting as read, or None until it is read. Writing the setting goes through the same action
+/// path as the other changes, and changes no working file.
+fn remember_option(ui: &mut Ui, cx: &mut Ctx, remember: &mut Option<bool>) {
+    let c = theme::of(ui);
+    let mut on = remember.unwrap_or(false);
+    let known = remember.is_some();
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        let box_ = egui::Checkbox::new(&mut on, "Remember how I resolve conflicts");
+        changed = ui.add_enabled(cx.idle && known, box_).changed();
+    });
+    ui.label(
+        RichText::new("Git will reuse your resolution if the same conflict happens again, for example in a later rebase.")
+            .small()
+            .color(c.muted),
+    );
+    if changed {
+        *remember = Some(on);
+        cx.act("Remember conflict resolutions", move |client, repo| {
+            client.set_rerere_enabled(on, repo).map(|()| Some(remember_notice(on).to_string()))
+        });
     }
 }
 
@@ -118,6 +162,19 @@ impl ToolWindow for ConflictWindow {
                     }
                     Err(error) => self.load_error = Some(error.to_string()),
                 }
+            }
+        }
+        // The setting is read once, when the editor first draws. A failed read leaves the box off
+        // and disabled, since the editor cannot say what Git has.
+        if !self.remember_asked {
+            self.remember_asked = true;
+            self.remember_read = Some(query(ui.ctx(), cx.repo, |client, repo| client.rerere_enabled(repo)));
+        }
+        if self.remember.is_none() {
+            let finished = self.remember_read.as_mut().and_then(|task| task.get()).map(|read| read.as_ref().ok().copied());
+            if let Some(value) = finished {
+                self.remember = value;
+                self.remember_read = None;
             }
         }
 
@@ -181,7 +238,10 @@ impl ToolWindow for ConflictWindow {
         ui.label(RichText::new("Result").strong());
         if markers {
             widgets::callout(ui, "The result still has conflict markers. Remove them before saving.", true);
+        } else if cx.snapshot.reused_resolutions.contains(&self.path) {
+            widgets::callout(ui, "Git reused a resolution you recorded earlier. Check it, then mark the file resolved.", false);
         }
+        remember_option(ui, cx, &mut self.remember);
         // The editor wraps to the window's width, so only the height needs to scroll.
         ScrollArea::vertical().id_salt(("conflict-result", self.path.as_str())).auto_shrink([false, false]).show(ui, |ui| {
             let width = ui.available_width();

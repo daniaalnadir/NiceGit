@@ -477,7 +477,9 @@ impl NiceGitApp {
             counts.and_then(|counts| if staged { counts.staged.get(&entry.path) } else { counts.unstaged.get(&entry.path) }).copied();
         let large = counts.and_then(|counts| counts.large.get(&entry.path)).copied();
         let buttons = if staged { 1.0 } else { 2.0 };
-        let counts_width = if count.is_some() { 64.0 } else { 0.0 } + if large.is_some() { 64.0 } else { 0.0 };
+        let reused = entry.kind == StatusKind::Conflicted && snapshot.reused_resolutions.contains(&entry.path);
+        let counts_width =
+            if count.is_some() { 64.0 } else { 0.0 } + if large.is_some() { 64.0 } else { 0.0 } + if reused { 130.0 } else { 0.0 };
         let label_width = (child.available_width() - buttons * 30.0 - counts_width).max(40.0);
         child.allocate_ui_with_layout(egui::vec2(label_width, height), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add(egui::Label::new(RichText::new(text).color(ui.visuals().text_color())).truncate().selectable(false))
@@ -491,6 +493,11 @@ impl NiceGitApp {
                     widgets::icon_button(ui, icon::TRASH, "Discard changes…", idle && entry.kind != StatusKind::Conflicted).clicked();
                 if entry.kind == StatusKind::Conflicted {
                     resolve_clicked = widgets::icon_button(ui, icon::GIT_DIFF, "Resolve conflict…", true).clicked();
+                    if reused {
+                        let c = theme::of(ui);
+                        ui.label(RichText::new("Resolved from memory").small().color(c.muted))
+                            .on_hover_text("Git reused a resolution you recorded earlier. Check it, then mark the file resolved.");
+                    }
                 } else {
                     stage_clicked = widgets::icon_button(ui, icon::PLUS_CIRCLE, "Stage", idle).clicked();
                 }

@@ -13,6 +13,7 @@ use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
 use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
+use crate::notifications::FinishedWork;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
 use crate::theme;
 use crate::tools::{Ctx, Request, Task, ToolWindow};
@@ -347,6 +348,11 @@ pub struct Repo {
     pub signing: Option<nicegit_core::client::SigningSetup>,
     /// The signing setup being read in the background.
     pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
+    /// Whether the checkout is shallow or limited to some folders, as last read. The Repository
+    /// menu offers its fetch and show-all items only when these apply.
+    pub shape: Option<nicegit_core::client::RepositoryShape>,
+    /// The shape being read in the background. Each load replaces it, so the newest read wins.
+    pub shape_read: Option<Task<nicegit_core::client::RepositoryShape>>,
     pub commit_filter: String,
     /// The Author and Path filters the history is narrowed by. Kept in memory for this repository
     /// only, so it is not saved across restarts.
@@ -533,6 +539,8 @@ impl Repo {
             sent_sign: None,
             signing: None,
             signing_read: None,
+            shape: None,
+            shape_read: None,
             commit_filter: String::new(),
             history_filter: nicegit_core::HistoryFilter::default(),
             filter_draft: None,
@@ -653,6 +661,12 @@ pub struct NiceGitApp {
     /// The `glab` program that GitLab merge requests run through. Tests point it at a missing file.
     pub glab: nicegit_core::gitlab::GlabProgram,
     recorded: RecordSlot,
+    /// When the action now running started, so its duration can be told when it finishes.
+    action_started: Option<Instant>,
+    /// The desktop notifications sent, as title and body. Tests read these instead of the
+    /// operating system's.
+    #[cfg(test)]
+    pub sent_notifications: Vec<(String, String)>,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
     /// The terminal panel under the history, when shown.
@@ -734,6 +748,9 @@ impl NiceGitApp {
             pending_check_out: None,
             glab: nicegit_core::gitlab::GlabProgram::default(),
             recorded: Arc::new(Mutex::new(None)),
+            action_started: None,
+            #[cfg(test)]
+            sent_notifications: Vec::new(),
             preview_light: false,
             terminal: None,
             fitted_to_monitor: false,
@@ -1181,6 +1198,7 @@ impl NiceGitApp {
         self.watched_git_change = false;
         self.busy = Some(label.to_string());
         self.timings.action = Some((label.to_string(), Instant::now()));
+        self.action_started = Some(Instant::now());
         // A background fetch leaves the last message for the person to read.
         if label != BACKGROUND_FETCH {
             self.notice = None;
@@ -1288,10 +1306,40 @@ impl NiceGitApp {
         self.notice = Some(Notice { text: text.into(), is_error, action: None, detail: None });
     }
 
+    /// Shows a desktop notification for finished work, when the window is in the background and
+    /// the setting is on. Tests record the notification instead.
+    fn notify_finished(&mut self, event: FinishedWork) {
+        let Some((title, body)) = crate::notifications::notification_for(&event, self.was_focused, self.settings.notify_when_finished)
+        else {
+            return;
+        };
+        #[cfg(test)]
+        self.sent_notifications.push((title, body));
+        #[cfg(not(test))]
+        crate::notifications::send(title, body);
+    }
+
+    /// The commits a background fetch brought onto the current branch's upstream: how much further
+    /// behind the branch is than the snapshot before the fetch showed. None when the branch or
+    /// its upstream changed, or either count is unknown.
+    fn upstream_commits_gained(&self, index: usize, fresh: &Snapshot) -> Option<FinishedWork> {
+        let previous = self.repos[index].snapshot.as_deref()?;
+        if previous.current_branch != fresh.current_branch || previous.upstream != fresh.upstream {
+            return None;
+        }
+        let (before, after) = (previous.behind?, fresh.behind?);
+        Some(FinishedWork::NewUpstreamCommits {
+            repo: self.repos[index].name(),
+            upstream: fresh.upstream.clone()?,
+            count: after.saturating_sub(before),
+        })
+    }
+
     fn receive(&mut self) {
         while let Ok(message) = self.worker.receiver.try_recv() {
             match message {
                 Message::Loaded { generation, path, action, snapshot } => {
+                    let started = if action.is_some() { self.action_started.take() } else { None };
                     if action.is_some() {
                         self.busy = None;
                         self.timings.action_done();
@@ -1326,6 +1374,19 @@ impl NiceGitApp {
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
+                    let background_fetched = matches!(&action, Some((label, Ok(_))) if label == BACKGROUND_FETCH);
+                    // An action the person started is announced once it is known how it ended, when NiceGit is in the background.
+                    if let (Some((label, result)), Some(started)) = (&action, started) {
+                        if label != BACKGROUND_FETCH {
+                            let event = FinishedWork::Action {
+                                label: label.clone(),
+                                repo: self.repos[index].name(),
+                                elapsed: started.elapsed(),
+                                error: result.as_ref().err().map(|error| error.to_string()),
+                            };
+                            self.notify_finished(event);
+                        }
+                    }
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     // A commit that failed gives its message back; one that was made keeps it cleared,
                     // and the box starts from the commit template for the next one.
@@ -1510,15 +1571,27 @@ impl NiceGitApp {
                     }
                     match *snapshot {
                         Ok(snapshot) => {
+                            if background_fetched {
+                                if let Some(event) = self.upstream_commits_gained(index, &snapshot) {
+                                    self.notify_finished(event);
+                                }
+                            }
                             // An action that stopped at conflicts left an operation to finish: that
                             // is a pause for the person, not a failure, so it is described as one.
                             if let (Some(detail), Some(operation)) = (stopped_with.take(), snapshot.operation) {
                                 let conflicts = snapshot.status.iter().filter(|e| e.kind == nicegit_core::StatusKind::Conflicted).count();
                                 if conflicts > 0 {
                                     let plural = if conflicts == 1 { "" } else { "s" };
+                                    // Files Git resolved from a recorded resolution still need checking.
+                                    let reused = snapshot.reused_resolutions.len();
+                                    let reused_note = match reused {
+                                        0 => String::new(),
+                                        1 => " Git reused 1 recorded resolution. Check it before continuing.".to_string(),
+                                        count => format!(" Git reused {count} recorded resolutions. Check them before continuing."),
+                                    };
                                     self.notice = Some(Notice {
                                         text: format!(
-                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.",
+                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.{reused_note}",
                                             operation.name()
                                         ),
                                         is_error: true,
@@ -1709,6 +1782,14 @@ impl NiceGitApp {
             let context = self.worker.context.clone();
             self.repos[index].signing_read = Some(Task::spawn(&context, move || GitClient::new().signing_setup(&path).unwrap_or_default()));
         }
+        // Whether the checkout is shallow or limited to folders is read on every load, so a fetch
+        // or checkout made from the menu is seen. It is file checks against the snapshot's Git
+        // directory, so a refresh starts no Git process for it.
+        let shape_path = self.repos[index].path.clone();
+        let shape_git_dir = self.repos[index].snapshot.as_ref().and_then(|s| s.absolute_git_dir.clone());
+        let shape_context = self.worker.context.clone();
+        self.repos[index].shape_read =
+            Some(Task::spawn(&shape_context, move || GitClient::new().repository_shape(&shape_path, shape_git_dir.as_deref())));
         // Bisect state and submodules are read alongside, without delaying the snapshot. The bar
         // keeps the last state until the new read arrives, so it does not vanish (and take its
         // buttons with it) on every refresh.
@@ -1798,6 +1879,17 @@ impl NiceGitApp {
             if let Some(setup) = task.get().copied() {
                 repo.signing = Some(setup);
                 repo.signing_read = None;
+            }
+        }
+    }
+
+    /// Keeps each repository's shallow and sparse state once its background read arrives.
+    fn receive_repository_shapes(&mut self) {
+        for repo in &mut self.repos {
+            let Some(task) = repo.shape_read.as_mut() else { continue };
+            if let Some(shape) = task.get().copied() {
+                repo.shape = Some(shape);
+                repo.shape_read = None;
             }
         }
     }
@@ -2748,10 +2840,15 @@ impl NiceGitApp {
                 if self.settings.clone_folder.is_none() {
                     self.settings.clone_folder = path.parent().map(Path::to_path_buf);
                 }
+                let folder = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
+                self.notify_finished(FinishedWork::Clone(Ok(folder)));
                 self.notify(format!("Cloned into {}.", path.display()), false);
                 self.open(path);
             }
-            Err(error) => self.notify(format!("Clone failed: {error}"), true),
+            Err(error) => {
+                self.notify_finished(FinishedWork::Clone(Err(error.to_string())));
+                self.notify(format!("Clone failed: {error}"), true);
+            }
         }
     }
 
@@ -3017,6 +3114,7 @@ impl eframe::App for NiceGitApp {
         self.poll_merge_tool();
         self.receive_templates();
         self.receive_signing_setups();
+        self.receive_repository_shapes();
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();

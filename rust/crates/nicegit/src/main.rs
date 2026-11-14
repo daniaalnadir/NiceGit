@@ -6,6 +6,7 @@ mod diff_view;
 mod file_dialog;
 mod git_ext;
 mod graph_view;
+mod notifications;
 mod preload;
 mod settings;
 mod syntax;
@@ -22,9 +23,13 @@ mod ui_screenshots;
 #[cfg(test)]
 mod ui_tests;
 #[cfg(test)]
+mod ui_tests_clone;
+#[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]
 mod ui_tests_more;
+#[cfg(test)]
+mod ui_tests_notifications;
 #[cfg(test)]
 mod ui_tests_parity_a;
 #[cfg(test)]
@@ -39,6 +44,8 @@ mod ui_tests_parity_e;
 mod ui_tests_parity_f;
 #[cfg(test)]
 mod ui_tests_perf;
+#[cfg(test)]
+mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_speed;
 #[cfg(test)]
