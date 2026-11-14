@@ -23,6 +23,7 @@ pub mod gitlab;
 pub mod graph;
 pub mod hosting;
 pub mod inline;
+pub mod install;
 mod json;
 pub mod lfs;
 pub mod line_counts;

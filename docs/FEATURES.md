@@ -92,6 +92,14 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Add trailers from the commit box's menu: Signed-off-by from your Git identity, and
   Co-authored-by from recent authors (the current user and bots left out). The menu edits
   the description text, so the exact lines show before you commit.
+- Conventional Commits help above the summary: a type menu (feat, fix, and nine more, each
+  with a one-line description), a scope field, and a Breaking toggle. They write the prefix
+  into the summary itself, so the summary stays the only copy of the message. Settings, under
+  Committing, sets it to Off, Automatic (the default, on when at least five of the last
+  twenty non-merge commits use the convention), or Always. Automatic also hints that the
+  repository uses the convention while a summary has no type.
+- The summary shows a character count past 50 characters, in a warning colour past 72, and
+  never blocks a commit.
 - Skip Git hooks for a commit from the commit box's options menu (the gear beside Add
   trailers). The note under the Commit button shows while it is on, and it resets after each
   commit. Skipping passes `--no-verify` to the commit, amend, or Commit and push, and also
@@ -137,7 +145,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Updates: NiceGit asks GitHub once a day for the newest release's version number, through the
   system `curl`, and sends nothing else. When a newer version exists, a notice along the bottom
   of the window offers Download, which opens the releases page, and Dismiss, which hides that
-  version's notice. Turn checks off, or run Check now, under Settings > General. Settings also
+  version's notice. Where NiceGit can replace itself (the macOS app bundle, the Windows MSI
+  install, and the Linux AppImage), Download and install also appears. After you confirm, it
+  downloads the release file, checks it against the release's SHA256SUMS.txt, and installs
+  only a file that matches; then Restart NiceGit starts the new copy. Homebrew, portable, and
+  package copies keep the link only. Turn checks off, or run Check now, under Settings > General. Settings also
   links Report a problem, which opens a new bug report with NiceGit's version, your operating
   system and its architecture, and the template's sections filled in, and Request a feature.
   Both are in the command palette too. Neither includes repository paths or names.

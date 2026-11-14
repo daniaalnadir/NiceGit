@@ -14,6 +14,9 @@ const CHECKOUT_CHANGED: &str = "The current checkout changed since this action w
 const BRANCH_CHANGED: &str = "This branch changed since it was selected. Refresh and review it again.";
 /// The largest `commit.template` file read. A commit message is never this long.
 const COMMIT_TEMPLATE_LIMIT: u64 = 64 * 1024;
+/// How many paths a staging command must name before their contents go into one pack (see
+/// `run_adding_many`). Below this, the usual loose objects are as quick and no small pack is made.
+const MANY_FILES: usize = 50;
 
 /// How `GitClient::pull` brings the upstream's commits into the current branch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -353,6 +356,28 @@ impl GitClient {
         runner::run(arguments, directory, &self.options())
     }
 
+    /// Runs a commit command with Git's automatic housekeeping off (`maintenance.auto=false`), so
+    /// the person does not wait for it; `run_due_maintenance` runs it once the commit is shown.
+    fn run_commit(&self, arguments: &[&str], directory: &Path) -> Result<String> {
+        const NO_AUTO_MAINTENANCE: &[(&str, &str)] =
+            &[("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "maintenance.auto"), ("GIT_CONFIG_VALUE_0", "false")];
+        runner::run(arguments, directory, &RunOptions { env: NO_AUTO_MAINTENANCE, ..self.options() })
+    }
+
+    /// Writes the staged tree's objects and caches them in the index, so the next commit does not
+    /// build them while the person waits. A commit of thousands of files spends most of its time
+    /// there. Git updates the cache under the index lock, and an unmerged index or any other
+    /// failure only means the commit builds the tree itself, so the result is ignored.
+    pub fn prepare_commit_tree(&self, directory: &Path) {
+        let _ = runner::run(&["write-tree"], directory, &GitClient::deliberate().options());
+    }
+
+    /// Runs the housekeeping Git skips during NiceGit's commits (`maintenance.auto=false`), once
+    /// the commit has been shown. Git decides whether anything is due; usually nothing is.
+    pub fn run_due_maintenance(&self, directory: &Path) {
+        let _ = runner::run(&["maintenance", "run", "--auto", "--quiet"], directory, &GitClient::deliberate().options());
+    }
+
     pub(crate) fn run_accepting(&self, arguments: &[&str], directory: &Path, accepted: &[i32]) -> Result<String> {
         runner::run(arguments, directory, &RunOptions { accepted, ..self.options() })
     }
@@ -686,7 +711,27 @@ impl GitClient {
         solo: Option<&str>,
         filter: &HistoryFilter,
     ) -> Result<Snapshot> {
-        let root = self.repository_root(selected)?;
+        self.load_snapshot_from(None, selected, history_limit, scope, hidden, solo, filter)
+    }
+
+    /// Loads a snapshot as `load_snapshot_with_filter` does. `known_root` is the root a previous
+    /// snapshot of this checkout reported: when its `.git` is still there, it is used as the root
+    /// rather than asking Git again, which saves a Git process before the reads can start.
+    #[allow(clippy::too_many_arguments)]
+    pub fn load_snapshot_from(
+        &self,
+        known_root: Option<&Path>,
+        selected: &Path,
+        history_limit: usize,
+        scope: HistoryScope,
+        hidden: &[String],
+        solo: Option<&str>,
+        filter: &HistoryFilter,
+    ) -> Result<Snapshot> {
+        let root = match known_root.filter(|root| root.join(".git").exists()) {
+            Some(root) => root.to_path_buf(),
+            None => self.repository_root(selected)?,
+        };
         let limit = history_limit.max(1);
         let log_format = format!("--pretty=format:{LOG_FORMAT}");
         let branch_format = format!("--format={BRANCH_FORMAT}");
@@ -875,11 +920,28 @@ impl GitClient {
         }
         let mut arguments = vec!["add", "--"];
         arguments.extend(paths.iter().map(String::as_str));
-        self.run(&arguments, directory).map(drop)
+        if paths.len() >= MANY_FILES {
+            self.run_adding_many(&arguments, directory)
+        } else {
+            self.run(&arguments, directory).map(drop)
+        }
     }
 
     pub fn stage_all(&self, directory: &Path) -> Result<()> {
-        self.run(&["add", "--all"], directory).map(drop)
+        self.run_adding_many(&["add", "--all"], directory)
+    }
+
+    /// Runs `git add` for what may be many files, writing their contents into one pack rather than
+    /// a file each. Git streams a file into a pack when it is larger than `core.bigFileThreshold`,
+    /// so a threshold of one byte sends every new file there. Creating thousands of small files is
+    /// what makes a large add slow: one pack made 5,000 new files stage about eight times faster.
+    /// A file that needs a filter or line-ending conversion is still added the usual way, and the
+    /// setting applies to this command only, so diffs and later commands are unaffected. Git's
+    /// housekeeping later combines the packs.
+    fn run_adding_many(&self, arguments: &[&str], directory: &Path) -> Result<()> {
+        const ONE_PACK: &[(&str, &str)] =
+            &[("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "core.bigFileThreshold"), ("GIT_CONFIG_VALUE_0", "1")];
+        runner::run(arguments, directory, &RunOptions { env: ONE_PACK, ..self.options() }).map(drop)
     }
 
     pub fn unstage(&self, entry: Selected, directory: &Path) -> Result<()> {
@@ -988,7 +1050,7 @@ impl GitClient {
         }
         arguments.extend(sign_argument(sign));
         arguments.extend(["-m", message]);
-        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
+        self.run_commit(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
     /// Commits the staged changes as a `fixup!` commit for `target`, which is HEAD or an earlier
@@ -1034,7 +1096,7 @@ impl GitClient {
             arguments.push("--no-verify");
         }
         arguments.extend(sign_argument(sign));
-        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
+        self.run_commit(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
     /// Whether the repository has a signing setup, and whether `commit.gpgSign` signs commits by
@@ -1161,7 +1223,7 @@ impl GitClient {
         }
         arguments.extend(sign_argument(sign));
         arguments.extend(["--message", message]);
-        self.run(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
+        self.run_commit(&arguments, directory).map(drop).map_err(|error| self.refusal_by_hook(error, skip_hooks, directory))
     }
 
     /// The commit HEAD points to, if any.

@@ -2809,3 +2809,58 @@ fn commit_that_cannot_be_signed_is_reported_as_a_signing_failure_and_not_made() 
     }
     assert_eq!(repo.head(), first, "a commit that failed to sign is not made");
 }
+
+fn pack_count(repo: &Repo) -> usize {
+    std::fs::read_dir(repo.path().join(".git/objects/pack"))
+        .map(|entries| entries.filter_map(Result::ok).filter(|entry| entry.path().extension().is_some_and(|e| e == "pack")).count())
+        .unwrap_or(0)
+}
+
+#[test]
+fn staging_many_files_writes_them_into_one_pack_and_commits_them_intact() {
+    let repo = Repo::new();
+    repo.commit("README.md", "readme\n", "Start");
+    for n in 0..60 {
+        repo.write(&format!("many/f{n:02}.txt"), &format!("file {n}\n"));
+    }
+    client().stage_all(repo.path()).expect("stage all");
+    assert_eq!(pack_count(&repo), 1, "the new files went into one pack");
+    client().commit_with_options("Add many", false, None, repo.path()).expect("commit");
+    assert_eq!(repo.git(&["show", "HEAD:many/f42.txt"]), "file 42\n");
+    assert_eq!(repo.git(&["ls-tree", "-r", "--name-only", "HEAD", "many"]).lines().count(), 60);
+    // Diffs still see text, since the setting applied to the add alone.
+    assert!(repo.git(&["show", "--stat", "--format=", "HEAD"]).contains("60 files changed, 60 insertions(+)"));
+    git(repo.path(), &["fsck", "--no-progress"]);
+}
+
+#[test]
+fn staging_a_few_paths_keeps_git_s_usual_objects() {
+    let repo = Repo::new();
+    repo.commit("README.md", "readme\n", "Start");
+    repo.write("one.txt", "one\n");
+    repo.write("two.txt", "two\n");
+    client().stage_paths(&["one.txt".to_string(), "two.txt".to_string()], repo.path()).expect("stage");
+    assert_eq!(pack_count(&repo), 0, "a small staging makes no pack");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "one.txt\ntwo.txt\n");
+}
+
+#[test]
+fn a_known_root_loads_the_same_snapshot_as_asking_git() {
+    let repo = Repo::new();
+    repo.commit("README.md", "readme\n", "Start");
+    repo.write("new.txt", "new\n");
+    let asked = client().load_snapshot(repo.path(), 100).expect("snapshot");
+    let root = std::path::PathBuf::from(&asked.root_path);
+    let known = client()
+        .load_snapshot_from(Some(&root), repo.path(), 100, HistoryScope::All, &[], None, &HistoryFilter::default())
+        .expect("snapshot from the known root");
+    assert_eq!(known.root_path, asked.root_path);
+    assert_eq!(known.status, asked.status);
+    assert_eq!(known.head_hash, asked.head_hash);
+    // A root whose .git is gone is not trusted: Git is asked again.
+    let missing = repo.path().join("no-such-folder");
+    let fallback = client()
+        .load_snapshot_from(Some(&missing), repo.path(), 100, HistoryScope::All, &[], None, &HistoryFilter::default())
+        .expect("snapshot");
+    assert_eq!(fallback.root_path, asked.root_path);
+}
