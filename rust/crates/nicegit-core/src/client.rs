@@ -52,6 +52,91 @@ fn rebase_setting_rebases(value: &str) -> Option<bool> {
     }
 }
 
+/// What `GitClient::clone_repository_with_options` asks Git for beyond a full clone.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CloneOptions {
+    /// Only this many of the newest commits on each branch (`--depth`). `None` keeps the full history.
+    pub depth: Option<u32>,
+    /// Downloads file contents only when they are needed (`--filter=blob:none`).
+    pub blobless: bool,
+    /// The folders the checkout is limited to (`--sparse`, then `sparse-checkout set --cone`).
+    /// Empty checks out every folder.
+    pub sparse_folders: Vec<String>,
+}
+
+/// Whether a checkout is shallow, and whether sparse checkout limits its folders.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RepositoryShape {
+    pub shallow: bool,
+    pub sparse: bool,
+}
+
+/// Why a folder cannot be checked out alone, or `None` when it can. A folder is relative to the
+/// repository root and has no `..` part, a leading slash or backslash, or a drive or colon.
+pub fn sparse_folder_problem(folder: &str) -> Option<&'static str> {
+    let folder = folder.trim();
+    if folder.is_empty() {
+        return Some("A folder line is empty. Remove it, or type a folder name.");
+    }
+    if folder.starts_with(['/', '\\']) || folder.contains(':') {
+        return Some("Folders must be relative to the repository, such as src/app.");
+    }
+    if folder.split(['/', '\\']).any(|part| part == "..") {
+        return Some("Folders cannot contain \"..\".");
+    }
+    None
+}
+
+/// The address a clone reads `source` from. A plain local folder becomes a `file://` address,
+/// since Git ignores `--depth` and `--filter` for local paths. Anything else, including a path
+/// that is not an existing folder, is returned unchanged for Git to judge.
+fn clone_source(source: &str, parent: &Path) -> String {
+    if !is_local_path(source) {
+        return source.to_string();
+    }
+    // Git runs the clone in the destination's parent, so a relative path is read from there.
+    let path = parent.join(source);
+    if path.is_dir() {
+        file_address(&path)
+    } else {
+        source.to_string()
+    }
+}
+
+/// Whether `source` names a local path rather than a URL or an scp-like `host:path` address.
+/// A Windows drive letter, as in `C:\repo`, is a local path.
+fn is_local_path(source: &str) -> bool {
+    if source.is_empty() || source.contains("://") {
+        return false;
+    }
+    match source.find(':') {
+        None => true,
+        Some(colon) => {
+            let before = &source[..colon];
+            before.contains(['/', '\\']) || (colon == 1 && before.as_bytes()[0].is_ascii_alphabetic())
+        }
+    }
+}
+
+/// `path` as a `file://` address with its unusual characters percent-encoded. Windows drives
+/// become `file:///C:/...`.
+fn file_address(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let text = if cfg!(windows) { text.replace('\\', "/") } else { text.into_owned() };
+    let mut address = String::from("file://");
+    if !text.starts_with('/') {
+        address.push('/');
+    }
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~/:".contains(&byte) {
+            address.push(byte as char);
+        } else {
+            address.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    address
+}
+
 /// What a force push would change on the remote, from `GitClient::force_push_preview`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForcePushPreview {
@@ -334,8 +419,85 @@ impl GitClient {
     }
 
     pub fn clone_repository(&self, source: &str, destination: &Path) -> Result<()> {
+        self.clone_repository_with_options(source, destination, &CloneOptions::default())
+    }
+
+    /// Clones `source` into `destination` with the history, file contents, and folders `options`
+    /// choose. The defaults run exactly the plain clone. Folders are checked before Git runs. When
+    /// the clone succeeds but limiting the folders fails, the error says the clone itself worked.
+    pub fn clone_repository_with_options(&self, source: &str, destination: &Path, options: &CloneOptions) -> Result<()> {
+        if options.depth == Some(0) {
+            return Err(GitError::failed("clone", "The number of commits must be at least 1."));
+        }
+        if let Some(problem) = options.sparse_folders.iter().find_map(|folder| sparse_folder_problem(folder)) {
+            return Err(GitError::failed("clone", problem));
+        }
         let parent = destination.parent().ok_or_else(|| GitError::failed("clone", "Choose a folder inside another folder."))?;
-        self.run(&["clone", "--", source, &destination.to_string_lossy()], parent)?;
+        // Git ignores --depth and --filter for a plain local path, so such a path becomes a file:// address.
+        let limited = options.depth.is_some() || options.blobless;
+        let source = if limited { clone_source(source, parent) } else { source.to_string() };
+        let depth = options.depth.map(|depth| depth.to_string());
+        let destination_text = destination.to_string_lossy().into_owned();
+        let mut arguments = vec!["clone"];
+        if let Some(depth) = depth.as_deref() {
+            arguments.extend(["--depth", depth, "--no-single-branch"]);
+        }
+        if options.blobless {
+            arguments.push("--filter=blob:none");
+        }
+        let sparse = !options.sparse_folders.is_empty();
+        if sparse {
+            arguments.push("--sparse");
+        }
+        arguments.extend(["--", source.as_str(), destination_text.as_str()]);
+        self.run(&arguments, parent)?;
+        if sparse {
+            let mut set = vec!["sparse-checkout", "set", "--cone", "--"];
+            set.extend(options.sparse_folders.iter().map(String::as_str));
+            if let Err(error) = self.run(&set, destination) {
+                return Err(GitError::failed(
+                    "clone",
+                    format!("The repository was cloned, but limiting it to the chosen folders failed, so it has every folder: {error}"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether a checkout is shallow, and whether its folders are limited by sparse checkout.
+    /// Each reads as `false` when Git cannot say.
+    ///
+    /// With the checkout's Git directory known (as a snapshot has it), this is file checks: Git
+    /// keeps a `shallow` file in the common Git directory of a shallow repository, and a sparse
+    /// checkout always has `info/sparse-checkout` in its own Git directory. Only when that file
+    /// exists is `core.sparseCheckout` asked, because disabling sparse checkout leaves the file.
+    pub fn repository_shape(&self, directory: &Path, git_directory: Option<&Path>) -> RepositoryShape {
+        let Some(git_directory) = git_directory else {
+            return RepositoryShape {
+                shallow: self.try_trimmed(&["rev-parse", "--is-shallow-repository"], directory).as_deref() == Some("true"),
+                sparse: self.try_trimmed(&["config", "--bool", "core.sparseCheckout"], directory).as_deref() == Some("true"),
+            };
+        };
+        // A linked worktree's `commondir` names the shared Git directory, relative to its own.
+        let common = std::fs::read_to_string(git_directory.join("commondir"))
+            .ok()
+            .map(|text| git_directory.join(runner::strip_line_terminator(text)))
+            .unwrap_or_else(|| git_directory.to_path_buf());
+        let shallow = common.join("shallow").is_file();
+        let sparse = git_directory.join("info").join("sparse-checkout").is_file()
+            && self.try_trimmed(&["config", "--bool", "core.sparseCheckout"], directory).as_deref() == Some("true");
+        RepositoryShape { shallow, sparse }
+    }
+
+    /// Downloads the full history of a shallow repository from its remote.
+    pub fn fetch_full_history(&self, directory: &Path) -> Result<()> {
+        self.run(&["fetch", "--unshallow"], directory)?;
+        Ok(())
+    }
+
+    /// Stops limiting the checkout to some folders, checking out every folder.
+    pub fn show_all_folders(&self, directory: &Path) -> Result<()> {
+        self.run(&["sparse-checkout", "disable"], directory)?;
         Ok(())
     }
 
@@ -2380,6 +2542,46 @@ fn is_own_commit_refusal(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sparse_folders_must_be_relative_and_have_no_parent_parts() {
+        for folder in ["a", "src/app", " docs ", "a\\b", "a..b"] {
+            assert_eq!(sparse_folder_problem(folder), None, "{folder:?} is a folder inside the repository");
+        }
+        for folder in ["", "   ", "../x", "a/../b", "a\\..\\b", "..", "/abs", "\\abs", "C:foo", "C:\\x"] {
+            assert!(sparse_folder_problem(folder).is_some(), "{folder:?} is refused");
+        }
+    }
+
+    #[test]
+    fn only_plain_local_paths_are_local() {
+        for source in ["/srv/repo", "./repo", "../repo", "repo", "C:\\repo", "C:/repo", "C:repo"] {
+            assert!(is_local_path(source), "{source:?} is a local path");
+        }
+        for source in ["https://example.com/a.git", "file:///srv/repo", "git@github.com:acme/app.git", "host:path", ""] {
+            assert!(!is_local_path(source), "{source:?} is not a local path");
+        }
+    }
+
+    #[test]
+    fn a_local_folder_becomes_a_file_address_only_when_it_exists() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let folder = dir.path().join("my repo");
+        std::fs::create_dir_all(&folder).expect("create folder");
+        let address = clone_source(&folder.to_string_lossy(), dir.path());
+        assert!(address.starts_with("file:///"), "{address}");
+        assert!(address.ends_with("/my%20repo"), "spaces are percent-encoded: {address}");
+        // A relative path is read from the folder Git clones into, as Git itself reads it.
+        assert_eq!(clone_source("my repo", dir.path()), address);
+        // Anything else is left for Git to judge.
+        assert_eq!(clone_source("https://example.com/a.git", dir.path()), "https://example.com/a.git");
+        assert_eq!(clone_source("missing", dir.path()), "missing");
+    }
+
+    #[test]
+    fn default_clone_options_describe_a_full_clone() {
+        assert_eq!(CloneOptions::default(), CloneOptions { depth: None, blobless: false, sparse_folders: Vec::new() });
+    }
 
     #[test]
     fn pull_strategy_follows_git_config_in_git_precedence_order() {

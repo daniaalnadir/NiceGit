@@ -13,6 +13,8 @@ use crate::tools::{widgets, Task};
 use crate::ui::clone_picker::{ClonePicker, Picked};
 
 pub enum Pending {
+    /// Checking out every folder of a sparse checkout, which ends the limit to some folders.
+    ShowAllFolders,
     Discard(StatusEntry),
     DiscardAll(Vec<StatusEntry>),
     /// Discarding some of a file's unstaged lines, as indices into the review's lines.
@@ -195,7 +197,8 @@ pub enum InputKind {
     /// against its commit, so the rename applies to the stash that was shown.
     RenameStash(Stash),
     /// Cloning. The destination follows the address until the person edits it or chooses one.
-    Clone(CloneDestination),
+    /// The choices are the Options section's, which the defaults leave as a plain clone.
+    Clone(CloneDestination, CloneChoices),
     /// Naming a workspace for the open tabs, which are captured in tab order when the dialog opens.
     SaveWorkspace {
         repositories: Vec<std::path::PathBuf>,
@@ -223,6 +226,136 @@ impl CloneDestination {
         *destination = wanted.clone();
         self.automatic = wanted;
     }
+}
+
+/// The Clone dialog's Options section: how much history, which file contents, and which folders.
+/// Its default is a plain clone of the full history with every folder.
+#[derive(Clone)]
+pub struct CloneChoices {
+    /// Whether only the latest commits are cloned, rather than the full history.
+    pub latest_only: bool,
+    /// The number of commits kept when `latest_only` is set, as typed.
+    pub depth: String,
+    /// Whether file contents are downloaded only when they are needed.
+    pub on_demand: bool,
+    /// Whether the checkout is limited to the folders typed in `folders`.
+    pub only_folders: bool,
+    /// The folders, one per line.
+    pub folders: String,
+}
+
+impl Default for CloneChoices {
+    fn default() -> Self {
+        Self { latest_only: false, depth: "1".into(), on_demand: false, only_folders: false, folders: String::new() }
+    }
+}
+
+impl CloneChoices {
+    /// The Git options these choices make, or the first problem with them. Blank folder lines are
+    /// ignored, so a trailing newline is not a problem.
+    pub fn options(&self) -> Result<nicegit_core::client::CloneOptions, String> {
+        let depth = if self.latest_only {
+            match self.depth.trim().parse::<u32>() {
+                Ok(depth) if (1..=100_000).contains(&depth) => Some(depth),
+                _ => return Err("Enter a number of commits from 1 to 100000.".into()),
+            }
+        } else {
+            None
+        };
+        let sparse_folders = if self.only_folders {
+            let folders: Vec<String> = self.folders.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_string).collect();
+            if folders.is_empty() {
+                return Err("Type at least one folder, one per line.".into());
+            }
+            if let Some(problem) = folders.iter().find_map(|folder| nicegit_core::client::sparse_folder_problem(folder)) {
+                return Err(problem.into());
+            }
+            folders
+        } else {
+            Vec::new()
+        };
+        Ok(nicegit_core::client::CloneOptions { depth, blobless: self.on_demand, sparse_folders })
+    }
+}
+
+/// The Clone dialog's collapsed Options section, drawn under its destination. Returns whether the
+/// choices make valid options; a problem is shown beside the choice it concerns.
+fn clone_options(ui: &mut egui::Ui, choices: &mut CloneChoices) -> bool {
+    let muted = theme::of(ui).muted;
+    let warning = theme::of(ui).warning;
+    let valid = choices.options().is_ok();
+    egui::CollapsingHeader::new("Options").id_salt("clone-options").default_open(false).show(ui, |ui| {
+        ui.label(RichText::new("History").color(muted));
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, !choices.latest_only, "Full history").clicked() {
+                choices.latest_only = false;
+            }
+        });
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, choices.latest_only, "Only the latest N commits").clicked() {
+                choices.latest_only = true;
+            }
+        });
+        if choices.latest_only {
+            ui.horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.label("Number of commits");
+                ui.add(egui::TextEdit::singleline(&mut choices.depth).desired_width(90.0))
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Number of commits"));
+            });
+        }
+        ui.label(RichText::new("Faster for large projects. You can fetch the full history later.").small().color(muted));
+        ui.add_space(8.0);
+
+        ui.label(RichText::new("File contents").color(muted));
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, !choices.on_demand, "Download all files now").clicked() {
+                choices.on_demand = false;
+            }
+        });
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, choices.on_demand, "Download file contents when needed").clicked() {
+                choices.on_demand = true;
+            }
+        });
+        ui.label(
+            RichText::new(
+                "Smaller and faster; Git downloads older file versions when you look at them. Needs a server that supports partial clone.",
+            )
+            .small()
+            .color(muted),
+        );
+        ui.add_space(8.0);
+
+        ui.label(RichText::new("Folders").color(muted));
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, !choices.only_folders, "All folders").clicked() {
+                choices.only_folders = false;
+            }
+        });
+        ui.horizontal(|ui| {
+            if widgets::radio(ui, choices.only_folders, "Only these folders").clicked() {
+                choices.only_folders = true;
+            }
+        });
+        if choices.only_folders {
+            ui.horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.add(
+                    egui::TextEdit::multiline(&mut choices.folders)
+                        .desired_rows(3)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("src\ndocs/guide"),
+                )
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Folders, one per line"));
+            });
+            ui.label(RichText::new("One folder per line, relative to the repository.").small().color(muted));
+        }
+        if let Err(problem) = choices.options() {
+            ui.label(RichText::new(problem).small().color(warning));
+        }
+    });
+    valid
 }
 
 /// Names commits in a history detail: one commit by its short hash, several by their count.
@@ -348,7 +481,7 @@ impl Dialog {
             "Clone repository",
             "Repository URL or local path",
             "Destination folder",
-            InputKind::Clone(CloneDestination::default()),
+            InputKind::Clone(CloneDestination::default(), CloneChoices::default()),
         )
     }
 
@@ -641,7 +774,7 @@ impl NiceGitApp {
                     ui.add_space(8.0);
                     ui.label(RichText::new(label.as_str()).color(c.muted));
                     // The Clone dialog's address field has a "From GitHub…" button beside it.
-                    let first = if matches!(kind, InputKind::Clone(_)) {
+                    let first = if matches!(kind, InputKind::Clone(..)) {
                         ui.horizontal(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let pick = ui
@@ -768,7 +901,7 @@ impl NiceGitApp {
                     }
                     let tag_needs_message = matches!(kind, InputKind::CreateTag { annotated: true, .. }) && second.trim().is_empty();
                     // While the destination is still automatic, the default folder and the address give it.
-                    if let (InputKind::Clone(destination), Some(folder)) = (&mut *kind, self.settings.clone_folder.as_deref()) {
+                    if let (InputKind::Clone(destination, _), Some(folder)) = (&mut *kind, self.settings.clone_folder.as_deref()) {
                         destination.follow(folder, value.as_str(), second);
                     }
                     let mut edited_destination = false;
@@ -777,7 +910,7 @@ impl NiceGitApp {
                         ui.add_space(6.0);
                         ui.label(RichText::new(second_label.as_str()).color(c.muted));
                         ui.horizontal(|ui| {
-                            let browse = matches!(kind, InputKind::Clone(_));
+                            let browse = matches!(kind, InputKind::Clone(..));
                             let width = ui.available_width() - if browse { 90.0 } else { 0.0 };
                             if matches!(kind, InputKind::CreateTag { .. }) {
                                 ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width))
@@ -796,16 +929,22 @@ impl NiceGitApp {
                             }
                         });
                         if edited_destination || chose_destination {
-                            if let InputKind::Clone(destination) = &mut *kind {
+                            if let InputKind::Clone(destination, _) = &mut *kind {
                                 destination.by_hand = true;
                             }
                         }
-                        if let InputKind::Clone(destination) = &*kind {
+                        if let InputKind::Clone(destination, _) = &*kind {
                             let path = std::path::PathBuf::from(second.trim());
                             if !destination.by_hand && !second.trim().is_empty() && is_taken(&path) {
                                 ui.label(RichText::new(format!("{} already exists; choose another folder.", path.display())).color(c.muted));
                             }
                         }
+                    }
+                    // The Clone dialog's Options section, which the defaults leave as a plain clone.
+                    let mut options_valid = true;
+                    if let InputKind::Clone(_, choices) = &mut *kind {
+                        ui.add_space(8.0);
+                        options_valid = clone_options(ui, choices);
                     }
                     ui.add_space(16.0);
                     // While the GitHub picker is open, Enter belongs to it, not to this dialog.
@@ -813,7 +952,7 @@ impl NiceGitApp {
                     ui.horizontal(|ui| {
                         // A stash's message is optional: Git names one after the branch when it is empty.
                         let optional = matches!(kind, InputKind::SaveStash);
-                        let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none();
+                        let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none() && options_valid;
                         let ok_label = match kind {
                             InputKind::CreateTag { push: Some(_), .. } => "Create and push",
                             InputKind::BranchFromStash { .. } => "Create branch",
@@ -1377,6 +1516,9 @@ impl NiceGitApp {
                     .delete_remote_branch(&remote, &branch, &tip, expected, path)
                     .map(|_| Some(format!("Deleted {branch} from {remote}.")))
             }),
+            Pending::ShowAllFolders => {
+                self.act("Show all folders", |client, path| client.show_all_folders(path).map(|_| Some("Checked out every folder.".into())))
+            }
             Pending::PopStash(stash) => self.act("Pop stash", move |client, path| {
                 client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
             }),
@@ -1483,20 +1625,27 @@ impl NiceGitApp {
             InputKind::RenameStash(stash) => self.act("Rename stash", move |client, path| {
                 client.rename_stash(&stash, &value, path).map(|()| Some("Renamed the stash. It is at the top of the list.".into()))
             }),
-            InputKind::Clone(_) => {
+            InputKind::Clone(_, choices) => {
                 let destination = std::path::PathBuf::from(second.trim());
                 let source = value.trim().to_string();
                 if destination.as_os_str().is_empty() {
                     self.notify("Choose a destination folder.", true);
                     return;
                 }
+                let options = match choices.options() {
+                    Ok(options) => options,
+                    Err(problem) => {
+                        self.notify(problem, true);
+                        return;
+                    }
+                };
                 if self.busy.is_some() {
                     return;
                 }
                 self.busy = Some("Clone".into());
                 let context = self.worker.context.clone();
                 let task = crate::tools::Task::spawn(&context, move || {
-                    nicegit_core::GitClient::new().clone_repository(&source, &destination).map(|_| destination)
+                    nicegit_core::GitClient::new().clone_repository_with_options(&source, &destination, &options).map(|_| destination)
                 });
                 self.pending_clone = Some(task);
             }

@@ -41,6 +41,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Clone repositories from a remote URL or local path.
 - Clones go into a default folder: set it under Clone into in Settings, or let NiceGit remember the parent folder of your first clone. The Clone dialog then fills in the destination from the repository's name.
 - Pick one of your GitHub repositories when cloning, through the GitHub CLI (`gh`), including GitHub Enterprise hosts listed in Settings.
+- The Clone dialog's Options section clones only the latest commits (a number you choose), downloads file contents only when they are needed (a partial clone), or checks out only the folders you list. The defaults are a plain full clone. A shallow checkout offers Fetch full history, and a sparse one offers Show all folders, in the Repository menu.
 - Run Git operations in the background with a busy indicator.
 - View local and remote branches.
 - Browse linked worktree folders and branches, and open another checkout from the sidebar.
