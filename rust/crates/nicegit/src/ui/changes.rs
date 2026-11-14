@@ -712,6 +712,12 @@ impl NiceGitApp {
             self.save_working_patch(staged, Some(paths), true, &name);
         }
         self.lfs_menu_items(ui, &entry.path, idle);
+        let values = crate::custom_actions::Values {
+            file: entry.path.clone(),
+            file_path: repo_path.join(&entry.path).display().to_string(),
+            ..self.repository_values()
+        };
+        self.custom_actions_submenu(ui, crate::settings::ActionScope::File, &values, self.idle());
         if entry.kind == StatusKind::Untracked {
             ui.menu_button(format!("{}  Ignore", icon::EYE_SLASH), |ui| {
                 use nicegit_core::settings::{IgnoreRule, IgnoreScope};

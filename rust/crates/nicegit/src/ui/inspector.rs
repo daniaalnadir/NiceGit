@@ -332,6 +332,15 @@ impl NiceGitApp {
                 crate::git_ext::PUSHED_COMMIT_NOTE,
             );
         }
+        // The commit's values are filled in too, though a file action's validation refuses {sha}.
+        let values = crate::custom_actions::Values {
+            sha: hash.to_string(),
+            short_sha: short(hash).to_string(),
+            file: path.to_string(),
+            file_path: self.repo().map(|repo| repo.path.join(path).display().to_string()).unwrap_or_default(),
+            ..self.repository_values()
+        };
+        self.custom_actions_submenu(ui, crate::settings::ActionScope::File, &values, self.idle());
         ui.separator();
         for (before, text) in [(false, "Restore this version"), (true, "Restore version before this commit")] {
             if ui

@@ -605,6 +605,13 @@ impl NiceGitApp {
             self.open_tool(Box::new(window));
         }
         ui.separator();
+        let values = self.repository_values();
+        self.custom_actions_submenu(ui, crate::settings::ActionScope::Repository, &values, has_repo && self.idle());
+        if ui.button(format!("{}  Manage custom actions…", icon::PENCIL_SIMPLE)).clicked() {
+            ui.close();
+            self.show_settings = true;
+        }
+        ui.separator();
         let can_publish = self.snapshot().is_some_and(|s| s.upstream.is_none() && s.is_on_branch() && !s.remotes.is_empty()) && self.idle();
         if ui
             .add_enabled(can_publish, egui::Button::new(format!("{}  Publish branch…", icon::UPLOAD_SIMPLE)))

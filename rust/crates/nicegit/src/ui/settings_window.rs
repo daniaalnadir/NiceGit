@@ -33,6 +33,7 @@ impl NiceGitApp {
                 data.remove::<String>(draft_id);
                 data.remove::<String>(gitlab_draft_id);
                 data.remove::<IssueLinkDraft>(issue_link_draft_id());
+                data.remove::<crate::custom_actions::ActionDraft>(egui::Id::unique("custom_action_draft"));
             });
             return;
         }
@@ -198,6 +199,9 @@ impl NiceGitApp {
                 })
                 .response
                 .on_hover_text("The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.");
+                ui.add_space(10.0);
+                widgets::section(ui, "Custom actions");
+                self.custom_actions_section(ui);
                 ui.add_space(10.0);
                 widgets::section(ui, "GitHub Enterprise");
                 let mut draft = ui
