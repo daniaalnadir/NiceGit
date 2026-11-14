@@ -26,8 +26,8 @@ fn a_newer_release_shows_the_notice_and_download_opens_the_releases_page() {
     loaded(&mut harness);
     assert!(!notice_shown(&harness), "no notice before a check has found a newer version");
 
-    harness.state_mut().receive_latest_release("v2.1.0");
-    wait(&mut harness, "the update notice", |h| h.query_by_label("NiceGit 2.1.0 is available").is_some());
+    harness.state_mut().receive_latest_release("v99.1.0");
+    wait(&mut harness, "the update notice", |h| h.query_by_label("NiceGit 99.1.0 is available").is_some());
 
     clear_opened();
     harness.get_by_label("Download").click();
@@ -41,20 +41,20 @@ fn dismiss_hides_the_notice_and_remembers_only_that_version() {
     let repo = repository();
     let mut harness = open(repo.path());
     loaded(&mut harness);
-    harness.state_mut().receive_latest_release("v2.1.0");
-    wait(&mut harness, "the update notice", |h| h.query_by_label("NiceGit 2.1.0 is available").is_some());
+    harness.state_mut().receive_latest_release("v99.1.0");
+    wait(&mut harness, "the update notice", |h| h.query_by_label("NiceGit 99.1.0 is available").is_some());
 
     harness.get_by_label("Dismiss").click();
     settle(&mut harness);
     assert!(!notice_shown(&harness), "dismissed");
-    assert_eq!(harness.state().settings.dismissed_update.as_deref(), Some("2.1.0"));
+    assert_eq!(harness.state().settings.dismissed_update.as_deref(), Some("99.1.0"));
 
     // The same version found again stays hidden; a later one shows again.
-    harness.state_mut().receive_latest_release("v2.1.0");
+    harness.state_mut().receive_latest_release("v99.1.0");
     settle(&mut harness);
     assert!(!notice_shown(&harness), "the dismissed version stays hidden");
-    harness.state_mut().receive_latest_release("v2.2.0");
-    wait(&mut harness, "the later version", |h| h.query_by_label("NiceGit 2.2.0 is available").is_some());
+    harness.state_mut().receive_latest_release("v99.2.0");
+    wait(&mut harness, "the later version", |h| h.query_by_label("NiceGit 99.2.0 is available").is_some());
 }
 
 #[test]
