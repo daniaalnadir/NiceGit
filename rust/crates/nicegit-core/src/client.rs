@@ -625,6 +625,7 @@ impl GitClient {
         snapshot.bisecting = git_directory.join("BISECT_START").exists();
         snapshot.has_gitmodules = root.join(".gitmodules").exists();
         snapshot.absolute_git_dir = Some(git_directory);
+        snapshot.reused_resolutions = self.reused_resolutions_for(&snapshot.status, &root);
         Ok(snapshot)
     }
 
@@ -672,7 +673,19 @@ impl GitClient {
         // A working-file change can add or remove .gitmodules; both checks are file checks.
         snapshot.bisecting = git_directory.join("BISECT_START").exists();
         snapshot.has_gitmodules = Path::new(&previous.root_path).join(".gitmodules").exists();
+        // The conflicts may have changed, so the reused files are read again. The setting is kept
+        // from `previous`, as the other repository settings are.
+        snapshot.reused_resolutions = quiet.reused_resolutions_for(&snapshot.status, Path::new(&previous.root_path));
         Ok(Some(snapshot))
+    }
+
+    /// The conflicted files Git resolved from a recorded resolution, or none when the status has
+    /// no conflict. A failed read reports none, rather than failing the whole snapshot.
+    fn reused_resolutions_for(&self, status: &[StatusEntry], root: &Path) -> Vec<String> {
+        if !status.iter().any(|entry| entry.kind == StatusKind::Conflicted) {
+            return Vec::new();
+        }
+        self.rerere_reused_paths(root).unwrap_or_default()
     }
 
     pub fn load_status(&self, directory: &Path) -> Result<Vec<StatusEntry>> {
