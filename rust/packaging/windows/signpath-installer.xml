@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installer": signs the NiceGit .msi uploaded by the release workflow. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msi-file path="NiceGit-*.msi">
+      <authenticode-sign />
+    </msi-file>
+  </zip-file>
+</artifact-configuration>

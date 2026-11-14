@@ -82,18 +82,35 @@ such as `2.1.0-rc.1` installs as `2.1.0`.
 
 ### Signing the Windows app
 
-With a code-signing certificate in the `release` environment, the Windows job signs
-`nicegit.exe` with SHA-256 and a DigiCert timestamp, then verifies the signature. Without one
-the run warns and the app stays unsigned, so Windows SmartScreen shows an unknown publisher.
+Windows signing uses the [SignPath Foundation](https://signpath.org), which signs open-source
+projects for free; the publisher shown is "SignPath Foundation". Certificate authorities no
+longer issue code-signing keys as `.pfx` files, so a key now lives with a signing service.
 
-| Secret | Contents |
-| --- | --- |
-| `WINDOWS_CERT_PFX` | Base64 of the code-signing certificate and private key (`.pfx`) |
-| `WINDOWS_CERT_PASSWORD` | The password of that `.pfx` |
+When SignPath is set up, each Windows job uploads `nicegit.exe` to SignPath, waits for the
+signed file, and packages that; it then has the `.msi` signed the same way. Both signatures are
+checked with `Get-AuthenticodeSignature`. Without SignPath the run warns and the downloads are
+unsigned, so Windows SmartScreen shows an unknown publisher.
 
-An OV or EV certificate from a certificate authority works. A certificate whose key lives only
-in a hardware token or a cloud service (such as Azure Trusted Signing) needs a different
-signing step.
+To set it up:
+
+1. Apply at [signpath.org](https://signpath.org/apply). The policy their terms require is
+   `site/code-signing.html`, published at
+   https://daniaalnadir.github.io/NiceGit/code-signing.html.
+2. Once accepted, install the SignPath GitHub App on the repository, and in SignPath create the
+   project with two artifact configurations, using the files in `rust/packaging/windows/`:
+   `app` (`signpath-app.xml`) and `installer` (`signpath-installer.xml`).
+3. In the repository's `release` environment, add:
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `SIGNPATH_API_TOKEN` | secret | An API token of a SignPath CI user that may submit to the signing policy |
+| `SIGNPATH_ORGANIZATION_ID` | variable | The SignPath organisation ID |
+| `SIGNPATH_PROJECT_SLUG` | variable | The project's slug, for example `NiceGit` |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | variable | `release-signing` |
+
+Under the Foundation's release-signing policy, each signing request waits for an approver to
+approve it in SignPath, so a release run pauses until you do (up to an hour per request).
+Pull requests never sign: they cannot use the `release` environment.
 
 ## Package managers
 
