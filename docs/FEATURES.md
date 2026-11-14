@@ -41,6 +41,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Clone repositories from a remote URL or local path.
 - Clones go into a default folder: set it under Clone into in Settings, or let NiceGit remember the parent folder of your first clone. The Clone dialog then fills in the destination from the repository's name.
 - Pick one of your GitHub repositories when cloning, through the GitHub CLI (`gh`), including GitHub Enterprise hosts listed in Settings.
+- The Clone dialog's Options section clones only the latest commits (a number you choose), downloads file contents only when they are needed (a partial clone), or checks out only the folders you list. The defaults are a plain full clone. A shallow checkout offers Fetch full history, and a sparse one offers Show all folders, in the Repository menu.
 - Run Git operations in the background with a busy indicator.
 - View local and remote branches.
 - Browse linked worktree folders and branches, and open another checkout from the sidebar.
@@ -144,6 +145,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   links Report a problem, which opens a new bug report with NiceGit's version, your operating
   system and its architecture, and the template's sections filled in, and Request a feature.
   Both are in the command palette too. Neither includes repository paths or names.
+- Desktop notifications: while the NiceGit window is not focused, an action you started that
+  took at least two seconds says it finished or failed, with the repository's name and the first
+  line of any error. A background fetch that brings commits onto the current branch's upstream
+  says how many, and a finished clone names its folder. Turn this off under Settings > General.
 - GitFlow (Repository > GitFlow): set up, start feature, release, and hotfix branches, and
   finish them with no-fast-forward merges and version tags, compatible with git-flow.
 - Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose
@@ -281,6 +286,7 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Take either side of a conflicted file from its right-click menu in the Changes panel, or of
   every conflicted file at once from the Resolve all menu beside Continue and Abort.
 - Resolve a conflicted file in the merge tool Git is set to use (`merge.tool`), from its Changes panel menu or the conflict editor. NiceGit refreshes when the tool closes, and it refuses while the built-in editor has unsaved text. Without a merge tool, the item is disabled and says how to set one.
+- Remember conflict resolutions (Git's `rerere`): the conflict editor's checkbox turns it on or off for the repository, and the command palette has the same toggle. When Git reuses a recorded resolution, the file is marked "Resolved from memory" in the Changes panel, the editor asks you to check it, and the notice after a stopped merge or rebase says how many were reused. Git leaves such files unmerged until you stage them. A file whose markers you removed by hand, and have not staged, is also marked.
 
 ## Run
 
