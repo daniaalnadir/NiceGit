@@ -136,6 +136,10 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   links Report a problem, which opens a new bug report with NiceGit's version, your operating
   system and its architecture, and the template's sections filled in, and Request a feature.
   Both are in the command palette too. Neither includes repository paths or names.
+- Desktop notifications: while the NiceGit window is not focused, an action you started that
+  took at least two seconds says it finished or failed, with the repository's name and the first
+  line of any error. A background fetch that brings commits onto the current branch's upstream
+  says how many, and a finished clone names its folder. Turn this off under Settings > General.
 - GitFlow (Repository > GitFlow): set up, start feature, release, and hotfix branches, and
   finish them with no-fast-forward merges and version tags, compatible with git-flow.
 - Git LFS (Repository > Git LFS): see tracked patterns and LFS files, including files whose

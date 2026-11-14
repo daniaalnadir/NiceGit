@@ -13,6 +13,7 @@ use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
 use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
+use crate::notifications::FinishedWork;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
 use crate::theme;
 use crate::tools::{Ctx, Request, Task, ToolWindow};
@@ -651,6 +652,12 @@ pub struct NiceGitApp {
     /// The `glab` program that GitLab merge requests run through. Tests point it at a missing file.
     pub glab: nicegit_core::gitlab::GlabProgram,
     recorded: RecordSlot,
+    /// When the action now running started, so its duration can be told when it finishes.
+    action_started: Option<Instant>,
+    /// The desktop notifications sent, as title and body. Tests read these instead of the
+    /// operating system's.
+    #[cfg(test)]
+    pub sent_notifications: Vec<(String, String)>,
     /// A debug-only light preview that does not touch saved settings.
     pub preview_light: bool,
     /// The terminal panel under the history, when shown.
@@ -729,6 +736,9 @@ impl NiceGitApp {
             pending_check_out: None,
             glab: nicegit_core::gitlab::GlabProgram::default(),
             recorded: Arc::new(Mutex::new(None)),
+            action_started: None,
+            #[cfg(test)]
+            sent_notifications: Vec::new(),
             preview_light: false,
             terminal: None,
             fitted_to_monitor: false,
@@ -1128,6 +1138,7 @@ impl NiceGitApp {
         // The reload after an action reads the whole checkout, so earlier Git changes are covered.
         self.watched_git_change = false;
         self.busy = Some(label.to_string());
+        self.action_started = Some(Instant::now());
         // A background fetch leaves the last message for the person to read.
         if label != BACKGROUND_FETCH {
             self.notice = None;
@@ -1234,10 +1245,40 @@ impl NiceGitApp {
         self.notice = Some(Notice { text: text.into(), is_error, action: None, detail: None });
     }
 
+    /// Shows a desktop notification for finished work, when the window is in the background and
+    /// the setting is on. Tests record the notification instead.
+    fn notify_finished(&mut self, event: FinishedWork) {
+        let Some((title, body)) = crate::notifications::notification_for(&event, self.was_focused, self.settings.notify_when_finished)
+        else {
+            return;
+        };
+        #[cfg(test)]
+        self.sent_notifications.push((title, body));
+        #[cfg(not(test))]
+        crate::notifications::send(title, body);
+    }
+
+    /// The commits a background fetch brought onto the current branch's upstream: how much further
+    /// behind the branch is than the snapshot before the fetch showed. None when the branch or
+    /// its upstream changed, or either count is unknown.
+    fn upstream_commits_gained(&self, index: usize, fresh: &Snapshot) -> Option<FinishedWork> {
+        let previous = self.repos[index].snapshot.as_deref()?;
+        if previous.current_branch != fresh.current_branch || previous.upstream != fresh.upstream {
+            return None;
+        }
+        let (before, after) = (previous.behind?, fresh.behind?);
+        Some(FinishedWork::NewUpstreamCommits {
+            repo: self.repos[index].name(),
+            upstream: fresh.upstream.clone()?,
+            count: after.saturating_sub(before),
+        })
+    }
+
     fn receive(&mut self) {
         while let Ok(message) = self.worker.receiver.try_recv() {
             match message {
                 Message::Loaded { generation, path, action, snapshot } => {
+                    let started = if action.is_some() { self.action_started.take() } else { None };
                     if action.is_some() {
                         self.busy = None;
                     }
@@ -1271,6 +1312,19 @@ impl NiceGitApp {
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
+                    let background_fetched = matches!(&action, Some((label, Ok(_))) if label == BACKGROUND_FETCH);
+                    // An action the person started is announced once it is known how it ended, when NiceGit is in the background.
+                    if let (Some((label, result)), Some(started)) = (&action, started) {
+                        if label != BACKGROUND_FETCH {
+                            let event = FinishedWork::Action {
+                                label: label.clone(),
+                                repo: self.repos[index].name(),
+                                elapsed: started.elapsed(),
+                                error: result.as_ref().err().map(|error| error.to_string()),
+                            };
+                            self.notify_finished(event);
+                        }
+                    }
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     // A commit that failed gives its message back; one that was made keeps it cleared,
                     // and the box starts from the commit template for the next one.
@@ -1455,6 +1509,11 @@ impl NiceGitApp {
                     }
                     match *snapshot {
                         Ok(snapshot) => {
+                            if background_fetched {
+                                if let Some(event) = self.upstream_commits_gained(index, &snapshot) {
+                                    self.notify_finished(event);
+                                }
+                            }
                             // An action that stopped at conflicts left an operation to finish: that
                             // is a pause for the person, not a failure, so it is described as one.
                             if let (Some(detail), Some(operation)) = (stopped_with.take(), snapshot.operation) {
@@ -2689,10 +2748,15 @@ impl NiceGitApp {
                 if self.settings.clone_folder.is_none() {
                     self.settings.clone_folder = path.parent().map(Path::to_path_buf);
                 }
+                let folder = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
+                self.notify_finished(FinishedWork::Clone(Ok(folder)));
                 self.notify(format!("Cloned into {}.", path.display()), false);
                 self.open(path);
             }
-            Err(error) => self.notify(format!("Clone failed: {error}"), true),
+            Err(error) => {
+                self.notify_finished(FinishedWork::Clone(Err(error.to_string())));
+                self.notify(format!("Clone failed: {error}"), true);
+            }
         }
     }
 
