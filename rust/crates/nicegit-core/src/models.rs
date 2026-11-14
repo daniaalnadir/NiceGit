@@ -313,6 +313,9 @@ pub struct Snapshot {
     /// This checkout's own Git directory, as an absolute path. A quick refresh reads the
     /// unfinished operation from it; absent for a snapshot that was not loaded from Git.
     pub absolute_git_dir: Option<PathBuf>,
+    /// The conflicted files that Git resolved from a resolution recorded earlier. Their working
+    /// files hold that resolution, and they are still unmerged until staged.
+    pub reused_resolutions: Vec<String>,
 }
 
 impl Snapshot {
