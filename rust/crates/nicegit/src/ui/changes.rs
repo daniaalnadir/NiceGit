@@ -790,6 +790,18 @@ impl NiceGitApp {
         }
         let can_amend = snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none();
         let head_published = self.head_published();
+        // Conventional Commits help: the type menu shows when the setting is Always, or when Automatic
+        // finds that the recent commits mostly follow the convention. Read from the loaded history.
+        let convention = self.settings.conventional_commits;
+        let convention_detected = crate::conventional::repository_uses_convention(
+            snapshot.commits.iter().filter(|commit| commit.parents.len() <= 1).map(|commit| commit.subject.as_str()),
+        );
+        let convention_menu = match convention {
+            crate::conventional::ConventionalCommits::Off => false,
+            crate::conventional::ConventionalCommits::Automatic => convention_detected,
+            crate::conventional::ConventionalCommits::Always => true,
+        };
+        let convention_hint = convention == crate::conventional::ConventionalCommits::Automatic && convention_detected;
         let repo = &mut self.repos[self.active];
         let path = repo.path.clone();
         egui::Frame::new()
@@ -798,6 +810,10 @@ impl NiceGitApp {
             .corner_radius(8.0)
             .inner_margin(egui::Margin::symmetric(10, 8))
             .show(ui, |ui| {
+                if convention_menu {
+                    convention_controls(ui, &mut repo.draft.summary);
+                    ui.add_space(4.0);
+                }
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut repo.draft.summary)
@@ -806,11 +822,6 @@ impl NiceGitApp {
                             .desired_width((ui.available_width() - 124.0).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit summary"));
-                    // Characters used out of the 72-character guideline, e.g. "0/72".
-                    let length = repo.draft.summary.chars().count();
-                    let color = if length > 72 { c.warning } else { c.muted };
-                    ui.label(RichText::new(format!("{length}/72")).small().monospace().color(color))
-                        .on_hover_text("Summaries read best under 72 characters");
                     // Recent summaries from this branch's history, to reuse one.
                     let mut recent: Vec<&str> = Vec::new();
                     for commit in snapshot.commits.iter().filter(|commit| commit.parents.len() <= 1) {
@@ -887,6 +898,14 @@ impl NiceGitApp {
                         .on_hover_text("Commit options")
                         .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Commit options"));
                 });
+                // Past 50 characters, a count shows; past 72, it turns to a warning. It never blocks a commit.
+                if let Some((text, over)) = crate::conventional::length_note(&repo.draft.summary) {
+                    let color = if over { c.warning } else { c.muted };
+                    ui.label(RichText::new(text).small().monospace().color(color));
+                }
+                if convention_hint && !repo.draft.summary.trim().is_empty() && crate::conventional::prefix(&repo.draft.summary).is_none() {
+                    ui.label(RichText::new("This repository uses Conventional Commits").small().color(c.muted));
+                }
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
                         .hint_text("Description")
@@ -1013,6 +1032,65 @@ impl NiceGitApp {
     fn branch_contains(snapshot: &Snapshot, tip: &str, target: &str) -> bool {
         commit_reaches(&snapshot.commits, tip, target)
     }
+}
+
+/// The Conventional Commits controls above the summary: a type menu, then the scope and Breaking for
+/// the chosen type. Each one rewrites the summary's prefix, which stays the only copy of the message.
+fn convention_controls(ui: &mut Ui, summary: &mut String) {
+    use crate::conventional::{prefix, with_prefix};
+    let c = theme::of(ui);
+    let current = prefix(summary);
+    let kind = current.as_ref().map(|prefix| prefix.kind);
+    let scope = current.as_ref().and_then(|prefix| prefix.scope.clone()).unwrap_or_default();
+    let breaking = current.as_ref().is_some_and(|prefix| prefix.breaking);
+    ui.horizontal(|ui| {
+        let mut chosen = None;
+        // Kept open while the summary is edited, like the trailers menu beside it.
+        let (menu, _) =
+            egui::containers::menu::MenuButton::new(RichText::new(format!("{}  {}", kind.unwrap_or("Type"), icon::CARET_DOWN)).small())
+                .config(egui::containers::menu::MenuConfig::new().close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside))
+                .ui(ui, |ui| {
+                    for (name, description) in crate::conventional::TYPES {
+                        ui.horizontal(|ui| {
+                            if ui.selectable_label(kind == Some(name), name).clicked() {
+                                chosen = Some(name);
+                                ui.close();
+                            }
+                            ui.label(RichText::new(description).small().color(c.muted));
+                        });
+                    }
+                });
+        menu.on_hover_text("Commit type").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Commit type"));
+        if let Some(name) = chosen {
+            let next = with_prefix(summary.as_str(), name, Some(&scope), breaking);
+            *summary = next;
+        }
+        // While the field has focus it keeps what is typed, so a trailing space survives until the next
+        // character; otherwise it shows the scope the summary holds.
+        let scope_id = ui.scope_id().with("commit_scope_text");
+        let focused = ui.ctx().memory(|memory| memory.has_focus(scope_id));
+        let mut text =
+            if focused { ui.ctx().data(|data| data.get_temp::<String>(scope_id)).unwrap_or_else(|| scope.clone()) } else { scope.clone() };
+        let field =
+            ui.add_enabled(kind.is_some(), egui::TextEdit::singleline(&mut text).id(scope_id).hint_text("scope").desired_width(80.0));
+        let changed = field.changed();
+        field
+            .on_disabled_hover_text("Choose a type first")
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, kind.is_some(), "Commit scope"));
+        if let Some(kind) = kind {
+            if changed {
+                let next = with_prefix(summary.as_str(), kind, Some(&text), breaking);
+                *summary = next;
+            }
+        }
+        ui.ctx().data_mut(|data| data.insert_temp(scope_id, text));
+        let mut breaking_now = breaking;
+        let toggled = widgets::checkbox(ui, kind.is_some(), &mut breaking_now, "Breaking").changed();
+        if let (Some(kind), true) = (kind, toggled) {
+            let next = with_prefix(summary.as_str(), kind, Some(&scope), breaking_now);
+            *summary = next;
+        }
+    });
 }
 
 /// The Add trailers menu: Signed-off-by from the Git identity, and Co-authored-by for recent
