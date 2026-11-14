@@ -184,7 +184,7 @@ jobs:
     name: Windows ${{ matrix.arch }}
     needs: check
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -193,14 +193,14 @@ jobs:
             runner: windows-latest
           - arch: arm64
             runner: windows-11-arm
-    # The release environment holds the optional Windows code-signing certificate. Pull requests
-    # cannot use it, so they build unsigned without an environment.
+    # The release environment holds the SignPath token that signs the Windows app and installer.
+    # Pull requests cannot use it, so they build unsigned without an environment.
     environment: ${{ github.event_name != 'pull_request' && 'release' || '' }}
     env:
       VERSION: ${{ needs.check.outputs.version }}
       ARCH: ${{ matrix.arch }}
-      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
-      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      # Signing runs when the token and the SignPath organisation are both set. See docs/RELEASING.md.
+      SIGN: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -216,33 +216,47 @@ jobs:
         working-directory: rust
         run: cargo build --release --locked
 
-      # Signs nicegit.exe when a code-signing certificate is set, so Windows SmartScreen shows
-      # the publisher. Without one the app is unsigned, as before. See docs/RELEASING.md.
+      # SignPath signs nicegit.exe before packaging, so the zip and the installer both carry the
+      # signed app. Without SignPath set up the app is unsigned, as before.
+      - name: Upload the app for signing
+        id: unsigned-app
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-app-${{ matrix.arch }}
+          path: rust/target/release/nicegit.exe
+          if-no-files-found: error
+
       - name: Sign the app
-        if: env.WINDOWS_CERT_PFX != ''
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          # Each request waits for an approver in SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: rust/target/signed-app
+
+      - name: Use the signed app
+        if: env.SIGN == 'true'
         shell: pwsh
         working-directory: rust
         run: |
           $ErrorActionPreference = 'Stop'
-          $pfx = Join-Path $env:RUNNER_TEMP 'nicegit-signing.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX))
-          try {
-            $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' |
-              Sort-Object FullName -Descending | Select-Object -First 1
-            if (-not $signtool) { throw 'signtool.exe was not found' }
-            & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD `
-              /tr http://timestamp.digicert.com /td SHA256 /d NiceGit 'target/release/nicegit.exe'
-            if ($LASTEXITCODE -ne 0) { throw 'signing failed' }
-            & $signtool.FullName verify /pa 'target/release/nicegit.exe'
-            if ($LASTEXITCODE -ne 0) { throw 'the signature did not verify' }
-          } finally {
-            Remove-Item -Force $pfx -ErrorAction SilentlyContinue
-          }
+          Copy-Item -Force 'target/signed-app/nicegit.exe' 'target/release/nicegit.exe'
+          $signature = Get-AuthenticodeSignature 'target/release/nicegit.exe'
+          if ($signature.Status -ne 'Valid') { throw "nicegit.exe is not validly signed: $($signature.StatusMessage)" }
+          Write-Host "nicegit.exe is signed by $($signature.SignerCertificate.Subject)"
 
       - name: Note an unsigned build
-        if: env.WINDOWS_CERT_PFX == ''
+        if: env.SIGN != 'true'
         shell: pwsh
-        run: Write-Host "::warning::WINDOWS_CERT_PFX is not set, so nicegit.exe is unsigned."
+        run: Write-Host "::warning::SignPath is not set up, so nicegit.exe and the installer are unsigned."
 
       - name: Install cargo-about and WiX
         shell: pwsh
@@ -259,6 +273,42 @@ jobs:
       - name: Package the zip and installer
         shell: pwsh
         run: pwsh rust/scripts/package-windows.ps1 -Version $env:VERSION -Arch $env:ARCH
+
+      - name: Upload the installer for signing
+        id: unsigned-installer
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer-${{ matrix.arch }}
+          path: rust/dist/*.msi
+          if-no-files-found: error
+
+      - name: Sign the installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          # Each request waits for an approver in SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: rust/target/signed-installer
+
+      - name: Use the signed installer
+        if: env.SIGN == 'true'
+        shell: pwsh
+        working-directory: rust
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = "dist/NiceGit-$env:VERSION-windows-$env:ARCH.msi"
+          Copy-Item -Force "target/signed-installer/$(Split-Path -Leaf $msi)" $msi
+          $signature = Get-AuthenticodeSignature $msi
+          if ($signature.Status -ne 'Valid') { throw "$msi is not validly signed: $($signature.StatusMessage)" }
+          Write-Host "$msi is signed by $($signature.SignerCertificate.Subject)"
 
       - name: Check the zip and installer
         shell: pwsh

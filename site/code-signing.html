@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NiceGit Code Signing</title>
+  <meta name="description" content="How NiceGit's Windows downloads are signed, who can approve a signed release, and what the app sends over the network.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="images/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <a class="brand" href="./">
+        <img src="images/icon.png" alt="" width="28" height="28">
+        <span>NiceGit</span>
+      </a>
+      <nav aria-label="Sections">
+        <a href="./#features">Features</a>
+        <a href="guide.html">Guide</a>
+        <a href="./#download">Download</a>
+        <a href="https://github.com/daniaalnadir/NiceGit">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap guide">
+    <aside class="toc" aria-label="On this page">
+      <strong>On this page</strong>
+      <a href="#signing">Signing</a>
+      <a href="#team">Team roles</a>
+      <a href="#privacy">Privacy</a>
+    </aside>
+
+    <article class="doc">
+      <h1>Code signing policy</h1>
+      <p class="lead-left">How NiceGit's Windows downloads are signed, and what the app sends over the network.</p>
+
+      <section id="signing">
+        <h2>Signing</h2>
+        <p>Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+        <p>From the first release signed this way, the Windows app (<code>nicegit.exe</code>) and installer (<code>.msi</code>) show SignPath Foundation as their publisher. Releases before then are unsigned.</p>
+        <ul>
+          <li>Only files built by NiceGit's <a href="https://github.com/daniaalnadir/NiceGit/blob/main/.github/workflows/release.yml">release workflow</a> on GitHub-hosted runners are signed, from a version tag on the <code>main</code> branch of the <a href="https://github.com/daniaalnadir/NiceGit">public repository</a>.</li>
+          <li>Every release is approved by hand before it is signed and published.</li>
+          <li>The macOS app is signed with an Apple Developer ID and notarized by Apple.</li>
+          <li>Each release lists <code>SHA256SUMS.txt</code>, so a download can be checked against what was published.</li>
+        </ul>
+      </section>
+
+      <section id="team">
+        <h2>Team roles</h2>
+        <ul>
+          <li><strong>Committers and reviewers:</strong> <a href="https://github.com/daniaalnadir">Daniaal Nadir</a>, the project's maintainer. Changes reach <code>main</code> through pull requests that pass the automated tests on macOS, Windows and Linux.</li>
+          <li><strong>Approvers:</strong> <a href="https://github.com/daniaalnadir">Daniaal Nadir</a>.</li>
+        </ul>
+        <p>Everyone in these roles uses multi-factor authentication for GitHub and SignPath.</p>
+      </section>
+
+      <section id="privacy">
+        <h2>Privacy</h2>
+        <p>NiceGit will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with one exception you can turn off:</p>
+        <ul>
+          <li><strong>Update check:</strong> once a day NiceGit asks GitHub for the latest release number. Nothing about you or your repositories is sent. Turn it off under <strong>Settings › General</strong>.</li>
+        </ul>
+        <p>Everything else happens only when you ask for it: Git talks to the remotes you fetch from and push to, and the GitHub and GitLab command-line tools you have signed in to fetch pull requests and issues. NiceGit has no account, analytics or crash reporting.</p>
+      </section>
+    </article>
+  </main>
+
+  <footer>
+    <div class="wrap footer-row">
+      <span>NiceGit is free software under the <a href="https://github.com/daniaalnadir/NiceGit/blob/main/LICENSE">MIT License</a>.</span>
+      <span>
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/docs/FEATURES.md">Feature guide</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/blob/main/CHANGELOG.md">Changelog</a> ·
+        <a href="https://github.com/daniaalnadir/NiceGit/discussions">Discussions</a> ·
+        <a href="code-signing.html">Code signing</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>
