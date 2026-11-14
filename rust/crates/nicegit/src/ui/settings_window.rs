@@ -1,8 +1,26 @@
 use egui::RichText;
 
 use crate::app::NiceGitApp;
+use crate::issue_links::{check_rule, IssueLinkRule};
 use crate::theme::{self, Appearance, GraphPalette};
 use crate::tools::widgets;
+
+/// A custom rule being added or edited in the Issue links section.
+#[derive(Clone, Debug, Default)]
+struct IssueLinkDraft {
+    /// The index of the rule being edited, or None for a new rule.
+    editing: Option<usize>,
+    pattern: String,
+    url: String,
+    remote_contains: String,
+    /// Why the last save was refused.
+    problem: Option<String>,
+}
+
+/// Where the draft rule is kept while the Settings window is open.
+fn issue_link_draft_id() -> egui::Id {
+    egui::Id::unique("issue_link_draft")
+}
 
 impl NiceGitApp {
     pub fn settings_window(&mut self, ctx: &egui::Context) {
@@ -14,6 +32,7 @@ impl NiceGitApp {
             ctx.data_mut(|data| {
                 data.remove::<String>(draft_id);
                 data.remove::<String>(gitlab_draft_id);
+                data.remove::<IssueLinkDraft>(issue_link_draft_id());
             });
             return;
         }
@@ -241,6 +260,8 @@ impl NiceGitApp {
                 }
                 ui.ctx().data_mut(|data| data.insert_temp(gitlab_draft_id, gitlab_draft));
                 ui.add_space(10.0);
+                self.issue_links_section(ui);
+                ui.add_space(10.0);
                 widgets::section(ui, "Layout");
                 ui.horizontal(|ui| {
                     ui.label("Interface size");
@@ -296,5 +317,121 @@ impl NiceGitApp {
         }
         self.show_settings = open;
         self.show_shortcuts |= show_shortcuts;
+    }
+
+    /// The Issue links section: whether `#123` links to the host, and the custom rules with their
+    /// inline form. A rule is saved only when it checks out; the problem is shown otherwise.
+    fn issue_links_section(&mut self, ui: &mut egui::Ui) {
+        let c = theme::of(ui);
+        widgets::section(ui, "Issue links");
+        crate::tools::widgets::checkbox(ui, true, &mut self.settings.link_host_issues, "Link #123 to the repository's host");
+        ui.label(
+            RichText::new(
+                "For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). \
+                 On Azure DevOps, AB#123 links to the work item.",
+            )
+            .small()
+            .color(c.muted),
+        );
+        ui.add_space(6.0);
+
+        let mut draft: Option<IssueLinkDraft> = ui.ctx().data(|data| data.get_temp(issue_link_draft_id()));
+        let mut remove = None;
+        let mut edit = None;
+        if self.settings.issue_links.is_empty() {
+            ui.label(RichText::new("No custom rules. A rule can link text such as JIRA-7 to your tracker.").small().color(c.muted));
+        }
+        for (index, rule) in self.settings.issue_links.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(&rule.pattern).monospace());
+                    ui.label(RichText::new(&rule.url).small().color(c.muted));
+                    if !rule.remote_contains.trim().is_empty() {
+                        let text = format!("Only for repositories whose remote contains \"{}\"", rule.remote_contains.trim());
+                        ui.label(RichText::new(text).small().color(c.muted));
+                    }
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Remove").on_hover_text("Remove this rule").clicked() {
+                        remove = Some(index);
+                    }
+                    if ui.button("Edit").on_hover_text("Change this rule").clicked() {
+                        edit = Some(index);
+                    }
+                });
+            });
+        }
+        if remove.is_some() {
+            draft = None;
+        }
+        if let Some(index) = remove {
+            self.settings.issue_links.remove(index);
+        }
+        if let Some(index) = edit {
+            let rule = &self.settings.issue_links[index];
+            draft = Some(IssueLinkDraft {
+                editing: Some(index),
+                pattern: rule.pattern.clone(),
+                url: rule.url.clone(),
+                remote_contains: rule.remote_contains.clone(),
+                problem: None,
+            });
+        }
+        if draft.is_none() && ui.button("Add rule").on_hover_text("Add a rule that links text in messages").clicked() {
+            draft = Some(IssueLinkDraft::default());
+        }
+
+        // Set when the form closes: after a save that checks out, or Cancel.
+        let mut close = false;
+        if let Some(form) = draft.as_mut() {
+            ui.add_space(6.0);
+            ui.label("Pattern (a regular expression)");
+            let field = ui.add(egui::TextEdit::singleline(&mut form.pattern).hint_text(r"\b[A-Z]+-\d+\b").desired_width(f32::INFINITY));
+            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Rule pattern"));
+            ui.label("Address to open ($0 is the match, $1 to $9 its groups)");
+            let field = ui.add(
+                egui::TextEdit::singleline(&mut form.url).hint_text("https://example.atlassian.net/browse/$1").desired_width(f32::INFINITY),
+            );
+            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Rule address"));
+            ui.label("Only for repositories whose remote contains (empty for all)");
+            let field =
+                ui.add(egui::TextEdit::singleline(&mut form.remote_contains).hint_text("github.com/acme").desired_width(f32::INFINITY));
+            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Rule remote filter"));
+            if let Some(problem) = &form.problem {
+                ui.label(RichText::new(problem).color(c.warning));
+            }
+            ui.horizontal(|ui| {
+                if ui.button("Save rule").clicked() {
+                    let rule = IssueLinkRule {
+                        pattern: form.pattern.clone(),
+                        url: form.url.trim().to_string(),
+                        remote_contains: form.remote_contains.trim().to_string(),
+                    };
+                    match check_rule(&rule) {
+                        Ok(()) => {
+                            match form.editing {
+                                Some(index) if index < self.settings.issue_links.len() => self.settings.issue_links[index] = rule,
+                                _ => self.settings.issue_links.push(rule),
+                            }
+                            close = true;
+                        }
+                        Err(problem) => form.problem = Some(problem),
+                    }
+                }
+                if ui.button("Cancel").clicked() {
+                    close = true;
+                }
+            });
+        }
+        if close {
+            draft = None;
+        }
+        ui.ctx().data_mut(|data| {
+            if let Some(form) = draft {
+                data.insert_temp(issue_link_draft_id(), form);
+            } else {
+                data.remove::<IssueLinkDraft>(issue_link_draft_id());
+            }
+        });
     }
 }

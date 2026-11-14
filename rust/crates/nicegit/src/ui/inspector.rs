@@ -8,6 +8,7 @@ use nicegit_core::models::short;
 use nicegit_core::{GitClient, Snapshot, Stash, StashFile};
 
 use crate::app::{NiceGitApp, Selection};
+use crate::issue_links::{IssueLinks, Segment};
 use crate::ui::history::middle_ellipsis;
 
 /// A commit's signature summary, filled in by a background thread: None while loading.
@@ -49,6 +50,7 @@ impl NiceGitApp {
         let files = self.repo().map(|r| r.commit_files.clone()).unwrap_or_default();
         let signature = self.signature_for(&hash, ui.ctx());
         let containing = self.containing_for(&hash, &snapshot, ui.ctx());
+        let links = IssueLinks::new(&self.settings, &snapshot);
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -81,11 +83,11 @@ impl NiceGitApp {
                             .split_once('\n')
                             .map(|(s, b)| (s.to_string(), b.trim().to_string()))
                             .unwrap_or((details.message.clone(), String::new()));
-                        ui.label(RichText::new(subject).size(16.0).strong());
+                        show_subject(ui, &links, &subject);
                         if !body.is_empty() {
                             ui.add_space(4.0);
                             let hash = summary.as_ref().map(|commit| commit.hash.clone()).unwrap_or_default();
-                            commit_description(ui, &body, &hash, panel_height);
+                            commit_description(ui, &body, &hash, panel_height, &links);
                         }
                         if !details.notes.is_empty() {
                             ui.add_space(10.0);
@@ -216,6 +218,7 @@ impl NiceGitApp {
         let Some(stash) = snapshot.stashes.iter().find(|s| s.hash == hash).cloned() else { return };
         // The files are listed for this stash only; a listing for another stash is not shown.
         let listing = self.repo().and_then(|r| r.stash_files.clone()).filter(|(listed, _)| *listed == hash).map(|(_, result)| result);
+        let links = IssueLinks::new(&self.settings, &snapshot);
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -227,7 +230,7 @@ impl NiceGitApp {
         ui.separator();
         egui::ScrollArea::vertical().id_salt("inspector").auto_shrink(false).show(ui, |ui| {
             egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 8, bottom: 12 }).show(ui, |ui| {
-                ui.label(RichText::new(stash.message.as_str()).size(16.0).strong());
+                show_subject(ui, &links, &stash.message);
                 ui.add_space(10.0);
                 egui::Grid::new("stash_meta").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
                     let caption = |ui: &mut Ui, text: &str| {
@@ -517,12 +520,75 @@ fn signature_color(level: u8, c: &theme::Colors) -> egui::Color32 {
 /// The lines of a commit's description shown before it scrolls.
 const DESCRIPTION_LINES: f32 = 8.0;
 
+/// A commit or stash message's subject line, with its issue links. Text without links is drawn as a
+/// single label, as it always was.
+fn show_subject(ui: &mut Ui, links: &IssueLinks, subject: &str) {
+    let segments = links.segments(subject);
+    if segments.iter().any(|segment| segment.url.is_some()) {
+        show_linked(ui, &segments, |text| RichText::new(text).size(16.0).strong());
+    } else {
+        ui.label(RichText::new(subject).size(16.0).strong());
+    }
+}
+
+/// Shows text in segments, with each link underlined in the accent colour. Clicking a link opens its
+/// address in the browser, and hovering shows the address. `plain` styles the text of every segment.
+/// Each line of the text wraps on its own, as a label's own line breaks do.
+fn show_linked(ui: &mut Ui, segments: &[Segment], plain: impl Fn(&str) -> RichText) {
+    let accent = theme::of(ui).accent;
+    let mut lines: Vec<Vec<(&str, Option<&str>)>> = vec![Vec::new()];
+    for segment in segments {
+        for (index, part) in segment.text.split('\n').enumerate() {
+            if index > 0 {
+                lines.push(Vec::new());
+            }
+            if !part.is_empty() {
+                lines.last_mut().expect("at least one line").push((part, segment.url.as_deref()));
+            }
+        }
+    }
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for line in lines {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                if line.is_empty() {
+                    ui.label(plain(" "));
+                }
+                for (text, url) in line {
+                    match url {
+                        Some(url) => {
+                            let label = egui::Label::new(plain(text).color(accent).underline()).sense(egui::Sense::click());
+                            let response = ui.add(label).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(url);
+                            if response.clicked() {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                            }
+                        }
+                        None => {
+                            ui.label(plain(text));
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+
 /// A commit's description. One of up to about eight lines is shown whole; a longer one is held to
 /// that height, never more than 40% of the panel and never less than three lines, in a tinted box
 /// that scrolls on its own. Each commit's box starts at the top.
-pub(crate) fn commit_description(ui: &mut egui::Ui, body: &str, hash: &str, panel_height: f32) {
+pub(crate) fn commit_description(ui: &mut egui::Ui, body: &str, hash: &str, panel_height: f32, links: &IssueLinks) {
     let color = ui.visuals().text_color().gamma_multiply(0.85);
     let text = RichText::new(body).color(color);
+    let segments = links.segments(body);
+    // The same text, with its links when it has any; the box's height is measured from the plain text.
+    let show = |ui: &mut egui::Ui| {
+        if segments.iter().any(|segment| segment.url.is_some()) {
+            show_linked(ui, &segments, |text| RichText::new(text).color(color));
+        } else {
+            ui.label(text.clone());
+        }
+    };
     let font = egui::TextStyle::Body.resolve(ui.style());
     let line = ui.fonts_mut(|fonts| fonts.row_height(&font));
     let galley = egui::WidgetText::from(text.clone()).into_galley(
@@ -533,7 +599,7 @@ pub(crate) fn commit_description(ui: &mut egui::Ui, body: &str, hash: &str, pane
     );
     let limit = (line * DESCRIPTION_LINES).min(panel_height * 0.4).max(line * 3.0);
     if galley.size().y <= limit + 1.0 {
-        ui.label(text);
+        show(ui);
         return;
     }
     let c = crate::theme::of(ui);
@@ -549,7 +615,7 @@ pub(crate) fn commit_description(ui: &mut egui::Ui, body: &str, hash: &str, pane
                 // Always drawn, so the box reads as one that scrolls.
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
-                    ui.label(text);
+                    show(ui);
                 });
         },
     );
