@@ -347,6 +347,10 @@ pub struct Settings {
     /// A version the person dismissed the update notice for; the notice stays hidden for it.
     #[serde(default)]
     pub dismissed_update: Option<String>,
+    /// Whether a desktop notification says when work started in NiceGit finishes while the window
+    /// is in the background.
+    #[serde(default = "default_true")]
+    pub notify_when_finished: bool,
 }
 
 /// How many recently opened repositories are remembered.
@@ -395,6 +399,7 @@ impl Default for Settings {
             solo_branch: BTreeMap::new(),
             workspaces: Vec::new(),
             check_for_updates: true,
+            notify_when_finished: true,
             last_update_check: 0,
             latest_version: None,
             dismissed_update: None,
