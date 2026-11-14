@@ -1,10 +1,12 @@
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::settings::IdentityProfile;
 use nicegit_core::PullStrategy;
 
 use crate::app::{HistoryEntry, NiceGitApp};
 use crate::settings::SyncAction;
 use crate::theme;
+use crate::tools::repository_settings::{StoredProfile, PROFILES_KEY};
 use crate::tools::{self};
 use crate::ui::dialogs::{Dialog, InputKind};
 
@@ -566,6 +568,10 @@ impl NiceGitApp {
                     app.open_tool(make(ui.ctx()));
                 }
             };
+        if has_repo {
+            self.identity_menu(ui);
+            ui.separator();
+        }
         open(ui, self, icon::GEAR_SIX, "Repository settings…", &|_| Box::new(tools::repository_settings::RepositorySettingsWindow::new()));
         open(ui, self, icon::SLIDERS_HORIZONTAL, "Git settings…", &|_| Box::new(tools::git_settings::GitSettingsWindow::new()));
         open(ui, self, icon::ARCHIVE, "Stashes…", &|_| Box::new(tools::stash::StashWindow::new()));
@@ -607,6 +613,37 @@ impl NiceGitApp {
             ui.close();
             self.apply_patch();
         }
+    }
+
+    /// The Identity submenu: the saved profiles from Repository settings, with a check mark on the one
+    /// the repository's commits already use, then Manage identities, which opens those profiles. A
+    /// profile is applied the same way as its Apply button in Repository settings.
+    fn identity_menu(&mut self, ui: &mut Ui) {
+        let current = self.repo().and_then(|repo| repo.identity.clone());
+        let idle = self.idle();
+        let profiles: Vec<StoredProfile> = ui.ctx().data_mut(|data| data.get_persisted(egui::Id::unique(PROFILES_KEY))).unwrap_or_default();
+        ui.menu_button(format!("{}  Identity", icon::USER_CIRCLE), |ui| {
+            ui.set_min_width(240.0);
+            if profiles.is_empty() {
+                ui.add_enabled(false, egui::Button::new("No saved profiles"));
+            }
+            for profile in profiles {
+                let core = IdentityProfile::new(&profile.name, &profile.email, profile.signing_key.as_deref());
+                let selected = current.as_ref().is_some_and(|(name, email)| *name == core.name && email.eq_ignore_ascii_case(&core.email));
+                let mark = if selected { icon::CHECK } else { " " };
+                let text = format!("{mark}  {}", core.label);
+                if ui.add_enabled(idle, egui::Button::new(text)).clicked() {
+                    ui.close();
+                    let (label, run) = tools::repository_settings::apply_profile(&profile);
+                    self.act(&label, run);
+                }
+            }
+            ui.separator();
+            if ui.button(format!("{}  Manage identities…", icon::GEAR_SIX)).clicked() {
+                ui.close();
+                self.open_tool(Box::new(tools::repository_settings::RepositorySettingsWindow::on_profiles()));
+            }
+        });
     }
 
     /// Asks before undoing the last recorded step, from the toolbar or the command palette.

@@ -347,6 +347,11 @@ pub struct Repo {
     pub signing: Option<nicegit_core::client::SigningSetup>,
     /// The signing setup being read in the background.
     pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
+    /// The Git name and email commits use here, as Git reads them: read with each snapshot, and
+    /// empty for a field that is not set.
+    pub identity: Option<(String, String)>,
+    /// The identity being read in the background.
+    pub identity_read: Option<Task<(String, String)>>,
     pub commit_filter: String,
     /// The Author and Path filters the history is narrowed by. Kept in memory for this repository
     /// only, so it is not saved across restarts.
@@ -533,6 +538,8 @@ impl Repo {
             sent_sign: None,
             signing: None,
             signing_read: None,
+            identity: None,
+            identity_read: None,
             commit_filter: String::new(),
             history_filter: nicegit_core::HistoryFilter::default(),
             filter_draft: None,
@@ -1050,6 +1057,9 @@ impl NiceGitApp {
                 self.worker.load(self.generation, path, deliberate, limit, scope, hidden, solo, filter);
             }
         }
+        if deliberate || self.repos[index].identity.is_none() {
+            self.start_identity_read(index);
+        }
     }
 
     /// Fetches the open repository from its remotes every few minutes, as Settings chooses, so
@@ -1271,6 +1281,9 @@ impl NiceGitApp {
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
+                    // An action that changes the commit identity is followed by a fresh read of it.
+                    let identity_changed =
+                        matches!(&action, Some((label, _)) if crate::tools::repository_settings::changes_identity(label));
                     let action = action.filter(|(label, _)| label != BACKGROUND_FETCH);
                     // A commit that failed gives its message back; one that was made keeps it cleared,
                     // and the box starts from the commit template for the next one.
@@ -1473,6 +1486,9 @@ impl NiceGitApp {
                                 }
                             }
                             self.apply(index, snapshot);
+                            if identity_changed {
+                                self.start_identity_read(index);
+                            }
                             // After fetching for a refused push, the upstream's commits are offered
                             // through the usual merge or rebase choice, with its preview.
                             if offer_integration && !action_failed && index == self.active {
@@ -1741,6 +1757,27 @@ impl NiceGitApp {
                 repo.signing_read = None;
             }
         }
+    }
+
+    /// Keeps each repository's commit identity once its background read arrives.
+    fn receive_identities(&mut self) {
+        for repo in &mut self.repos {
+            let Some(task) = repo.identity_read.as_mut() else { continue };
+            if let Some(identity) = task.get().cloned() {
+                repo.identity = Some(identity);
+                repo.identity_read = None;
+            }
+        }
+    }
+
+    /// Starts reading the repository's commit identity, which the commit box and the Identity menu
+    /// show. Read only on deliberate loads, a repository's first load, and after an action that
+    /// changes the identity, so automatic refreshes start no Git process for it. The last value stays
+    /// shown until the new read arrives.
+    fn start_identity_read(&mut self, index: usize) {
+        let path = self.repos[index].path.clone();
+        let context = self.worker.context.clone();
+        self.repos[index].identity_read = Some(Task::spawn(&context, move || GitClient::new().identity(&path)));
     }
 
     /// Copies each commit message that the commit menu asked for once it has been read. A read
@@ -2950,6 +2987,7 @@ impl eframe::App for NiceGitApp {
         self.poll_merge_tool();
         self.receive_templates();
         self.receive_signing_setups();
+        self.receive_identities();
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();

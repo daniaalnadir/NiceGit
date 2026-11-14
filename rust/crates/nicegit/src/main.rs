@@ -20,6 +20,8 @@ mod ui_tests;
 #[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]
+mod ui_tests_identity;
+#[cfg(test)]
 mod ui_tests_more;
 #[cfg(test)]
 mod ui_tests_parity_a;

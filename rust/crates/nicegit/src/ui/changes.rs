@@ -948,6 +948,22 @@ impl NiceGitApp {
             .inner
             .on_hover_text("Ctrl/Cmd-Enter")
             .clicked();
+        // Who the commit will be made as, from the identity read with the snapshot.
+        match self.repos[self.active].identity.clone() {
+            Some((name, email)) if !name.is_empty() && !email.is_empty() => {
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(format!("Committing as {name} <{email}>")).small().color(c.muted));
+                });
+            }
+            Some(_) => {
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new("No Git identity set. Choose one under Identity in the repository menu.").small().color(c.warning),
+                    );
+                });
+            }
+            None => {}
+        }
         if self.repos[self.active].skip_hooks {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
                 ui.label(RichText::new("Git hooks are skipped for this commit").small().color(c.muted));
