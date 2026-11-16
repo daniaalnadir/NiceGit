@@ -659,6 +659,10 @@ pub struct NiceGitApp {
     pub pending_clone: Option<Task<nicegit_core::Result<PathBuf>>>,
     /// Reading the tags a remote lacks, before the push confirmation opens.
     pub pending_tag_scan: Option<TagScan>,
+    /// Reading which dropped commits the checked-out branch already has, before the cherry-pick confirmation opens.
+    pub pending_cherry_review: Option<crate::ui::history::CherryReview>,
+    /// A cherry-pick waiting for the checkout that a drop on another branch started to finish.
+    pub pending_after_checkout: Option<crate::ui::history::AfterCheckout>,
     /// The "From GitHub…" list over the Clone dialog, while it is open.
     pub clone_picker: Option<crate::ui::clone_picker::ClonePicker>,
     /// The Create pull request dialog, while it is open.
@@ -756,6 +760,8 @@ impl NiceGitApp {
             applied_appearance: None,
             pending_clone: None,
             pending_tag_scan: None,
+            pending_cherry_review: None,
+            pending_after_checkout: None,
             clone_picker: None,
             pull_request: None,
             pending_check_out: None,
@@ -3178,6 +3184,8 @@ impl eframe::App for NiceGitApp {
         self.finish_update_check();
         self.finish_install(&ctx);
         self.finish_tag_scan();
+        self.finish_cherry_pick_review();
+        self.finish_cherry_pick_after_checkout();
         self.shortcuts(&ctx);
         self.drop_folders(&ctx);
         self.auto_refresh(&ctx);

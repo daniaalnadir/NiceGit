@@ -11,6 +11,7 @@ use crate::app::{NiceGitApp, Selection};
 use crate::theme;
 use crate::tools::{self, widgets, Task};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
+use crate::ui::history::{self, DraggedCommits};
 
 /// A collapsible sidebar section: icon, uppercase title, and a count.
 pub(crate) fn section<R>(ui: &mut Ui, id: &str, glyph: &str, title: &str, count: usize, open: bool, add: impl FnOnce(&mut Ui) -> R) {
@@ -245,9 +246,19 @@ impl NiceGitApp {
                 // Drag a branch onto the current branch to merge it in or rebase onto it.
                 if !branch.is_current {
                     response.dnd_set_drag_payload(branch.clone());
-                } else if let Some(source) = response.dnd_release_payload::<Branch>() {
-                    if can_switch {
-                        self.dialog = Some(Dialog::Integrate { source: (*source).clone() });
+                } else if response.dnd_hover_payload::<Branch>().is_some() {
+                    if let Some(source) = response.dnd_release_payload::<Branch>() {
+                        if can_switch {
+                            self.dialog = Some(Dialog::Integrate { source: (*source).clone() });
+                        }
+                    }
+                }
+                // Commits dragged from the graph are cherry-picked onto this branch. A branch checked
+                // out in another worktree cannot take them here.
+                if !in_other && response.dnd_hover_payload::<DraggedCommits>().is_some() {
+                    history::drop_outline(ui, response.rect);
+                    if let Some(commits) = response.dnd_release_payload::<DraggedCommits>() {
+                        self.drop_commits_on_branch(commits.0.clone(), branch.clone());
                     }
                 }
                 if response.double_clicked() && !branch.is_current && can_switch && !in_other {

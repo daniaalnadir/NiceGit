@@ -33,6 +33,8 @@ mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_custom_actions;
 #[cfg(test)]
+mod ui_tests_drag_cherry_pick;
+#[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]
 mod ui_tests_find_repositories;

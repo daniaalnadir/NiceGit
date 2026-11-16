@@ -67,6 +67,12 @@ pub enum Pending {
         branch: String,
         head: Option<String>,
     },
+    /// Checking out a branch that commits were dropped on, then cherry-picking them there. The
+    /// cherry-pick is confirmed again once the branch is checked out, so the person sees it first.
+    CheckOutAndCherryPick {
+        branch: Branch,
+        commits: Vec<String>,
+    },
     Revert {
         commit: String,
         branch: String,
@@ -1461,6 +1467,15 @@ impl NiceGitApp {
                     crate::git_ext::rebase_onto(client, &onto, &branch, head.as_deref(), path)
                         .map(|_| Some(format!("Rebased onto {name}.")))
                 })
+            }
+            Pending::CheckOutAndCherryPick { branch, commits } => {
+                let Some(path) = self.repo().map(|repo| repo.path.clone()) else { return };
+                let name = branch.name.clone();
+                self.checkout(branch);
+                // A checkout refused just now starts nothing, so there is no cherry-pick to wait for.
+                if self.busy.is_some() {
+                    self.pending_after_checkout = Some(crate::ui::history::AfterCheckout { path, branch: name, commits });
+                }
             }
             Pending::CherryPick { commits, branch, head } => {
                 let count = commits.len();
