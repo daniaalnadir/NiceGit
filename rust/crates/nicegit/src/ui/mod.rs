@@ -880,7 +880,8 @@ impl NiceGitApp {
         if selectable && !selected.is_empty() {
             let staged = review.as_ref().is_some_and(|r| r.staged);
             egui::Frame::new().fill(c.subtle_bg).inner_margin(egui::Margin::symmetric(14, 6)).show(ui, |ui| {
-                ui.horizontal(|ui| {
+                // Wraps in a narrow diff panel, so every button stays on screen.
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new(format!("{} line{} selected", selected.len(), if selected.len() == 1 { "" } else { "s" }))
                             .color(c.muted),
