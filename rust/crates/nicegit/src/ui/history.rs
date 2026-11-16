@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use egui::{Color32, FontId, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::models::short;
 use nicegit_core::{Branch, Commit, GitClient, HistoryFilter, Snapshot, Stash, StatusEntry, StatusKind};
 
 use crate::app::{NiceGitApp, Selection};
@@ -13,6 +15,53 @@ use crate::ui::dialogs::{Dialog, InputKind, Pending};
 use crate::ui::history_columns::{self, Column};
 
 const ROW_HEIGHT: f32 = 34.0;
+
+/// The commits dragged from the graph, as full hashes: the dragged row, or every marked commit when
+/// the dragged row is one of them. A local branch takes them as a cherry-pick; nothing else does.
+#[derive(Clone)]
+pub(crate) struct DraggedCommits(pub Vec<String>);
+
+/// Commits dropped on the checked-out branch, read before their cherry-pick is confirmed: which of
+/// them the branch already has. The branch and HEAD are those shown when the drop happened.
+pub(crate) struct CherryReview {
+    pub path: PathBuf,
+    pub branch: String,
+    pub head: String,
+    pub commits: Vec<String>,
+    pub task: Task<nicegit_core::Result<Vec<String>>>,
+}
+
+/// A cherry-pick to offer once the checkout started by a drop on another branch has finished.
+pub(crate) struct AfterCheckout {
+    pub path: PathBuf,
+    pub branch: String,
+    pub commits: Vec<String>,
+}
+
+/// Outlines a row or label that dragged commits would be dropped on.
+pub(crate) fn drop_outline(ui: &Ui, rect: egui::Rect) {
+    let c = theme::of(ui);
+    ui.painter().rect_stroke(rect, 5.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Outside);
+}
+
+/// Names what dropping the dragged commits does, beside the pointer, while they are dragged.
+fn cherry_pick_drag_label(ctx: &egui::Context) {
+    let Some(payload) = egui::DragAndDrop::payload::<DraggedCommits>(ctx) else { return };
+    let Some(pointer) = ctx.pointer_latest_pos() else { return };
+    let text = match payload.0.as_slice() {
+        [one] => format!("Cherry-pick {}", short(one)),
+        many => format!("Cherry-pick {} commits", many.len()),
+    };
+    egui::Area::new(ctx.viewport_id().root_ui_id().with_salt(egui::IdSalt::new("cherry-pick drag label")))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(pointer + egui::vec2(14.0, 12.0))
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(text);
+            });
+        });
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum LabelKind {
@@ -421,6 +470,7 @@ impl NiceGitApp {
         if clear_solo {
             self.set_solo_branch(None);
         }
+        cherry_pick_drag_label(ui.ctx());
 
         let dirty = !snapshot.status.is_empty();
         // Stashes are drawn only in the unfiltered history: a filtered one would show a stash above
@@ -536,7 +586,7 @@ impl NiceGitApp {
         let commit = repo.commit_at(index).cloned();
         let selection = repo.selection.clone();
         let width = ui.available_width();
-        let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), Sense::click());
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), Sense::click_and_drag());
         // The row is painted, so describe it for screen readers and UI tests.
         let description = match &commit {
             Some(commit) => commit.subject.clone(),
@@ -722,6 +772,14 @@ impl NiceGitApp {
             if !branch.is_current && branch.name != commit.hash {
                 label.dnd_set_drag_payload(branch.clone());
             }
+            // Dragged commits are cherry-picked onto a local branch. The hover check comes first, so
+            // a release takes only a payload this label accepts.
+            if !branch.is_remote && label.dnd_hover_payload::<DraggedCommits>().is_some() {
+                drop_outline(ui, pill);
+                if let Some(commits) = label.dnd_release_payload::<DraggedCommits>() {
+                    self.drop_commits_on_branch(commits.0.clone(), branch.clone());
+                }
+            }
             label.context_menu(|ui| self.branch_menu(ui, &branch, snapshot, can_switch));
         }
         // Tag labels are named for screen readers and tests; hovering passes through to the row.
@@ -729,7 +787,7 @@ impl NiceGitApp {
             let tag = ui.interact(pill, ui.scope_id().with(("tag", &commit.hash, index)), Sense::hover());
             tag.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, format!("Tag {name}")));
         }
-        if is_head && snapshot.is_on_branch() {
+        if is_head && snapshot.is_on_branch() && response.dnd_hover_payload::<Branch>().is_some() {
             if let Some(source) = response.dnd_release_payload::<Branch>() {
                 if self.idle() && snapshot.operation.is_none() && !source.is_current {
                     self.dialog = Some(Dialog::Integrate { source: (*source).clone() });
@@ -737,6 +795,12 @@ impl NiceGitApp {
             }
         }
         let response = response.on_hover_text_at_pointer(format!("{}\n{} <{}>", commit.subject, commit.author_name, commit.author_email));
+        // Past egui's drag threshold, the row (or every marked commit, when the row is one) is dragged
+        // onto a local branch to cherry-pick it. A plain click or a Command-click is not a drag.
+        if response.drag_started() {
+            let commits = if is_marked { marked.iter().cloned().collect() } else { vec![commit.hash.clone()] };
+            response.dnd_set_drag_payload(DraggedCommits(commits));
+        }
         if response.clicked() || label_clicked {
             let toggle = ui.input(|i| i.modifiers.command);
             if toggle {
@@ -750,6 +814,128 @@ impl NiceGitApp {
             }
         }
         response.context_menu(|ui| self.commit_menu(ui, &commit, snapshot, can_switch));
+    }
+
+    /// Cherry-picks dropped commits onto a local branch. On the checked-out branch the confirmation
+    /// comes after the guards and a read of what the branch already has. Another branch is checked
+    /// out first, after its own confirmation, and the cherry-pick is confirmed once it is checked out.
+    pub(crate) fn drop_commits_on_branch(&mut self, commits: Vec<String>, target: Branch) {
+        if target.is_current {
+            self.begin_cherry_pick_review(commits);
+            return;
+        }
+        if self.busy.is_some() {
+            self.notify("Wait for the current Git action to finish before cherry-picking.", true);
+            return;
+        }
+        let Some(snapshot) = self.repo().and_then(|repo| repo.snapshot.clone()) else { return };
+        if snapshot.operation.is_some() {
+            self.notify("Finish or abort the current Git operation before switching branches.", true);
+            return;
+        }
+        let name = target.display_name();
+        let count = commits.len();
+        let noun = if count == 1 { "commit" } else { "commits" };
+        self.confirm(
+            format!("Check out {name} and cherry-pick {count} {noun}?"),
+            format!(
+                "NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}."
+            ),
+            "Check out",
+            Pending::CheckOutAndCherryPick { branch: target, commits },
+        );
+    }
+
+    /// Starts a cherry-pick of dropped commits onto the checked-out branch, after the guards the
+    /// Cherry-pick button has. The commits the branch already has are read in the background, and
+    /// the confirmation opens when that read finishes.
+    fn begin_cherry_pick_review(&mut self, commits: Vec<String>) {
+        if self.busy.is_some() {
+            self.notify("Wait for the current Git action to finish before cherry-picking.", true);
+            return;
+        }
+        let Some(repo) = self.repo() else { return };
+        let Some(snapshot) = repo.snapshot.clone() else { return };
+        let path = repo.path.clone();
+        if snapshot.operation.is_some() {
+            self.notify("Finish or abort the current Git operation before cherry-picking.", true);
+            return;
+        }
+        if !snapshot.is_on_branch() {
+            self.notify("Check out a branch before cherry-picking.", true);
+            return;
+        }
+        if !snapshot.status.is_empty() {
+            self.notify("Commit or stash your changes before cherry-picking.", true);
+            return;
+        }
+        let Some(head) = snapshot.head_hash.clone() else { return };
+        let context = self.worker.context.clone();
+        let (read_path, read_head, read_commits) = (path.clone(), head.clone(), commits.clone());
+        self.busy = Some("Read commits".into());
+        let task = Task::spawn(&context, move || GitClient::new().commits_reachable_from(&read_commits, &read_head, &read_path));
+        self.pending_cherry_review = Some(CherryReview { path, branch: snapshot.current_branch.clone(), head, commits, task });
+    }
+
+    /// Opens the cherry-pick confirmation once the read of the branch's commits has finished. The
+    /// commits it already has are left out; when none remain, a notice says so and nothing opens.
+    pub(crate) fn finish_cherry_pick_review(&mut self) {
+        let Some(review) = self.pending_cherry_review.as_mut() else { return };
+        let Some(result) = review.task.get().cloned() else { return };
+        let Some(review) = self.pending_cherry_review.take() else { return };
+        self.busy = None;
+        if self.repos.get(self.active).is_none_or(|repo| repo.path != review.path) {
+            return;
+        }
+        let already = match result {
+            Ok(already) => already,
+            Err(error) => {
+                self.notify(format!("Could not read the commits on {}: {error}", review.branch), true);
+                return;
+            }
+        };
+        let remaining: Vec<String> = review.commits.iter().filter(|hash| !already.contains(hash)).cloned().collect();
+        let skipped = review.commits.len() - remaining.len();
+        let branch = review.branch;
+        if remaining.is_empty() {
+            let text = if skipped == 1 {
+                format!("That commit is already on {branch}.")
+            } else {
+                format!("All {skipped} commits are already on {branch}.")
+            };
+            self.notify(text, false);
+            return;
+        }
+        let count = remaining.len();
+        let (title, mut message) = if count == 1 {
+            ("Cherry-pick this commit?".to_string(), format!("It is applied to {branch} as a new commit."))
+        } else {
+            (format!("Cherry-pick {count} commits?"), format!("They are applied to {branch} oldest first."))
+        };
+        message.push_str(" Conflicts stop the sequence for you to resolve or abort.");
+        if skipped > 0 {
+            message.push_str(&format!(" {skipped} of them are already on {branch}."));
+        }
+        self.confirm(title, message, "Cherry-pick", Pending::CherryPick { commits: remaining, branch, head: Some(review.head) });
+    }
+
+    /// Opens the cherry-pick confirmation once the checkout started by a drop has finished, if it
+    /// checked out the branch. A checkout that failed leaves the branch as it was, and nothing opens.
+    pub(crate) fn finish_cherry_pick_after_checkout(&mut self) {
+        if self.pending_after_checkout.is_none() || self.busy.is_some() {
+            return;
+        }
+        let Some(repo) = self.repos.get(self.active) else { return };
+        if repo.loading {
+            return;
+        }
+        let current = repo.snapshot.as_ref().map(|snapshot| snapshot.current_branch.clone());
+        let same_repo = self.pending_after_checkout.as_ref().is_some_and(|pending| pending.path == repo.path);
+        let Some(pending) = self.pending_after_checkout.take() else { return };
+        if !same_repo || current.as_deref() != Some(pending.branch.as_str()) {
+            return;
+        }
+        self.begin_cherry_pick_review(pending.commits);
     }
 
     /// A stash's row, listed above the commit it was made on: its node in the graph, `stash@{n}`,
@@ -999,6 +1185,31 @@ impl NiceGitApp {
             if button.clicked() {
                 ui.close();
                 self.commit_fixup(commit.hash.clone(), commit.subject.clone(), snapshot.current_branch.clone(), snapshot.head_hash.clone());
+            }
+        }
+        {
+            // Splitting rewrites this commit and the commits after it, so a merge cannot be split. A commit
+            // that is not on the checked-out branch is refused by the core, which says why.
+            let merge = commit.parents.len() > 1;
+            let reason = if !idle {
+                "Wait for the current Git action to finish"
+            } else if !on_branch {
+                "Check out a branch first"
+            } else if snapshot.operation.is_some() {
+                "Finish the current Git operation first"
+            } else {
+                "Merge commits can't be split"
+            };
+            let enabled = idle && on_branch && snapshot.operation.is_none() && !merge;
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Split commit…", icon::SCISSORS)));
+            let button = if enabled {
+                button.on_hover_text("Divides this commit into two, with a message for each")
+            } else {
+                button.on_disabled_hover_text(reason)
+            };
+            if button.clicked() {
+                ui.close();
+                self.open_tool(Box::new(tools::split_commit::SplitWindow::new(&commit.hash, &commit.subject, snapshot)));
             }
         }
         if is_head

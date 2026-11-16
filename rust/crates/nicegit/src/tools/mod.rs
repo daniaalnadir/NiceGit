@@ -34,6 +34,7 @@ pub mod pull_request_detail;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;
+pub mod split_commit;
 pub mod stash;
 pub mod submodules;
 pub mod terminal;

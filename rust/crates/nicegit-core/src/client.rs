@@ -2590,7 +2590,7 @@ fn sign_argument(sign: Option<bool>) -> Option<&'static str> {
 
 /// Whether Git's failure text says it could not sign a commit: the signing program failed or could
 /// not run, or the `gpg.format` setting is broken.
-fn is_signing_refusal(message: &str) -> bool {
+pub(crate) fn is_signing_refusal(message: &str) -> bool {
     // GnuPG reports through Git's own words; SSH signing reports ssh-keygen's, such as a key
     // file that cannot be loaded.
     [

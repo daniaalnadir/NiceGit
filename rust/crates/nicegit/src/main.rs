@@ -33,6 +33,8 @@ mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_custom_actions;
 #[cfg(test)]
+mod ui_tests_drag_cherry_pick;
+#[cfg(test)]
 mod ui_tests_files;
 #[cfg(test)]
 mod ui_tests_find_repositories;
@@ -64,6 +66,8 @@ mod ui_tests_perf;
 mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_speed;
+#[cfg(test)]
+mod ui_tests_split;
 #[cfg(test)]
 mod ui_tests_stash_lines;
 #[cfg(test)]

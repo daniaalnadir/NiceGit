@@ -58,7 +58,7 @@ pub struct DiffRequest {
 }
 
 /// Reads `@@ -a,b +c,d @@`, returning (old start, old count, new start, new count).
-fn hunk_header(text: &str) -> Option<(usize, usize, usize, usize)> {
+pub(crate) fn hunk_header(text: &str) -> Option<(usize, usize, usize, usize)> {
     let rest = text.strip_prefix("@@ -")?;
     let (ranges, _) = rest.split_once(" @@")?;
     let (old, new) = ranges.split_once(" +")?;
