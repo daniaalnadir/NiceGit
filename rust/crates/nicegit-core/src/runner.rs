@@ -166,6 +166,14 @@ pub fn spawn(arguments: &[&str], directory: &Path, options: &RunOptions) -> Resu
     command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
 }
 
+/// Starts Git with its standard output and error piped, for output that is read as it arrives. The
+/// caller must read the output to its end and then wait for the child.
+pub fn spawn_piped(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Child> {
+    let mut command = configured_command(arguments, directory, options)?;
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+}
+
 /// A Git command with NiceGit's environment: inherited repository variables removed, prompts and
 /// editors disabled, optional index locks skipped, and literal pathspecs for path commands.
 fn configured_command(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Command> {

@@ -24,6 +24,7 @@ pub mod gitlab;
 pub mod graph;
 pub mod hosting;
 pub mod inline;
+pub mod insights;
 pub mod install;
 mod json;
 pub mod lfs;

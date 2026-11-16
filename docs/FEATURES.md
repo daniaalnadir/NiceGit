@@ -210,6 +210,13 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
 - Tip history from a branch's menu (sidebar or graph label) lists every commit that branch has
   pointed to, newest first, from its own reflog. A branch can be created at any entry, and for
   the current branch an entry can be reset to, with the usual reset confirmation.
+- Insights from Repository > Insights (also in the command palette) is a read-only window
+  on the history: commits over time as a bar chart (by day for 30 days, by ISO week otherwise),
+  authors with commits, lines added and removed, and last activity (mailmap merges one person's
+  addresses), the most changed files, which follow renames to their newest name, and the top-level
+  folders. The period is 30 days, 90 days, 1 year (the default), or all time, and the read covers
+  this branch or every branch. It reads in the background with a Cancel, and it covers the newest
+  20,000 commits at most.
 - Stash only selected files (including untracked ones) from the Stashes window.
 - Remove a clean linked worktree, and forget worktrees whose folders were deleted.
 - Command palette (Shift-Command-P) for repository actions, branch switching, and recent
