@@ -101,6 +101,30 @@ pub enum NoticeAction {
     OpenUrl(String),
     /// Make the commit again with Git hooks skipped, after a hook stopped it.
     CommitWithoutHooks(HookRetry),
+    /// Apply the stash's changes on top of the changes that would have been overwritten, after
+    /// Git's own apply or pop refused. With `drop_after`, the stash is removed once they apply.
+    ApplyIntoChanges { stash: Stash, drop_after: bool },
+}
+
+/// The stash, and whether it is popped, for an apply or pop action's label ("Apply stash@{0}" or
+/// "Pop stash@{0}"), so a refusal can offer to apply it into the changes instead.
+pub fn stash_replay_label(label: &str) -> Option<(String, bool)> {
+    let (reference, drop_after) = match label.strip_prefix("Pop ") {
+        Some(reference) => (reference, true),
+        None => (label.strip_prefix("Apply ")?, false),
+    };
+    reference.starts_with("stash@{").then(|| (reference.to_string(), drop_after))
+}
+
+/// The files Git says would be overwritten, one per line after its message, or a general word.
+pub fn overwritten_files(error: &str) -> String {
+    let files: Vec<&str> =
+        error.lines().filter_map(|line| line.strip_prefix('\t')).map(str::trim).filter(|file| !file.is_empty()).collect();
+    if files.is_empty() {
+        "your files".to_string()
+    } else {
+        files.join(", ")
+    }
 }
 
 /// Which commit a Git hook stopped, so it can be made again with hooks skipped.
@@ -1561,6 +1585,28 @@ impl NiceGitApp {
                                     action: None,
                                     detail: Some(error.to_string()),
                                 });
+                            }
+                            // Git's own apply or pop refused over local changes to a stash. The notice offers to
+                            // apply the stash on top of them, when the stash is still listed under its label.
+                            Err(error) if stash_replay_label(&label).is_some() && blocked_by_local_changes(&error.to_string()) => {
+                                action_failed = true;
+                                let (reference, drop_after) = stash_replay_label(&label).unwrap_or_default();
+                                let files = overwritten_files(&error.to_string());
+                                let stash = self
+                                    .snapshot()
+                                    .and_then(|snapshot| snapshot.stashes.iter().find(|s| s.reference == reference))
+                                    .cloned();
+                                let (text, action) = match stash {
+                                    Some(stash) => (
+                                        format!("Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead."),
+                                        Some(NoticeAction::ApplyIntoChanges { stash, drop_after }),
+                                    ),
+                                    None => (
+                                        format!("Git would overwrite your changes to {files}. Commit or stash them, then try again."),
+                                        None,
+                                    ),
+                                };
+                                self.notice = Some(Notice { text, is_error: true, action, detail: Some(error.to_string()) });
                             }
                             Err(error) if blocked_by_local_changes(&error.to_string()) => {
                                 action_failed = true;

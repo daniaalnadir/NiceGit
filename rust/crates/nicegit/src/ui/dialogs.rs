@@ -211,6 +211,12 @@ pub enum InputKind {
     /// Renaming a stash. The stash is captured when the dialog opens, and the new name is stored
     /// against its commit, so the rename applies to the stash that was shown.
     RenameStash(Stash),
+    /// Stashing the selected lines of an unstaged file, with the lines and the review they were
+    /// chosen from, so the stash applies to the diff that was shown.
+    StashLines {
+        lines: std::collections::BTreeSet<usize>,
+        review: nicegit_core::staging::FileReview,
+    },
     /// Cloning. The destination follows the address until the person edits it or chooses one.
     /// The choices are the Options section's, which the defaults leave as a plain clone.
     Clone(CloneDestination, CloneChoices),
@@ -989,11 +995,12 @@ impl NiceGitApp {
                     let enter = !picker_open && ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     ui.horizontal(|ui| {
                         // A stash's message is optional: Git names one after the branch when it is empty.
-                        let optional = matches!(kind, InputKind::SaveStash);
+                        let optional = matches!(kind, InputKind::SaveStash | InputKind::StashLines { .. });
                         let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none() && options_valid;
                         let ok_label = match kind {
                             InputKind::CreateTag { push: Some(_), .. } => "Create and push",
                             InputKind::BranchFromStash { .. } => "Create branch",
+                            InputKind::StashLines { .. } => "Stash",
                             _ => "OK",
                         };
                         if widgets::primary_button(ui, ok_label, ready).clicked() || (enter && ready) {
@@ -1581,7 +1588,7 @@ impl NiceGitApp {
             Pending::ShowAllFolders => {
                 self.act("Show all folders", |client, path| client.show_all_folders(path).map(|_| Some("Checked out every folder.".into())))
             }
-            Pending::PopStash(stash) => self.act("Pop stash", move |client, path| {
+            Pending::PopStash(stash) => self.act(&format!("Pop {}", stash.reference), move |client, path| {
                 client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
             }),
             Pending::ReplaceWorkspace { name, repositories } => self.store_workspace(name, repositories),
@@ -1682,6 +1689,12 @@ impl NiceGitApp {
                 };
                 self.act("Stash", move |client, path| {
                     client.save_stash(&value, options, path).map(|_| Some("Saved your changes in a stash.".into()))
+                })
+            }
+            InputKind::StashLines { lines, review } => {
+                let name = review.path.clone();
+                self.act("Stash lines", move |client, path| {
+                    client.stash_lines(&value, &lines, &review, path).map(|_| Some(format!("Stashed the selected lines of {name}.")))
                 })
             }
             InputKind::RenameStash(stash) => self.act("Rename stash", move |client, path| {

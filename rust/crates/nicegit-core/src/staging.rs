@@ -3,13 +3,16 @@
 //! before writing anything.
 
 use std::collections::BTreeSet;
+use std::fs;
 use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::client::GitClient;
 use crate::diff::{parse_diff, DiffLine, DiffLineKind};
-use crate::models::{GitError, Result, StatusKind};
+use crate::models::{GitError, Result, Stash, StatusKind};
+use crate::rebase::Scratch;
+use crate::runner::{self, RunOptions};
 use crate::undo::DiscardUndo;
 
 const NO_NEWLINE: &str = "\\ No newline at end of file";
@@ -230,10 +233,226 @@ impl GitClient {
         };
         Ok(Some(DiscardUndo { path: review.path.clone(), index_before, working_before, index_after: after.0, working_after: after.1 }))
     }
+
+    /// Stashes the selected lines of a file's unstaged changes, and removes them from the working
+    /// file. The stash is shaped as `git stash` makes one, a commit with HEAD and an index commit
+    /// as parents, so Apply, Pop, and Drop work on it unchanged. Its tree is HEAD with only this
+    /// file changed to its index version plus the selected lines, so the stash holds this file
+    /// and nothing else. The stash commits are made first, in a temporary index, so a failure
+    /// before the working file changes leaves everything as it was. `selected` holds indices into
+    /// `review.lines`, which must be the unstaged diff. Refuses if the file or index changed since
+    /// `review` was read, and checks afterwards that only this file changed.
+    pub fn stash_lines(&self, message: &str, selected: &BTreeSet<usize>, review: &FileReview, directory: &Path) -> Result<()> {
+        if review.staged {
+            return Err(stash_error("Only unstaged changes can be stashed line by line."));
+        }
+        if let Some(reason) = &review.line_staging_unavailable {
+            return Err(stash_error(reason));
+        }
+        // Added and deleted files have no index version to keep the rest of the file in.
+        let whole_file = review
+            .lines
+            .iter()
+            .take_while(|line| line.kind != DiffLineKind::Hunk)
+            .any(|line| matches!(line.text.as_str(), "--- /dev/null" | "+++ /dev/null"));
+        if review.untracked || whole_file {
+            return Err(stash_error("Added and deleted files are stashed as a whole, not line by line."));
+        }
+        let all_changes = selected.iter().all(|&index| review.lines.get(index).is_some_and(is_change));
+        if selected.is_empty() || !all_changes {
+            return Err(stash_error("Select added or removed lines first."));
+        }
+        self.require_finished_operation("stash", directory)?;
+        let fresh = self.file_review(&review.path, false, directory)?;
+        if fresh.patch != review.patch || fresh.line_staging_unavailable.is_some() {
+            return Err(stash_error("The file or index changed. Reload the diff before stashing lines."));
+        }
+
+        // The stash's own state: the index content with the selected lines, which is what staging
+        // them would give. The working file is changed afterwards with the matching patch.
+        let (baseline, target) = line_sides(review, selected);
+        if baseline == target {
+            return Err(stash_error("The selected lines do not change the index."));
+        }
+        let stage = build_patch(review, &baseline, &target);
+        // The working file, read as an index, with the selected lines reverted: what discarding
+        // them would do. Applying it to the working file is refused if the file does not match.
+        let reverse = FileReview { staged: true, ..review.clone() };
+        let (working, kept) = line_sides(&reverse, selected);
+        if working == kept {
+            return Err(stash_error("The selected lines do not change the file."));
+        }
+        let removal = build_patch(&reverse, &working, &kept);
+
+        let head = self.head(directory).ok_or_else(|| stash_error("Make a first commit before stashing lines."))?;
+        let others_before = status_of_other_paths(self, &review.path, directory)?;
+        let branch = self.try_trimmed(&["branch", "--show-current"], directory).unwrap_or_else(|| "(no branch)".to_string());
+        let subject = self.run_trimmed(&["log", "-1", "--format=%h %s", &head], directory)?;
+        let label = if message.trim().is_empty() { format!("Selected lines from {}", review.path) } else { message.trim().to_string() };
+        let index_message = format!("index on {branch}: {subject}");
+        let stash_message = format!("On {branch}: {label}");
+
+        // Everything below uses a temporary index, so the real index is only read.
+        let scratch = Scratch::new("stash lines")?;
+        let index_path = scratch.path().join("index").to_string_lossy().into_owned();
+        let index_tree = self.run_trimmed(&["write-tree"], directory)?;
+        let index_commit = self.run_trimmed(&["commit-tree", &index_tree, "-p", &head, "-m", &index_message], directory)?;
+        let version = self
+            .index_version(&review.path, directory)?
+            .ok_or_else(|| stash_error("This file is not in the index. Stash it as a whole."))?;
+        run_in_index(self, &["read-tree", &head], directory, &index_path)?;
+        run_in_index(self, &["update-index", "--add", "--cacheinfo", &version.mode, &version.blob, &review.path], directory, &index_path)?;
+        apply_patch_in(self, &stage, true, Some(&index_path), directory)?;
+        let tree = run_in_index(self, &["write-tree"], directory, &index_path)?;
+        let stash = self.run_trimmed(&["commit-tree", &tree, "-p", &head, "-p", &index_commit, "-m", &stash_message], directory)?;
+        self.run(&["stash", "store", "-m", &stash_message, &stash], directory)?;
+
+        // The stash is stored, so the working file changes only now. If that fails, the stash
+        // is removed again, so the selected lines are not kept twice.
+        if let Err(error) = apply_patch_in(self, &removal, false, None, directory) {
+            return Err(match drop_stash_entry(self, &stash, directory) {
+                Ok(()) => error,
+                Err(drop_error) => stash_error(&format!(
+                    "The lines were stashed, but the file was not changed and the stash could not be removed. Check Stashes before continuing. {drop_error}"
+                )),
+            });
+        }
+
+        let file_is_expected = fs::read(directory.join(&review.path)).is_ok_and(|bytes| bytes == kept.as_bytes());
+        let others_after = status_of_other_paths(self, &review.path, directory)?;
+        if !file_is_expected || others_after != others_before {
+            return Err(stash_error(
+                "The lines were stashed, but the file is not as expected, or other files changed. Check the file and Stashes before continuing.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Applies a stash's working-file changes on top of the changes already there, for when
+    /// Git's own apply or pop refuses because they would be overwritten. The changes are the
+    /// stash's part after its index commit (`<stash>^2`), which for a stash of selected lines is
+    /// exactly those lines. Only working files change, and only if the changes fit the files as
+    /// they are now; otherwise nothing changes. With `drop_after`, the stash is removed once the
+    /// changes are applied. Stashes with untracked files are refused. Refused during an
+    /// unfinished operation.
+    /// Applies a stash's unstaged changes on top of the working files when Git's own apply refuses.
+    /// Returns what happened to the stash. Only the changes against the stash's index commit are
+    /// applied, so a stash that also saved staged changes keeps them: it is never removed here, even
+    /// for a pop, and the caller says so.
+    pub fn apply_stash_into_changes(&self, stash: &Stash, drop_after: bool, directory: &Path) -> Result<StashIntoChanges> {
+        const COMMAND: &str = "apply stash";
+        self.require_finished_operation(COMMAND, directory)?;
+        let listed = self.require_listed_stash(stash, COMMAND, directory)?;
+        let parents: Vec<String> =
+            self.run_trimmed(&["log", "-1", "--format=%P", &listed.hash], directory)?.split_whitespace().map(str::to_string).collect();
+        // A stash with untracked files has a third parent, which these changes do not cover.
+        if parents.len() != 2 {
+            return Err(GitError::failed(
+                COMMAND,
+                "This stash has untracked files, so it can only be applied as a whole. Apply it instead.",
+            ));
+        }
+        let base = &parents[1];
+        // The stash's staged part: what its index commit changed against the commit it was made on.
+        let has_staged = !self.run_trimmed(&["diff", "--name-only", "-z", &parents[0], base, "--"], directory)?.is_empty();
+        let names = self.run(&["diff", "--name-only", "-z", "--no-renames", base, &listed.hash], directory)?;
+        let paths: Vec<String> = names.split('\0').filter(|name| !name.is_empty()).map(str::to_string).collect();
+        let patch = runner::run_bytes(
+            &["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--binary", base, &listed.hash],
+            directory,
+            &self.options(),
+        )?;
+        if patch.is_empty() {
+            return Err(GitError::failed(COMMAND, "The stash has no changes to apply."));
+        }
+
+        let before = status_except(self, &paths, directory)?;
+        let refused = || {
+            GitError::failed(
+                COMMAND,
+                "The stashed lines no longer fit the file as it is now. Commit or stash your other changes, then apply it again.",
+            )
+        };
+        apply_patch_bytes(self, &patch, &["--check"], None, directory).map_err(|_| refused())?;
+        apply_patch_bytes(self, &patch, &[], None, directory).map_err(|_| refused())?;
+        if status_except(self, &paths, directory)? != before {
+            return Err(GitError::failed(
+                COMMAND,
+                "The stash was applied, but other files changed. Check your changes and Stashes before continuing.",
+            ));
+        }
+
+        if has_staged {
+            return Ok(StashIntoChanges::KeptForStagedChanges);
+        }
+        if drop_after {
+            // Only the entry that was listed is removed, and only if it is still at its position.
+            let still_listed =
+                self.list_stashes(directory)?.iter().any(|entry| entry.reference == listed.reference && entry.hash == listed.hash);
+            if !still_listed {
+                return Err(GitError::failed(
+                    COMMAND,
+                    "The changes were applied, but the stash moved, so it was not removed. Check Stashes before continuing.",
+                ));
+            }
+            self.run(&["stash", "drop", &listed.reference], directory).map(drop).map_err(|error| {
+                GitError::failed(
+                    COMMAND,
+                    format!("The changes were applied, but the stash could not be removed. Do not apply it again. {error}"),
+                )
+            })?;
+            return Ok(StashIntoChanges::Removed);
+        }
+        Ok(StashIntoChanges::Kept)
+    }
+}
+
+/// What `apply_stash_into_changes` did with the stash after applying its changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StashIntoChanges {
+    /// Applied, and the stash was kept, as asked.
+    Kept,
+    /// Applied, and the stash was removed, as a pop asks.
+    Removed,
+    /// Applied, but the stash also saved staged changes, which were not applied; it is kept.
+    KeptForStagedChanges,
 }
 
 fn review_error(message: &str) -> GitError {
     GitError::failed("file review", message)
+}
+
+fn stash_error(message: &str) -> GitError {
+    GitError::failed("stash lines", message)
+}
+
+/// Runs Git with `GIT_INDEX_FILE` set to `index`, so the real index is not touched.
+fn run_in_index(client: &GitClient, arguments: &[&str], directory: &Path, index: &str) -> Result<String> {
+    let environment = [("GIT_INDEX_FILE", index)];
+    runner::run(arguments, directory, &RunOptions { env: &environment, ..client.options() }).map(|output| output.trim().to_string())
+}
+
+/// The porcelain status records for every path except `path`, so a change to another file shows.
+fn status_of_other_paths(client: &GitClient, path: &str, directory: &Path) -> Result<Vec<String>> {
+    status_except(client, &[path.to_string()], directory)
+}
+
+/// The porcelain status records for every path not in `paths`.
+fn status_except(client: &GitClient, paths: &[String], directory: &Path) -> Result<Vec<String>> {
+    let output = client.run(&["status", "--porcelain=v1", "-z", "--no-renames"], directory)?;
+    Ok(output
+        .split('\0')
+        .filter(|record| !record.get(3..).is_some_and(|path| paths.iter().any(|excluded| excluded == path)))
+        .map(str::to_string)
+        .collect())
+}
+
+/// Removes the stash commit with this object ID, if it is still listed.
+fn drop_stash_entry(client: &GitClient, hash: &str, directory: &Path) -> Result<()> {
+    match client.list_stashes(directory)?.into_iter().find(|stash| stash.hash == hash) {
+        Some(stash) => client.run(&["stash", "drop", &stash.reference], directory).map(drop),
+        None => Ok(()),
+    }
 }
 
 /// Headers that mark a file which cannot be staged by line.
@@ -389,17 +608,29 @@ static PATCH_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// Writes the patch to a temporary file, applies it to the index (`cached`) or the working
 /// files, and removes the file.
 fn apply_patch(client: &GitClient, patch: &str, cached: bool, directory: &Path) -> Result<()> {
+    apply_patch_in(client, patch, cached, None, directory)
+}
+
+/// Like `apply_patch`, and with `index` set, applies to the index at that path instead of the
+/// repository's own index.
+fn apply_patch_in(client: &GitClient, patch: &str, cached: bool, index: Option<&str>, directory: &Path) -> Result<()> {
+    let flags: &[&str] = if cached { &["--cached"] } else { &[] };
+    apply_patch_bytes(client, patch.as_bytes(), flags, index, directory)
+}
+
+/// Applies a patch given as bytes with extra `git apply` flags, such as `--check` or `--cached`.
+/// Without `index`, the working files are changed.
+fn apply_patch_bytes(client: &GitClient, patch: &[u8], flags: &[&str], index: Option<&str>, directory: &Path) -> Result<()> {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|time| time.as_nanos()).unwrap_or(0);
     let sequence = PATCH_COUNTER.fetch_add(1, Ordering::Relaxed);
     let file = std::env::temp_dir().join(format!("nicegit-lines-{}-{nanos}-{sequence}.patch", std::process::id()));
-    std::fs::write(&file, patch.as_bytes()).map_err(|error| GitError::failed("stage lines", error.to_string()))?;
+    std::fs::write(&file, patch).map_err(|error| GitError::failed("stage lines", error.to_string()))?;
     let file_text = file.to_string_lossy().into_owned();
     let mut arguments = vec!["apply"];
-    if cached {
-        arguments.push("--cached");
-    }
+    arguments.extend(flags);
     arguments.extend(["--whitespace=nowarn", "--", &file_text]);
-    let result = client.run(&arguments, directory).map(drop);
+    let environment: Vec<(&str, &str)> = index.map(|path| ("GIT_INDEX_FILE", path)).into_iter().collect();
+    let result = runner::run(&arguments, directory, &RunOptions { env: &environment, ..client.options() }).map(drop);
     let _ = std::fs::remove_file(&file);
     result
 }

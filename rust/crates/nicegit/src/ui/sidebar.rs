@@ -425,7 +425,8 @@ impl NiceGitApp {
                     if ui.add_enabled(allowed, egui::Button::new(format!("{}  Apply", icon::TRAY_ARROW_DOWN))).clicked() {
                         ui.close();
                         let stash = stash.clone();
-                        self.act("Apply stash", move |client, path| {
+                        // The label names the stash, so a refusal can offer to apply it into the changes.
+                        self.act(&format!("Apply {}", stash.reference), move |client, path| {
                             client.apply_stash(&stash, path).map(|_| Some("Applied the stash.".into()))
                         });
                     }

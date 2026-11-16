@@ -65,6 +65,8 @@ mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_speed;
 #[cfg(test)]
+mod ui_tests_stash_lines;
+#[cfg(test)]
 mod ui_tests_tools;
 #[cfg(test)]
 mod ui_tests_updates;

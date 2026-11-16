@@ -705,3 +705,234 @@ fn marker_detection_matches_the_configured_length() {
     assert!(!has_conflict_markers("|||\n", 7));
     assert!(has_conflict_markers("|||\n", 3));
 }
+
+// MARK: Stashing lines
+
+/// Commits a 30-line file and changes lines 5, 15, and 25 in the working file. Returns the
+/// committed content and the edited content.
+fn three_changes(repo: &Repo) -> (String, String) {
+    let original: String = (1..=30).map(|n| format!("line {n}\n")).collect();
+    repo.commit("notes.txt", &original, "Base");
+    let edited = original.replace("line 5\n", "five\n").replace("line 15\n", "fifteen\n").replace("line 25\n", "twenty five\n");
+    repo.write("notes.txt", &edited);
+    (original, edited)
+}
+
+fn stash_entries(repo: &Repo) -> Vec<String> {
+    repo.git(&["stash", "list"]).lines().map(str::to_string).collect()
+}
+
+#[test]
+fn stashing_the_middle_change_keeps_the_others_and_the_index() {
+    let repo = Repo::new();
+    let (original, edited) = three_changes(&repo);
+    repo.commit("other.txt", "one\n", "Other");
+    repo.write("other.txt", "two\n");
+    repo.git(&["add", "--", "other.txt"]);
+
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 15", "+fifteen"]);
+    client().stash_lines("", &selected, &review, repo.path()).expect("stash the middle change");
+
+    let entries = stash_entries(&repo);
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert!(entries[0].contains("On main: Selected lines from notes.txt"), "{entries:?}");
+    let shown = repo.git(&["stash", "show", "-p", "stash@{0}"]);
+    assert!(shown.contains("-line 15\n+fifteen\n"), "{shown}");
+    assert!(!shown.contains("+five") && !shown.contains("+twenty five"), "{shown}");
+    assert_eq!(repo.git(&["stash", "show", "--name-only", "stash@{0}"]), "notes.txt\n");
+
+    let working = original.replace("line 5\n", "five\n").replace("line 25\n", "twenty five\n");
+    assert_eq!(repo.read("notes.txt"), working, "the other two changes stay in the working file");
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "other.txt\n", "other.txt stays staged");
+    assert_eq!(repo.index_text("notes.txt"), original, "the index is unchanged");
+
+    // Git's own apply refuses over a file with other unstaged changes, as it does here.
+    let refused = git_output(repo.path(), &["stash", "apply"]);
+    assert!(!refused.status.success(), "plain git stash apply refuses over the other changes");
+    assert_eq!(repo.read("notes.txt"), working, "the refused apply changes nothing");
+
+    client().apply_stash_into_changes(&only_stash(&repo), false, repo.path()).expect("apply into the changes");
+    assert_eq!(repo.read("notes.txt"), edited, "all three changes are back");
+    assert_eq!(repo.index_text("notes.txt"), original, "the index is still unchanged");
+    assert_eq!(stash_entries(&repo).len(), 1, "apply keeps the stash");
+}
+
+/// The only stash listed.
+fn only_stash(repo: &Repo) -> nicegit_core::Stash {
+    let mut listed = client().list_stashes(repo.path()).expect("list stashes");
+    assert_eq!(listed.len(), 1, "one stash is listed");
+    listed.remove(0)
+}
+
+#[test]
+fn applying_a_stash_into_changes_refuses_a_conflicting_edit_and_changes_nothing() {
+    let repo = Repo::new();
+    three_changes(&repo);
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    client().stash_lines("", &select(&review, &["-line 15", "+fifteen"]), &review, repo.path()).expect("stash");
+    // Line 14 is context of the stashed change, so editing it means the change no longer fits.
+    let changed = repo.read("notes.txt").replace("line 14\n", "fourteen\n");
+    repo.write("notes.txt", &changed);
+    let stash = only_stash(&repo);
+
+    let error = client().apply_stash_into_changes(&stash, true, repo.path()).expect_err("a conflicting edit is refused");
+    assert!(error.to_string().contains("no longer fit"), "{error}");
+    assert_eq!(repo.read("notes.txt"), changed, "the working file is unchanged");
+    assert_eq!(stash_entries(&repo).len(), 1, "the stash is kept");
+}
+
+#[test]
+fn stashing_a_file_with_staged_and_unstaged_changes_keeps_the_staged_part_staged() {
+    let repo = Repo::new();
+    let (original, _) = three_changes(&repo);
+    // Line 5 is staged; lines 15 and 25 stay unstaged.
+    let staged = original.replace("line 5\n", "five\n");
+    repo.write("notes.txt", &staged);
+    repo.git(&["add", "--", "notes.txt"]);
+    let edited = staged.replace("line 15\n", "fifteen\n").replace("line 25\n", "twenty five\n");
+    repo.write("notes.txt", &edited);
+
+    let review = client().file_review("notes.txt", false, repo.path()).expect("unstaged review");
+    client().stash_lines("", &select(&review, &["-line 15", "+fifteen"]), &review, repo.path()).expect("stash");
+
+    assert_eq!(repo.index_text("notes.txt"), staged, "the staged change stays staged");
+    assert_eq!(repo.read("notes.txt"), staged.replace("line 25\n", "twenty five\n"), "the other unstaged change stays");
+    // The stash's own part, after its index commit, holds only the selected unstaged line.
+    let part = repo.git(&["diff", "stash@{0}^2", "stash@{0}"]);
+    assert!(part.contains("-line 15\n+fifteen\n"), "{part}");
+    assert!(!part.contains("five") && !part.contains("twenty five"), "{part}");
+
+    client().apply_stash_into_changes(&only_stash(&repo), false, repo.path()).expect("apply into the changes");
+    assert_eq!(repo.read("notes.txt"), edited, "the selected line is back beside the staged change");
+    assert_eq!(repo.index_text("notes.txt"), staged, "the index is still unchanged");
+}
+
+#[test]
+fn stashing_lines_takes_a_custom_message_and_pop_into_changes_restores_them() {
+    let repo = Repo::new();
+    let (_, edited) = three_changes(&repo);
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 5", "+five"]);
+    client().stash_lines("Five only", &selected, &review, repo.path()).expect("stash");
+
+    assert!(stash_entries(&repo)[0].ends_with("On main: Five only"), "{:?}", stash_entries(&repo));
+    // Git's own pop refuses over the other unstaged changes, so the stash goes in as its changes.
+    client().apply_stash_into_changes(&only_stash(&repo), true, repo.path()).expect("pop into the changes");
+    assert!(stash_entries(&repo).is_empty(), "the stash is removed once its changes are applied");
+    assert_eq!(repo.read("notes.txt"), edited, "every change is back");
+}
+
+#[test]
+fn stashing_lines_is_refused_when_the_file_changed_since_review() {
+    let repo = Repo::new();
+    three_changes(&repo);
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 15", "+fifteen"]);
+    let changed = repo.read("notes.txt").replace("twenty five", "25");
+    repo.write("notes.txt", &changed);
+
+    let error = client().stash_lines("", &selected, &review, repo.path()).expect_err("a stale review is refused");
+    assert!(error.to_string().contains("Reload the diff"), "{error}");
+    assert!(stash_entries(&repo).is_empty());
+    assert_eq!(repo.read("notes.txt"), changed);
+}
+
+#[test]
+fn stashing_lines_is_refused_for_a_staged_review() {
+    let repo = Repo::new();
+    let (_, edited) = three_changes(&repo);
+    repo.git(&["add", "--", "notes.txt"]);
+    let review = client().file_review("notes.txt", true, repo.path()).expect("staged review");
+    let selected = select(&review, &["-line 15", "+fifteen"]);
+
+    assert!(client().stash_lines("", &selected, &review, repo.path()).is_err());
+    assert!(stash_entries(&repo).is_empty());
+    assert_eq!(repo.git(&["diff", "--cached", "--name-only"]), "notes.txt\n");
+    assert_eq!(repo.read("notes.txt"), edited);
+}
+
+#[test]
+fn stashing_lines_is_refused_during_a_merge() {
+    let repo = Repo::new();
+    let (_, edited) = three_changes(&repo);
+    let review = client().file_review("notes.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 15", "+fifteen"]);
+    fs::write(repo.path().join(".git").join("MERGE_HEAD"), "0000000000000000000000000000000000000000\n").expect("write marker");
+
+    assert!(client().stash_lines("", &selected, &review, repo.path()).is_err());
+    assert!(stash_entries(&repo).is_empty());
+    assert_eq!(repo.read("notes.txt"), edited);
+}
+
+#[test]
+fn added_files_are_refused_for_line_stashing() {
+    let repo = Repo::new();
+    repo.commit("kept.txt", "a\n", "Base");
+    repo.write("new.txt", "fresh\n");
+    let review = client().file_review("new.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["+fresh"]);
+
+    assert!(client().stash_lines("", &selected, &review, repo.path()).is_err());
+    assert!(stash_entries(&repo).is_empty());
+    assert!(repo.path().join("new.txt").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn stashing_lines_of_a_file_with_glob_characters_touches_only_that_file() {
+    let repo = Repo::new();
+    let original: String = (1..=20).map(|n| format!("line {n}\n")).collect();
+    repo.commit("a [b]*.txt", &original, "Base");
+    repo.commit("a b1.txt", &original, "Other");
+    let edited = original.replace("line 10\n", "ten\n");
+    repo.write("a [b]*.txt", &edited);
+    repo.write("a b1.txt", &edited);
+
+    let review = client().file_review("a [b]*.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 10", "+ten"]);
+    client().stash_lines("", &selected, &review, repo.path()).expect("stash");
+
+    assert_eq!(repo.git(&["stash", "show", "--name-only", "stash@{0}"]), "a [b]*.txt\n");
+    assert_eq!(repo.read("a [b]*.txt"), original);
+    assert_eq!(repo.read("a b1.txt"), edited, "a file the pattern would also match is untouched");
+}
+
+#[test]
+fn stashing_lines_keeps_crlf_line_endings() {
+    let repo = Repo::new();
+    let original: String = (1..=10).map(|n| format!("line {n}\r\n")).collect();
+    repo.commit("crlf.txt", &original, "Base");
+    let edited = original.replace("line 3\r\n", "three\r\n").replace("line 8\r\n", "eight\r\n");
+    repo.write("crlf.txt", &edited);
+
+    let review = client().file_review("crlf.txt", false, repo.path()).expect("review");
+    let selected = select(&review, &["-line 3\r", "+three\r"]);
+    client().stash_lines("", &selected, &review, repo.path()).expect("stash");
+
+    assert_eq!(repo.read("crlf.txt"), edited.replace("three\r\n", "line 3\r\n"));
+    client().apply_stash_into_changes(&only_stash(&repo), false, repo.path()).expect("apply into the changes");
+    assert_eq!(repo.read("crlf.txt"), edited, "CRLF endings survive the round trip");
+}
+
+#[test]
+fn popping_into_changes_keeps_a_stash_that_also_saved_staged_changes() {
+    let repo = Repo::new();
+    repo.write("staged.txt", "one\n");
+    repo.write("worked.txt", "a\nb\nc\nd\ne\nf\ng\nh\n");
+    repo.git(&["add", "."]);
+    repo.git(&["commit", "-q", "-m", "Start"]);
+    // A normal stash with a staged change in one file and an unstaged change in another.
+    repo.write("staged.txt", "one\ntwo\n");
+    repo.git(&["add", "staged.txt"]);
+    repo.write("worked.txt", "a\nB\nc\nd\ne\nf\ng\nh\n");
+    repo.git(&["stash", "push", "-q", "-m", "Mixed"]);
+    // Keep editing the second file elsewhere, so Git's own pop refuses.
+    repo.write("worked.txt", "a\nb\nc\nd\ne\nf\ng\nH\n");
+    assert!(!git_output(repo.path(), &["stash", "pop"]).status.success(), "Git refuses to pop over the edited file");
+
+    let outcome = client().apply_stash_into_changes(&only_stash(&repo), true, repo.path()).expect("pop into the changes");
+    assert_eq!(outcome, nicegit_core::staging::StashIntoChanges::KeptForStagedChanges);
+    assert_eq!(repo.read("worked.txt"), "a\nB\nc\nd\ne\nf\ng\nH\n", "the unstaged change is applied beside the new edit");
+    assert_eq!(stash_entries(&repo).len(), 1, "the stash, which still holds the staged change, is kept");
+}

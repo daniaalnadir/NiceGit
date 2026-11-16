@@ -506,6 +506,7 @@ impl NiceGitApp {
                 let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
                 let mut open_link: Option<String> = None;
                 let mut retry_commit: Option<crate::app::HookRetry> = None;
+                let mut apply_into: Option<(nicegit_core::Stash, bool)> = None;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
                     if action == Some(crate::app::NoticeAction::Stash) {
@@ -523,6 +524,14 @@ impl NiceGitApp {
                     if let Some(crate::app::NoticeAction::OpenUrl(url)) = &action {
                         if ui.button("Open").on_hover_text(url.as_str()).clicked() {
                             open_link = Some(url.clone());
+                        }
+                    }
+                    if let Some(crate::app::NoticeAction::ApplyIntoChanges { stash, drop_after }) = &action {
+                        let button = ui
+                            .add_enabled(self.idle(), egui::Button::new("Apply into my changes"))
+                            .on_hover_text("Apply the stash's changes on top of your changes, and keep your changes");
+                        if button.clicked() {
+                            apply_into = Some((stash.clone(), *drop_after));
                         }
                     }
                     if let Some(crate::app::NoticeAction::CommitWithoutHooks(retry)) = &action {
@@ -566,6 +575,23 @@ impl NiceGitApp {
                 if let Some(retry) = retry_commit {
                     self.notice = None;
                     self.commit_without_hooks(retry);
+                }
+                if let Some((stash, drop_after)) = apply_into {
+                    self.notice = None;
+                    self.act("Apply into changes", move |client, path| {
+                        client.apply_stash_into_changes(&stash, drop_after, path).map(|outcome| {
+                            Some(match outcome {
+                                nicegit_core::staging::StashIntoChanges::Removed => {
+                                    "Applied the stash on top of your changes and removed it.".to_string()
+                                }
+                                nicegit_core::staging::StashIntoChanges::Kept => "Applied the stash on top of your changes.".to_string(),
+                                nicegit_core::staging::StashIntoChanges::KeptForStagedChanges => {
+                                    "Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept."
+                                        .to_string()
+                                }
+                            })
+                        })
+                    });
                 }
                 return;
             }
@@ -818,6 +844,8 @@ impl NiceGitApp {
         });
         ui.separator();
         let split = self.settings.split_diff;
+        // Stashing is refused during an unfinished Git operation, so its buttons are not offered.
+        let operation_running = self.snapshot().is_some_and(|snapshot| snapshot.operation.is_some());
         let repo = &mut self.repos[self.active];
         repo.diff_options.split = split;
         // Lines can be staged one by one once the review has loaded and matches the diff shown.
@@ -840,12 +868,12 @@ impl NiceGitApp {
         if !selectable {
             repo.diff_options.selected.clear();
         }
-        // Each run of changed lines offers Stage and Discard, or Unstage, while hovered.
+        // Each run of changed lines offers Stage, Discard and Stash, or Unstage, while hovered.
         repo.diff_options.block_buttons = review.as_ref().map(|review| {
             if review.staged {
                 crate::diff_view::BlockButtons::Unstage
             } else {
-                crate::diff_view::BlockButtons::StageAndDiscard
+                crate::diff_view::BlockButtons::StageAndDiscard { stash: !operation_running }
             }
         });
         let selected = repo.diff_options.selected.clone();
@@ -878,6 +906,15 @@ impl NiceGitApp {
                             let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
                             if let (Some(review), Some(lines)) = (review.clone(), lines) {
                                 self.run_block_action(crate::diff_view::BlockAction::Discard, lines, review);
+                            }
+                        }
+                        if !operation_running {
+                            let stash = egui::Button::new(RichText::new(format!("{}  Stash selected lines", icon::ARCHIVE)));
+                            if ui.add_enabled(self.busy.is_none(), stash).clicked() {
+                                let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
+                                if let (Some(review), Some(lines)) = (review.clone(), lines) {
+                                    self.run_block_action(crate::diff_view::BlockAction::Stash, lines, review);
+                                }
                             }
                         }
                     }
@@ -1065,6 +1102,23 @@ impl NiceGitApp {
                 };
                 let message = format!("{what} You can undo this from the Changes panel until the file changes again.");
                 self.confirm("Discard this change?", message, "Discard", crate::ui::dialogs::Pending::DiscardLines { lines, review });
+            }
+            BlockAction::Stash => {
+                // Checked here as well as by the action, so the dialog does not open for nothing.
+                if self.has_unsaved_editor() {
+                    self.notify("Save or close the file you are editing before changing the repository.", true);
+                    return;
+                }
+                if self.snapshot().is_some_and(|snapshot| snapshot.operation.is_some()) {
+                    return;
+                }
+                let value = format!("Selected lines from {}", review.path);
+                self.dialog = Some(crate::ui::dialogs::Dialog::input(
+                    "Stash lines",
+                    "Message (optional)",
+                    &value,
+                    crate::ui::dialogs::InputKind::StashLines { lines, review },
+                ));
             }
         }
     }
