@@ -104,7 +104,14 @@ fn a_large_file_is_read_only_after_open_anyway() {
     harness.get_by_label("Add a large file").click();
     wait(&mut harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
     settle(&mut harness);
-    harness.get_by_label("All files").click();
+    // A click on a slow runner can be dropped while the panel is still settling; the Changed files
+    // list also has a "big.txt" row, so the test must not go on until the tree is really shown.
+    click_until(
+        &mut harness,
+        "the All files tree",
+        |h| h.get_by_label("All files").click(),
+        |h| h.state().repo().is_some_and(|r| r.inspector_all_files),
+    );
     // The Changed files row also reads "big.txt", so the wait needs the tree itself to have arrived.
     // The commit's large data loads in the background, so the app is busy until it is read; the
     // row is clicked only once it is idle. The tree can still be drawn again while the file list
