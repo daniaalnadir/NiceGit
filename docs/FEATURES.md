@@ -185,6 +185,11 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   oldest first. Squash… and Drop… open the interactive rebase window with the selected
   commits arranged, so you can review them before clicking Rewrite commits. Revert… undoes
   them with new commits, newest first, in one sequence.
+- Drag a commit (or the marked commits, when the dragged one is marked) from the graph onto a
+  local branch to cherry-pick it. Dropped on the current branch, after the usual confirmation;
+  commits it already has are left out. Dropped on another local branch, NiceGit confirms the
+  checkout first, then asks to cherry-pick once the branch is checked out. Remote branches and
+  tags are not drop targets.
 - Undo a discard from the Changes panel: the file's staged and unstaged versions are
   saved before discarding and restored exactly, until the file changes again.
 - See submodules in the sidebar with their state (not checked out, at the recorded commit,

@@ -437,6 +437,19 @@ impl GitClient {
         self.run(&arguments, directory).map(drop)
     }
 
+    /// The commits among `commits` that `head` already reaches, in the order given. A cherry-pick
+    /// of one of them would repeat a change the branch has, so the caller leaves them out.
+    pub fn commits_reachable_from(&self, commits: &[String], head: &str, directory: &Path) -> Result<Vec<String>> {
+        let mut reachable = Vec::new();
+        for commit in commits {
+            let hash = self.resolve_commit(commit, directory)?;
+            if self.run(&["merge-base", "--is-ancestor", &hash, head], directory).is_ok() {
+                reachable.push(commit.clone());
+            }
+        }
+        Ok(reachable)
+    }
+
     /// Reverts several commits as one sequence, newest first, so each change is undone before the
     /// earlier changes it builds on. Every commit must already be on the checkout's history.
     /// Conflicts stop the sequence for Continue or Abort, like a single revert.
@@ -801,5 +814,36 @@ mod tests {
         // A fixup names only earlier commits, so "fixup! B" before B stays where it is.
         let commits = [commit("a", "fixup! B"), commit("b", "B")];
         assert_eq!(arranged(&commits), arranged_of(&[("fixup! B", None), ("B", None)]));
+    }
+
+    #[test]
+    fn commits_reachable_from_head_are_the_ones_it_already_has() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path();
+        let git = |arguments: &[&str]| -> String {
+            let output = std::process::Command::new("git")
+                .args(["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"])
+                .args(arguments)
+                .current_dir(path)
+                .env_remove("GIT_DIR")
+                .output()
+                .expect("run git");
+            assert!(output.status.success(), "git {arguments:?}: {}", String::from_utf8_lossy(&output.stderr));
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "Base"]);
+        git(&["switch", "-q", "-c", "side"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "Side"]);
+        git(&["switch", "-q", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "Main"]);
+        let base = git(&["rev-parse", "main~1"]);
+        let side = git(&["rev-parse", "side"]);
+        let head = git(&["rev-parse", "main"]);
+
+        let client = GitClient::new();
+        let reachable = client.commits_reachable_from(&[base.clone(), side.clone()], &head, path).expect("ancestry");
+        assert_eq!(reachable, vec![base], "the base is on main, the side commit is not");
+        assert!(client.commits_reachable_from(&[side], &head, path).expect("ancestry").is_empty());
     }
 }
