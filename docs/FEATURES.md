@@ -229,6 +229,12 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   edit, squash, fix up, or drop each commit, with a warning for commits already on a remote.
   Edit stops the rebase after that commit so you can change its files; Continue folds in
   what you have staged. A row whose choice is not Pick says what that choice does.
+- Split commit from a commit's context menu on the current branch: check the changes (whole
+  files or single hunks) that go into the first of two new commits, give each commit its own
+  message, and Split rewrites the commit and the commits after it. The working tree and index
+  are not touched, the original author and date are kept, and Undo puts the branch back. A
+  commit already on a remote is flagged, since splitting it means a force-push. Merge commits
+  cannot be split.
 - Compare any commit with the working files, or two commits with each other (mark one,
   then compare from another), with a changed-file list and per-file diffs. A branch's
   right-click menu compares it with the checked-out branch: the commits only each side has,

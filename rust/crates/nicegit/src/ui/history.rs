@@ -1187,6 +1187,31 @@ impl NiceGitApp {
                 self.commit_fixup(commit.hash.clone(), commit.subject.clone(), snapshot.current_branch.clone(), snapshot.head_hash.clone());
             }
         }
+        {
+            // Splitting rewrites this commit and the commits after it, so a merge cannot be split. A commit
+            // that is not on the checked-out branch is refused by the core, which says why.
+            let merge = commit.parents.len() > 1;
+            let reason = if !idle {
+                "Wait for the current Git action to finish"
+            } else if !on_branch {
+                "Check out a branch first"
+            } else if snapshot.operation.is_some() {
+                "Finish the current Git operation first"
+            } else {
+                "Merge commits can't be split"
+            };
+            let enabled = idle && on_branch && snapshot.operation.is_none() && !merge;
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Split commit…", icon::SCISSORS)));
+            let button = if enabled {
+                button.on_hover_text("Divides this commit into two, with a message for each")
+            } else {
+                button.on_disabled_hover_text(reason)
+            };
+            if button.clicked() {
+                ui.close();
+                self.open_tool(Box::new(tools::split_commit::SplitWindow::new(&commit.hash, &commit.subject, snapshot)));
+            }
+        }
         if is_head
             && ui
                 .add_enabled(
