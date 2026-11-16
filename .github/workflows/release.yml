@@ -90,6 +90,47 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           echo "### NiceGit v$version (\`${GITHUB_SHA::9}\`)$([ "$publish" = true ] || echo ', dry run')" >>"$GITHUB_STEP_SUMMARY"
 
+  # A release is built only from a commit whose own CI passed on main. The builds below run in
+  # parallel, but the draft release waits for this. A tag on a commit that changed nothing under
+  # rust/ has no Rust run of its own, so the newest Rust run on main before it decides.
+  ci:
+    name: Main's CI passed
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    permissions:
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Wait for main's Rust CI on this commit
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 70); do
+            run="$(gh run list --workflow rust-ci.yml --branch main --event push --commit "$SHA" --limit 1 \
+              --json databaseId,status,conclusion --jq '.[0] // empty')"
+            if [ -z "$run" ] && [ "$attempt" -ge 3 ]; then
+              # No run for this commit: it changed nothing the Rust workflow watches.
+              run="$(gh run list --workflow rust-ci.yml --branch main --event push --status completed --limit 1 \
+                --json databaseId,status,conclusion --jq '.[0] // empty')"
+            fi
+            if [ -n "$run" ] && [ "$(echo "$run" | jq -r .status)" = completed ]; then
+              conclusion="$(echo "$run" | jq -r .conclusion)"
+              echo "Main's Rust CI run $(echo "$run" | jq -r .databaseId) finished: $conclusion"
+              if [ "$conclusion" != success ]; then
+                echo "::error::Main's CI did not pass for this commit, so no release is created. Fix main, then tag again."
+                exit 1
+              fi
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "::error::Main's CI did not finish within 70 minutes, so no release is created."
+          exit 1
+
   macos:
     name: macOS universal app
     needs: check
@@ -302,7 +343,7 @@ jobs:
 
   publish:
     name: Draft GitHub release
-    needs: [check, macos, windows, linux]
+    needs: [check, ci, macos, windows, linux]
     if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 15

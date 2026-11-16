@@ -12,7 +12,10 @@ Releases are made from `main` by `.github/workflows/release.yml`.
    `main`.
 2. Optionally, do a dry run: Actions › Release › Run workflow, on `main`. It builds, signs,
    notarizes, and checks everything, without creating a release.
-3. Tag the merged commit, for example `git tag v1.0.0 && git push origin v1.0.0`.
+3. When `main`'s own CI run for the merged commit has passed (Actions › Rust, on `main`), tag
+   it, for example `git tag v1.0.0 && git push origin v1.0.0`. The release workflow checks this
+   too: its "Main's CI passed" job waits for that run and creates no draft release unless it
+   succeeded.
 4. When the run finishes, open the draft release, check its notes and files, and publish it.
 
 The tag's run first checks that the tag points to a commit on `main` and matches the version
