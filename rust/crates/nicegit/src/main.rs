@@ -41,6 +41,8 @@ mod ui_tests_find_repositories;
 #[cfg(test)]
 mod ui_tests_identity;
 #[cfg(test)]
+mod ui_tests_insights;
+#[cfg(test)]
 mod ui_tests_install;
 #[cfg(test)]
 mod ui_tests_issue_links;

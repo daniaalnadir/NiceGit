@@ -52,7 +52,9 @@ fn open_all_files_of_the_guide_commit(harness: &mut App) {
     harness.get_by_label("Add the guide").click();
     wait(harness, "the commit's files", |h| h.state().repo().is_some_and(|r| !r.commit_files.is_empty()));
     settle(harness);
-    harness.get_by_label("All files").click();
+    // A click on a slow runner can be dropped while the panel settles, so it is repeated until the
+    // inspector really shows the tree.
+    click_until(harness, "All files", |h| h.get_by_label("All files").click(), |h| h.state().repo().is_some_and(|r| r.inspector_all_files));
     wait(harness, "the commit's tree", |h| shows(h, &folder_row("docs")));
     settle(harness);
 }
