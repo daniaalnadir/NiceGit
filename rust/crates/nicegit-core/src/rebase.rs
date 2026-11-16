@@ -676,6 +676,11 @@ impl Scratch {
         self.path.join(name)
     }
 
+    /// The folder's path, for files that Git creates itself, such as a temporary index.
+    pub(crate) fn dir(&self) -> &Path {
+        &self.path
+    }
+
     /// Writes a file in this folder and returns its path.
     pub(crate) fn write(&self, command: &str, name: &str, contents: &[u8]) -> Result<PathBuf> {
         let file = self.path.join(name);

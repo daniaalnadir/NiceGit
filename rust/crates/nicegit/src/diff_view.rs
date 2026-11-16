@@ -251,8 +251,9 @@ pub struct DiffOptions {
 /// The buttons shown on a hovered run of changed lines.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockButtons {
-    /// Unstaged changes: Stage and Discard.
-    StageAndDiscard,
+    /// Unstaged changes: Stage and Discard, and Stash too when `stash` is set. Stash is left out
+    /// while a Git operation is unfinished, as stashing is refused then.
+    StageAndDiscard { stash: bool },
     /// Staged changes: Unstage.
     Unstage,
 }
@@ -263,6 +264,7 @@ pub enum BlockAction {
     Stage,
     Unstage,
     Discard,
+    Stash,
 }
 
 /// What happened in the diff view this frame.
@@ -408,14 +410,25 @@ fn block_buttons(ui: &mut Ui, buttons: BlockButtons) -> ShownButtons {
             ui.spacing_mut().item_spacing.x = 2.0;
             ui.spacing_mut().button_padding = vec2(6.0, 1.0);
             // Laid out from the right, so the last added is leftmost.
-            let choices: &[(BlockAction, &str, &str, &str)] = match buttons {
-                BlockButtons::StageAndDiscard => &[
-                    (BlockAction::Discard, icon::ARROW_COUNTER_CLOCKWISE, "Discard", "Discard this change from the file. You can undo it."),
-                    (BlockAction::Stage, icon::PLUS, "Stage", "Stage this change"),
-                ],
-                BlockButtons::Unstage => &[(BlockAction::Unstage, icon::MINUS, "Unstage", "Unstage this change")],
+            let choices: Vec<(BlockAction, &str, &str, &str)> = match buttons {
+                BlockButtons::StageAndDiscard { stash } => {
+                    let mut choices = vec![
+                        (
+                            BlockAction::Discard,
+                            icon::ARROW_COUNTER_CLOCKWISE,
+                            "Discard",
+                            "Discard this change from the file. You can undo it.",
+                        ),
+                        (BlockAction::Stage, icon::PLUS, "Stage", "Stage this change"),
+                    ];
+                    if stash {
+                        choices.insert(1, (BlockAction::Stash, icon::ARCHIVE, "Stash", "Stash this change and remove it from the file"));
+                    }
+                    choices
+                }
+                BlockButtons::Unstage => vec![(BlockAction::Unstage, icon::MINUS, "Unstage", "Unstage this change")],
             };
-            for &(choice, glyph, label, tip) in choices {
+            for &(choice, glyph, label, tip) in &choices {
                 let text = RichText::new(format!("{glyph} {label}")).small();
                 let text = if choice == BlockAction::Discard { text.color(c.removed) } else { text };
                 let button = ui.add(egui::Button::new(text).frame(false)).on_hover_text(tip);
@@ -678,7 +691,7 @@ fn line_button(ui: &mut Ui, view: &View, rect: Rect, line: usize, response: &mut
         return;
     }
     let (glyph, action, verb) = match buttons {
-        BlockButtons::StageAndDiscard => (icon::PLUS, BlockAction::Stage, "Stage"),
+        BlockButtons::StageAndDiscard { .. } => (icon::PLUS, BlockAction::Stage, "Stage"),
         BlockButtons::Unstage => (icon::MINUS, BlockAction::Unstage, "Unstage"),
     };
     let area = Rect::from_min_size(rect.min, vec2(view.style.lead, view.style.row_height));

@@ -307,6 +307,12 @@ See [Contributing](../CONTRIBUTING.md), [Security](../SECURITY.md), and
   the stash there, and removes it once it applies.
 - Rename a stash from its right-click menu or the Stashes window. The stash keeps its commit
   and changes, and moves to the top of the list.
+- Stash selected lines of an unstaged file, or one change from its hover button (Stash this
+  change), with an optional message. Only those lines leave the file; its other changes and
+  the index stay as they were, and the stash holds just that file. Added and deleted files
+  are stashed whole. Git refuses Apply and Pop over a file that still has other unstaged
+  changes; the notice then offers Apply into my changes, which puts the stashed lines back on
+  top of them, and removes the stash for Pop. It is refused if the lines no longer fit the file.
 - Preview a stash's tracked and untracked changes before applying it. Selecting a stash lists
   its files in the inspector; click one to see just its changes, or restore that file from the
   stash.
