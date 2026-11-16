@@ -4,7 +4,8 @@
 
 - Split a commit into two: choose which of its files or changes go into the first commit.
 - Drag commits onto a branch to cherry-pick them; another branch is checked out first.
-- Stash selected lines or a single change, and apply a stash on top of files you've kept editing.
+- Stash selected lines or a single change, and apply a stash on top of files you've kept
+  editing.
 - Insights: commits over time, authors, the most-changed files and the busiest folders.
 - Releases are built only from a commit whose CI passed on main.
 
