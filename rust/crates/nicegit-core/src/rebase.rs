@@ -658,6 +658,11 @@ impl Scratch {
         Ok(Scratch { path })
     }
 
+    /// The path of a file in this folder, which need not exist yet.
+    pub(crate) fn path(&self, name: &str) -> PathBuf {
+        self.path.join(name)
+    }
+
     /// Writes a file in this folder and returns its path.
     pub(crate) fn write(&self, command: &str, name: &str, contents: &[u8]) -> Result<PathBuf> {
         let file = self.path.join(name);
