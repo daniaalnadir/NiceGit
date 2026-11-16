@@ -659,7 +659,7 @@ impl Scratch {
     }
 
     /// The folder's path, for files that Git creates itself, such as a temporary index.
-    pub(crate) fn path(&self) -> &Path {
+    pub(crate) fn dir(&self) -> &Path {
         &self.path
     }
 

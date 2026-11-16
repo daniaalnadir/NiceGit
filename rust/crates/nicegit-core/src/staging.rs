@@ -294,7 +294,7 @@ impl GitClient {
 
         // Everything below uses a temporary index, so the real index is only read.
         let scratch = Scratch::new("stash lines")?;
-        let index_path = scratch.path().join("index").to_string_lossy().into_owned();
+        let index_path = scratch.dir().join("index").to_string_lossy().into_owned();
         let index_tree = self.run_trimmed(&["write-tree"], directory)?;
         let index_commit = self.run_trimmed(&["commit-tree", &index_tree, "-p", &head, "-m", &index_message], directory)?;
         let version = self
