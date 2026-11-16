@@ -26,6 +26,7 @@ pub mod file_history;
 pub mod git_settings;
 pub mod gitflow;
 pub mod github;
+pub mod insights;
 pub mod interactive_rebase;
 pub mod launchpad;
 pub mod lfs;
