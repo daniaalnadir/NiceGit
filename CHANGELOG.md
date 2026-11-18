@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 - Reshape your history
+
+NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a
+branch to cherry-pick them, stash just the lines you choose, and see who changed what in
+Insights.
 
 - Split a commit into two: choose which of its files or changes go into the first commit.
 - Drag commits onto a branch to cherry-pick them; another branch is checked out first.
