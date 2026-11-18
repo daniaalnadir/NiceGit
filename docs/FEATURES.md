@@ -2,7 +2,7 @@
 
 NiceGit is a free Git client for macOS, Windows, and Linux, built with Rust. The goal is to make the everyday GitKraken-style workflow available without paid seats or feature gates.
 
-**Status: 2.1.0 preview.** A working desktop client under active development, not
+**Status: 2.2.0 preview.** A working desktop client under active development, not
 a drop-in replacement for every GitKraken feature. Back up important work before
 trying history-changing operations. NiceGit is an independent project and is not
 affiliated with GitKraken.
