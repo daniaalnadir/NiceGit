@@ -1,6 +1,7 @@
 //! The main window: repositories column, branches sidebar, toolbar and history in the middle,
 //! and the changes panel or commit inspector on the right.
 
+pub mod branch_checks;
 pub mod changes;
 pub mod clone_picker;
 pub mod commit_tree;

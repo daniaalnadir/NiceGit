@@ -205,6 +205,10 @@ impl NiceGitApp {
                 widgets::section(ui, "Custom actions");
                 self.custom_actions_section(ui);
                 ui.add_space(10.0);
+                widgets::section(ui, "GitHub");
+                ui.checkbox(&mut self.settings.show_branch_checks, "Show pull request checks on branches")
+                    .on_hover_text("A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.");
+                ui.add_space(10.0);
                 widgets::section(ui, "GitHub Enterprise");
                 let mut draft = ui
                     .ctx()
