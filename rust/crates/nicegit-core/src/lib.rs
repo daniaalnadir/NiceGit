@@ -4,6 +4,7 @@
 //! exactly like the user's own Git, including their configuration, hooks, and credentials.
 
 pub mod ai_message;
+pub mod absorb;
 pub mod bisect;
 pub mod blame;
 pub mod branch_compare;

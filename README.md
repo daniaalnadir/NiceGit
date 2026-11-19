@@ -37,7 +37,8 @@ Built with Rust, and released under the [MIT License](LICENSE).
   through every changed file without leaving the diff.
 - Interactive rebase: drag to reorder, and pick, reword, edit, squash, fix up, or drop
   commits. Edit the message of any commit on the branch, or fold staged changes into an
-  older commit with Fix up.
+  older commit with Fix up, or absorb staged changes into the unpushed commits that last
+  changed their lines.
 - Merge, rebase, cherry-pick one or many commits, revert, amend, reset, and resolve
   conflicts, with a preview of which files will conflict before you start.
 - Find the commit that introduced a bug with bisect, guided from the graph.

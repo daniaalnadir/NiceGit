@@ -298,6 +298,9 @@ impl NiceGitApp {
         let gap_top = ui.cursor().top();
         ui.add_space(8.0);
         ui.separator();
+        // Absorbing needs a branch, no unfinished operation, and no unsaved editor text.
+        let absorb_ready =
+            idle && !all_staged.is_empty() && snapshot.is_on_branch() && snapshot.operation.is_none() && !self.has_unsaved_editor();
         egui::Frame::new().inner_margin(section).show(ui, |ui| {
             egui::containers::Sides::new().shrink_left().truncate().show(
                 ui,
@@ -331,6 +334,10 @@ impl NiceGitApp {
                         if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_staged.is_empty()).clicked() {
                             let name = self.section_patch_name(true);
                             self.save_working_patch(true, None, false, &name);
+                        }
+                        let absorb_tip = "Absorb staged changes into the earlier commits that last changed their lines";
+                        if widgets::icon_button(ui, icon::GIT_MERGE, absorb_tip, absorb_ready).clicked() {
+                            self.open_tool(Box::new(tools::absorb::AbsorbWindow::new(&snapshot)));
                         }
                     });
                 },
