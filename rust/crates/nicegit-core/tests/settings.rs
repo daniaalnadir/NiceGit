@@ -1191,9 +1191,17 @@ impl GitDaemon {
         let port = std::net::TcpListener::bind("127.0.0.1:0").expect("bind free port").local_addr().expect("address").port();
         let base = repo.parent().expect("parent folder");
         let name = repo.file_name().expect("folder name").to_string_lossy().into_owned();
-        let child = Command::new("git")
+        // `git daemon` is not built in: the `git` wrapper runs `git-daemon` as its own child and
+        // waits for it, so killing the wrapper would leave the real daemon running for good, with
+        // any pipes it inherited from tests running at the same time. Start `git-daemon` itself,
+        // so dropping this stops the process that is actually listening.
+        let exec_path = String::from_utf8(Command::new("git").arg("--exec-path").output().ok()?.stdout).ok()?;
+        let program = Path::new(exec_path.trim_end()).join("git-daemon");
+        if !program.is_file() {
+            return None;
+        }
+        let child = Command::new(program)
             .args([
-                "daemon",
                 "--reuseaddr",
                 "--export-all",
                 "--listen=127.0.0.1",
@@ -1215,6 +1223,27 @@ impl GitDaemon {
         }
         None
     }
+}
+
+/// Dropping the helper stops the process that listens, so no daemon outlives its test. Through the
+/// `git` wrapper, the real `git-daemon` stayed running after its wrapper was killed.
+#[cfg(not(windows))]
+#[test]
+fn a_test_git_daemon_stops_when_dropped() {
+    let source = Repo::new();
+    source.commit("one.txt", "one\n", "One");
+    let Some((daemon, url)) = GitDaemon::serve(source.path()) else {
+        eprintln!("git daemon is not available on this machine; skipping");
+        return;
+    };
+    let port: u16 = url.rsplit(':').next().and_then(|rest| rest.split('/').next()).and_then(|port| port.parse().ok()).expect("a port");
+    assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_ok(), "the daemon listens while it is held");
+    drop(daemon);
+    let stopped = (0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::net::TcpStream::connect(("127.0.0.1", port)).is_err()
+    });
+    assert!(stopped, "nothing listens on the port once the daemon is dropped");
 }
 
 #[cfg(not(windows))]
