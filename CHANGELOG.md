@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Optional Draft button in the commit box writes a commit message from the staged changes with Claude, using your own Anthropic API key. Off by default; set it up under Settings, in Claude.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a

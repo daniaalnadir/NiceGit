@@ -717,6 +717,16 @@ pub struct NiceGitApp {
     pub install: Option<crate::install::Install>,
     /// A newer NiceGit that is installed and waits for a restart: its version and what it replaced.
     pub installed_update: Option<(String, crate::install::Installed)>,
+    /// The function that drafts commit messages. Tests replace it with a stand-in.
+    pub drafter: crate::claude::Drafter,
+    /// The file that holds the saved Anthropic API key, when there is a settings folder.
+    pub key_file: Option<PathBuf>,
+    /// A commit message being drafted in the background, if any.
+    pub draft_run: Option<crate::ui::ai_draft::DraftRun>,
+    /// A finished draft waiting for the person to say whether it replaces the current message.
+    pub draft_ready: Option<crate::ui::ai_draft::ReadyDraft>,
+    /// What the last draft reported, shown under the commit box.
+    pub draft_status: Option<crate::ui::ai_draft::DraftStatus>,
 }
 
 /// A read of the tags one remote lacks. The repository and the remote's push addresses are
@@ -802,6 +812,11 @@ impl NiceGitApp {
             update_status: None,
             install: None,
             installed_update: None,
+            drafter: crate::claude::draft_with_claude,
+            key_file: crate::claude::key_file(),
+            draft_run: None,
+            draft_ready: None,
+            draft_status: None,
             timings: crate::timing::Timings::default(),
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
@@ -3228,6 +3243,7 @@ impl eframe::App for NiceGitApp {
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();
+        self.finish_draft();
         self.finish_install(&ctx);
         self.finish_tag_scan();
         self.finish_cherry_pick_review();
