@@ -240,7 +240,7 @@ pub fn first_patch(files: &[SplitFile], choices: &[FileChoice]) -> Result<String
 }
 
 /// The author of a commit, as the commit it is rebuilt into must keep it.
-struct Author {
+pub(crate) struct Author {
     name: String,
     email: String,
     /// Git's raw date: seconds since the epoch and the offset.
@@ -360,12 +360,12 @@ impl GitClient {
     }
 
     /// A commit's message exactly as stored, after its header block.
-    fn raw_commit_message(&self, commit: &str, directory: &Path) -> Result<String> {
+    pub(crate) fn raw_commit_message(&self, commit: &str, directory: &Path) -> Result<String> {
         let object = self.run(&["cat-file", "commit", commit], directory)?;
         Ok(object.split_once("\n\n").map(|(_, message)| message.to_string()).unwrap_or_default())
     }
 
-    fn author_of(&self, commit: &str, directory: &Path) -> Result<Author> {
+    pub(crate) fn author_of(&self, commit: &str, directory: &Path) -> Result<Author> {
         let text =
             runner::strip_line_terminator(self.run(&["show", "-s", "--format=%an%x00%ae%x00%ad", "--date=raw", commit, "--"], directory)?);
         match text.split('\0').collect::<Vec<_>>().as_slice() {
@@ -376,7 +376,7 @@ impl GitClient {
 
     /// Creates a commit with `tree` and `parents`, written by `author` with the message exactly as given.
     #[allow(clippy::too_many_arguments)]
-    fn commit_tree_as(
+    pub(crate) fn commit_tree_as(
         &self,
         scratch: &Scratch,
         number: usize,

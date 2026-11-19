@@ -11,6 +11,7 @@ use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
 
+pub mod absorb;
 pub mod archive;
 pub mod bisect;
 pub mod blame;

@@ -3,6 +3,7 @@
 //! NiceGit drives the `git` command-line program rather than a Git library, so it behaves
 //! exactly like the user's own Git, including their configuration, hooks, and credentials.
 
+pub mod absorb;
 pub mod bisect;
 pub mod blame;
 pub mod branch_compare;

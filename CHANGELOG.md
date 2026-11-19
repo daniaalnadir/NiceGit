@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a

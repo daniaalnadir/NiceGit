@@ -54,6 +54,8 @@ enum Run {
     /// Opens a saved workspace's folders as tabs, by its name.
     OpenWorkspace(String),
     ApplyPatch,
+    /// Opens the window that folds staged changes into earlier commits.
+    Absorb,
     Identity {
         name: String,
         email: String,
@@ -244,6 +246,13 @@ impl NiceGitApp {
                 Run::Tool("launchpad"),
             ),
             command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
+            command(
+                "Absorb staged changes…",
+                "Fold staged changes into the unpushed commits that last changed their lines",
+                icon::GIT_MERGE,
+                idle && clean && snapshot.is_some_and(|s| s.is_on_branch() && s.staged_count() > 0) && !self.has_unsaved_editor(),
+                Run::Absorb,
+            ),
         ];
         if let Some((branch, label, cli)) = pull_request {
             list.push(command(
@@ -443,6 +452,12 @@ impl NiceGitApp {
             Run::Clone => self.dialog = Some(crate::ui::dialogs::Dialog::clone_repository()),
             Run::NewRepository => self.create_repository(),
             Run::ApplyPatch => self.apply_patch(),
+            Run::Absorb => {
+                let window = self.snapshot().map(tools::absorb::AbsorbWindow::new);
+                if let Some(window) = window {
+                    self.open_tool(Box::new(window));
+                }
+            }
             Run::Publish => self.push(),
             Run::Continue(operation) => self
                 .act_recording("Continue", operation.name(), move |client, path| client.continue_operation(operation, path).map(|_| None)),
