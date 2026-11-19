@@ -13,6 +13,7 @@ use egui::{pos2, vec2, Align2, Color32, CursorIcon, FontId, Id, Key, Rect, RichT
 use egui_phosphor::regular as icon;
 use nicegit_core::diff::{side_by_side, DiffLine, DiffLineKind, SplitRow};
 use nicegit_core::inline::{self, InlineChange};
+use nicegit_core::word_diff::{self, WordKind, WordRow, WordSegment};
 
 use crate::syntax;
 use crate::theme;
@@ -66,6 +67,17 @@ pub struct DiffContent {
     blocks: std::sync::OnceLock<Vec<BTreeSet<usize>>>,
     /// Which hunks show syntax colours, and in what language.
     syntax: syntax::Plan,
+    /// The diff as word rows, worked out when first needed. Boxed, since only the Words layout
+    /// uses it and it would otherwise add to every diff's size.
+    words: std::sync::OnceLock<Box<WordPlan>>,
+}
+
+/// A word diff prepared for display: its rows, the row each line is drawn in, and how tall
+/// each row is at the width it was last drawn with.
+struct WordPlan {
+    rows: Vec<WordRow>,
+    row_of_line: Vec<usize>,
+    heights: std::sync::Mutex<Option<WrappedRows>>,
 }
 
 impl DiffContent {
@@ -97,7 +109,60 @@ impl DiffContent {
             wrapped_rows: Default::default(),
             blocks: Default::default(),
             syntax,
+            words: Default::default(),
         }
+    }
+
+    /// The diff as word rows, with the row each line is drawn in.
+    fn word_plan(&self) -> &WordPlan {
+        self.words.get_or_init(|| {
+            let rows = word_diff::word_rows(&self.lines);
+            let mut row_of_line = vec![0; self.lines.len()];
+            for (row, word_row) in rows.iter().enumerate() {
+                match word_row {
+                    WordRow::Context(line) | WordRow::Other(line) => row_of_line[*line] = row,
+                    WordRow::Merged { source_lines, .. } => {
+                        for &line in source_lines {
+                            row_of_line[line] = row;
+                        }
+                    }
+                }
+            }
+            Box::new(WordPlan { rows, row_of_line, heights: Default::default() })
+        })
+    }
+
+    /// How many rows each word row takes when wrapped at `width`. A plain line is measured as
+    /// it is in the unified view; a merged row is laid out with its changed words.
+    fn word_heights(&self, ctx: &egui::Context, font: &FontId, width: f32, char_width: f32) -> std::sync::Arc<Vec<Measured>> {
+        let key = (font.size.to_bits(), width.to_bits(), char_width.to_bits());
+        let mut cache = self.word_plan().heights.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((measured, heights)) = cache.as_ref() {
+            if *measured == key {
+                return heights.clone();
+            }
+        }
+        // Measured before the fonts are borrowed, since measuring a line takes them too.
+        let lines = self.rows_at(ctx, font, width, char_width);
+        let colors = theme::colors(false);
+        let heights: Vec<Measured> = ctx.fonts_mut(|fonts| {
+            self.word_plan()
+                .rows
+                .iter()
+                .map(|row| match row {
+                    WordRow::Context(line) | WordRow::Other(line) => lines[*line],
+                    WordRow::Merged { segments, .. } => {
+                        let mut job = merged_job(segments, font, &colors, Color32::WHITE);
+                        wrap_line(&mut job, DiffLineKind::Context, width, char_width);
+                        let galley = fonts.layout_job(job);
+                        Measured { rows: galley.rows.len().max(1), height: galley.size().y }
+                    }
+                })
+                .collect()
+        });
+        let heights = std::sync::Arc::new(heights);
+        *cache = Some((key, heights.clone()));
+        heights
     }
 
     /// How many rows each line takes when wrapped at `width` for code. Lines wrap between words
@@ -236,6 +301,9 @@ pub struct DiffFind {
 #[derive(Clone, Debug, Default)]
 pub struct DiffOptions {
     pub split: bool,
+    /// Whether changed words are merged into one line each. It takes the place of `split`, and
+    /// lines cannot be selected or staged in this layout.
+    pub words: bool,
     pub find: DiffFind,
     /// Whether added and removed lines can be selected, for staging individual lines.
     pub selectable: bool,
@@ -309,21 +377,37 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
     response.match_count = occurrences.len();
     response.current_match_line = occurrences.get(options.find.current).map(|occurrence| occurrence.line);
 
+    // Words takes the place of the side-by-side layout while it is on.
+    let words = options.words;
     // Beside an empty column, a new or deleted file's lines would have half the room; and a
     // narrow panel leaves each side too little room to read.
-    let split = options.split && !content.is_one_sided() && split_fits(ui.available_width());
+    let split = !words && options.split && !content.is_one_sided() && split_fits(ui.available_width());
     // Each changed line has a + (or −) button before its numbers while lines can be staged.
-    let lead = if options.selectable && options.block_buttons.is_some() { LINE_BUTTON } else { 0.0 };
+    let lead = if !words && options.selectable && options.block_buttons.is_some() { LINE_BUTTON } else { 0.0 };
     let style = Style::new(ui, content, split, lead);
-    let rows = if split { content.split.len() } else { content.lines.len() };
+    let word_heights = words.then(|| content.word_heights(ui.ctx(), &style.font, style.wrap_width, style.char_width));
+    let rows = if words {
+        content.word_plan().rows.len()
+    } else if split {
+        content.split.len()
+    } else {
+        content.lines.len()
+    };
     // Where each row starts: as high as its line wraps, or a split row's longer side.
     let mut tops = Vec::with_capacity(rows + 1);
     let mut top = 0.0;
     for row in 0..rows {
         tops.push(top);
-        top += if split { style.split_row_height(&content.split[row]) } else { style.unified_row_height(row) };
+        top += if let Some(heights) = &word_heights {
+            style.measured_block_height(heights[row])
+        } else if split {
+            style.split_row_height(&content.split[row])
+        } else {
+            style.unified_row_height(row)
+        };
     }
     tops.push(top);
+    let row_of_line = |line: usize| if words { content.word_plan().row_of_line[line] } else { content.row_of(line, split) };
     // The scroll bar stays visible, so a long diff never looks cut off at the panel's edge.
     let mut area = ScrollArea::both()
         .id_salt(("diff", content.title.as_str(), split))
@@ -331,10 +415,11 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded);
     if let Some(line) = scroll_to {
         // Scroll so the match sits a little above the middle of the viewport.
-        let row = content.row_of(line, split);
+        let row = row_of_line(line);
         area = area.vertical_scroll_offset((tops[row] - ui.available_height() * 0.4).max(0.0));
     }
-    let buttons = options.block_buttons.filter(|_| options.selectable);
+    // Words shows no line buttons, as its rows are not single lines.
+    let buttons = options.block_buttons.filter(|_| options.selectable && !words);
     let view = View { content, occurrences: &occurrences, current: options.find.current, split, style, drag_id, buttons };
     ui.scope(|ui| {
         // Rows are placed at computed heights, so no spacing may sit between them.
@@ -348,20 +433,21 @@ fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, fin
             // The rows that overlap the visible part of the diff.
             let first = tops.partition_point(|top| *top <= viewport.min.y).saturating_sub(1);
             let last = tops.partition_point(|top| *top < viewport.max.y).min(rows);
-            let row_of = |line: usize| content.row_of(line, split);
             // The run of changed lines under the pointer, whose buttons show on its first row.
-            let hovered = options.block_buttons.filter(|_| options.selectable).and_then(|buttons| {
+            let hovered = buttons.and_then(|buttons| {
                 let pointer = ui.input(|input| input.pointer.hover_pos()).filter(|pointer| ui.clip_rect().contains(*pointer))?;
                 let y = pointer.y - origin.y;
                 content.blocks().iter().find_map(|block| {
-                    let first_row = block.iter().map(|&line| row_of(line)).min()?;
-                    let last_row = block.iter().map(|&line| row_of(line)).max()?;
+                    let first_row = block.iter().map(|&line| row_of_line(line)).min()?;
+                    let last_row = block.iter().map(|&line| row_of_line(line)).max()?;
                     (tops[first_row] <= y && y < tops[last_row + 1]).then_some((buttons, block, first_row))
                 })
             });
             for row in first..last {
                 let rect = Rect::from_min_size(origin + vec2(0.0, tops[row]), vec2(view.style.total, tops[row + 1] - tops[row]));
-                if split {
+                if words {
+                    draw_word_row(ui, row, rect, &view);
+                } else if split {
                     draw_split_row(ui, row, rect, &view, options, &mut response);
                 } else {
                     draw_unified_row(ui, row, rect, &view, options, &mut response);
@@ -522,6 +608,11 @@ impl Style {
         self.text_height(line) + 2.0
     }
 
+    /// The height of a row whose wrapped text was measured as `measured`.
+    fn measured_block_height(&self, measured: Measured) -> f32 {
+        measured.height.max(self.row_height - 2.0) + 2.0
+    }
+
     /// The height of a split row: its longer side, wrapped.
     fn split_row_height(&self, row: &SplitRow) -> f32 {
         match *row {
@@ -633,10 +724,83 @@ impl View<'_> {
         painter.galley(pos2(x, y), galley, text_color);
     }
 
+    /// Paints a merged word row into `rect`, with the old and new line numbers in its gutters.
+    fn paint_merged(&self, ui: &Ui, rect: Rect, numbers: [Option<usize>; 2], segments: &[WordSegment]) {
+        let painter = ui.painter().with_clip_rect(rect);
+        let first_line_center = rect.top() + self.style.row_height / 2.0;
+        for (column, number) in numbers.iter().enumerate() {
+            if let Some(number) = number {
+                let x = rect.left() + self.style.lead + (column + 1) as f32 * self.style.gutter - PADDING / 2.0;
+                painter.text(
+                    pos2(x, first_line_center),
+                    Align2::RIGHT_CENTER,
+                    number.to_string(),
+                    self.style.font.clone(),
+                    self.style.muted,
+                );
+            }
+        }
+        let mut job = merged_job(segments, &self.style.font, &self.style.colors, self.style.text);
+        // Words wrap between the words of the merged text, at the width code wraps to.
+        wrap_line(&mut job, DiffLineKind::Context, self.style.wrap_width, self.style.char_width);
+        let galley = painter.layout_job(job);
+        let x = rect.left() + self.style.lead + numbers.len() as f32 * self.style.gutter + PADDING;
+        let y = first_line_center - (self.style.row_height - 2.0) / 2.0;
+        painter.galley(pos2(x, y), galley, self.style.text);
+    }
+
     /// Paints an empty half of a split row, where the other side has no counterpart.
     fn paint_empty(&self, ui: &Ui, rect: Rect) {
         ui.painter().rect_filled(rect, 0.0, self.style.colors.subtle_bg);
     }
+}
+
+/// Draws one row of a word diff into `rect`: a plain line as the unified view draws it, or a
+/// merged row with its changed words marked. Word rows are not selectable.
+fn draw_word_row(ui: &mut Ui, row: usize, rect: Rect, view: &View) {
+    match &view.content.word_plan().rows[row] {
+        WordRow::Context(line) | WordRow::Other(line) => {
+            let diff_line = &view.content.lines[*line];
+            let numbers = [diff_line.old_number, diff_line.new_number];
+            view.paint_line(ui, rect, *line, &numbers, false, true);
+        }
+        WordRow::Merged { old_line, new_line, segments, .. } => {
+            // The row's text is painted, not a widget, so its label says which words changed.
+            let label = ui.interact(rect, view.drag_id.with(("word row", row)), Sense::hover());
+            label.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, word_label(segments)));
+            view.paint_merged(ui, rect, [*old_line, *new_line], segments);
+        }
+    }
+}
+
+/// The text of a merged row for screen readers: removed words in brackets after "removed",
+/// added words after "added".
+fn word_label(segments: &[WordSegment]) -> String {
+    segments
+        .iter()
+        .map(|segment| match segment.kind {
+            WordKind::Same => segment.text.clone(),
+            WordKind::Removed => format!("[removed: {}]", segment.text),
+            WordKind::Added => format!("[added: {}]", segment.text),
+        })
+        .collect()
+}
+
+/// The text of a merged row: removed words struck through in red on a red tint, added words in
+/// green on a green tint, and unchanged words in the normal colour.
+fn merged_job(segments: &[WordSegment], font: &FontId, colors: &theme::Colors, text: Color32) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    job.wrap.max_width = f32::INFINITY;
+    for segment in segments {
+        let (color, background, strikethrough) = match segment.kind {
+            WordKind::Same => (text, Color32::TRANSPARENT, Stroke::NONE),
+            WordKind::Removed => (colors.removed, colors.removed_word_bg, Stroke::new(1.0, colors.removed)),
+            WordKind::Added => (colors.added, colors.added_word_bg, Stroke::NONE),
+        };
+        let format = TextFormat { font_id: font.clone(), color, background, expand_bg: -1.0, strikethrough, ..Default::default() };
+        job.append(&segment.text.replace('\t', &" ".repeat(TAB_COLUMNS)), 0.0, format);
+    }
+    job
 }
 
 /// Draws one unified line into `row_rect`, handling pointer selection on changed lines.
@@ -949,6 +1113,26 @@ mod tests {
         let found = matches_in(text, "café");
         assert_eq!(found.len(), 2);
         assert_eq!(&text[found[1].clone()], "Café");
+    }
+
+    #[test]
+    fn merged_word_rows_are_as_tall_as_their_wrapped_text() {
+        let long = "wrap ".repeat(80);
+        let lines = vec![
+            DiffLine { text: format!("-{long}old"), kind: DiffLineKind::Deletion, old_number: Some(1), new_number: None },
+            DiffLine { text: format!("+{long}new"), kind: DiffLineKind::Addition, old_number: None, new_number: Some(1) },
+        ];
+        let content = DiffContent::new("prose.txt".to_string(), lines);
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(900.0, 600.0))), ..Default::default() };
+        let mut output = ctx.run_ui(input, |ui| {
+            let style = Style::new(ui, &content, false, 0.0);
+            let heights = content.word_heights(ui.ctx(), &style.font, style.wrap_width, style.char_width);
+            assert_eq!(heights.len(), 1, "the pair is one merged row");
+            assert!(heights[0].rows > 1, "a 400-column line wraps on a 900-point view");
+            assert!(style.measured_block_height(heights[0]) > style.row_height);
+        });
+        output.textures_delta.clear();
     }
 
     #[test]

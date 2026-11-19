@@ -45,6 +45,7 @@ pub mod submodule;
 pub mod tracked;
 pub mod undo;
 pub mod updates;
+pub mod word_diff;
 pub mod worktree;
 
 pub use client::{GitClient, NewRepository, PullStrategy};
