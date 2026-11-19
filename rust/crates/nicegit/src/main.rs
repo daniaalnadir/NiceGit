@@ -27,6 +27,8 @@ mod ui_screenshots;
 #[cfg(test)]
 mod ui_tests;
 #[cfg(test)]
+mod ui_tests_apply_patch;
+#[cfg(test)]
 mod ui_tests_clone;
 #[cfg(test)]
 mod ui_tests_conventional;

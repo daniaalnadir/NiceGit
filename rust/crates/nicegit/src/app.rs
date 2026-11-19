@@ -887,8 +887,11 @@ impl NiceGitApp {
             painter.rect_filled(screen, 0.0, c.accent.gamma_multiply(0.12));
             painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
             // On a solid label, so the words stay readable over whatever is beneath.
-            let text =
-                painter.layout_no_wrap("Drop a folder to open it as a repository".into(), egui::FontId::proportional(18.0), c.accent_text);
+            let text = painter.layout_no_wrap(
+                "Drop a folder to open it, or a patch to apply it".into(),
+                egui::FontId::proportional(18.0),
+                c.accent_text,
+            );
             let label = egui::Rect::from_center_size(screen.center(), text.size() + egui::vec2(36.0, 22.0));
             painter.rect_filled(label, 10.0, c.accent);
             painter.galley(label.center() - text.size() / 2.0, text, c.accent_text);
@@ -907,9 +910,24 @@ impl NiceGitApp {
         if let Some(folder) = others.into_iter().next() {
             self.dialog = Some(crate::ui::dialogs::Dialog::FindOffer { folder });
         }
-        if !files.is_empty() {
-            self.notify("Drop a folder, not a file, to open it as a repository.", true);
+        let (patches, files): (Vec<PathBuf>, Vec<PathBuf>) =
+            files.into_iter().partition(|path| crate::tools::apply_patch::is_patch_file(path));
+        if let Some(patch) = patches.into_iter().next() {
+            self.open_dropped_patch(patch);
         }
+        if !files.is_empty() {
+            self.notify("Drop a folder to open it as a repository, or a .patch or .diff file to apply it.", true);
+        }
+    }
+
+    /// Opens a patch file dropped onto the window in the Apply patch window. It needs an open
+    /// repository, since the patch applies to its checkout.
+    fn open_dropped_patch(&mut self, patch: PathBuf) {
+        if self.snapshot().is_none() {
+            self.notify("Open a repository before applying a patch.", true);
+            return;
+        }
+        self.open_tool(Box::new(crate::tools::apply_patch::ApplyPatchWindow::new(Some(patch))));
     }
 
     pub fn switch_to(&mut self, index: usize) {
@@ -2858,6 +2876,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let editor_unsaved = self.has_unsaved_editor();
         let external = self.active_external_tools();
         let request = self.diff_request();
         let mut requests = Vec::new();
@@ -2892,6 +2911,7 @@ impl NiceGitApp {
                     cx.ignore_whitespace = request.ignore_whitespace;
                     cx.diff_context = request.context;
                     cx.external = external.clone();
+                    cx.editor_unsaved = editor_unsaved;
                     tool.ui(ui, &mut cx);
                 });
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {

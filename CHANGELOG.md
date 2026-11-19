@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Apply patch opens a preview window: paste a patch or drop a .patch, .diff or .mbox file onto NiceGit, see the files it changes, then apply it unstaged, staged, or as commits from a mailbox patch.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a
