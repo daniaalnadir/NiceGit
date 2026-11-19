@@ -907,6 +907,12 @@ impl NiceGitApp {
             let other = branch.display_name();
             self.open_tool(Box::new(tools::branch_compare::BranchCompareWindow::new(other, branch.tip.clone(), current.clone())));
         }
+        if !branch.is_remote && !branch.is_detached() && ui.button(format!("{}  Compare with previous version…", icon::GIT_DIFF)).clicked()
+        {
+            ui.close();
+            let start = tools::range_diff::Start::Branch(branch.name.clone());
+            self.open_tool(Box::new(tools::range_diff::RangeDiffWindow::new(start)));
+        }
         if !branch.is_detached() && ui.button(format!("{}  Tip history…", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::reflog::ReflogWindow::for_branch(branch)));

@@ -91,3 +91,4 @@
 - Commits run with `maintenance.auto=false` (through `GIT_CONFIG_COUNT`, never `-c`, which would change the runner's first argument) and run `git maintenance run --auto` after the result is delivered. After a staging action, build the commit tree with `git write-tree` in parallel with the refresh.
 - Time changes with `NICEGIT_TIMING=1` and the `ui_bench_speed` benchmarks; test helpers that sleep between frames inflate timings, so benchmarks step frames back to back.
 - Tests that start a long-running Git program, such as `git daemon`, must start the real program (`git-daemon` from `git --exec-path`): the `git` wrapper runs it as its own child, so killing the wrapper leaves it running for good, holding any pipes inherited from tests running at the same time.
+- `git range-diff` refuses a series with no commits (`A..A`, "need two commit ranges"); list the other side's commits directly, as `range_diff` does, instead of asking Git.
