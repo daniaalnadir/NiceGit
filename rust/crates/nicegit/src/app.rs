@@ -447,6 +447,11 @@ pub struct Repo {
     pub pr_status: Option<(String, crate::ui::pull_request::PrStatusRead)>,
     /// When the pull request status was last asked for. `None` asks again at the next snapshot.
     pub pr_checked_at: Option<Instant>,
+    /// The open pull or merge requests of this repository's remote, read through gh or glab, for the
+    /// branch checks on the graph and sidebar. The read keeps its previous answer while it runs.
+    pub open_requests: Option<crate::ui::branch_checks::OpenRequestsRead>,
+    /// When the open requests were last asked for. `None` asks again at the next frame when quiet.
+    pub open_requests_at: Option<Instant>,
     /// The tips that `branch_tracking` was read for. While a refresh leaves them unchanged, the
     /// read is not repeated.
     pub branch_tracking_key: Option<TrackingKey>,
@@ -602,6 +607,8 @@ impl Repo {
             tag_details: std::collections::HashMap::new(),
             pr_status: None,
             pr_checked_at: None,
+            open_requests: None,
+            open_requests_at: None,
             branch_tracking_key: None,
             #[cfg(test)]
             branch_tracking_reads: 0,
@@ -663,7 +670,7 @@ pub struct NiceGitApp {
     /// It carries the tool's exit status, or nothing if the tool never started.
     pub merge_tool_exit: Option<(String, Receiver<std::io::Result<ExitStatus>>)>,
     generation: u64,
-    was_focused: bool,
+    pub was_focused: bool,
     /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
     pub(crate) activation_refresh: bool,
     /// How wide the diff panel was when last shown, so Settings can say whether side by side
@@ -1096,6 +1103,7 @@ impl NiceGitApp {
         // A deliberate load reads the pull request status again, once the snapshot arrives.
         if deliberate {
             repo.pr_checked_at = None;
+            repo.open_requests_at = None;
         }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
@@ -1431,6 +1439,7 @@ impl NiceGitApp {
                     let remote_fetch = matches!(&action, Some((label, _)) if label.starts_with(REMOTE_FETCH_PREFIX));
                     if changes_pull_request || remote_fetch {
                         self.repos[index].pr_checked_at = None;
+                        self.repos[index].open_requests_at = None;
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
@@ -3237,6 +3246,7 @@ impl eframe::App for NiceGitApp {
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
         self.auto_pr_status(&ctx);
+        self.auto_open_requests(&ctx);
         self.debug_open(&ctx);
         if first {
             crate::timing::report("first frame: before layout", crate::timing::since_start());
