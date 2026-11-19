@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use nicegit_core::client::PullStrategy;
 use serde::{Deserialize, Serialize};
 
+use crate::claude::ClaudeModel;
 use crate::conventional::ConventionalCommits;
 use crate::issue_links::IssueLinkRule;
 use crate::theme::{Appearance, GraphPalette};
@@ -370,6 +371,13 @@ pub struct Settings {
     /// Whether the commit box offers Conventional Commits help: its type menu, scope, and Breaking.
     #[serde(default)]
     pub conventional_commits: ConventionalCommits,
+    /// Whether the commit box offers a Draft button that writes a message with Claude from the
+    /// staged changes. Off by default: nothing is sent unless this is on and Draft is clicked.
+    #[serde(default)]
+    pub draft_with_claude: bool,
+    /// The Claude model that drafts use.
+    #[serde(default)]
+    pub claude_model: ClaudeModel,
     /// Branches hidden from the commit graph, keyed like `drafts`. Each entry is a full ref name,
     /// such as `refs/heads/feature`, so a local and a remote branch never collide.
     #[serde(default)]
@@ -457,6 +465,8 @@ impl Default for Settings {
             stash_staged_only: false,
             cherry_pick_record_origin: false,
             conventional_commits: ConventionalCommits::default(),
+            draft_with_claude: false,
+            claude_model: ClaudeModel::default(),
             hidden_branches: BTreeMap::new(),
             solo_branch: BTreeMap::new(),
             workspaces: Vec::new(),
