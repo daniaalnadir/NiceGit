@@ -78,6 +78,8 @@ mod ui_tests_range_diff;
 #[cfg(test)]
 mod ui_tests_resolutions;
 #[cfg(test)]
+mod ui_tests_review_threads;
+#[cfg(test)]
 mod ui_tests_speed;
 #[cfg(test)]
 mod ui_tests_split;
