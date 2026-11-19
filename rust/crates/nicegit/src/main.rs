@@ -65,6 +65,8 @@ mod ui_tests_parity_f;
 #[cfg(test)]
 mod ui_tests_perf;
 #[cfg(test)]
+mod ui_tests_range_diff;
+#[cfg(test)]
 mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_speed;

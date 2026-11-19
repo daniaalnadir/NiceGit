@@ -223,6 +223,13 @@ impl NiceGitApp {
                 has,
                 Run::Tool("insights"),
             ),
+            command(
+                "Compare branch versions…",
+                "Which commits changed after a rebase, amend, or force push",
+                icon::GIT_DIFF,
+                has,
+                Run::Tool("range_diff"),
+            ),
             command("Clean up branches", "Delete merged, inactive, or gone local branches", icon::BROOM, has, Run::Tool("cleanup")),
             command("Bisect", "Find the commit that introduced a bug", icon::BUG, has, Run::Tool("bisect")),
             command("Worktrees", "Linked worktrees", icon::FOLDERS, has, Run::Tool("worktrees")),
@@ -479,6 +486,14 @@ impl NiceGitApp {
                     "grep" => Some(Box::new(tools::content_search::ContentSearchWindow::new(None))),
                     "reflog" => Some(Box::new(tools::reflog::ReflogWindow::new())),
                     "insights" => Some(Box::new(tools::insights::InsightsWindow::new())),
+                    "range_diff" => {
+                        // The checkout's branch is compared with its earlier version, when it has one.
+                        let start = match self.snapshot() {
+                            Some(snapshot) if snapshot.is_on_branch() => tools::range_diff::Start::Branch(snapshot.current_branch.clone()),
+                            _ => tools::range_diff::Start::Blank,
+                        };
+                        Some(Box::new(tools::range_diff::RangeDiffWindow::new(start)))
+                    }
                     "cleanup" => Some(Box::new(tools::branch_cleanup::BranchCleanupWindow::new())),
                     "bisect" => Some(Box::new(tools::bisect::BisectWindow::new())),
                     "worktrees" => Some(Box::new(tools::worktrees::WorktreesWindow::new())),

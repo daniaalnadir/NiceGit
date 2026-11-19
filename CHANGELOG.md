@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Compare versions of a branch after a rebase, amend, or force push, to see which commits changed, were added, or were removed, with each change's diff. Use it from a branch's menu, from Force push's "Compare with remote", or from "Compare branch versions" in the command palette.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a
