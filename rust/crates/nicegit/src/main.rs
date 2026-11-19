@@ -67,6 +67,8 @@ mod ui_tests_perf;
 #[cfg(test)]
 mod ui_tests_resolutions;
 #[cfg(test)]
+mod ui_tests_review_threads;
+#[cfg(test)]
 mod ui_tests_speed;
 #[cfg(test)]
 mod ui_tests_split;

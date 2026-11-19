@@ -2,17 +2,21 @@
 //! It is read in the background through the signed-in GitHub CLI (`gh pr view`). Every title, body,
 //! comment, and link shown here is display data: nothing runs, and nothing opens unless the person
 //! clicks a link. The view can also review the pull request or merge it, but only from a button
-//! press followed by a confirmation that names the repository, number, and title.
+//! press followed by a confirmation that names the repository, number, and title. Review comments
+//! on the diff are posted the same way: each reply, new comment, or resolve change waits for its own
+//! confirmation (see `pull_request_files`).
 
 use egui::{Color32, RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::github::{
     relative_time, Cancel, CheckOutcome, ConversationEntry, GhProgram, GhStatus, GitHubRepository, MergeMethod, PrState, PullRequestDetail,
-    PullRequestFile, PullRequestReview, ReviewChoice,
+    PullRequestReview, ReviewChoice,
 };
+use nicegit_core::github_review::{file_diffs, FileDiff, ReviewThread};
 
 use crate::theme;
 use crate::tools::github::{label_pill, message, Refreshing};
+use crate::tools::pull_request_files::{self, Confirm as ThreadConfirm, FilesState, FilesView, Pull, Write as ThreadWrite};
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 /// The sections of the detail view.
@@ -53,7 +57,7 @@ enum Confirm {
     Merge { shown: Shown, method: MergeMethod },
 }
 
-/// What a confirmation asked to run.
+/// The action a confirmation submitted, to run in the background.
 enum Submit {
     Review { choice: ReviewChoice, body: String },
     Merge { method: MergeMethod, head_oid: String },
@@ -74,6 +78,20 @@ pub struct PullRequestDetailWindow {
     write: Option<Task<nicegit_core::Result<String>>>,
     /// The error from the last review or merge, shown in its confirmation.
     write_error: Option<String>,
+    /// The review threads, keyed by the detail's generation and the thread generation.
+    threads: Refreshing<(u64, u64), Vec<ReviewThread>>,
+    /// Bumped after a reply, comment, or resolve change is posted, so the threads are read again.
+    thread_generation: u64,
+    /// The diff split by file, read when the Files tab is first shown.
+    diff: Refreshing<u64, Vec<FileDiff>>,
+    /// What the Files tab shows and the comment being written.
+    files: FilesState,
+    /// The reply, comment, or resolve change awaiting confirmation, if any.
+    thread_confirm: Option<ThreadConfirm>,
+    /// The reply, comment, or resolve change running in the background.
+    thread_write: Option<Task<nicegit_core::Result<String>>>,
+    /// The error from the last thread write, shown in its confirmation.
+    thread_error: Option<String>,
 }
 
 impl PullRequestDetailWindow {
@@ -89,22 +107,43 @@ impl PullRequestDetailWindow {
             confirm: None,
             write: None,
             write_error: None,
+            threads: Refreshing::new(),
+            thread_generation: 0,
+            diff: Refreshing::new(),
+            files: FilesState::default(),
+            thread_confirm: None,
+            thread_write: None,
+            thread_error: None,
         }
     }
 
     /// A window that already shows `detail`, for tests that do not reach GitHub.
     #[cfg(test)]
     pub(crate) fn loaded(repository: GitHubRepository, number: u64, detail: PullRequestDetail) -> Self {
-        let mut window = Self::new(repository, number);
-        window.detail = Refreshing::with_answer(0, Ok(Loaded::Read { detail: Box::new(detail), login: None }));
-        window
+        Self::loaded_with_review(repository, number, detail, None, Vec::new(), Vec::new())
     }
 
     /// A window that already shows `detail` for the signed-in user `login`, for tests.
     #[cfg(test)]
     pub(crate) fn loaded_as(repository: GitHubRepository, number: u64, detail: PullRequestDetail, login: &str) -> Self {
+        Self::loaded_with_review(repository, number, detail, Some(login), Vec::new(), Vec::new())
+    }
+
+    /// A window that already shows `detail`, with its review `threads` and `diff`, for tests that
+    /// do not reach GitHub. Nothing is read for any of them.
+    #[cfg(test)]
+    pub(crate) fn loaded_with_review(
+        repository: GitHubRepository,
+        number: u64,
+        detail: PullRequestDetail,
+        login: Option<&str>,
+        threads: Vec<ReviewThread>,
+        diff: Vec<FileDiff>,
+    ) -> Self {
         let mut window = Self::new(repository, number);
-        window.detail = Refreshing::with_answer(0, Ok(Loaded::Read { detail: Box::new(detail), login: Some(login.to_string()) }));
+        window.detail = Refreshing::with_answer(0, Ok(Loaded::Read { detail: Box::new(detail), login: login.map(str::to_string) }));
+        window.threads = Refreshing::with_answer((0, 0), Ok(threads));
+        window.diff = Refreshing::with_answer(0, Ok(diff));
         window
     }
 }
@@ -167,6 +206,12 @@ impl ToolWindow for PullRequestDetailWindow {
         }
         self.detail.settle();
         self.finish_write(cx);
+        self.finish_thread_write(cx);
+        if matches!(self.detail.latest(), Some(Ok(Loaded::Read { .. }))) {
+            self.start_reviews(&ctx, cx);
+        }
+        self.threads.settle();
+        self.diff.settle();
         let pending = self.detail.is_pending();
         let now = now_seconds();
         let host = self.repository.host.clone();
@@ -181,8 +226,8 @@ impl ToolWindow for PullRequestDetailWindow {
             Some(Ok(Loaded::Read { detail, login })) => (Some(&**detail), login.as_deref()),
             _ => (None, None),
         };
-        // Reviews and merges wait for the window to be idle, and for the last one to finish.
-        let idle = cx.idle && self.write.is_none();
+        // Reviews, merges, and thread writes wait for the window to be idle, and for the last one to finish.
+        let idle = cx.idle && self.write.is_none() && self.thread_write.is_none();
         let clicks = header(ui, number, detail, pending, idle);
         refresh |= clicks.refresh;
         if clicks.open {
@@ -204,6 +249,9 @@ impl ToolWindow for PullRequestDetailWindow {
         }
         ui.add_space(6.0);
 
+        let threads = self.threads.latest();
+        let diff = self.diff.latest();
+        let mut requested: Option<ThreadConfirm> = None;
         match answer {
             None => widgets::loading(ui, "Loading from GitHub"),
             Some(Err(error)) => widgets::callout(ui, &message(error), true),
@@ -229,9 +277,21 @@ impl ToolWindow for PullRequestDetailWindow {
             Some(Ok(Loaded::Read { detail, .. })) => {
                 tabs(ui, &mut tab, detail);
                 ui.add_space(4.0);
+                let refusal = thread_refusal(detail.state, idle);
+                let pull = pull_of(detail, &self.repository);
+                let mut switch: Option<Tab> = None;
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                    content(ui, tab, detail, now, &mut open_link);
+                    if tab == Tab::Files {
+                        files_summary(ui, detail);
+                        let view = FilesView { pull: &pull, files: &detail.files, diff, threads, refusal, now };
+                        requested = pull_request_files::show(ui, &mut self.files, &view);
+                    } else {
+                        content(ui, tab, detail, now, &mut open_link, threads, &mut switch);
+                    }
                 });
+                if let Some(next) = switch {
+                    tab = next;
+                }
             }
         }
 
@@ -242,7 +302,11 @@ impl ToolWindow for PullRequestDetailWindow {
         if let Some(url) = open_link {
             crate::ui::changes::open_url(&url);
         }
+        if requested.is_some() {
+            self.thread_confirm = requested;
+        }
         self.confirmation(&ctx, cx);
+        self.thread_confirmation(&ctx, cx);
     }
 }
 
@@ -265,6 +329,76 @@ impl PullRequestDetailWindow {
             Some(Err(error)) => self.write_error = Some(message(&error)),
             None => {}
         }
+    }
+
+    /// Takes the answer of a finished reply, comment, or resolve change. A success closes its
+    /// confirmation, clears the comment, says so, and reads the threads again; a failure stays in
+    /// the confirmation.
+    fn finish_thread_write(&mut self, cx: &mut Ctx) {
+        let Some(task) = self.thread_write.as_mut() else { return };
+        if task.is_pending() {
+            return;
+        }
+        let answer = self.thread_write.take().and_then(|mut task| task.get().cloned());
+        match answer {
+            Some(Ok(text)) => {
+                self.thread_confirm = None;
+                self.thread_error = None;
+                self.files.clear_composer();
+                cx.notice(text, false);
+                self.thread_generation += 1;
+            }
+            Some(Err(error)) => self.thread_error = Some(message(&error)),
+            None => {}
+        }
+    }
+
+    /// Starts the review threads of the pull request, and its diff when the Files tab is shown, unless
+    /// each is shown or on its way already. The threads are read for the Conversation count too.
+    fn start_reviews(&mut self, ctx: &egui::Context, cx: &Ctx) {
+        let threads_key = (self.generation, self.thread_generation);
+        if !self.threads.shown_or_pending_key(&threads_key) {
+            let token = self.cancel.clone();
+            let (repository, number) = (self.repository.clone(), self.number);
+            let task = query(ctx, cx.repo, move |client, directory| {
+                client.review_threads(&repository, number, &GhProgram::Search, &token, directory)
+            });
+            self.threads.start(threads_key, task);
+        }
+        if self.tab == Tab::Files && !self.diff.shown_or_pending_key(&self.generation) {
+            let token = self.cancel.clone();
+            let (repository, number) = (self.repository.clone(), self.number);
+            let task = query(ctx, cx.repo, move |client, directory| {
+                let patch = client.pull_request_diff(&repository, number, &GhProgram::Search, &token, directory)?;
+                Ok(file_diffs(&patch))
+            });
+            self.diff.start(self.generation, task);
+        }
+    }
+
+    /// Draws the confirmation for a reply, comment, or resolve change, when one is waiting, and runs
+    /// what the person confirmed. Cancel, Escape, and a click outside close it, but not while it runs.
+    fn thread_confirmation(&mut self, ctx: &egui::Context, cx: &mut Ctx) {
+        let busy = self.thread_write.is_some();
+        let error = self.thread_error.clone();
+        let Some(write) = pull_request_files::confirmation(ctx, &mut self.thread_confirm, busy, error.as_deref()) else { return };
+        self.thread_error = None;
+        let (repository, number) = (self.repository.clone(), self.number);
+        let task = query(ctx, cx.repo, move |client, directory| match write {
+            ThreadWrite::Reply { thread_id, body } => {
+                client.reply_to_thread(&repository, &thread_id, &body, &GhProgram::Search, directory)?;
+                Ok(format!("Replied on #{number}."))
+            }
+            ThreadWrite::Line(comment) => {
+                client.add_line_comment(&repository, number, &comment, &GhProgram::Search, directory)?;
+                Ok(format!("Commented on #{number}."))
+            }
+            ThreadWrite::Resolve { thread_id, resolved } => {
+                client.set_thread_resolved(&repository, &thread_id, resolved, &GhProgram::Search, directory)?;
+                Ok(if resolved { format!("Resolved a thread on #{number}.") } else { format!("Reopened a thread on #{number}.") })
+            }
+        });
+        self.thread_write = Some(task);
     }
 
     /// Draws the confirmation for a review or merge, when one is waiting, and starts what it asks for.
@@ -399,7 +533,30 @@ fn tabs(ui: &mut Ui, tab: &mut Tab, detail: &PullRequestDetail) {
     });
 }
 
-fn content(ui: &mut Ui, tab: Tab, detail: &PullRequestDetail, now: i64, open_link: &mut Option<String>) {
+/// The Files tab's summary of the changed files, and a note when GitHub listed fewer than all of them.
+fn files_summary(ui: &mut Ui, detail: &PullRequestDetail) {
+    let c = theme::of(ui);
+    ui.label(
+        RichText::new(format!("{} files changed, +{} \u{2212}{}", detail.changed_files, detail.additions, detail.deletions))
+            .small()
+            .color(c.muted),
+    );
+    if (detail.files.len() as u64) < detail.changed_files {
+        ui.label(RichText::new(format!("Showing the first {} files.", detail.files.len())).small().color(c.muted));
+    }
+    ui.add_space(4.0);
+}
+
+/// The Description, Checks, and Conversation sections. The Files section is drawn by its own module.
+fn content(
+    ui: &mut Ui,
+    tab: Tab,
+    detail: &PullRequestDetail,
+    now: i64,
+    open_link: &mut Option<String>,
+    threads: Option<&nicegit_core::Result<Vec<ReviewThread>>>,
+    switch: &mut Option<Tab>,
+) {
     let c = theme::of(ui);
     match tab {
         Tab::Description => {
@@ -442,6 +599,7 @@ fn content(ui: &mut Ui, tab: Tab, detail: &PullRequestDetail, now: i64, open_lin
             }
         }
         Tab::Conversation => {
+            review_thread_count(ui, threads, switch);
             let entries = detail.conversation();
             if entries.is_empty() {
                 ui.label(RichText::new("No reviews or comments yet.").color(c.muted));
@@ -461,21 +619,20 @@ fn content(ui: &mut Ui, tab: Tab, detail: &PullRequestDetail, now: i64, open_lin
                 }
             }
         }
-        Tab::Files => {
-            ui.label(
-                RichText::new(format!("{} files changed, +{} \u{2212}{}", detail.changed_files, detail.additions, detail.deletions))
-                    .small()
-                    .color(c.muted),
-            );
-            if (detail.files.len() as u64) < detail.changed_files {
-                ui.label(RichText::new(format!("Showing the first {} files.", detail.files.len())).small().color(c.muted));
-            }
-            ui.add_space(4.0);
-            for file in &detail.files {
-                file_row(ui, file);
-            }
-        }
+        // The Files section is drawn by the window, which keeps the state it needs.
+        Tab::Files => {}
     }
+}
+
+/// The count of review threads and how many are unresolved, as a link to the Files tab, where the
+/// threads are shown on their lines. Shown once the threads have been read.
+fn review_thread_count(ui: &mut Ui, threads: Option<&nicegit_core::Result<Vec<ReviewThread>>>, switch: &mut Option<Tab>) {
+    let Some(Ok(threads)) = threads else { return };
+    let unresolved = threads.iter().filter(|thread| !thread.resolved).count();
+    if ui.link(format!("{} review threads ({unresolved} unresolved)", threads.len())).clicked() {
+        *switch = Some(Tab::Files);
+    }
+    ui.add_space(6.0);
 }
 
 fn conversation_review(ui: &mut Ui, review: &PullRequestReview, now: i64) {
@@ -500,17 +657,6 @@ fn conversation_header(ui: &mut Ui, author: Option<&str>, word: &str, color: Opt
         if let Some(ago) = relative_time(stamp, now) {
             ui.label(RichText::new(ago).small().color(c.muted));
         }
-    });
-}
-
-fn file_row(ui: &mut Ui, file: &PullRequestFile) {
-    let c = theme::of(ui);
-    ui.horizontal(|ui| {
-        ui.add(egui::Label::new(RichText::new(file.path.as_str()).monospace()).wrap());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(RichText::new(format!("\u{2212}{}", file.deletions)).small().color(c.removed));
-            ui.label(RichText::new(format!("+{}", file.additions)).small().color(c.added));
-        });
     });
 }
 
@@ -563,6 +709,19 @@ fn merge_refusal(state: PrState, mergeable: Option<&str>) -> Option<&'static str
     }
 }
 
+/// Why replies, comments, and resolve changes are refused for a pull request in `state`, or `None`
+/// when they can be confirmed. Only an open or draft pull request takes them, and only while the
+/// window is idle.
+fn thread_refusal(state: PrState, idle: bool) -> Option<&'static str> {
+    if !idle {
+        return Some("Wait for the current action to finish.");
+    }
+    match state {
+        PrState::Open | PrState::Draft => None,
+        PrState::Merged | PrState::Closed => Some("A merged or closed pull request cannot take review comments."),
+    }
+}
+
 /// Why `choice` cannot be submitted for the pull request as it was shown, or `None` when it can.
 /// A merged or closed pull request takes no review. An author cannot approve or request changes on
 /// their own pull request, and without a known login that cannot be checked, so those are refused
@@ -597,6 +756,16 @@ fn shown(detail: &PullRequestDetail, login: Option<&str>, repository: &GitHubRep
         head_ref: detail.head_ref.clone(),
         head_oid: detail.head_oid.clone(),
         login: login.map(str::to_string),
+    }
+}
+
+/// The pull request a thread write names, as the Files tab shows it.
+fn pull_of(detail: &PullRequestDetail, repository: &GitHubRepository) -> Pull {
+    Pull {
+        repository: format!("{}/{}", repository.host, repository.slug()),
+        number: detail.number,
+        title: detail.title.clone(),
+        head_oid: detail.head_oid.clone(),
     }
 }
 
@@ -692,7 +861,7 @@ fn merge_form(ui: &mut Ui, shown: &Shown, method: &mut MergeMethod, busy: bool) 
 }
 
 /// The confirm and cancel buttons. Returns whether the confirm button was clicked, and whether Cancel was.
-fn footer(ui: &mut Ui, confirm_text: &str, ready: bool, busy: bool) -> (bool, bool) {
+pub(crate) fn footer(ui: &mut Ui, confirm_text: &str, ready: bool, busy: bool) -> (bool, bool) {
     let c = theme::of(ui);
     let mut clicks = (false, false);
     ui.add_space(8.0);
@@ -765,5 +934,14 @@ mod tests {
         assert!(merge_refusal(PrState::Open, None).is_some(), "an unknown state is refused");
         assert!(merge_refusal(PrState::Merged, Some("MERGEABLE")).is_some());
         assert!(merge_refusal(PrState::Closed, Some("MERGEABLE")).is_some());
+    }
+
+    #[test]
+    fn review_comments_are_written_only_on_an_open_pull_request_while_idle() {
+        assert!(thread_refusal(PrState::Open, true).is_none());
+        assert!(thread_refusal(PrState::Draft, true).is_none(), "a draft takes review comments");
+        assert!(thread_refusal(PrState::Merged, true).is_some());
+        assert!(thread_refusal(PrState::Closed, true).is_some());
+        assert!(thread_refusal(PrState::Open, false).is_some(), "an action in progress refuses them");
     }
 }

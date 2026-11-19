@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a

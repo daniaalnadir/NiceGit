@@ -14,7 +14,8 @@ use crate::models::{GitError, Result};
 use crate::rebase::Scratch;
 use crate::runner;
 
-const NOT_INSTALLED: &str = "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.";
+pub(crate) const NOT_INSTALLED: &str =
+    "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.";
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Longest `gh` error shown to the user.
 pub(crate) const MESSAGE_LIMIT: usize = 2000;
@@ -347,7 +348,7 @@ pub enum GhProgram {
 }
 
 impl GhProgram {
-    fn executable(&self) -> Option<PathBuf> {
+    pub(crate) fn executable(&self) -> Option<PathBuf> {
         match self {
             GhProgram::Search => gh_executable(),
             GhProgram::Given(path) => is_executable(path).then(|| path.clone()),
@@ -837,7 +838,7 @@ pub fn decode_repositories(json: &str, host: &str) -> Result<Vec<GitHubRepoListi
 }
 
 /// The text of an optional JSON field: absent or `null` is empty, and any other type is refused.
-fn optional_text<'a>(entry: &'a Json, key: &str) -> Option<&'a str> {
+pub(crate) fn optional_text<'a>(entry: &'a Json, key: &str) -> Option<&'a str> {
     match entry.get(key) {
         None | Some(Json::Null) => Some(""),
         Some(value) => value.as_str(),
@@ -860,7 +861,7 @@ pub(crate) fn clean_text(text: &str, limit: usize) -> String {
 
 /// Whether one half of a repository name is valid: ASCII letters, digits, hyphens, underscores,
 /// and dots, and not `.` or `..`.
-fn valid_name_part(part: &str) -> bool {
+pub(crate) fn valid_name_part(part: &str) -> bool {
     !part.is_empty() && part != "." && part != ".." && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
@@ -1116,7 +1117,7 @@ const PULL_REQUEST_DETAIL_FIELDS: &str = "number,title,body,author,state,isDraft
      reviewDecision,mergeable,additions,deletions,changedFiles,files,commits,reviews,comments,statusCheckRollup,labels,headRefOid";
 
 /// The longest body, review, or comment text kept, in characters.
-const TEXT_LIMIT: usize = 50_000;
+pub(crate) const TEXT_LIMIT: usize = 50_000;
 
 /// One pull request in full, for the detail view, as `gh pr view` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1293,7 +1294,7 @@ impl MergeMethod {
 }
 
 /// Whether `text` is a full object ID: 40 hexadecimal digits, or 64 for SHA-256 repositories.
-fn object_id(text: &str) -> Option<&str> {
+pub(crate) fn object_id(text: &str) -> Option<&str> {
     let hex = text.len() == 40 || text.len() == 64;
     (hex && text.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(text)
 }
@@ -1330,7 +1331,7 @@ pub fn pull_request_merge_arguments(repository: &GitHubRepository, number: u64, 
 }
 
 /// The message GitHub's CLI printed, without control characters, for the user to read.
-fn gh_message(message: &str) -> String {
+pub(crate) fn gh_message(message: &str) -> String {
     message.chars().filter(|c| !c.is_control() || *c == '\n').collect::<String>().trim().to_string()
 }
 
@@ -1568,7 +1569,7 @@ fn check_link(link: &str, repository: &GitHubRepository) -> Option<String> {
 
 /// A user's login from an `author` object. An absent or `null` author is `Some(None)`, and an
 /// unexpected shape is `None`.
-fn author_login(entry: &Json) -> Option<Option<String>> {
+pub(crate) fn author_login(entry: &Json) -> Option<Option<String>> {
     match entry.get("author") {
         None | Some(Json::Null) => Some(None),
         Some(author @ Json::Object(_)) => {
@@ -1600,7 +1601,7 @@ fn array_field<'a>(entry: &'a Json, key: &str) -> Option<&'a [Json]> {
 
 /// Body text as plain text: CRLF and CR become line feeds, tabs and line feeds are kept, other
 /// control characters (escape sequences included) are removed, and the text is trimmed and limited.
-fn plain_text(text: &str) -> String {
+pub(crate) fn plain_text(text: &str) -> String {
     let lines = text.replace("\r\n", "\n").replace('\r', "\n");
     let kept: String = lines.chars().filter(|c| *c == '\n' || *c == '\t' || !c.is_control()).collect();
     kept.trim().chars().take(TEXT_LIMIT).collect::<String>().trim_end().to_string()
@@ -1706,7 +1707,7 @@ fn run_gh(arguments: &[&str], directory: &Path, cancel: &Cancel, host: Option<&s
 }
 
 /// [`run_gh`] with the program given.
-fn run_gh_with(
+pub(crate) fn run_gh_with(
     executable: &Path,
     arguments: &[&str],
     directory: &Path,
@@ -1717,7 +1718,7 @@ fn run_gh_with(
 }
 
 /// [`run_gh_with`], also writing `input` to the program's standard input when it is given.
-fn run_gh_with_input(
+pub(crate) fn run_gh_with_input(
     executable: &Path,
     arguments: &[&str],
     directory: &Path,
