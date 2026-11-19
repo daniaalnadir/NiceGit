@@ -11,8 +11,8 @@ use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
 
-pub mod apply_patch;
 pub mod absorb;
+pub mod apply_patch;
 pub mod archive;
 pub mod bisect;
 pub mod blame;
@@ -34,8 +34,8 @@ pub mod launchpad;
 pub mod lfs;
 pub mod line_history;
 pub mod pull_request_detail;
-pub mod range_diff;
 pub mod pull_request_files;
+pub mod range_diff;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;
