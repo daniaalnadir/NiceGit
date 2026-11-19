@@ -118,11 +118,6 @@ pub enum Pending {
         expected_remote_tip: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
-    ApplyPatch {
-        file: std::path::PathBuf,
-        branch: String,
-        head: Option<String>,
-    },
     Undo,
     Redo,
     RestoreFile {
@@ -1582,11 +1577,6 @@ impl NiceGitApp {
                     client.force_push(&snapshot, &expected_remote_tip, path).map(|_| Some(format!("Force pushed {branch} to {upstream}.")))
                 })
             }
-            Pending::ApplyPatch { file, branch, head } => self.act("Apply patch", move |client, path| {
-                client.require_checkout(&branch, head.as_deref(), "apply", path)?;
-                let contents = std::fs::read(&file).map_err(|e| nicegit_core::GitError::failed("apply", e.to_string()))?;
-                client.apply_patch(&contents, path).map(|_| Some("Applied the patch. Its changes are unstaged.".into()))
-            }),
             Pending::RestoreFile { path, source, branch, head } => self.act("Restore file", move |client, repo| {
                 client
                     .restore(&path, &source, &branch, head.as_deref(), repo)

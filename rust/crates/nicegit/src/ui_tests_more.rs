@@ -814,9 +814,13 @@ fn save_a_commit_as_a_patch_and_apply_it_again() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
     wait(&mut harness, "the refreshed checkout", |h| h.state().snapshot().and_then(|s| s.head_hash.clone()) == Some(head.clone()));
     idle(&mut harness);
-    crate::file_dialog::answer_next(&patch);
     repository_menu(&mut harness, &folder_name(path), "Apply patch");
-    wait(&mut harness, "the apply confirmation", |h| shows(h, "Apply second-line.patch?"));
+    wait(&mut harness, "the Apply patch window", |h| h.state().tools.iter().any(|tool| tool.id() == "apply-patch"));
+    crate::file_dialog::answer_next(&patch);
+    harness.get_by_role_and_label(Role::Button, "Choose file…").click();
+    wait(&mut harness, "the preview", |h| h.query_by_label_contains("Applies cleanly").is_some());
+    // A saved commit is a mailbox patch, which applies as commits by default; this test wants the change back unstaged.
+    harness.get_by_role_and_label(Role::RadioButton, "Apply as unstaged changes").click();
     settle(&mut harness);
     harness.get_by_role_and_label(Role::Button, "Apply").click();
     idle(&mut harness);
