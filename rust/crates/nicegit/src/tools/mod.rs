@@ -33,6 +33,7 @@ pub mod launchpad;
 pub mod lfs;
 pub mod line_history;
 pub mod pull_request_detail;
+pub mod range_diff;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;

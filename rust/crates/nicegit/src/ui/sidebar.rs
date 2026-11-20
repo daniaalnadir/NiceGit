@@ -10,6 +10,7 @@ use nicegit_core::{Branch, GitClient, MergeStyle, Snapshot, TagDetails};
 use crate::app::{NiceGitApp, Selection};
 use crate::theme;
 use crate::tools::{self, widgets, Task};
+use crate::ui::branch_checks::{self, Dot, DOT_SPACE};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 use crate::ui::history::{self, DraggedCommits};
 
@@ -55,6 +56,22 @@ fn row(
     marker: Option<RichText>,
     selected: bool,
 ) -> egui::Response {
+    row_with_dot(ui, glyph, glyph_color, text, trailing, marker, selected, None).0
+}
+
+/// A sidebar row, as `row`, with an optional check dot just after the name. Returns the row's
+/// response, and the dot's when there is one.
+#[allow(clippy::too_many_arguments)]
+fn row_with_dot(
+    ui: &mut Ui,
+    glyph: &str,
+    glyph_color: egui::Color32,
+    text: RichText,
+    trailing: Option<RichText>,
+    marker: Option<RichText>,
+    selected: bool,
+    dot: Option<(&Dot, egui::Id)>,
+) -> (egui::Response, Option<egui::Response>) {
     let c = theme::of(ui);
     let height = 26.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
@@ -67,7 +84,8 @@ fn row(
         egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(14.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)),
     );
     child.label(RichText::new(glyph).color(glyph_color));
-    if trailing.is_some() || marker.is_some() {
+    let mut dot_response = None;
+    if trailing.is_some() || marker.is_some() || dot.is_some() {
         child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if let Some(trailing) = trailing {
                 ui.label(trailing);
@@ -75,12 +93,17 @@ fn row(
             if let Some(marker) = marker {
                 ui.label(marker);
             }
+            // The dot sits between the name and the markers, so it is laid out before the name.
+            if let Some((dot, id)) = dot {
+                let (slot, _) = ui.allocate_exact_size(egui::vec2(DOT_SPACE, 16.0), egui::Sense::hover());
+                dot_response = Some(branch_checks::show_dot(ui, slot.center(), id, dot, &c));
+            }
             ui.add(egui::Label::new(text).truncate().selectable(false));
         });
     } else {
         child.add(egui::Label::new(text).truncate().selectable(false));
     }
-    response
+    (response, dot_response)
 }
 
 /// The hover text of an annotated tag: its name, then its tagger and date, then its message.
@@ -183,6 +206,7 @@ impl NiceGitApp {
         let matches = |text: &str| filter.is_empty() || text.to_lowercase().contains(&filter);
         let other_worktrees = GitClient::branches_in_other_worktrees(snapshot);
         let hidden_refs = self.hidden_branches();
+        let requests = self.shown_requests();
 
         // A branch that became current, was deleted, or is not listed any more leaves the selection.
         if let Some(repo) = self.repos.get_mut(self.active) {
@@ -235,7 +259,15 @@ impl NiceGitApp {
                 let hidden = hidden_refs.contains(&branch.full_ref());
                 let marker = hidden.then(|| RichText::new(icon::EYE_SLASH).color(c.muted));
                 let is_selected = selected_ids.contains(&branch.id());
-                let response = row(ui, glyph, color, text, trailing, marker, is_selected);
+                let check = branch_checks::check_for(requests.as_deref(), Some(branch));
+                let dot_id = ui.make_persistent_id(("check", branch.id()));
+                let (response, dot_response) =
+                    row_with_dot(ui, glyph, color, text, trailing, marker, is_selected, check.as_ref().map(|check| (&check.dot, dot_id)));
+                if let (Some(check), Some(dot_response)) = (&check, dot_response) {
+                    if dot_response.clicked() {
+                        self.open_request_checks(check.forge, check.request);
+                    }
+                }
                 let response = response.on_hover_text(format!(
                     "{}  {}{}{tracking_note}{}",
                     short(&branch.tip),
@@ -307,13 +339,29 @@ impl NiceGitApp {
                             }
                             let hidden = hidden_refs.contains(&branch.full_ref());
                             let marker = hidden.then(|| RichText::new(icon::EYE_SLASH).color(c.muted));
-                            let response = row(ui, icon::GIT_BRANCH, c.remote_branch, RichText::new(name), None, marker, false)
-                                .on_hover_text(format!(
-                                    "{}  {}{}",
-                                    short(&branch.tip),
-                                    branch.subject,
-                                    if hidden { "\nHidden from the graph" } else { "" }
-                                ));
+                            let check = branch_checks::check_for(requests.as_deref(), Some(branch));
+                            let dot_id = ui.make_persistent_id(("check", branch.id()));
+                            let (response, dot_response) = row_with_dot(
+                                ui,
+                                icon::GIT_BRANCH,
+                                c.remote_branch,
+                                RichText::new(name),
+                                None,
+                                marker,
+                                false,
+                                check.as_ref().map(|check| (&check.dot, dot_id)),
+                            );
+                            if let (Some(check), Some(dot_response)) = (&check, dot_response) {
+                                if dot_response.clicked() {
+                                    self.open_request_checks(check.forge, check.request);
+                                }
+                            }
+                            let response = response.on_hover_text(format!(
+                                "{}  {}{}",
+                                short(&branch.tip),
+                                branch.subject,
+                                if hidden { "\nHidden from the graph" } else { "" }
+                            ));
                             response.dnd_set_drag_payload(branch.clone());
                             if response.double_clicked() && can_switch {
                                 self.checkout(branch.clone());
@@ -858,6 +906,12 @@ impl NiceGitApp {
             ui.close();
             let other = branch.display_name();
             self.open_tool(Box::new(tools::branch_compare::BranchCompareWindow::new(other, branch.tip.clone(), current.clone())));
+        }
+        if !branch.is_remote && !branch.is_detached() && ui.button(format!("{}  Compare with previous version…", icon::GIT_DIFF)).clicked()
+        {
+            ui.close();
+            let start = tools::range_diff::Start::Branch(branch.name.clone());
+            self.open_tool(Box::new(tools::range_diff::RangeDiffWindow::new(start)));
         }
         if !branch.is_detached() && ui.button(format!("{}  Tip history…", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
             ui.close();
