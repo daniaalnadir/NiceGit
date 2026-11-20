@@ -35,6 +35,7 @@ impl NiceGitApp {
                 data.remove::<IssueLinkDraft>(issue_link_draft_id());
                 data.remove::<crate::custom_actions::ActionDraft>(egui::Id::unique("custom_action_draft"));
             });
+            crate::ui::ai_draft::forget_key_draft(ctx);
             return;
         }
         let mut open = true;
@@ -119,6 +120,8 @@ impl NiceGitApp {
                 // A warning is set at body size so it reads as clearly as the setting it explains.
                 let note = RichText::new(note).color(color);
                 ui.label(if too_narrow && self.settings.split_diff { note } else { note.small() });
+                // Words takes the place of side by side while it is on.
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.word_diff, "Show changed words inline");
                 crate::tools::widgets::checkbox(ui, true, &mut self.settings.syntax_highlighting, "Syntax highlighting");
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -145,6 +148,8 @@ impl NiceGitApp {
                     "Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. \
                      Automatic turns this on when at least five of the last twenty commits use the convention.",
                 );
+                ui.add_space(10.0);
+                self.claude_section(ui);
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(
@@ -202,6 +207,10 @@ impl NiceGitApp {
                 ui.add_space(10.0);
                 widgets::section(ui, "Custom actions");
                 self.custom_actions_section(ui);
+                ui.add_space(10.0);
+                widgets::section(ui, "GitHub");
+                ui.checkbox(&mut self.settings.show_branch_checks, "Show pull request checks on branches")
+                    .on_hover_text("A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.");
                 ui.add_space(10.0);
                 widgets::section(ui, "GitHub Enterprise");
                 let mut draft = ui

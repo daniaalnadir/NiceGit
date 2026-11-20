@@ -704,6 +704,7 @@ mod tests {
             url: format!("https://github.com/acme/app/pull/{number}"),
             author: author.map(str::to_string),
             head_branch: "feature".into(),
+            is_cross_repository: false,
             is_draft: false,
             review_decision: None,
             review_requests: requests,

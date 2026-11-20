@@ -344,12 +344,18 @@ fn decode_open_merge_request(entry: &Json, repository: &HostedRepository) -> Res
         Some(_) => return Err(unexpected()),
     };
     let checks = pipeline_checks(entry).ok_or_else(unexpected)?;
+    // A merge request from a fork has its source in another project. A list without project ids
+    // cannot tell, so it is read as this project's.
+    let project = |key: &str| entry.get(key).and_then(Json::as_number);
+    let is_cross_repository =
+        matches!((project("source_project_id"), project("target_project_id")), (Some(source), Some(target)) if source != target);
     Ok(OpenPullRequest {
         number,
         title: clean_text(title, TITLE_LIMIT),
         url: url.to_string(),
         author,
         head_branch: clean_text(head_branch, TITLE_LIMIT),
+        is_cross_repository,
         is_draft,
         review_decision: None,
         review_requests,
@@ -676,6 +682,17 @@ esac
         assert!(orphan.review_requests.is_empty());
         assert_eq!(orphan.checks, Checks::default(), "no pipeline, no checks");
         assert!(decode_open_merge_requests("[]", &repository).unwrap().is_empty());
+    }
+
+    #[test]
+    fn open_merge_requests_from_another_project_are_marked_as_forks() {
+        let repository = repository();
+        let same = listed_entry(&[("source_project_id", "12"), ("target_project_id", "12")]);
+        assert!(!decode_open_merge_requests(&same, &repository).unwrap()[0].is_cross_repository);
+        let fork = listed_entry(&[("source_project_id", "13"), ("target_project_id", "12")]);
+        assert!(decode_open_merge_requests(&fork, &repository).unwrap()[0].is_cross_repository);
+        let unknown = listed_entry(&[]);
+        assert!(!decode_open_merge_requests(&unknown, &repository).unwrap()[0].is_cross_repository, "without ids it is this project's");
     }
 
     #[test]
