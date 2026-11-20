@@ -845,10 +845,12 @@ impl NiceGitApp {
         });
         ui.separator();
         let split = self.settings.split_diff;
+        let words = self.settings.word_diff;
         // Stashing is refused during an unfinished Git operation, so its buttons are not offered.
         let operation_running = self.snapshot().is_some_and(|snapshot| snapshot.operation.is_some());
         let repo = &mut self.repos[self.active];
         repo.diff_options.split = split;
+        repo.diff_options.words = words;
         // Lines can be staged one by one once the review has loaded and matches the diff shown.
         // While a refresh reloads the review, the previous one stays, so the buttons remain.
         let review_loading = repo.review.as_mut().is_some_and(|task| task.is_loading());
@@ -864,19 +866,24 @@ impl NiceGitApp {
             repo.line_map = Some(nicegit_core::staging::line_map(&diff.lines, review).map(std::sync::Arc::new));
         }
         let line_map = repo.line_map.clone().flatten();
-        let selectable = review.as_ref().is_some_and(|r| r.line_staging_unavailable.is_none()) && line_map.is_some();
+        // Lines of a working change can be staged, unless the words view is showing instead.
+        let stageable = review.as_ref().is_some_and(|r| r.line_staging_unavailable.is_none()) && line_map.is_some();
+        let selectable = stageable && !words;
         repo.diff_options.selectable = selectable;
         if !selectable {
             repo.diff_options.selected.clear();
         }
         // Each run of changed lines offers Stage, Discard and Stash, or Unstage, while hovered.
-        repo.diff_options.block_buttons = review.as_ref().map(|review| {
-            if review.staged {
-                crate::diff_view::BlockButtons::Unstage
-            } else {
-                crate::diff_view::BlockButtons::StageAndDiscard { stash: !operation_running }
-            }
-        });
+        repo.diff_options.block_buttons = review
+            .as_ref()
+            .map(|review| {
+                if review.staged {
+                    crate::diff_view::BlockButtons::Unstage
+                } else {
+                    crate::diff_view::BlockButtons::StageAndDiscard { stash: !operation_running }
+                }
+            })
+            .filter(|_| !words);
         let selected = repo.diff_options.selected.clone();
         if selectable && !selected.is_empty() {
             let staged = review.as_ref().is_some_and(|r| r.staged);
@@ -942,6 +949,13 @@ impl NiceGitApp {
                     .wrap(),
                 );
             });
+        } else if stageable && words {
+            // Said once, so a reader knows why a line cannot be staged here.
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                let verb = if review.as_ref().is_some_and(|r| r.staged) { "unstage" } else { "stage" };
+                ui.add(egui::Label::new(RichText::new(format!("Switch to Unified to {verb} single lines.")).small().color(c.muted)).wrap());
+            });
         }
         let repo = &mut self.repos[self.active];
         let mut block_action = None;
@@ -966,10 +980,11 @@ impl NiceGitApp {
 }
 
 impl NiceGitApp {
-    /// The diff's view controls, laid out from the right: Split and Unified, Hide whitespace,
-    /// and Edit for a working file.
+    /// The diff's view controls, laid out from the right: Split, Unified and Words, Hide
+    /// whitespace, and Edit for a working file.
     fn diff_view_controls(&mut self, ui: &mut egui::Ui, panel_width: f32, editable: Option<String>) {
         let mut split = self.settings.split_diff;
+        let mut words = self.settings.word_diff;
         // A diff with only one side always shows in one column.
         let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
         let narrow = !crate::diff_view::split_fits(panel_width);
@@ -981,15 +996,25 @@ impl NiceGitApp {
         let available = !one_sided && !narrow;
         // The control shows the layout on screen: Unified whenever Split cannot apply,
         // while the saved preference waits for a diff and a panel that suit it.
-        // Only Split is disabled, so the active Unified keeps full emphasis.
-        let shown = split && available;
+        // Only Split is disabled, so the active Unified keeps full emphasis. Words replaces
+        // both, so neither Split nor Unified is shown as active while it is on.
+        let shown = split && available && !words;
         if ui.add_enabled(available, egui::Button::selectable(shown, "Split")).on_disabled_hover_text(reason).clicked() {
             split = true;
+            words = false;
         }
-        if ui.add(egui::Button::selectable(!shown, "Unified")).clicked() && available {
-            split = false;
+        if ui.add(egui::Button::selectable(!shown && !words, "Unified")).clicked() {
+            words = false;
+            if available {
+                split = false;
+            }
+        }
+        // Words works in any panel width, as its lines wrap in one column.
+        if ui.add(egui::Button::selectable(words, "Words")).on_hover_text("Show changed words merged into each line").clicked() {
+            words = true;
         }
         self.settings.split_diff = split;
+        self.settings.word_diff = words;
         let mut ignore = self.settings.ignore_whitespace;
         if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
             self.settings.ignore_whitespace = ignore;

@@ -80,6 +80,8 @@ mod ui_tests_tools;
 mod ui_tests_updates;
 #[cfg(test)]
 mod ui_tests_welcome;
+#[cfg(test)]
+mod ui_tests_word_diff;
 mod updates;
 mod worker;
 
