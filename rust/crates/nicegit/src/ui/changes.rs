@@ -387,6 +387,8 @@ impl NiceGitApp {
                     });
                     // The whole row opens the menu, not only the arrow that opens the folder.
                     let response = ui.interact(row.response.rect, id.with("menu"), egui::Sense::click());
+                    let files = child.count();
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Folder {name}, {files} files")));
                     response.context_menu(|ui| self.folder_menu(ui, child, &path, staged, idle));
                 })
                 .body(|ui| self.folder_rows(ui, child, &path, staged, idle, snapshot, depth + 1));
@@ -465,6 +467,12 @@ impl NiceGitApp {
             matches!(self.repo().map(|r| &r.selection), Some(Selection::Change { entry: e, staged: s }) if e == entry && *s == staged);
         let height = ROW_HEIGHT;
         let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
+        // "src/app.rs, modified, staged": the row is the file, and its buttons are named apart.
+        response.widget_info(|| {
+            let place = if staged { "staged" } else { "unstaged" };
+            egui::WidgetInfo::labeled(egui::Role::ListItem, true, format!("{}, {}, {place}", row_text(entry, label), entry.kind.title()))
+        });
+        widgets::mark_selected(ui.ctx(), response.id, selected);
         if selected {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().selection.bg_fill);
         } else if response.hovered() {
@@ -474,7 +482,11 @@ impl NiceGitApp {
             egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(8.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
         let (glyph, color) = kind_icon(&child, entry.kind);
-        child.label(RichText::new(glyph).color(color)).on_hover_text(entry.kind.title());
+        // The glyph is a private-use character, so it is named by the status it shows.
+        child
+            .label(RichText::new(glyph).color(color))
+            .on_hover_text(entry.kind.title())
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, entry.kind.title()));
         let text = row_text(entry, label);
         let mut stage_clicked = false;
         let mut discard_clicked = false;

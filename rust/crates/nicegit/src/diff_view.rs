@@ -662,6 +662,7 @@ impl View<'_> {
 
     /// Paints one line into `rect`, with a number column for each entry in `numbers`.
     fn paint_line(&self, ui: &Ui, rect: Rect, line: usize, numbers: &[Option<usize>], selected: bool, wrap: bool) {
+        name_line(ui, rect, self, line);
         let painter = ui.painter().with_clip_rect(rect);
         let colors = self.style.colors;
         let diff_line = &self.content.lines[line];
@@ -770,6 +771,44 @@ fn draw_word_row(ui: &mut Ui, row: usize, rect: Rect, view: &View) {
             label.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, word_label(segments)));
             view.paint_merged(ui, rect, [*old_line, *new_line], segments);
         }
+    }
+}
+
+/// Gives a painted line a label for screen readers, such as "Added line 12: fn main() {". The
+/// text is painted rather than a widget, so this hover-only widget carries it. The label is built
+/// only while a screen reader listens.
+fn name_line(ui: &Ui, rect: Rect, view: &View, line: usize) {
+    let response = ui.interact(rect, view.drag_id.with(("line text", line)), Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, line_label(&view.content.lines[line])));
+}
+
+/// What a screen reader says for one line of a diff: its kind, its number, then its text.
+fn line_label(line: &DiffLine) -> String {
+    let (kind, number) = match line.kind {
+        DiffLineKind::Hunk => return hunk_label(&line.text),
+        DiffLineKind::Metadata => return line.text.clone(),
+        DiffLineKind::Addition => ("Added line", line.new_number),
+        DiffLineKind::Deletion => ("Removed line", line.old_number),
+        DiffLineKind::Context => ("Line", line.new_number.or(line.old_number)),
+    };
+    // The text keeps the diff's marker in front of the code: "+", "-" or a space.
+    let code = line.text.strip_prefix(['+', '-', ' ']).unwrap_or(&line.text);
+    match number {
+        Some(number) => format!("{kind} {number}: {code}"),
+        None => format!("{kind}: {code}"),
+    }
+}
+
+/// "Hunk at lines 10 to 20" for a header such as "@@ -8,3 +10,11 @@", from its new-file range.
+fn hunk_label(header: &str) -> String {
+    let range = header.split_whitespace().find_map(|token| token.strip_prefix('+')).unwrap_or_default();
+    let mut parts = range.split(',');
+    let start = parts.next().and_then(|start| start.parse::<usize>().ok());
+    let count = parts.next().and_then(|count| count.parse::<usize>().ok()).unwrap_or(1);
+    match start {
+        Some(start) if count > 1 => format!("Hunk at lines {start} to {}", start + count - 1),
+        Some(start) => format!("Hunk at line {start}"),
+        None => header.to_string(),
     }
 }
 

@@ -818,7 +818,7 @@ fn save_a_commit_as_a_patch_and_apply_it_again() {
     wait(&mut harness, "the Apply patch window", |h| h.state().tools.iter().any(|tool| tool.id() == "apply-patch"));
     crate::file_dialog::answer_next(&patch);
     harness.get_by_role_and_label(Role::Button, "Choose file…").click();
-    wait(&mut harness, "the preview", |h| h.query_by_label_contains("Applies cleanly").is_some());
+    wait(&mut harness, "the preview", |h| h.query_all_by_label_contains("Applies cleanly").next().is_some());
     // A saved commit is a mailbox patch, which applies as commits by default; this test wants the change back unstaged.
     harness.get_by_role_and_label(Role::RadioButton, "Apply as unstaged changes").click();
     settle(&mut harness);
@@ -1829,7 +1829,7 @@ fn publish_a_branch_from_the_command_palette() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("publish".into()));
-    wait(&mut harness, "the publish command", |h| h.query_by_label_contains("Publish branch").is_some());
+    wait(&mut harness, "the publish command", |h| h.query_all_by_label_contains("Publish branch").next().is_some());
     harness.key_press(Key::Enter);
     wait(&mut harness, "the publish dialog", |h| shows(h, "Push main to a remote and track it there."));
     harness.query_all(By::new().role(Role::Button).label("Publish")).last().expect("the dialog's Publish").click();
@@ -2060,7 +2060,7 @@ fn a_change_in_the_diff_can_be_staged_or_discarded_on_its_own_and_the_discard_un
     idle(&mut harness);
     let discarded = original.replace("line 3\n", "three\n");
     wait(&mut harness, "the change discarded", |_| std::fs::read_to_string(path.join("long.txt")).unwrap() == discarded);
-    wait(&mut harness, "Undo discard", |h| h.query_by_label_contains("Undo discard").is_some());
+    wait(&mut harness, "Undo discard", |h| h.query_all_by_label_contains("Undo discard").next().is_some());
     harness.get_by_label_contains("Undo discard").click();
     idle(&mut harness);
     wait(&mut harness, "the change restored", |_| std::fs::read_to_string(path.join("long.txt")).unwrap() == edited);
@@ -2211,7 +2211,7 @@ fn a_failed_background_fetch_shows_quietly_in_the_status_bar() {
     });
     assert!(harness.state().notice.is_none(), "no error message pops up");
     settle(&mut harness);
-    assert!(harness.query_by_label_contains("Couldn't fetch").is_some());
+    assert!(harness.query_all_by_label_contains("Couldn't fetch").next().is_some());
 
     // Turned off, it does not run again.
     let app = harness.state_mut();
@@ -2228,7 +2228,7 @@ fn the_keyboard_shortcuts_open_from_the_keyboard_the_palette_and_settings() {
     let repo = repository();
     let mut harness = open(repo.path());
     loaded(&mut harness);
-    let shown = |h: &App| h.query_by_label_contains("previous or next changed file").is_some();
+    let shown = |h: &App| h.query_all_by_label_contains("previous or next changed file").next().is_some();
 
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Slash);
     wait(&mut harness, "the shortcuts from the keyboard", shown);
@@ -2325,7 +2325,7 @@ fn a_changed_file_opens_in_its_default_app_from_its_menu() {
     loaded(&mut harness);
     crate::ui::changes::OPENED.with(|opened| opened.borrow_mut().clear());
     harness.get_by_label("notes.txt").click_secondary();
-    wait(&mut harness, "the file's menu", |h| h.query_by_label_contains("Open in default app").is_some());
+    wait(&mut harness, "the file's menu", |h| h.query_all_by_label_contains("Open in default app").next().is_some());
     harness.get_by_label_contains("Open in default app").click();
     settle(&mut harness);
     let opened = crate::ui::changes::OPENED.with(|opened| opened.borrow().clone());
@@ -2471,7 +2471,7 @@ fn lines_of_a_new_file_can_be_staged_on_their_own() {
     wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
 
     select_line(&mut harness, "+two");
-    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Stage selected lines").is_some());
+    wait(&mut harness, "the selection bar", |h| h.query_all_by_label_contains("Stage selected lines").next().is_some());
     harness.get_by_label_contains("Stage selected lines").click();
     idle(&mut harness);
     wait(&mut harness, "the staged line", |_| git(path, &["show", ":new.txt"]) == "two");
@@ -2490,13 +2490,13 @@ fn selected_lines_can_be_discarded_and_the_discard_undone() {
     wait(&mut harness, "stageable lines", |h| h.state().repo().is_some_and(|r| r.diff_options.selectable));
 
     select_line(&mut harness, "+third");
-    wait(&mut harness, "the selection bar", |h| h.query_by_label_contains("Discard selected lines").is_some());
+    wait(&mut harness, "the selection bar", |h| h.query_all_by_label_contains("Discard selected lines").next().is_some());
     harness.get_by_label_contains("Discard selected lines").click();
     wait(&mut harness, "the confirmation", |h| h.state().dialog.is_some());
     harness.get_all_by_label("Discard").last().expect("the confirm button").click();
     idle(&mut harness);
     wait(&mut harness, "the line discarded", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == "first\nsecond\nfourth\n");
-    wait(&mut harness, "Undo discard", |h| h.query_by_label_contains("Undo discard").is_some());
+    wait(&mut harness, "Undo discard", |h| h.query_all_by_label_contains("Undo discard").next().is_some());
     harness.get_by_label_contains("Undo discard").click();
     idle(&mut harness);
     wait(&mut harness, "the line restored", |_| std::fs::read_to_string(path.join("notes.txt")).unwrap() == edited);
@@ -2764,7 +2764,7 @@ fn copy_the_message_from_the_inspector_menu() {
     });
     settle(&mut harness);
 
-    harness.get_by_label(icon::DOTS_THREE).click();
+    harness.get_by_label("More actions for this commit").click();
     settle(&mut harness);
     harness.get_by_label_contains(&format!("{}  Copy", icon::COPY)).click();
     settle(&mut harness);
@@ -3167,7 +3167,7 @@ fn a_repository_tabs_menu_closes_others_copies_and_reveals_its_path() {
 
     let second_name = folder_name(second.path());
     harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
-    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Close other tabs").is_some());
+    wait(&mut harness, "the tab menu", |h| h.query_all_by_label_contains("Close other tabs").next().is_some());
     settle(&mut harness);
     harness.get_by_label_contains("Close other tabs").click();
     wait(&mut harness, "the other tabs to close", |h| h.state().repos.len() == 1);
@@ -3176,7 +3176,7 @@ fn a_repository_tabs_menu_closes_others_copies_and_reveals_its_path() {
 
     crate::ui::changes::REVEALED.with(|revealed| revealed.borrow_mut().clear());
     harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
-    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Show in file manager").is_some());
+    wait(&mut harness, "the tab menu", |h| h.query_all_by_label_contains("Show in file manager").next().is_some());
     settle(&mut harness);
     harness.get_by_label_contains("Show in file manager").click();
     wait(&mut harness, "the file manager", |_| crate::ui::changes::REVEALED.with(|revealed| !revealed.borrow().is_empty()));
@@ -3185,7 +3185,7 @@ fn a_repository_tabs_menu_closes_others_copies_and_reveals_its_path() {
     assert!(same_folder(&revealed[0], second.path()), "the repository's folder is shown");
 
     harness.get_all_by_label(&second_name).next().unwrap().click_secondary();
-    wait(&mut harness, "the tab menu", |h| h.query_by_label_contains("Copy path").is_some());
+    wait(&mut harness, "the tab menu", |h| h.query_all_by_label_contains("Copy path").next().is_some());
     settle(&mut harness);
     harness.get_by_label_contains("Copy path").click();
     let mut copied = None;

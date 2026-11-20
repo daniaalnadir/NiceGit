@@ -296,6 +296,13 @@ pub struct Settings {
     pub auto_fetch_minutes: u32,
     /// How large the whole interface is drawn: 1.0 is normal size.
     pub zoom: f32,
+    /// Whether the interface is drawn a quarter larger again, for people who find text small. The
+    /// size itself is kept in `zoom`; this records the choice for the Settings checkbox.
+    #[serde(default)]
+    pub larger_text: bool,
+    /// Whether animations are switched off, such as the fades and the eased motion of panels.
+    #[serde(default)]
+    pub reduce_motion: bool,
     /// The command that opens a file in the person's own editor, such as `code` or `zed`; the
     /// file's path is added after it. Empty when none is set.
     pub external_editor: String,
@@ -434,6 +441,8 @@ impl Default for Settings {
             graph_palette: GraphPalette::Standard,
             split_diff: false,
             word_diff: false,
+            larger_text: false,
+            reduce_motion: false,
             syntax_highlighting: true,
             ignore_whitespace: false,
             auto_refresh: true,

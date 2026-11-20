@@ -18,6 +18,9 @@ struct IssueLinkDraft {
 }
 
 /// Where the draft rule is kept while the Settings window is open.
+/// How much larger "Larger text" draws the interface, on top of its zoom.
+const LARGER_TEXT: f32 = 1.25;
+
 fn issue_link_draft_id() -> egui::Id {
     egui::Id::unique("issue_link_draft")
 }
@@ -48,7 +51,9 @@ impl NiceGitApp {
         // The window never grows past the app's window: its title bar, with the close button, stays
         // on screen and the settings scroll beneath it.
         let max_height = (ctx.content_rect().height() - 190.0).max(200.0);
+        let window_id = egui::Id::unique("settings window");
         egui::Window::new("Settings")
+            .id(window_id)
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -304,6 +309,24 @@ impl NiceGitApp {
                     crate::app::restore_panel_widths(ctx);
                     self.settings.history_columns.widths.clear();
                 }
+                ui.add_space(10.0);
+                widgets::section(ui, "Accessibility");
+                let mut larger = self.settings.larger_text;
+                let larger_box = widgets::checkbox(ui, true, &mut larger, "Larger text")
+                    .on_hover_text("Draws the interface a quarter larger again, on top of the interface size");
+                if larger_box.changed() {
+                    self.settings.larger_text = larger;
+                    let zoom = ctx.zoom_factor();
+                    let zoom = if larger { zoom * LARGER_TEXT } else { zoom / LARGER_TEXT };
+                    ctx.set_zoom_factor(zoom.clamp(crate::app::MIN_ZOOM, crate::app::MAX_ZOOM));
+                }
+                let mut reduce = self.settings.reduce_motion;
+                let reduce_box = widgets::checkbox(ui, true, &mut reduce, "Reduce motion")
+                    .on_hover_text("Switches off the fades and eased movements in the interface");
+                if reduce_box.changed() {
+                    self.settings.reduce_motion = reduce;
+                    crate::theme::set_reduce_motion(ctx, reduce);
+                }
               });
                 // The version and shortcuts stay below the scrolling settings, always in view.
                 ui.separator();
@@ -325,6 +348,7 @@ impl NiceGitApp {
                     });
                 });
             });
+        widgets::name_window_title(ctx, window_id, "Settings");
         if reload_diff {
             self.reload_diff();
         }

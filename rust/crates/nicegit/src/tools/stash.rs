@@ -207,7 +207,9 @@ impl StashWindow {
         widgets::section(ui, "Save");
         ui.add_space(4.0);
         let hint = format!("WIP on {}", cx.snapshot.current_branch);
-        widgets::text_field(ui, &mut self.message, &hint);
+        let field = widgets::text_field(ui, &mut self.message, &hint);
+        // Read as the message the stash is saved with, which the hint only suggests.
+        widgets::name_text_field(&field, "Stash message");
         ui.add_space(4.0);
 
         ui.horizontal(|ui| {

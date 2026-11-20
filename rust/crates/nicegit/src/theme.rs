@@ -295,6 +295,16 @@ fn visuals(dark: bool) -> Visuals {
     visuals
 }
 
+/// egui's own animation time, which the interface uses unless reduced motion is on.
+const ANIMATION_TIME: f32 = 1.0 / 12.0;
+
+/// Switches the interface's animations off, or back on, for every theme. Only the animation time
+/// changes, so the colours and the rest of the style stay as they are.
+pub fn set_reduce_motion(ctx: &egui::Context, reduce: bool) {
+    let time = if reduce { 0.0 } else { ANIMATION_TIME };
+    ctx.all_styles_mut(|style| style.animation_time = time);
+}
+
 pub fn apply(ctx: &egui::Context, appearance: Appearance) {
     let theme = match appearance {
         Appearance::System => egui::ThemePreference::System,

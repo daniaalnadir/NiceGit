@@ -220,7 +220,7 @@ pub(crate) fn toolbar_button(harness: &mut Harness<'static, NiceGitApp>, label: 
 }
 
 pub(crate) fn has_label(harness: &Harness<'static, NiceGitApp>, label: &str) -> bool {
-    harness.query_by_label_contains(label).is_some()
+    harness.query_all_by_label_contains(label).next().is_some()
 }
 
 #[test]
@@ -450,7 +450,7 @@ fn resolve_a_merge_conflict_in_the_editor() {
     // Open the conflict editor from the banner and keep the current version.
     harness.get_by_label_contains("  notes.txt").click();
     wait(&mut harness, "the conflict editor", |h| h.state().tools.iter().any(|t| t.id().starts_with("conflict:")));
-    wait(&mut harness, "the conflict to load", |h| h.query_by_label_contains("Take current").is_some());
+    wait(&mut harness, "the conflict to load", |h| h.query_all_by_label_contains("Take current").next().is_some());
     // Wait until the window has finished sizing itself, so the button stays where it was found.
     let mut last = harness.get_by_label_contains("Take current").rect();
     for _ in 0..30 {
@@ -614,7 +614,7 @@ fn palette_go_to_upstream_selects_the_upstream_tip() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("go to upstream".into()));
-    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    wait(&mut harness, "the go to upstream command", |h| h.query_all_by_label_contains("Go to upstream").next().is_some());
     harness.key_press(Key::Enter);
     idle(&mut harness);
     settle(&mut harness);
@@ -631,7 +631,7 @@ fn palette_go_to_upstream_is_disabled_without_an_upstream() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("go to upstream".into()));
-    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    wait(&mut harness, "the go to upstream command", |h| h.query_all_by_label_contains("Go to upstream").next().is_some());
     harness.key_press(Key::Enter);
     settle(&mut harness);
     // A disabled command cannot be chosen, so the palette stays open and nothing is selected.
@@ -659,7 +659,7 @@ fn go_to_upstream_says_when_its_commit_is_not_loaded() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("go to upstream".into()));
-    wait(&mut harness, "the go to upstream command", |h| h.query_by_label_contains("Go to upstream").is_some());
+    wait(&mut harness, "the go to upstream command", |h| h.query_all_by_label_contains("Go to upstream").next().is_some());
     harness.key_press(Key::Enter);
     wait(&mut harness, "the notice", |h| {
         h.state().notice.as_ref().is_some_and(|n| n.text.starts_with("origin/main's latest commit isn't in the loaded history."))
@@ -814,7 +814,7 @@ fn track_and_untrack_an_lfs_pattern() {
         // Without git-lfs, Git would commit matching files in full, so tracking is refused
         // and the window says why.
         assert!(format!("{:?}", harness.get_by_label("Track")).contains("disabled: true"));
-        assert!(harness.query_by_label_contains("Git LFS is not installed").is_some());
+        assert!(harness.query_all_by_label_contains("Git LFS is not installed").next().is_some());
         return;
     }
     harness.get_by_label("Track").click();
@@ -841,9 +841,9 @@ fn lfs_locks_say_why_they_cannot_be_read_without_a_remote() {
     repository_menu(&mut harness, &folder_name(repo.path()), "Git LFS");
     wait(&mut harness, "the LFS window", |h| h.query_by_label("LFS pattern").is_some());
     let reason = if lfs_installed { "This repository has no remote" } else { "Git LFS is missing" };
-    wait(&mut harness, "the locks message", |h| h.query_by_label_contains("file locks cannot be read").is_some());
-    assert!(harness.query_by_label_contains(reason).is_some(), "the locks section says why: {reason}");
-    assert!(harness.query_by_label_contains("Refresh").is_some(), "the locks section has a Refresh button");
+    wait(&mut harness, "the locks message", |h| h.query_all_by_label_contains("file locks cannot be read").next().is_some());
+    assert!(harness.query_all_by_label_contains(reason).next().is_some(), "the locks section says why: {reason}");
+    assert!(harness.query_all_by_label_contains("Refresh").next().is_some(), "the locks section has a Refresh button");
 }
 
 #[test]
@@ -1039,19 +1039,19 @@ fn github_pull_requests_and_issues_load_from_github() {
     assert!(loaded >= 1, "the sidebar counts loaded pull requests");
     // The window offers closed and merged pull requests and the Issues tab.
     harness.get_by_label("Open GitHub window").click();
-    wait(&mut harness, "pull requests from GitHub", |h| h.query_by_label_contains("Open in browser").is_some());
+    wait(&mut harness, "pull requests from GitHub", |h| h.query_all_by_label_contains("Open in browser").next().is_some());
     assert!(harness.query_all_by_label_contains("Port NiceGit to Rust").next().is_some(), "lists the open pull request");
     // Closed and merged pull requests load when chosen, such as #33.
     settle(&mut harness);
     harness.get_by_label("Merged").click();
-    wait(&mut harness, "merged pull requests", |h| h.query_by_label_contains("Rewrite the README").is_some());
+    wait(&mut harness, "merged pull requests", |h| h.query_all_by_label_contains("Rewrite the README").next().is_some());
     // The Issues tab loads too; this project may have none, which shows an empty state.
     settle(&mut harness);
     harness.get_by_label_contains("Issues").click();
     wait(&mut harness, "issues from GitHub", |h| {
-        h.query_by_label_contains("Open in browser").is_some()
-            || h.query_by_label_contains("No open issues").is_some()
-            || h.query_by_label_contains("No issues").is_some()
+        h.query_all_by_label_contains("Open in browser").next().is_some()
+            || h.query_all_by_label_contains("No open issues").next().is_some()
+            || h.query_all_by_label_contains("No issues").next().is_some()
     });
 }
 

@@ -310,7 +310,7 @@ fn palette_switches_to_a_branch_by_its_name() {
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     // Typed in full: "feature" alone also matches Request a feature, which now ranks first.
     harness.event(egui::Event::Text("switch to feature".into()));
-    wait(&mut harness, "the switch command", |h| h.query_by_label_contains("Switch to feature").is_some());
+    wait(&mut harness, "the switch command", |h| h.query_all_by_label_contains("Switch to feature").next().is_some());
     harness.key_press(Key::Enter);
     idle(&mut harness);
     assert_eq!(git(path, &["branch", "--show-current"]), "feature");
@@ -333,7 +333,7 @@ fn palette_reopens_a_recent_repository_after_its_tab_closes() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text(format!("open {first_name}")));
-    wait(&mut harness, "the reopen command", |h| h.query_by_label_contains(&format!("Open {first_name}")).is_some());
+    wait(&mut harness, "the reopen command", |h| h.query_all_by_label_contains(&format!("Open {first_name}")).next().is_some());
     harness.key_press(Key::Enter);
     loaded(&mut harness);
     assert_eq!(harness.state().repos.len(), 2, "the repository opens in a new tab");
@@ -359,7 +359,7 @@ fn palette_undoes_the_last_commit() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("undo".into()));
-    wait(&mut harness, "the undo command", |h| h.query_by_label_contains("Undo commit").is_some());
+    wait(&mut harness, "the undo command", |h| h.query_all_by_label_contains("Undo commit").next().is_some());
     harness.key_press(Key::Enter);
     // Undo asks first, as it does from the toolbar.
     wait(&mut harness, "the undo confirmation", |h| h.state().dialog.is_some());
@@ -576,7 +576,7 @@ fn undo_history_names_each_commit_newest_first() {
     commit_notes(&mut harness, path, "first\nsecond\nthird\nfourth\n", "Add a fourth line");
     settle(&mut harness);
     harness.get_by_label("Undo history options").click();
-    wait(&mut harness, "the undo steps", |h| h.query_by_label_contains("Commit: Add a fourth line").is_some());
+    wait(&mut harness, "the undo steps", |h| h.query_all_by_label_contains("Commit: Add a fourth line").next().is_some());
 
     // Each step names its commit. The list is drawn top down, so the newest sits above the older one.
     let top = |h: &App, summary: &str| h.query_by_label_contains(&format!("Commit: {summary}")).map(|node| node.rect().min.y);
@@ -634,8 +634,8 @@ fn status_bar_shows_the_current_branchs_pull_request_and_checks() {
     settle(&mut harness);
     harness.state_mut().repos[0].pr_status = Some(("main".into(), crate::tools::Task::ready(Ok(Some(sample_pull_request())))));
     settle(&mut harness);
-    assert!(harness.query_by_label_contains("PR #12").is_some(), "the status bar names the pull request");
-    assert!(harness.query_by_label_contains(&format!("{} 5", icon::CHECK)).is_some(), "and its passed checks");
+    assert!(harness.query_all_by_label_contains("PR #12").next().is_some(), "the status bar names the pull request");
+    assert!(harness.query_all_by_label_contains(&format!("{} 5", icon::CHECK)).next().is_some(), "and its passed checks");
 
     crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());
     harness.get_by_label_contains("PR #12").click();
@@ -671,7 +671,7 @@ fn status_bar_shows_the_current_branchs_gitlab_merge_request_and_its_pipeline() 
     merge_request.url = "https://gitlab.com/group/proj/-/merge_requests/7".into();
     harness.state_mut().repos[0].pr_status = Some(("main".into(), crate::tools::Task::ready(Ok(Some(merge_request)))));
     settle(&mut harness);
-    assert!(harness.query_by_label_contains("MR !7").is_some(), "the status bar names the merge request with !");
+    assert!(harness.query_all_by_label_contains("MR !7").next().is_some(), "the status bar names the merge request with !");
     assert!(harness.query_by_label_contains("PR #7").is_none(), "not as a GitHub pull request");
 
     crate::ui::changes::OPENED_URLS.with(|opened| opened.borrow_mut().clear());

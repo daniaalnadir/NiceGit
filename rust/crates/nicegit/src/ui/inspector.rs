@@ -61,10 +61,11 @@ impl NiceGitApp {
                     if let Some(commit) = &summary {
                         let commit = commit.clone();
                         let snapshot = snapshot.clone();
-                        ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| {
+                        let menu = ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| {
                             let can_switch = self.idle() && snapshot.operation.is_none();
                             self.commit_menu(ui, &commit, &snapshot, can_switch);
                         });
+                        crate::tools::widgets::name_icon(&menu.response, "More actions for this commit");
                     }
                 });
             });

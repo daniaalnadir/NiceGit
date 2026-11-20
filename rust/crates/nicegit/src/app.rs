@@ -405,6 +405,9 @@ pub struct Repo {
     /// The last discards that can be reversed, newest last (at most 20).
     pub discard_undo: Vec<DiscardUndo>,
     pub scroll_to_selection: bool,
+    /// Counts down the frames until the row an arrow key selected takes keyboard focus, so a screen
+    /// reader announces it. An arrow key sets it to 2; each frame lowers it by one.
+    pub focus_row_in: u8,
     /// A bisect in progress, read after each refresh.
     pub bisect: Option<Task<Option<nicegit_core::bisect::BisectStatus>>>,
     /// Submodules recorded in the index, read after each refresh.
@@ -588,6 +591,7 @@ impl Repo {
             redo: Vec::new(),
             discard_undo: Vec::new(),
             scroll_to_selection: false,
+            focus_row_in: 0,
             bisect: None,
             submodules: None,
             line_counts: None,
@@ -894,6 +898,8 @@ impl NiceGitApp {
             self.settings.zoom = zoom;
         } else {
             ctx.set_zoom_factor(self.settings.zoom.clamp(MIN_ZOOM, MAX_ZOOM));
+            // The saved accessibility choices apply from the first frame.
+            crate::theme::set_reduce_motion(ctx, self.settings.reduce_motion);
             self.zoom_applied = true;
         }
     }
@@ -2920,8 +2926,10 @@ impl NiceGitApp {
                 980.0
             };
             let size = egui::vec2(width, wanted.y).min(screen.size() - egui::vec2(40.0, 60.0));
-            egui::Window::new(tool.title())
-                .id(egui::Id::unique(("tool", tool.id())))
+            let window_id = egui::Id::unique(("tool", tool.id()));
+            let title = tool.title();
+            egui::Window::new(title.as_str())
+                .id(window_id)
                 .pivot(egui::Align2::CENTER_CENTER)
                 .default_pos(screen.center())
                 .default_size(size)
@@ -2938,6 +2946,7 @@ impl NiceGitApp {
                     cx.editor_unsaved = editor_unsaved;
                     tool.ui(ui, &mut cx);
                 });
+            crate::tools::widgets::name_window_title(ctx, window_id, &title);
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {
                 closed.push(index);
             } else if !open {

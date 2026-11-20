@@ -128,8 +128,14 @@ impl NiceGitApp {
                 repo.change_filter.clear();
             }
         }
-        // Arrow keys, Home and End move through the graph when no text field has focus.
-        let typing = ctx.memory(|m| m.focused().is_some());
+        // The row a keyboard move selected takes focus in the frame after the move (see history).
+        if let Some(repo) = self.repo_mut() {
+            repo.focus_row_in = repo.focus_row_in.saturating_sub(1);
+        }
+        // Arrow keys, Home and End move through the graph when no text field has focus. A graph row
+        // that a keyboard move focused still takes them.
+        let focused = ctx.memory(|m| m.focused());
+        let typing = focused.is_some_and(|id| ctx.data(|d| d.get_temp::<egui::Id>(history::focused_row_key())) != Some(id));
         if !typing && self.dialog.is_none() && self.palette.is_none() {
             let (up, down, home, end, escape) = ctx.input(|i| {
                 (
@@ -202,6 +208,7 @@ impl NiceGitApp {
         }
         if let Some(repo) = self.repo_mut() {
             repo.scroll_to_selection = true;
+            repo.focus_row_in = 2;
         }
     }
 

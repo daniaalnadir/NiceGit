@@ -227,7 +227,9 @@ impl NiceGitApp {
                 ui.add(egui::Label::new(RichText::new(&path).strong()).truncate()).on_hover_text(&path);
                 ui.label(RichText::new(format!("in {}", short(&hash))).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| self.tree_file_menu(ui, &hash, &path, submodule));
+                    let menu =
+                        ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| self.tree_file_menu(ui, &hash, &path, submodule));
+                    crate::tools::widgets::name_icon(&menu.response, "More actions for this file");
                 });
             });
         });

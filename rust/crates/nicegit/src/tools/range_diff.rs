@@ -227,7 +227,8 @@ impl ToolWindow for RangeDiffWindow {
 /// One labelled revision field, in monospace, which keeps a long object ID readable.
 fn revision_row(ui: &mut Ui, label: &str, value: &mut String) {
     ui.label(label);
-    ui.add(egui::TextEdit::singleline(value).font(TextStyle::Monospace).desired_width(320.0));
+    let field = ui.add(egui::TextEdit::singleline(value).font(TextStyle::Monospace).desired_width(320.0));
+    widgets::name_text_field(&field, label);
     ui.end_row();
 }
 
