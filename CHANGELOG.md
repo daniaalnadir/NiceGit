@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
+
 ## 2.2.0 - Reshape your history
 
 NiceGit 2.2 adds ways to reshape and understand history: split a commit, drag commits onto a
