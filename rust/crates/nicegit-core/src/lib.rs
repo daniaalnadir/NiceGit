@@ -22,6 +22,7 @@ pub mod file_history;
 pub mod git_config;
 pub mod gitflow;
 pub mod github;
+pub mod github_review;
 pub mod gitlab;
 pub mod graph;
 pub mod hosting;
