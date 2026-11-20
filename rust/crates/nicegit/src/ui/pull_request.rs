@@ -494,6 +494,10 @@ impl NiceGitApp {
                 });
                 // Creating a pull request gives no new snapshot, so its status is read here.
                 self.refresh_pr_status(self.active);
+                // The new request's branch checks are read again too.
+                if let Some(repo) = self.repos.get_mut(self.active) {
+                    repo.open_requests_at = None;
+                }
             }
         }
     }

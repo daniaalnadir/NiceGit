@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
+- A dot on each branch with an open pull or merge request shows whether its checks passed, failed, or are pending, on the graph and in the sidebar; click it to see the checks. Turn it off in Settings.
 
 ## 2.2.0 - Reshape your history
 

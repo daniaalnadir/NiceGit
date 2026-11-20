@@ -326,12 +326,41 @@ pub fn pull_request_target(
     // The upstream is a full ref; only a remote-tracking branch has a remote to compare on.
     let upstream = branch.upstream.as_deref()?.strip_prefix("refs/remotes/")?;
     let (remote, remote_branch) = split_remote(snapshot, upstream)?;
-    let repository = match hosted_repository_for_remote(snapshot, remote, hosts)? {
-        HostedRepository { kind: Host::GitHub, .. } => Forge::GitHub(github_repository_for_remote(snapshot, remote, hosts.github)?),
-        hosted if hosted.kind == Host::GitLab => Forge::GitLab(hosted),
-        _ => return None,
-    };
+    let repository = forge_for_remote(snapshot, remote, hosts)?;
     Some(PullRequestTarget { repository, remote: remote.to_string(), remote_branch: remote_branch.to_string() })
+}
+
+/// The GitHub or GitLab repository behind a remote. Other hosts have no forge here, so they give none.
+pub fn forge_for_remote(snapshot: &nicegit_core::Snapshot, remote: &str, hosts: ListedHosts) -> Option<Forge> {
+    match hosted_repository_for_remote(snapshot, remote, hosts)? {
+        HostedRepository { kind: Host::GitHub, .. } => github_repository_for_remote(snapshot, remote, hosts.github).map(Forge::GitHub),
+        hosted if hosted.kind == Host::GitLab => Some(Forge::GitLab(hosted)),
+        _ => None,
+    }
+}
+
+/// The remote whose open pull or merge requests the branch checks read, with its forge. It is the
+/// current branch's upstream remote when that is a GitHub or GitLab remote, else `origin`, else the
+/// only such remote. Nothing is chosen when there is none, or when several are and none is origin.
+pub fn listing_forge(snapshot: &nicegit_core::Snapshot, hosts: ListedHosts) -> Option<(String, Forge)> {
+    let upstream = snapshot
+        .current()
+        .and_then(|branch| branch.upstream.as_deref())
+        .and_then(|upstream| upstream.strip_prefix("refs/remotes/"))
+        .and_then(|upstream| split_remote(snapshot, upstream))
+        .map(|(remote, _)| remote.to_string());
+    let forge = |remote: String| forge_for_remote(snapshot, &remote, hosts).map(|forge| (remote, forge));
+    if let Some(found) = upstream.and_then(forge) {
+        return Some(found);
+    }
+    if let Some(found) = forge("origin".to_string()) {
+        return Some(found);
+    }
+    let mut all = snapshot.remotes.iter().filter_map(|remote| forge(remote.clone()));
+    match (all.next(), all.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
 }
 
 /// The browser page for a local branch's pull or merge request, when its upstream is on a supported

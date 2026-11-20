@@ -339,6 +339,10 @@ pub struct Settings {
     /// Whether the commit graph labels commits with their tags.
     #[serde(default = "default_true")]
     pub show_tag_labels: bool,
+    /// Whether branches with an open pull or merge request show its checks as a dot, on the graph
+    /// and in the sidebar. Turning it off also stops reading the requests.
+    #[serde(default = "default_true")]
+    pub show_branch_checks: bool,
     /// Whether the commit graph draws each stash as a row above the commit it was made on.
     #[serde(default)]
     pub show_stashes: bool,
@@ -444,6 +448,7 @@ impl Default for Settings {
             history_scope: HistoryScope::All,
             show_remote_labels: true,
             show_tag_labels: true,
+            show_branch_checks: true,
             show_stashes: false,
             diff_context: DiffContextSetting::default(),
             clone_folder: None,
@@ -705,6 +710,23 @@ mod tests {
         storage.set_string(STORAGE_KEY, older);
         let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
         assert!(loaded.show_remote_labels && loaded.show_tag_labels && !loaded.show_stashes);
+    }
+
+    #[test]
+    fn branch_checks_are_shown_by_default_and_the_choice_is_kept() {
+        assert!(Settings::default().show_branch_checks);
+        let mut storage = MemoryStorage::default();
+        let settings = Settings { show_branch_checks: false, ..Settings::default() };
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("saved settings");
+        assert!(!loaded.show_branch_checks);
+        // A file saved before the setting existed shows the checks.
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        let older = saved.replacen(",show_branch_checks:false", "", 1);
+        assert_ne!(older, saved, "the field is in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.show_branch_checks);
     }
 
     #[test]
