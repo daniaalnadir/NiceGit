@@ -118,11 +118,6 @@ pub enum Pending {
         expected_remote_tip: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
-    ApplyPatch {
-        file: std::path::PathBuf,
-        branch: String,
-        head: Option<String>,
-    },
     Undo,
     Redo,
     RestoreFile {
@@ -764,6 +759,8 @@ impl NiceGitApp {
         let mut integrate: Option<bool> = None;
         // The Clone dialog's "From GitHub…" button asks for the picker, which is drawn over the dialog.
         let mut open_picker = false;
+        // The force push confirmation's "Compare with remote" link: the remote tip and the local tip.
+        let mut compare_remote: Option<(String, String)> = None;
         let picker_open = self.clone_picker.is_some();
         let published = self.head_published();
         let mut snapshot_commits: Vec<(String, String)> = Vec::new();
@@ -782,6 +779,12 @@ impl NiceGitApp {
                     });
                     ui.add_space(8.0);
                     ui.label(message.as_str());
+                    // A force push can be compared with the remote tip it would replace.
+                    if let Pending::ForcePush { expected_remote_tip, head, .. } = pending {
+                        if ui.link("Compare with remote").on_hover_text("Shows which commits the remote would lose").clicked() {
+                            compare_remote = Some((expected_remote_tip.clone(), head.clone()));
+                        }
+                    }
                     // A custom action's exact command: the program, then each argument on its own line.
                     if let Pending::RunCustomAction { program, arguments, .. } = pending {
                         ui.add_space(8.0);
@@ -1305,6 +1308,11 @@ impl NiceGitApp {
                 None => {}
             }
         }
+        // The link leaves the confirmation open. The comparison window then takes the next click,
+        // which, as with any click outside the confirmation, closes it.
+        if let Some((old, new)) = compare_remote {
+            self.open_tool(Box::new(crate::tools::range_diff::RangeDiffWindow::new(crate::tools::range_diff::Start::Tips { old, new })));
+        }
         if let (Some(rebase), Dialog::Integrate { source }) = (integrate, &dialog) {
             let source = source.clone();
             if rebase {
@@ -1569,11 +1577,6 @@ impl NiceGitApp {
                     client.force_push(&snapshot, &expected_remote_tip, path).map(|_| Some(format!("Force pushed {branch} to {upstream}.")))
                 })
             }
-            Pending::ApplyPatch { file, branch, head } => self.act("Apply patch", move |client, path| {
-                client.require_checkout(&branch, head.as_deref(), "apply", path)?;
-                let contents = std::fs::read(&file).map_err(|e| nicegit_core::GitError::failed("apply", e.to_string()))?;
-                client.apply_patch(&contents, path).map(|_| Some("Applied the patch. Its changes are unstaged.".into()))
-            }),
             Pending::RestoreFile { path, source, branch, head } => self.act("Restore file", move |client, repo| {
                 client
                     .restore(&path, &source, &branch, head.as_deref(), repo)

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod claude;
 mod conventional;
 mod custom_actions;
 mod diff_view;
@@ -28,6 +29,12 @@ mod ui_screenshots;
 mod ui_tests;
 #[cfg(test)]
 mod ui_tests_absorb;
+#[cfg(test)]
+mod ui_tests_ai_message;
+#[cfg(test)]
+mod ui_tests_apply_patch;
+#[cfg(test)]
+mod ui_tests_branch_checks;
 #[cfg(test)]
 mod ui_tests_clone;
 #[cfg(test)]
@@ -67,6 +74,8 @@ mod ui_tests_parity_f;
 #[cfg(test)]
 mod ui_tests_perf;
 #[cfg(test)]
+mod ui_tests_range_diff;
+#[cfg(test)]
 mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_speed;
@@ -80,6 +89,8 @@ mod ui_tests_tools;
 mod ui_tests_updates;
 #[cfg(test)]
 mod ui_tests_welcome;
+#[cfg(test)]
+mod ui_tests_word_diff;
 mod updates;
 mod worker;
 
