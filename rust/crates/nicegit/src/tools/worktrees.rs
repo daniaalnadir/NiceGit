@@ -2,6 +2,7 @@
 //! Linked worktrees: listing them, opening and removing them, forgetting missing ones, and
 //! creating a new one for a local branch.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
@@ -62,9 +63,9 @@ impl WorktreesWindow {
         let idle = cx.idle;
         let missing = snapshot.worktrees.iter().filter(|worktree| worktree.is_prunable).count();
 
-        widgets::section(ui, "Worktrees");
+        widgets::section(ui, tr("Worktrees"));
         if snapshot.worktrees.is_empty() {
-            widgets::empty_state(ui, icon::FOLDER, "No worktrees were listed for this repository.");
+            widgets::empty_state(ui, icon::FOLDER, tr("No worktrees were listed for this repository."));
         }
         let mut actions = Vec::new();
         for (index, worktree) in snapshot.worktrees.iter().enumerate() {
@@ -81,9 +82,9 @@ impl WorktreesWindow {
                 WorktreeAction::CancelRemove => self.confirming_removal = None,
                 WorktreeAction::ConfirmRemove(path) => {
                     self.removing = Some(path.clone());
-                    cx.act(format!("Remove worktree {path}"), move |client, dir| {
+                    cx.act(tr_fmt!("Remove worktree {path}", path = path), move |client, dir| {
                         client.remove_worktree(&path, dir)?;
-                        Ok(Some("Removed the worktree. Its branch was kept.".to_string()))
+                        Ok(Some(tr("Removed the worktree. Its branch was kept.").to_string()))
                     });
                 }
             }
@@ -92,16 +93,16 @@ impl WorktreesWindow {
         if missing > 0 {
             ui.add_space(6.0);
             let text = if missing == 1 {
-                "A worktree folder no longer exists on disk. Forget it to remove it from Git's list.".to_string()
+                tr("A worktree folder no longer exists on disk. Forget it to remove it from Git's list.").to_string()
             } else {
-                format!("{missing} worktree folders no longer exist on disk. Forget them to remove them from Git's list.")
+                tr_fmt!("{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.", count = missing)
             };
             widgets::callout(ui, &text, true);
             ui.add_space(4.0);
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Forget missing worktrees", icon::BROOM))).clicked() {
-                cx.act("Forget missing worktrees", |client, dir| {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::BROOM, tr("Forget missing worktrees")))).clicked() {
+                cx.act(tr("Forget missing worktrees"), |client, dir| {
                     client.prune_worktrees(dir)?;
-                    Ok(Some("Forgot the missing worktrees.".to_string()))
+                    Ok(Some(tr("Forgot the missing worktrees.").to_string()))
                 });
             }
         }
@@ -127,24 +128,24 @@ impl WorktreesWindow {
             }
         }
 
-        widgets::section(ui, "Create a worktree");
+        widgets::section(ui, tr("Create a worktree"));
         ui.label(
-            RichText::new("Check a local branch out in its own folder, so you can work on it without switching this checkout.")
+            RichText::new(tr("Check a local branch out in its own folder, so you can work on it without switching this checkout."))
                 .color(c.muted),
         );
         ui.add_space(8.0);
 
         if candidates.is_empty() {
-            ui.label(RichText::new("Every local branch is already checked out. Create a branch first.").color(c.muted));
+            ui.label(RichText::new(tr("Every local branch is already checked out. Create a branch first.")).color(c.muted));
             return;
         }
 
         let mut picked: Option<BranchChoice> = None;
         egui::Grid::new("worktree_create_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
-            ui.label("Branch");
+            ui.label(tr("Branch"));
             ui.add_enabled_ui(idle, |ui| {
                 egui::ComboBox::from_id_salt("worktree_branch")
-                    .selected_text(self.choice.as_ref().map(|choice| choice.name.as_str()).unwrap_or("Choose a branch"))
+                    .selected_text(self.choice.as_ref().map(|choice| choice.name.as_str()).unwrap_or(tr("Choose a branch")))
                     .width(320.0)
                     .show_ui(ui, |ui| {
                         for branch in &candidates {
@@ -157,10 +158,10 @@ impl WorktreesWindow {
             });
             ui.end_row();
 
-            ui.label("Parent folder");
+            ui.label(tr("Parent folder"));
             ui.horizontal(|ui| {
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  Choose folder", icon::FOLDER_OPEN))).clicked() {
-                    let folder = crate::file_dialog::pick_folder("Choose where the new worktree folder goes");
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::FOLDER_OPEN, tr("Choose folder")))).clicked() {
+                    let folder = crate::file_dialog::pick_folder(tr("Choose where the new worktree folder goes"));
                     if let Some(folder) = folder {
                         self.parent = folder.display().to_string();
                         // The branch may have moved while the dialog was open; read it again.
@@ -177,14 +178,14 @@ impl WorktreesWindow {
                 }
                 ui.add_enabled(
                     idle,
-                    egui::TextEdit::singleline(&mut self.parent).hint_text("Type a path or choose a folder").desired_width(260.0),
+                    egui::TextEdit::singleline(&mut self.parent).hint_text(tr("Type a path or choose a folder")).desired_width(260.0),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Parent folder"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Parent folder")));
             });
             ui.end_row();
 
-            ui.label("Folder name");
-            let hint = self.choice.as_ref().map(|choice| folder_for(&choice.name)).unwrap_or_else(|| "feature-branch".to_string());
+            ui.label(tr("Folder name"));
+            let hint = self.choice.as_ref().map(|choice| folder_for(&choice.name)).unwrap_or_else(|| tr("feature-branch").to_string());
             ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.folder_name).hint_text(hint).desired_width(320.0));
             ui.end_row();
         });
@@ -196,7 +197,7 @@ impl WorktreesWindow {
         let folder = self.effective_folder();
         if let (Some(parent), Some(folder)) = (&self.parent_folder(), &folder) {
             ui.add_space(4.0);
-            ui.label(RichText::new(format!("Creates {}", parent.join(folder).display())).small().color(c.muted));
+            ui.label(RichText::new(tr_fmt!("Creates {path}", path = parent.join(folder).display())).small().color(c.muted));
         }
 
         ui.add_space(8.0);
@@ -204,10 +205,10 @@ impl WorktreesWindow {
         let ready = idle && !checking && self.choice.is_some() && self.parent_folder().is_some() && folder.is_some();
         let create = ui.horizontal(|ui| {
             if checking {
-                widgets::loading(ui, "Checking the branch");
+                widgets::loading(ui, tr("Checking the branch"));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                widgets::primary_button(ui, &format!("{}  Create worktree", icon::PLUS), ready).clicked()
+                widgets::primary_button(ui, &format!("{}  {}", icon::PLUS, tr("Create worktree")), ready).clicked()
             })
             .inner
         });
@@ -215,9 +216,9 @@ impl WorktreesWindow {
             if let (Some(choice), Some(parent), Some(folder)) = (self.choice.clone(), self.parent_folder(), folder) {
                 let destination = parent.join(folder);
                 let BranchChoice { name, tip } = choice;
-                cx.act(format!("Create worktree for {name}"), move |client, dir| {
+                cx.act(tr_fmt!("Create worktree for {name}", name = name), move |client, dir| {
                     client.create_worktree(&name, &tip, &destination, dir)?;
-                    Ok(Some(format!("Created a worktree for {name} at {}.", destination.display())))
+                    Ok(Some(tr_fmt!("Created a worktree for {name} at {path}.", name = name, path = destination.display())))
                 });
             }
         }
@@ -241,11 +242,11 @@ impl WorktreesWindow {
             Ok(tip) if tip == choice.tip => {}
             Ok(_) => {
                 self.choice = None;
-                cx.notice(format!("{} moved after it was selected. Choose it again and review it.", choice.name), true);
+                cx.notice(tr_fmt!("{name} moved after it was selected. Choose it again and review it.", name = choice.name), true);
             }
             Err(error) => {
                 self.choice = None;
-                cx.notice(format!("Could not read {}: {error}", choice.name), true);
+                cx.notice(tr_fmt!("Could not read {name}: {error}", name = choice.name, error = error), true);
             }
         }
     }
@@ -263,7 +264,7 @@ impl ToolWindow for WorktreesWindow {
     }
 
     fn title(&self) -> String {
-        "Worktrees".to_string()
+        tr("Worktrees").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -274,12 +275,12 @@ impl ToolWindow for WorktreesWindow {
         self.check_tip(cx);
         let c = theme::of(ui);
         ui.label(
-            RichText::new("A linked worktree checks out another branch in its own folder and shares this repository's history.")
+            RichText::new(tr("A linked worktree checks out another branch in its own folder and shares this repository's history."))
                 .color(c.muted),
         );
         if !cx.idle {
             ui.add_space(4.0);
-            widgets::loading(ui, "An action is running. Controls return when it finishes.");
+            widgets::loading(ui, tr("An action is running. Controls return when it finishes."));
         }
         ui.add_space(6.0);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -326,45 +327,45 @@ fn worktree_card(
                 ui.label(RichText::new(icon::FOLDER).color(c.muted));
                 ui.label(RichText::new(name).strong());
                 if is_main {
-                    widgets::pill(ui, "Main", c.local_branch);
+                    widgets::pill(ui, tr("Main"), c.local_branch);
                 }
                 if is_current {
-                    widgets::pill(ui, "Open here", c.accent);
+                    widgets::pill(ui, tr("Open here"), c.accent);
                 }
                 if worktree.is_locked {
-                    widgets::pill(ui, "Locked", c.warning);
+                    widgets::pill(ui, tr("Locked"), c.warning);
                 }
                 if worktree.is_prunable {
-                    widgets::pill(ui, "Missing", c.danger);
+                    widgets::pill(ui, tr("Missing"), c.danger);
                 }
             });
             ui.add(egui::Label::new(RichText::new(&worktree.path).monospace().small().color(c.muted)).wrap());
             let branch = match (&worktree.branch, worktree.is_bare) {
                 (Some(branch), _) => format!("{}  {branch}", icon::GIT_BRANCH),
-                (None, true) => "Bare repository".to_string(),
-                (None, false) => "Detached HEAD".to_string(),
+                (None, true) => tr("Bare repository").to_string(),
+                (None, false) => tr("Detached HEAD").to_string(),
             };
             ui.label(RichText::new(branch).small());
 
             ui.add_space(6.0);
             let confirming_this = confirming == Some(worktree.path.as_str());
             ui.horizontal(|ui| {
-                if ui.add_enabled(!is_current && !worktree.is_prunable, egui::Button::new(format!("{}  Open", icon::ARROW_SQUARE_OUT))).clicked() {
+                if ui.add_enabled(!is_current && !worktree.is_prunable, egui::Button::new(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open")))).clicked() {
                     action = Some(WorktreeAction::Open(worktree.path.clone()));
                 }
-                if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+                if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
                     action = Some(WorktreeAction::Copy(worktree.path.clone()));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let removable = !is_main && !is_current && !worktree.is_prunable && !worktree.is_locked;
                     let hint = if worktree.is_locked {
-                        "A locked worktree must be unlocked in a terminal before it can be removed"
+                        tr("A locked worktree must be unlocked in a terminal before it can be removed")
                     } else if is_main || is_current {
-                        "The main worktree and the checkout open here cannot be removed"
+                        tr("The main worktree and the checkout open here cannot be removed")
                     } else {
-                        "Remove this worktree and its folder"
+                        tr("Remove this worktree and its folder")
                     };
-                    let remove = ui.add_enabled(idle && removable, egui::Button::new(format!("{}  Remove", icon::TRASH)));
+                    let remove = ui.add_enabled(idle && removable, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Remove"))));
                     if remove.on_hover_text(hint).on_disabled_hover_text(hint).clicked() {
                         action = Some(WorktreeAction::AskRemove(worktree.path.clone()));
                     }
@@ -375,15 +376,15 @@ fn worktree_card(
                 ui.add_space(6.0);
                 widgets::callout(
                     ui,
-                    "Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.",
+                    tr("Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept."),
                     true,
                 );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    if widgets::danger_button(ui, &format!("{}  Remove worktree", icon::TRASH), idle).clicked() {
+                    if widgets::danger_button(ui, &format!("{}  {}", icon::TRASH, tr("Remove worktree")), idle).clicked() {
                         action = Some(WorktreeAction::ConfirmRemove(worktree.path.clone()));
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel")).clicked() {
                         action = Some(WorktreeAction::CancelRemove);
                     }
                 });

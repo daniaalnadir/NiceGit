@@ -2,6 +2,7 @@
 //! rather than an app action because it only reads the repository, so it neither refreshes the
 //! repository nor takes its busy state. It reports the result as a notice and then closes.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::{Path, PathBuf};
 
 use nicegit_core::{GitClient, GitError};
@@ -52,7 +53,7 @@ impl ToolWindow for SaveZipWindow {
     }
 
     fn title(&self) -> String {
-        "Save as ZIP".into()
+        tr("Save as ZIP").into()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -79,11 +80,11 @@ impl ToolWindow for SaveZipWindow {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(format!("Writing {name}…"));
+                    ui.label(tr_fmt!("Writing {name}…", name = name));
                 });
             }
             Some(Ok(size)) => {
-                cx.notice(format!("Saved {name} ({}).", crate::tools::compare::human_size(*size as usize)), false);
+                cx.notice(tr_fmt!("Saved {name} ({size}).", name = name, size = crate::tools::compare::human_size(*size as usize)), false);
                 self.finished = true;
             }
             Some(Err(error)) => {

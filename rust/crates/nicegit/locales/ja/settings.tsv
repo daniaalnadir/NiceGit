@@ -1,0 +1,99 @@
+# ja translations. Format: English source, a tab, then the translation.
+Settings	設定
+General	一般
+Language	言語
+Translations may be incomplete. Corrections are welcome on GitHub.	翻訳は不完全な場合があります。修正は GitHub でお待ちしています。
+Check for new versions	新しいバージョンを確認
+Asks GitHub once a day for the latest version number. Nothing else is sent.	最新のバージョン番号を 1 日に 1 回 GitHub に問い合わせます。それ以外は何も送信されません。
+Notify me when work finishes in the background	バックグラウンドの作業が終わったら通知する
+Shows a desktop notification when an action you started finishes while NiceGit is not in focus.	NiceGit がフォーカスされていないときに、開始した操作が終わるとデスクトップ通知を表示します。
+Appearance	外観
+System	システム
+Light	ライト
+Dark	ダーク
+System ({language})	システム ({language})
+No Japanese font was found; some text may not display.	日本語のフォントが見つかりませんでした。一部のテキストが表示されない場合があります。
+No Chinese font was found; some text may not display.	中国語のフォントが見つかりませんでした。一部のテキストが表示されない場合があります。
+Graph colours	グラフの色
+Diffs	差分
+Hide whitespace-only changes	空白のみの変更を非表示
+Show diffs side by side	差分を並べて表示
+Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides.	現在は適用されません: 差分パネルの幅が {minimum} ポイント未満です。両方の側を表示するには広げてください。
+Needs a diff panel at least {minimum} points wide.	差分パネルは {minimum} ポイント以上の幅が必要です。
+Show changed words inline	変更された単語を行内に表示
+Syntax highlighting	構文の強調表示
+External editor	外部エディター
+The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.	ファイルをエディターで開くコマンドです。ファイルのパスが後ろに追加されます。変更されたファイルには、そこで開く項目が表示されます。
+Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. Automatic turns this on when at least five of the last twenty commits use the convention.	要約の上に種類メニュー、スコープ、Breaking を表示し、選んだ種類を要約に書き込みます。「自動」は、直近 20 件のコミットのうち 5 件以上がこの規則を使っていると有効になります。
+Committing	コミット
+Refresh automatically when files change outside NiceGit	NiceGit の外でファイルが変わったら自動的に更新
+Fetch from remotes	リモートから取得
+Off	オフ
+5 min	5 分
+15 min	15 分
+30 min	30 分
+1 hour	1 時間
+How often the open repository is fetched in the background, so ahead and behind counts stay current	開いているリポジトリをバックグラウンドで取得する間隔です。先行・遅れのカウントを最新に保ちます
+Pull with	プルの方式
+How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.	プルが上流のコミットを取り込む方法を決めます。「Git の設定に従う」は pull.rebase、branch.<名前>.rebase、pull.ff を読み取ります。いずれも未設定の場合、プルは早送りのみ行います。「取得とプル」メニューでは、マージまたはリベースによるプルを 1 回実行することもできます。
+Clone into	クローン先
+Not set	未設定
+Choose…	選択…
+Clones go into this folder by default	クローンは既定でこのフォルダーに作成されます
+Clear	クリア
+Default folder for clones	クローンの既定のフォルダー
+The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.	クローンのダイアログは、保存先をこのフォルダーから自動入力します。未設定の場合は、最初のクローンの親フォルダーを記憶します。
+Custom actions	カスタムアクション
+Show pull request checks on branches	ブランチにプルリクエストのチェックを表示
+A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.	ブランチのラベルとサイドバーの点は、開いているプルリクエストまたはマージリクエストのチェックが成功、失敗、保留中のいずれかを示します。オフにすると、チェックの読み取りも止まります。
+Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.	これらのホストのリモートでも、github.com のリモートと同様に、プルリクエスト、Issue、「GitHub で開く」が使えます。
+One hostname per line, such as github.example.com	1 行に 1 つのホスト名（例: github.example.com）
+GitHub Enterprise hosts	GitHub Enterprise のホスト
+Not saved, as these are not hostnames: {hosts}. Use a name such as github.example.com, without https:// or a port.	ホスト名ではないため保存されませんでした: {hosts}。https:// やポート番号を付けずに、github.example.com のような名前を使ってください。
+Remotes on these hosts get Open on GitLab links, as gitlab.com remotes do.	これらのホストのリモートでも、gitlab.com のリモートと同様に「GitLab で開く」リンクが使えます。
+One hostname per line, such as gitlab.example.com	1 行に 1 つのホスト名（例: gitlab.example.com）
+GitLab hosts	GitLab のホスト
+Not saved, as these are not hostnames: {hosts}. Use a name such as gitlab.example.com, without https:// or a port.	ホスト名ではないため保存されませんでした: {hosts}。https:// やポート番号を付けずに、gitlab.example.com のような名前を使ってください。
+Layout	レイアウト
+Interface size	画面の大きさ
+Smaller (Ctrl/Cmd-minus)	小さく (Ctrl/Cmd-マイナス)
+Larger (Ctrl/Cmd-plus)	大きく (Ctrl/Cmd-プラス)
+Normal size	標準サイズ
+Restore default panel widths	パネルの幅を既定に戻す
+Columns and panels return to their original sizes	列とパネルを元のサイズに戻します
+Accessibility	アクセシビリティ
+Larger text	文字を大きく
+Draws the interface a quarter larger again, on top of the interface size	画面の大きさに加えて、さらに 4 分の 1 大きく表示します
+Reduce motion	動きを抑える
+Switches off the fades and eased movements in the interface	画面のフェードや滑らかな動きをオフにします
+Keyboard shortcuts	キーボードショートカット
+Request a feature	機能をリクエスト
+Report a problem	問題を報告
+Issue links	Issue のリンク
+Link #123 to the repository's host	#123 をリポジトリのホストへのリンクにする
+For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). On Azure DevOps, AB#123 links to the work item.	GitHub、GitLab、Bitbucket の origin リモートでは、#123 がその Issue へのリンクになります（GitLab では !123 がマージリクエストへのリンク）。Azure DevOps では AB#123 が作業項目へのリンクになります。
+No custom rules. A rule can link text such as JIRA-7 to your tracker.	カスタムルールはありません。ルールを使うと、JIRA-7 などのテキストをトラッカーにリンクできます。
+Only for repositories whose remote contains "{remote}"	リモートに "{remote}" を含むリポジトリのみ
+Edit	編集
+Change this rule	このルールを変更
+Remove this rule	このルールを削除
+Add rule	ルールを追加
+Add a rule that links text in messages	メッセージ内のテキストをリンクするルールを追加します
+Pattern (a regular expression)	パターン（正規表現）
+Address to open ($0 is the match, $1 to $9 its groups)	開くアドレス（$0 は一致した部分、$1 から $9 はそのグループ）
+Only for repositories whose remote contains (empty for all)	リモートに含まれる文字列がマッチするリポジトリのみ（空欄で全て）
+Rule pattern	ルールのパターン
+Rule address	ルールのアドレス
+Rule remote filter	ルールのリモートフィルター
+Save rule	ルールを保存
+3 lines	3 行
+10 lines	10 行
+25 lines	25 行
+Always	常に
+Automatic	自動
+Colour-blind safe	色覚に配慮
+Fast-forward only	早送りのみ
+File	ファイル
+Follow Git's settings	Git の設定に従う
+Muted	控えめ
+Standard	標準

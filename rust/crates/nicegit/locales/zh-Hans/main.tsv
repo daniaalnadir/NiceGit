@@ -1,0 +1,281 @@
+# zh-Hans: 工具栏、侧栏和主要菜单。
+Nothing to undo	没有可撤销的内容
+Nothing to redo	没有可重做的内容
+Redo	重做
+{verb} {step}	{verb} {step}
+{verb} {step} ({count} steps)	{verb} {step}（共 {count} 步）
+Undo steps, newest first	可撤销的步骤，最新的在前
+and {count} more	以及另外 {count} 项
+Toolbar button	工具栏按钮
+Download from all remotes	从所有远程仓库下载
+Download from all remotes · {count} commit to pull	从所有远程仓库下载 · {count} 次提交待拉取
+Download from all remotes · {count} commits to pull	从所有远程仓库下载 · {count} 次提交待拉取
+Fetch, then pull the current branch as Settings chooses	先获取，然后按设置拉取当前分支
+Pull {count}	拉取 {count}
+Push {count}	推送 {count}
+Publish	发布
+Send the current branch to its upstream	将当前分支推送到其上游
+Create a branch at HEAD and switch to it	在 HEAD 处创建分支并切换到它
+Save all changes in a stash	将所有更改保存到贮藏
+Apply the latest stash and delete it	应用最新的贮藏并将其删除
+Terminal	终端
+Show the terminal (Ctrl-`)	显示终端 (Ctrl-`)
+Reload the repository (Ctrl/Cmd-R)	重新加载仓库 (Ctrl/Cmd-R)
+Commands	命令
+Command palette (Shift-Ctrl/Cmd-P)	命令面板 (Shift-Ctrl/Cmd-P)
+Pop	弹出
+Stash changes	贮藏更改
+Message (optional)	消息（可选）
+New branch	新分支
+New branch…	新分支…
+Pop {stash}?	弹出 {stash}？
+“{message}” is applied to your working files and then deleted. If applying fails, the stash is kept.	“{message}”会被应用到工作文件中，然后删除。如果应用失败，将保留该贮藏。
+More actions	更多操作
+More	更多
+Open repository…	打开仓库…
+Find repositories in a folder…	在文件夹中查找仓库…
+Clone repository…	克隆仓库…
+New repository…	新建仓库…
+Recent repositories	最近的仓库
+Repositories you open appear here	你打开的仓库会显示在这里
+Show all in the sidebar	在侧栏中显示全部
+Repository settings…	仓库设置…
+Git settings…	Git 设置…
+Stashes…	贮藏…
+Search history…	搜索历史…
+Search file contents…	搜索文件内容…
+Recover lost work…	恢复丢失的工作…
+Insights…	洞察…
+Clean up branches…	清理分支…
+Bisect…	二分查找…
+Worktrees…	工作树…
+Submodules…	子模块…
+Pull requests and issues…	拉取请求和问题…
+Manage custom actions…	管理自定义操作…
+Publish branch…	发布分支…
+The branch already has an upstream, or there is no remote	该分支已有上游，或者没有远程仓库
+Fetch full history	获取完整历史
+Wait for the current action to finish	请等待当前操作完成
+Fetched the full history.	已获取完整历史。
+Show all folders…	显示所有文件夹…
+Show all folders?	显示所有文件夹？
+Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change.	Git 会检出此仓库中的每个文件夹，因此每个文件都会写入你的文件夹。在部分克隆中，文件会先被下载，大型项目可能需要一些时间。你的提交和分支不会改变。
+Show all folders	显示所有文件夹
+Apply patch…	应用补丁…
+No saved profiles	没有已保存的配置
+Manage identities…	管理身份…
+Undo {step}?	撤销 {step}？
+Redo {step}?	重做 {step}？
+NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.	NiceGit 会将内容恢复到之前的状态。如果此后分支已移动，它会拒绝执行，因此不会丢失较新的工作。
+NiceGit puts back what the undo reversed. It refuses if the branch has moved since.	NiceGit 会重新应用被撤销的内容。如果此后分支已移动，它会拒绝执行。
+Undo history	撤销历史
+Show the steps Undo will step back through	显示撤销将回退经过的步骤
+Fetch and Pull	获取和拉取
+Choose what Fetch and Pull does	选择“获取和拉取”的操作
+{label} options	{label} 选项
+Pull (merge)	拉取（合并）
+Pull (rebase)	拉取（变基）
+Fetch, then merge the upstream's commits into the current branch	先获取，然后将上游的提交合并到当前分支
+Fetch, then replay the current branch's commits onto the upstream	先获取，然后将当前分支的提交变基到上游之上
+{label}: {tooltip}	{label}：{tooltip}
+Save or close the file you are editing first.	请先保存或关闭正在编辑的文件。
+Hide the terminal (Ctrl-`); its shells keep running	隐藏终端 (Ctrl-`)；其中的 shell 会继续运行
+Welcome to NiceGit	欢迎使用 NiceGit
+A fast Git client that keeps your work safe.	一个快速的 Git 客户端，让你的工作安全无忧。
+Create repository…	创建仓库…
+Or drag a folder onto this window.	或将文件夹拖到此窗口。
+Next tip	下一条提示
+Git was not found. Install Git, then restart NiceGit.	未找到 Git。请安装 Git，然后重新启动 NiceGit。
+Opening repository…	正在打开仓库…
+A fast Git client for macOS, Windows, and Linux.	适用于 macOS、Windows 和 Linux 的快速 Git 客户端。
+Clone…	克隆…
+Recent	最近
+Ctrl/Cmd-O to open · Shift-Ctrl/Cmd-P for commands	Ctrl/Cmd-O 打开 · Shift-Ctrl/Cmd-P 命令
+Dismiss	关闭
+Stash changes…	贮藏更改…
+Set your identity…	设置你的身份…
+Merge or rebase…	合并或变基…
+Fetch, then choose whether to merge the remote's commits or rebase onto them	先获取，然后选择合并远程提交还是变基到其上
+Apply into my changes	应用到我的更改
+Apply the stash's changes on top of your changes, and keep your changes	将贮藏的更改应用到你的更改之上，并保留你的更改
+Commit without hooks	不运行钩子直接提交
+Make the same commit again with Git hooks skipped	跳过 Git 钩子，重新执行同一次提交
+Git said:	Git 的输出：
+Apply into changes	应用到更改
+Applied the stash on top of your changes and removed it.	已将贮藏应用到你的更改之上，并将其删除。
+Applied the stash on top of your changes.	已将贮藏应用到你的更改之上。
+Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept.	已将贮藏中未暂存的更改应用到你的更改之上。已暂存的更改未被应用，但已一并保存，因此保留该贮藏。
+Current checkout: {branch}	当前检出：{branch}
+Couldn't fetch	获取失败
+The last automatic fetch failed. {plain}{said}	上次自动获取失败。{plain}{said}
+Remotes are fetched automatically; change how often in Settings.	远程仓库会自动获取；可在设置中更改频率。
+Rebase stopped to edit a commit: stage your changes, then Continue.	变基已停止以编辑提交：请暂存你的更改，然后继续。
+A {operation} is in progress. Continue when ready, or abort to return to where you started.	{operation} 正在进行。准备好后继续，或中止以返回起点。
+A {operation} stopped with {count} conflicted file(s). Resolve each one, then continue.	{operation} 因 {count} 个冲突文件而停止。请逐一解决后继续。
+Open the conflict editor	打开冲突编辑器
+Abort…	中止…
+Abort the {operation}?	中止 {operation}？
+Git returns the branch and files to the state before it started. Resolutions you made are lost.	Git 会将分支和文件恢复到开始之前的状态。你所做的冲突解决将会丢失。
+Resolve all…	全部解决…
+Take {side} for all	全部采用 {side}
+Take one side of every conflicted file	对每个冲突文件采用其中一方
+First bad commit: {hash} {subject}	第一个有问题的提交：{hash} {subject}
+ · about {count} step left	 · 约剩 {count} 步
+ · about {count} steps left	 · 约剩 {count} 步
+Bisecting: test {hash} and mark it{steps}	二分查找：测试 {hash} 并标记它{steps}
+Good	好
+Bad	坏
+Skip	跳过
+Mark good	标记为好
+Mark bad	标记为坏
+Mark skip	标记为跳过
+Bisecting: mark a good and a bad commit to begin.	二分查找：请标记一个好提交和一个坏提交以开始。
+End bisect, return to {branch}	结束二分查找，返回 {branch}
+End bisect	结束二分查找
+Ended the bisect.	已结束二分查找。
+Back to the commit history (Esc)	返回提交历史 (Esc)
+Previous file ({shortcut}-Up)	上一个文件 ({shortcut}-上)
+Next file ({shortcut}-Down)	下一个文件 ({shortcut}-下)
+{position} of {count}	第 {position} 个，共 {count} 个
+{count} line selected	已选择 {count} 行
+{count} lines selected	已选择 {count} 行
+Unstage selected lines	取消暂存所选行
+Stage selected lines	暂存所选行
+Discard selected lines	放弃所选行
+Stash selected lines	贮藏所选行
+Press − beside a line to unstage it, or click and drag over lines to choose several.	点击行旁的 − 可取消暂存该行，或点击并拖动以选择多行。
+Press + beside a line to stage it, or click and drag over lines to choose several.	点击行旁的 + 可暂存该行，或点击并拖动以选择多行。
+stage	暂存
+unstage	取消暂存
+Switch to Unified to {verb} single lines.	切换到“统一”以逐行{verb}。
+A new or deleted file has only one side, so it is shown in one column	新增或删除的文件只有一侧，因此以单列显示
+Widen the diff panel to show changes side by side	加宽差异面板以并排显示更改
+Split	拆分
+Unified	统一
+Words	词语
+Show changed words merged into each line	在每行中合并显示更改的词语
+Hide whitespace	隐藏空白
+How many unchanged lines to show around each change	每处更改前后显示的未更改行数
+Context lines	上下文行数
+Edit this file in NiceGit	在 NiceGit 中编辑此文件
+Unstage file	取消暂存文件
+Stage file	暂存文件
+Discard this file's changes…	放弃此文件的更改…
+Open in {editor}	在 {editor} 中打开
+Copy this diff	复制此差异
+Copied the diff.	已复制差异。
+Fetched just now	刚刚获取
+Fetched {minutes} min ago	{minutes} 分钟前获取
+Fetched {hours} h ago	{hours} 小时前获取
+Staged	已暂存
+Unstaged	未暂存
+Stage lines	暂存行
+Unstage lines	取消暂存行
+{done} {lines} in {name}.	{done}：{lines}，位于 {name}。
+{count} line	{count} 行
+{count} new line	{count} 个新增行
+{count} new lines	{count} 个新增行
+{lines} are removed from {path}.	{lines}将从 {path} 中移除。
+{count} changed line	{count} 行更改
+{count} changed lines	{count} 行更改
+{lines} in {path} go back to their staged version.	{path} 中的{lines}将恢复为已暂存的版本。
+{what} You can undo this from the Changes panel until the file changes again.	{what} 在文件再次更改之前，可在“更改”面板中撤销此操作。
+Discard this change?	放弃此更改？
+Save or close the file you are editing before changing the repository.	在更改仓库之前，请先保存或关闭正在编辑的文件。
+Selected lines from {path}	来自 {path} 的所选行
+Stash lines	贮藏行
+Show repositories	显示仓库
+Filter references	筛选引用
+New branch at HEAD	在 HEAD 处新建分支
+Local	本地
+   No local branches	   没有本地分支
+gone	已不存在
+Its upstream branch no longer exists on the remote	其上游分支已不在远程仓库中
+{commits} to push, {behind} to pull	{commits} 待推送，{behind} 待拉取
+Checked out in another worktree	已在另一个工作树中检出
+Hidden from the graph	在图表中隐藏
+Add a remote…	添加远程仓库…
+missing	缺失
+Manage worktrees…	管理工作树…
+   No tags	   没有标签
+Push tags to {remote}…	将标签推送到 {remote}…
+   No stashes	   没有贮藏
+Manage stashes…	管理贮藏…
+Applied the stash.	已应用贮藏。
+Apply {stash}	应用 {stash}
+Pop (apply and delete)	弹出（应用并删除）
+Create branch from stash…	从贮藏创建分支…
+Branch from stash	来自贮藏的分支
+Rename {stash}	重命名 {stash}
+Delete {stash}?	删除 {stash}？
+“{message}” will be deleted.	“{message}”将被删除。
+not checked out	未检出
+at recorded commit	位于记录的提交
+on {commit}	位于 {commit}
+{state} · changed	{state} · 有更改
+Recorded commit {commit}	记录的提交 {commit}
+Update submodule	更新子模块
+Checked out {path} at its recorded commit.	已将 {path} 检出到其记录的提交。
+Copy name	复制名称
+Push to {remote}	推送到 {remote}
+Push tag	推送标签
+Pushed {tag} to {remote}.	已将 {tag} 推送到 {remote}。
+Delete from {remote}…	从 {remote} 删除…
+The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept.	只要该标签仍与本地标签一致，它就会从 {remote} 中为所有使用者删除。本地标签会保留。
+Delete from remote	从远程仓库删除
+Delete {tag} from {remote}?	从 {remote} 删除 {tag}？
+The tag is removed from this repository only, not from remotes.	标签仅从此仓库中删除，不会从远程仓库删除。
+Delete tag {tag}?	删除标签 {tag}？
+Push all branches to {remote}…	将所有分支推送到 {remote}…
+Copy fetch URL	复制获取 URL
+Open on {host}	在 {host} 上打开
+Actions	Actions
+Edit in Repository Settings…	在仓库设置中编辑…
+The current branch cannot be selected for deletion.	无法选择当前分支进行删除。
+Deletes {names}.	将删除 {names}。
+{shown}, and {more} more	{shown} 以及另外 {more} 个
+Delete {count} branches?	删除 {count} 个分支？
+ Not merged into {branch}: {names}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.	 未合并到 {branch}：{names}。这些分支含有其他分支上没有的提交，因此只有在它们仍指向所显示的末端时才会删除。
+ Undo restores them at their tips until you take another undoable action.	 撤销会将它们恢复到原先的末端，直到你进行另一次可撤销的操作为止。
+Create the {noun} through the {tool}	通过 {tool} 创建{noun}
+Open branch on {host}	在 {host} 上打开分支
+Replaces the remote branch with yours, if no one else has pushed since you last fetched	如果自你上次获取以来没有其他人推送，则用你的分支替换远程分支。
+Push to {remote}/{name}…	推送到 {remote}/{name}…
+Updates {remote}/{name} to {tip} ({subject}). Only this branch is pushed; tags are not.	将 {remote}/{name} 更新为 {tip}（{subject}）。仅推送此分支，不推送标签。
+Push {branch} to {remote}?	将 {branch} 推送到 {remote}？
+Merge into {current}…	合并到 {current}…
+Rebase {current} onto this…	将 {current} 变基到此…
+Reset {current} to here…	将 {current} 重置到此处…
+Compare with {current}…	与 {current} 比较…
+Compare with previous version…	与之前的版本比较…
+Tip history…	末端历史…
+Create a branch at {branch}	在 {branch} 处创建分支
+Delete {display}…	删除 {display}…
+The branch is removed from {remote} for everyone who uses it, while it still points to {tip}. Local branches are not changed.	只要该分支仍指向 {tip}，它就会从 {remote} 中为所有使用者删除。本地分支不会改变。
+ {branch} tracks it; its upstream will be gone.	 {branch} 正在跟踪它；其上游将会消失。
+ {branches} track it; their upstreams will be gone.	 {branches} 正在跟踪它；它们的上游将会消失。
+Delete {display}?	删除 {display}？
+Create worktree…	创建工作树…
+Upstream	上游
+{branch} now tracks {name}.	{branch} 现在跟踪 {name}。
+Set upstream	设置上游
+Stop tracking	停止跟踪
+Unset upstream	取消上游
+Rename {branch}	重命名 {branch}
+This branch is merged into the current branch, so no commits are lost.	此分支已合并到当前分支，因此不会丢失任何提交。
+This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {tip}.	此分支有不在当前分支上的提交，因此 Git 会拒绝删除。请先合并它，或使用“清理分支”删除未合并的分支。其末端为 {tip}。
+Delete branch {branch}?	删除分支 {branch}？
+Hide in graph	在图表中隐藏
+The current branch is always shown.	当前分支始终会显示。
+Stop showing only this branch	停止仅显示此分支
+Show only this branch	仅显示此分支
+Merge {source} into {branch}?	将 {source} 合并到 {branch}？
+Rebase {branch} onto {onto}?	将 {branch} 变基到 {onto}？
+Set an upstream branch before force pushing.	强制推送前请先设置上游分支。
+Force push {branch}?	强制推送 {branch}？
+Force push	强制推送
+Your branch's commits are replayed on top of the other branch. Conflicts stop the rebase for you to resolve or abort.	当前分支的提交会被重新应用到另一分支之上。遇到冲突时变基会暂停，供你解决或中止。
+Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.	Git 会将该分支的提交合并到当前分支。遇到冲突时合并会暂停，供你解决或中止。
+Delete local tag…	删除本地标签…
+Lightweight tag at {commit}	轻量标签，位于 {commit}
+Could not read this tag: {error}	无法读取此标签：{error}

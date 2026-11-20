@@ -1,0 +1,224 @@
+# ja: dialogs, confirmations and short forms. Format: English source, a tab, then the translation.
+1 branch	1 ブランチ
+1 commit	1 コミット
+1 tag	1 タグ
+1 uncommitted change	未コミットの変更 1 件
+A README.md with the folder's name as its heading. An existing README is kept as it is.	フォルダー名を見出しにした README.md を作成します。既存の README はそのまま残します。
+A workspace with this name exists. You will be asked to replace it.	同じ名前のワークスペースがあります。置き換える前に確認します。
+Aborted the {operation}.	{operation}を中止しました。
+Add a README	README を追加
+Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. Useful when backporting a fix to another branch.	git cherry-pick -x と同様に、新しいコミットのメッセージに「(cherry picked from commit …)」を追加します。修正を別のブランチへ移すときに役立ちます。
+All changes	すべての変更
+All files	すべてのファイル
+All folders	すべてのフォルダー
+Always create a merge commit	常にマージコミットを作成
+Annotated, with a message	注释标签（带消息）
+Applied and deleted the stash.	スタッシュを適用して削除しました。
+Back to the Changes panel (Esc)	変更パネルに戻る (Esc)
+Blame a file to see who changed each line. Right-click a line to blame the file before that change.	ファイルの blame で、各行を変更した人を確認できます。行を右クリックすると、その変更より前の blame を表示します。
+Changed files	変更されたファイル
+Changed files ({count})	変更されたファイル ({count})
+Check out pull request #{number}	プルリクエスト #{number} をチェックアウト
+Checked out every folder.	すべてのフォルダーをチェックアウトしました。
+Checked out pull request #{number} as {local}.	プルリクエスト #{number} を {local} としてチェックアウトしました。
+Cherry-pick a merge	マージのチェリーピック
+Cherry-picked the commit.	コミットをチェリーピックしました。
+Cherry-picked {count} commits.	{count} 件のコミットをチェリーピックしました。
+Choose a GitHub repository	GitHub のリポジトリを選択
+Choose a destination folder.	保存先のフォルダーを選択してください。
+Choose a folder for the new repository	新しいリポジトリのフォルダーを選択
+Choose one of your GitHub repositories	GitHub のリポジトリから選択
+Clear 1 recent repository?	最近使ったリポジトリを 1 件クリアしますか？
+Clear all…	すべて消去…
+Clear {count} recent repositories?	最近使ったリポジトリを {count} 件クリアしますか？
+Clone repository	リポジトリをクローン
+Close other tabs	他のタブを閉じる
+Close tab	タブを閉じる
+Close {name}	{name} を閉じる
+Cmd-P goes to any tracked file by name, and Cmd-Enter in that list opens the file's blame.	Cmd-P で追跡中のファイルを名前から開けます。この一覧で Cmd-Enter を押すと、そのファイルの blame を開きます。
+Cmd-click commits in the graph to select several, then cherry-pick them together.	グラフのコミットを Cmd-クリックで複数選択し、まとめてチェリーピックできます。
+Commits the README as “Initial commit”, or an empty commit when there is no README.	README を「Initial commit」としてコミットします。README がない場合は空のコミットを作成します。
+Committer	コミッター
+Compare with remote	リモートと比較
+Copy the full commit ID	コミットの完全な ID をコピー
+Copy the full stash commit ID	スタッシュのコミットの完全な ID をコピー
+Create	作成
+Create and push	作成してプッシュ
+Created and switched to {branch}.	{branch} を作成して切り替えました。
+Created branch {branch}.	ブランチ {branch} を作成しました。
+Created repository {name}.	リポジトリ {name} を作成しました。
+Created {branch} from the stash and switched to it.	スタッシュから {branch} を作成して切り替えました。
+Created {created} {name} and pushed it to {remote}.	{created} {name} を作成し、{remote} にプッシュしました。
+Created {created} {name}, but could not push it to {remote}: {reason}	{created} {name} を作成しましたが、{remote} にプッシュできませんでした: {reason}
+Created {created} {name}.	{created} {name} を作成しました。
+Creates the branch and switches to it, carrying your changes across as Create branch does. The branch gets no upstream. A branch that already exists is not replaced.	ブランチを作成して切り替え、「ブランチを作成」と同じように変更を持ち越します。ブランチに上流は設定されません。既存のブランチは置き換えません。
+Creates the branch at the commit this stash was made on, switches to it, applies the stash, and removes the stash once it applies.	このスタッシュを作成したコミットにブランチを作成して切り替え、スタッシュを適用してから削除します。
+Current HEAD	現在の HEAD
+Default branch (loading…)	既定のブランチ（読み込み中…）
+Deleted 1 branch. Undo restores them.	ブランチを 1 件削除しました。元に戻すと復元されます。
+Deleted branch {name}.	ブランチ {name} を削除しました。
+Deleted tag {name}.	タグ {name} を削除しました。
+Deleted the stash.	スタッシュを削除しました。
+Deleted {branch} from {remote}.	{remote} からブランチ {branch} を削除しました。
+Deleted {deleted} of {count} branch before stopping. Undo restores those. {error}	停止前に {count} 件中 {deleted} 件のブランチを削除しました。元に戻すとそれらを復元します。{error}
+Deleted {deleted} of {count} branches before stopping. Undo restores those. {error}	停止前に {count} 件中 {deleted} 件のブランチを削除しました。元に戻すとそれらを復元します。{error}
+Deleted {tag} from {remote}.	{remote} からタグ {tag} を削除しました。
+Destination folder	保存先フォルダー
+Discarded 1 changed file.	変更されたファイル 1 件を破棄しました。
+Discarded 1 changed line in {name}.	{name} の変更された行 1 行を破棄しました。
+Discarded changes to {name}.	{name} への変更を破棄しました。
+Discarded {count} changed files.	変更されたファイル {count} 件を破棄しました。
+Discarded {count} changed lines in {name}.	{name} の変更された行 {count} 行を破棄しました。
+Download all files now	今すべてのファイルをダウンロード
+Download file contents when needed	必要になったときにファイルの内容をダウンロード
+Drag a branch onto the current branch in the sidebar to merge it in or rebase onto it.	サイドバーでブランチを現在のブランチにドラッグすると、マージするかリベースできます。
+Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead.	各ファイルは{side}側の版に置き換えられ、解決済みになります。これらのファイルの反対側の変更は破棄されます。{side}側で削除されたファイルは代わりに削除されます。
+Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed.	各ローカルブランチは、{remote} 上の同名のブランチへプッシュされます。{remote} に既にあるブランチは早送りのみで、強制上書きはしません。タグはプッシュされません。
+Enter a number of commits from 1 to 100000.	コミット数を 1 から 100000 までの数で入力してください。
+Every file in this commit's tree	このコミットのツリー内のすべてのファイル
+Faster for large projects. You can fetch the full history later.	大規模なプロジェクトでは高速です。完全な履歴は後から取得できます。
+Fetches pull request #{number} from {remote} into this new branch, then switches to it. The branch gets no upstream, because the pull request may come from a fork. An existing branch with this name is used only if it already points at the pull request.	プルリクエスト #{number} を {remote} からこの新しいブランチに取得し、そのブランチに切り替えます。プルリクエストはフォークからのものの場合があるため、ブランチに上流は設定されません。同名の既存ブランチは、すでにプルリクエストを指している場合にのみ使用します。
+First tag	最初のタグ
+Fix up with staged changes, in a commit's menu, folds what you have staged into that older commit.	ステージした変更で修正: コミットのメニューから、ステージした内容をその古いコミットに統合します。
+Folded the staged changes into “{subject}”.	ステージした変更を「{subject}」に統合しました。
+Folder	フォルダー
+Folder not found	フォルダーが見つかりません
+Folders, one per line	フォルダー（1 行に 1 つ）
+Force pushed {branch} to {upstream}.	{branch} を {upstream} に強制プッシュしました。
+Forget every repository in this list. No folder is deleted.	この一覧のリポジトリをすべて忘れます。フォルダーは削除されません。
+Forget the repositories whose folders no longer exist. No folder is deleted.	フォルダーが存在しなくなったリポジトリを忘れます。フォルダーは削除されません。
+From GitHub…	GitHub から…
+Full history	完全な履歴
+Git follows this repository's merge.ff setting.	Git はこのリポジトリの merge.ff 設定に従います。
+Git signs the tag with your configured signing key (user.signingKey and gpg.format), as `git tag --sign` does.	`git tag --sign` と同様に、設定された署名キー（user.signingKey と gpg.format）でタグに署名します。
+Hide repositories	リポジトリを非表示
+Initial branch	初期ブランチ
+Integrate {branch}	{branch} を統合
+Keep staged changes	ステージした変更を残す
+Lightweight	軽量
+Loading commit…	コミットを読み込み中…
+Local branch	ローカルブランチ
+Lost commits after a reset or rebase? Repository > Recover lost work lists every earlier position of HEAD.	reset やリベースの後にコミットを失いましたか？ リポジトリ > 失われた作業を復元 で、HEAD の過去のすべての位置を一覧できます。
+Made a mistake in a commit, merge, or rebase? Undo in the toolbar steps back through recent actions.	コミット、マージ、リベースで間違えましたか？ ツールバーの「元に戻す」で、直近の操作をさかのぼれます。
+Make a first commit	最初のコミットを作成
+Merge (fast-forward when possible)	マージ（可能なら早送り）
+Merge {source} into {current}, or replay {current}'s commits on top of it?	{source} を {current} にマージしますか、それとも {current} のコミットをその上に付け直しますか？
+Merged {name}.	{name} をマージしました。
+Middle-click a repository tab to close it, as in a browser.	ブラウザーと同様に、リポジトリのタブを中クリックすると閉じられます。
+More actions for this commit	このコミットの他の操作
+New files that Git does not track yet are saved in the stash and removed from the folder.	Git がまだ追跡していない新しいファイルは、スタッシュに保存されてフォルダーから削除されます。
+New repository	新しいリポジトリ
+New tag	新しいタグ
+No open repositories	開いているリポジトリはありません
+Note the original commit in each message	各メッセージに元のコミットを記録
+Notes	メモ
+Nothing was deleted. {error}	何も削除されませんでした。{error}
+Number of commits	コミット数
+One folder per line, relative to the repository.	1 行に 1 つのフォルダーを、リポジトリからの相対パスで入力します。
+Only the latest N commits	最新の N 件のコミットのみ
+Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.	変更されるのはメッセージだけです。ステージ済みと未ステージの編集は含まれません。コミットには新しい ID が付きます。
+Only these folders	これらのフォルダーのみ
+Open another repository	別のリポジトリを開く
+Open recent repository {name}	最近使ったリポジトリ {name} を開く
+Open tabs	開いているタブ
+Options	オプション
+Parent	親
+Parent {number} · {commit} {subject}	親 {number} · {commit} {subject}
+Parents	親
+Press Cmd-/ to see every keyboard shortcut.	Cmd-/ を押すと、すべてのキーボードショートカットを表示します。
+Press Ctrl-` to show or hide the terminal. Its shells keep running while it is hidden.	Ctrl-` でターミナルを表示または非表示にします。非表示の間もシェルは動き続けます。
+Press Shift-Cmd-P to open the command palette, which lists most actions and their shortcuts.	Shift-Cmd-P でコマンドパレットを開きます。ほとんどの操作とそのショートカットが一覧表示されます。
+Publish branch	ブランチを公開
+Published {branch} to {remote}.	{branch} を {remote} に公開しました。
+Push 1 branch to {remote}?	{remote} に 1 件のブランチをプッシュしますか？
+Push 1 tag to {remote}?	{remote} に 1 件のタグをプッシュしますか？
+Push to	プッシュ先
+Push to remote	リモートにプッシュ
+Push {branch} to a remote and track it there.	{branch} をリモートにプッシュし、そこで追跡します。
+Push {count} branches to {remote}?	{remote} に {count} 件のブランチをプッシュしますか？
+Push {count} tags to {remote}?	{remote} に {count} 件のタグをプッシュしますか？
+Pushed {branches} to {remote}.	{branches} を {remote} にプッシュしました。
+Pushed {name} to {remote}.	{name} を {remote} にプッシュしました。
+Pushed {summary} to {remote}.	{summary} を {remote} にプッシュしました。
+RECENT REPOSITORIES	最近のリポジトリ
+Rebased onto {name}.	{name} にリベースしました。
+Rebase…	リベース…
+Recent repository {name}	最近のリポジトリ {name}
+Recent repository {name}, folder not found	最近のリポジトリ {name}、フォルダーが見つかりません
+Records the merge with a merge commit even when the branch could move forward.	ブランチを早送りできる場合でも、マージコミットとしてマージを記録します。
+Remote	リモート
+Remove from recent repositories	最近使ったリポジトリから削除
+Remove from recent repositories. The folder is not deleted.	最近使ったリポジトリから削除します。フォルダーは削除されません。
+Remove missing	見つからないものを削除
+Remove {name} from recent repositories	最近使ったリポジトリから {name} を削除
+Removed 1 repository from recent. Their folders are unchanged.	最近使ったリポジトリから 1 件削除しました。フォルダーは変更されていません。
+Removed {count} repositories from recent. Their folders are unchanged.	最近使ったリポジトリから {count} 件削除しました。フォルダーは変更されていません。
+Renamed the stash. It is at the top of the list.	スタッシュの名前を変更しました。一覧の先頭に表示されます。
+Repositories	リポジトリ
+Repository URL or local path	リポジトリの URL またはローカルパス
+Resolved 1 file with the {side} version.	{side}側の版で 1 件のファイルを解決しました。
+Resolved {count} files with the {side} version.	{side}側の版で {count} 件のファイルを解決しました。
+Restore	復元
+Restore this file from the stash	このファイルをスタッシュから復元
+Restore version before this commit	このコミットより前の版を復元
+Restored {path} from {reference}.	{path} を {reference} から復元しました。
+Restored {path}. Review and commit the staged change.	{path} を復元しました。ステージした変更を確認してコミットしてください。
+Revert a merge	マージを取り消す
+Reverted the commit.	コミットを取り消しました。
+Reverted {count} commits.	{count} 件のコミットを取り消しました。
+Save message	メッセージを保存
+Saves the staged changes only. Unstaged and untracked changes stay in your files. A file with both staged and unstaged changes must be staged or unstaged in full first.	ステージした変更だけを保存します。未ステージの変更と未追跡の変更はファイルに残ります。ステージ済みと未ステージの変更が混在するファイルは、先にどちらかへ完全に揃えてください。
+Settings (Cmd-,) offers a colour-blind safe graph palette.	設定（Cmd-,）では、色覚多様性に配慮したグラフのパレットを選べます。
+Show all changes	すべての変更を表示
+Shows which commits the remote would lose	リモートが失うコミットを表示
+Sign with your signing key	署名キーで署名
+Signature	署名
+Skipped, because {remote} has a different tag with the same name: {names}.	{remote} に同名で別内容のタグがあるため、スキップしました: {names}
+Smaller and faster; Git downloads older file versions when you look at them. Needs a server that supports partial clone.	小さく高速です。古いファイルの版は、見たときに Git がダウンロードします。部分クローンに対応したサーバーが必要です。
+Squash into staged changes	ステージした変更にスカッシュ
+Stage one line at a time: press + beside a line in the diff, or drag over several lines first.	差分の行の横にある + を押すと、1 行ずつステージできます。複数行をまとめて選ぶにはドラッグします。
+Staged changes stay staged and in your files, and only unstaged changes leave your files. The stash still holds a copy of the staged changes, as Git's --keep-index does.	ステージした変更はステージされたままファイルに残ります。未ステージの変更だけがファイルから取り除かれます。Git の --keep-index と同様に、スタッシュにはステージした変更のコピーも残ります。
+Staged {name}'s changes as a squash. Review and commit them.	{name} の変更をスカッシュとしてステージしました。確認してコミットしてください。
+Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged.	ブランチの変更をコミットせずにステージします。新しい 1 つのコミットとしてコミットできます。ブランチはマージ済みとして記録されません。
+Start from	開始点
+Start work	作業を開始
+Start work on issue #{number}	イシュー #{number} の作業を開始
+Started work on issue #{number} on {local}.	イシュー #{number} の作業を {local} で開始しました。
+Stash only staged changes	ステージした変更のみスタッシュ
+Stashed the selected lines of {name}.	{name} の選択した行をスタッシュしました。
+Tag message	タグのメッセージ
+Tag name	タグ名
+Take the {side} version for all conflicts?	すべての競合で{side}側の版を採用しますか？
+Take {side} versions	{side}側の版を採用
+The folder is created if it does not exist.	フォルダーが存在しない場合は作成されます。
+The remote's default branch is not ready yet. Try again in a moment.	リモートの既定のブランチはまだ準備できていません。しばらくしてから再試行してください。
+The repository was created, but Git needs your name and email before it can make the first commit.	リポジトリは作成されましたが、最初のコミットを作成する前に Git で名前とメールアドレスの設定が必要です。
+The stash keeps its changes. Once renamed, it moves to the top of the list.	スタッシュの変更はそのまま残ります。名前を変更すると一覧の先頭に移動します。
+These local tags are not on {remote} yet. Tags already on {remote} are never replaced.	これらのローカルタグはまだ {remote} にありません。{remote} に既にあるタグは置き換えられません。
+They are removed from the recent list. Their folders are not deleted.	最近使ったリストから削除されます。フォルダーは削除されません。
+This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile.	このコミットはすでにリモートにあります。メッセージを変更すると書き換わるため、取得済みの人は調整が必要になります。
+This replaces {path} in your working files and in the staged version with its version from {reference}. Its current changes are lost; other files and the branch are not changed.	作業ファイルとステージ済みの版の {path} を {reference} の版で置き換えます。現在の変更は失われます。他のファイルとブランチは変更されません。
+Type at least one folder, one per line.	フォルダーを 1 つ以上、1 行に 1 つずつ入力してください。
+Undid the last commit. Its changes are staged.	直前のコミットを取り消しました。その変更はステージされています。
+Updated the commit message.	コミットメッセージを更新しました。
+and {count} later	ほか {count} 件
+by an unknown author	作成者不明
+signed tag	署名付きタグ
+tag	タグ
+untracked	未追跡
+{branches} already up to date on {remote}.	{branches} は {remote} で既に最新です。
+{count} branches	{count} 件のブランチ
+{count} could not be resolved: {names} (open them in the conflict editor).	{count} 件は解決できませんでした: {names}（競合エディターで開いてください）
+{count} tags	{count} 件のタグ
+{count} uncommitted changes	未コミットの変更 {count} 件
+{names} and {count} more	{names} ほか {count} 件
+{names}, and {count} more	{names} ほか {count} 件
+{path} already exists; choose another folder.	{path} は既に存在します。別のフォルダーを選んでください。
+{path} does not exist in that version, so it will be deleted.	{path} はその版には存在しないため、削除されます。
+{path} will be replaced with that version.	{path} はその版に置き換えられます。
+{remote} refused {branches}: {names}. Nothing was forced, so fetch and review them.	{remote} が {branches} を拒否しました: {names}。強制は行っていないため、取得して確認してください。
+{remote}'s default branch	{remote} の既定のブランチ
+{remote}/{branch} (the default branch)	{remote}/{branch}（既定のブランチ）
+{what} Staged and unstaged changes to it are lost; other files and the branch are not changed.	{what} ステージ済みと未ステージの変更は失われます。他のファイルとブランチは変更されません。
+“{subject}” has {count} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.	「{subject}」には親が {count} 件あります。変更を比べる親を選んでください。通常は最初の親、つまりマージ先のブランチです。
+…and {count} more	…ほか {count} 件

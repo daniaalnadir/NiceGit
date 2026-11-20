@@ -1,0 +1,224 @@
+# zh-Hans: dialogs, confirmations and short forms. Format: English source, a tab, then the translation.
+1 branch	1 个分支
+1 commit	1 个提交
+1 tag	1 个标签
+1 uncommitted change	1 项未提交的更改
+A README.md with the folder's name as its heading. An existing README is kept as it is.	以文件夹名作为标题的 README.md。已有的 README 保持不变。
+A workspace with this name exists. You will be asked to replace it.	已有同名的工作区，替换前会先确认。
+Aborted the {operation}.	已中止{operation}。
+Add a README	添加 README
+Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. Useful when backporting a fix to another branch.	与 git cherry-pick -x 一样，在每个新提交的消息中添加“(cherry picked from commit …)”。将修复移植到其他分支时很有用。
+All changes	所有更改
+All files	所有文件
+All folders	所有文件夹
+Always create a merge commit	始终创建合并提交
+Annotated, with a message	附注标签（带消息）
+Applied and deleted the stash.	已应用并删除贮藏。
+Back to the Changes panel (Esc)	返回“更改”面板 (Esc)
+Blame a file to see who changed each line. Right-click a line to blame the file before that change.	对文件执行 blame 可查看每一行由谁修改。右键点击某行，可查看该更改之前的 blame。
+Changed files	已更改的文件
+Changed files ({count})	已更改的文件 ({count})
+Check out pull request #{number}	检出拉取请求 #{number}
+Checked out every folder.	已检出所有文件夹。
+Checked out pull request #{number} as {local}.	已将拉取请求 #{number} 检出为 {local}。
+Cherry-pick a merge	摘取一个合并
+Cherry-picked the commit.	已摘取该提交。
+Cherry-picked {count} commits.	已摘取 {count} 个提交。
+Choose a GitHub repository	选择 GitHub 仓库
+Choose a destination folder.	请选择目标文件夹。
+Choose a folder for the new repository	为新仓库选择文件夹
+Choose one of your GitHub repositories	从你的 GitHub 仓库中选择
+Clear 1 recent repository?	清除 1 个最近的仓库？
+Clear all…	全部清除…
+Clear {count} recent repositories?	清除 {count} 个最近的仓库？
+Clone repository	克隆仓库
+Close other tabs	关闭其他标签页
+Close tab	关闭标签页
+Close {name}	关闭 {name}
+Cmd-P goes to any tracked file by name, and Cmd-Enter in that list opens the file's blame.	按 Cmd-P 可按名称前往任何已跟踪的文件，在该列表中按 Cmd-Enter 可打开文件的 blame。
+Cmd-click commits in the graph to select several, then cherry-pick them together.	在提交图中按住 Cmd 点击可选择多个提交，然后一起摘取。
+Commits the README as “Initial commit”, or an empty commit when there is no README.	将 README 提交为“Initial commit”；如果没有 README，则创建一个空提交。
+Committer	提交者
+Compare with remote	与远程比较
+Copy the full commit ID	复制完整的提交 ID
+Copy the full stash commit ID	复制完整的贮藏提交 ID
+Create	创建
+Create and push	创建并推送
+Created and switched to {branch}.	已创建并切换到 {branch}。
+Created branch {branch}.	已创建分支 {branch}。
+Created repository {name}.	已创建仓库 {name}。
+Created {branch} from the stash and switched to it.	已从贮藏创建 {branch} 并切换到它。
+Created {created} {name} and pushed it to {remote}.	已创建{created} {name} 并推送到 {remote}。
+Created {created} {name}, but could not push it to {remote}: {reason}	已创建{created} {name}，但无法推送到 {remote}：{reason}
+Created {created} {name}.	已创建{created} {name}。
+Creates the branch and switches to it, carrying your changes across as Create branch does. The branch gets no upstream. A branch that already exists is not replaced.	创建分支并切换到它，像“创建分支”一样带走你的更改。该分支不设置上游。已存在的分支不会被替换。
+Creates the branch at the commit this stash was made on, switches to it, applies the stash, and removes the stash once it applies.	在创建此贮藏时所基于的提交上创建分支，切换到该分支，应用此贮藏，应用后删除该贮藏。
+Current HEAD	当前 HEAD
+Default branch (loading…)	默认分支（正在加载…）
+Deleted 1 branch. Undo restores them.	已删除 1 个分支。撤销可将其恢复。
+Deleted branch {name}.	已删除分支 {name}。
+Deleted tag {name}.	已删除标签 {name}。
+Deleted the stash.	已删除贮藏。
+Deleted {branch} from {remote}.	已从 {remote} 删除分支 {branch}。
+Deleted {deleted} of {count} branch before stopping. Undo restores those. {error}	停止前已删除 {count} 个分支中的 {deleted} 个。撤销可恢复这些分支。{error}
+Deleted {deleted} of {count} branches before stopping. Undo restores those. {error}	停止前已删除 {count} 个分支中的 {deleted} 个。撤销可恢复这些分支。{error}
+Deleted {tag} from {remote}.	已从 {remote} 删除标签 {tag}。
+Destination folder	目标文件夹
+Discarded 1 changed file.	已丢弃 1 个已更改的文件。
+Discarded 1 changed line in {name}.	已丢弃 {name} 中 1 处已更改的行。
+Discarded changes to {name}.	已丢弃对 {name} 的更改。
+Discarded {count} changed files.	已丢弃 {count} 个已更改的文件。
+Discarded {count} changed lines in {name}.	已丢弃 {name} 中 {count} 处已更改的行。
+Download all files now	立即下载所有文件
+Download file contents when needed	需要时再下载文件内容
+Drag a branch onto the current branch in the sidebar to merge it in or rebase onto it.	在侧边栏中把一个分支拖到当前分支上，即可将其合并进来或变基到它上面。
+Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead.	每个文件都会替换为{side}版本并标记为已解决。这些文件中另一侧的更改会被丢弃。{side}删除的文件则会改为删除。
+Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed.	每个本地分支都会推送到 {remote} 上同名的分支。{remote} 已有的分支只会快进更新，绝不强制覆盖。标签不会被推送。
+Enter a number of commits from 1 to 100000.	请输入 1 到 100000 之间的提交数。
+Every file in this commit's tree	此提交树中的每个文件
+Faster for large projects. You can fetch the full history later.	对大型项目更快。之后可以再获取完整历史。
+Fetches pull request #{number} from {remote} into this new branch, then switches to it. The branch gets no upstream, because the pull request may come from a fork. An existing branch with this name is used only if it already points at the pull request.	将 {remote} 中的拉取请求 #{number} 取到这个新分支，然后切换到该分支。由于拉取请求可能来自 fork，该分支不设置上游。只有同名的已有分支已指向该拉取请求时才会使用它。
+First tag	首个标签
+Fix up with staged changes, in a commit's menu, folds what you have staged into that older commit.	用已暂存的更改修正：在提交的菜单中，可把已暂存的内容并入那个较早的提交。
+Folded the staged changes into “{subject}”.	已将暂存的更改并入“{subject}”。
+Folder	文件夹
+Folder not found	找不到文件夹
+Folders, one per line	文件夹，每行一个
+Force pushed {branch} to {upstream}.	已将 {branch} 强制推送到 {upstream}。
+Forget every repository in this list. No folder is deleted.	从此列表中移除所有仓库记录。不会删除任何文件夹。
+Forget the repositories whose folders no longer exist. No folder is deleted.	移除文件夹已不存在的仓库记录。不会删除任何文件夹。
+From GitHub…	从 GitHub…
+Full history	完整历史
+Git follows this repository's merge.ff setting.	Git 会遵循此仓库的 merge.ff 设置。
+Git signs the tag with your configured signing key (user.signingKey and gpg.format), as `git tag --sign` does.	与 `git tag --sign` 一样，使用你配置的签名密钥（user.signingKey 和 gpg.format）为标签签名。
+Hide repositories	隐藏仓库
+Initial branch	初始分支
+Integrate {branch}	整合 {branch}
+Keep staged changes	保留已暂存的更改
+Lightweight	轻量
+Loading commit…	正在加载提交…
+Local branch	本地分支
+Lost commits after a reset or rebase? Repository > Recover lost work lists every earlier position of HEAD.	重置或变基后丢失了提交？“仓库 > 恢复丢失的工作”会列出 HEAD 之前的每个位置。
+Made a mistake in a commit, merge, or rebase? Undo in the toolbar steps back through recent actions.	提交、合并或变基出错了？工具栏中的“撤销”可以逐步回退最近的操作。
+Make a first commit	创建首次提交
+Merge (fast-forward when possible)	合并（可能时快进）
+Merge {source} into {current}, or replay {current}'s commits on top of it?	将 {source} 合并到 {current}，还是把 {current} 的提交重放到它上面？
+Merged {name}.	已合并 {name}。
+Middle-click a repository tab to close it, as in a browser.	像在浏览器中一样，中键点击仓库标签页即可关闭它。
+More actions for this commit	此提交的更多操作
+New files that Git does not track yet are saved in the stash and removed from the folder.	Git 尚未跟踪的新文件会保存到贮藏中，并从文件夹中移除。
+New repository	新建仓库
+New tag	新建标签
+No open repositories	没有打开的仓库
+Note the original commit in each message	在每条消息中注明原始提交
+Notes	备注
+Nothing was deleted. {error}	没有删除任何内容。{error}
+Number of commits	提交数
+One folder per line, relative to the repository.	每行一个文件夹，相对于仓库。
+Only the latest N commits	仅最近 N 个提交
+Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.	只更改消息；已暂存和未暂存的编辑不受影响。提交会获得新的 ID。
+Only these folders	仅这些文件夹
+Open another repository	打开其他仓库
+Open recent repository {name}	打开最近的仓库 {name}
+Open tabs	已打开的标签页
+Options	选项
+Parent	父提交
+Parent {number} · {commit} {subject}	父提交 {number} · {commit} {subject}
+Parents	父提交
+Press Cmd-/ to see every keyboard shortcut.	按 Cmd-/ 查看所有键盘快捷键。
+Press Ctrl-` to show or hide the terminal. Its shells keep running while it is hidden.	按 Ctrl-` 显示或隐藏终端。隐藏时其中的 shell 会继续运行。
+Press Shift-Cmd-P to open the command palette, which lists most actions and their shortcuts.	按 Shift-Cmd-P 打开命令面板，其中列出了大多数操作及其快捷键。
+Publish branch	发布分支
+Published {branch} to {remote}.	已将 {branch} 发布到 {remote}。
+Push 1 branch to {remote}?	要将 1 个分支推送到 {remote} 吗？
+Push 1 tag to {remote}?	要将 1 个标签推送到 {remote} 吗？
+Push to	推送到
+Push to remote	推送到远程
+Push {branch} to a remote and track it there.	将 {branch} 推送到远程并在那里跟踪。
+Push {count} branches to {remote}?	要将 {count} 个分支推送到 {remote} 吗？
+Push {count} tags to {remote}?	要将 {count} 个标签推送到 {remote} 吗？
+Pushed {branches} to {remote}.	已将{branches}推送到 {remote}。
+Pushed {name} to {remote}.	已将 {name} 推送到 {remote}。
+Pushed {summary} to {remote}.	已将{summary}推送到 {remote}。
+RECENT REPOSITORIES	最近的仓库
+Rebased onto {name}.	已变基到 {name}。
+Rebase…	变基…
+Recent repository {name}	最近的仓库 {name}
+Recent repository {name}, folder not found	最近的仓库 {name}，找不到文件夹
+Records the merge with a merge commit even when the branch could move forward.	即使分支可以快进，也会以合并提交记录此次合并。
+Remote	远程
+Remove from recent repositories	从最近的仓库中移除
+Remove from recent repositories. The folder is not deleted.	从最近的仓库中移除。文件夹不会被删除。
+Remove missing	移除缺失的仓库
+Remove {name} from recent repositories	从最近的仓库中移除 {name}
+Removed 1 repository from recent. Their folders are unchanged.	已从最近的仓库中移除 1 个。文件夹未改动。
+Removed {count} repositories from recent. Their folders are unchanged.	已从最近的仓库中移除 {count} 个。文件夹未改动。
+Renamed the stash. It is at the top of the list.	已重命名贮藏。它已位于列表顶部。
+Repositories	仓库
+Repository URL or local path	仓库 URL 或本地路径
+Resolved 1 file with the {side} version.	已用{side}版本解决 1 个文件。
+Resolved {count} files with the {side} version.	已用{side}版本解决 {count} 个文件。
+Restore	恢复
+Restore this file from the stash	从贮藏中恢复此文件
+Restore version before this commit	恢复此提交之前的版本
+Restored {path} from {reference}.	已从 {reference} 恢复 {path}。
+Restored {path}. Review and commit the staged change.	已恢复 {path}。请检查并提交已暂存的更改。
+Revert a merge	还原一个合并
+Reverted the commit.	已还原该提交。
+Reverted {count} commits.	已还原 {count} 个提交。
+Save message	保存消息
+Saves the staged changes only. Unstaged and untracked changes stay in your files. A file with both staged and unstaged changes must be staged or unstaged in full first.	只保存已暂存的更改。未暂存和未跟踪的更改会保留在文件中。同时含有已暂存和未暂存更改的文件，需要先整体暂存或整体取消暂存。
+Settings (Cmd-,) offers a colour-blind safe graph palette.	设置（Cmd-,）提供对色盲友好的提交图配色。
+Show all changes	显示所有更改
+Shows which commits the remote would lose	显示远程会丢失哪些提交
+Sign with your signing key	使用你的签名密钥签名
+Signature	签名
+Skipped, because {remote} has a different tag with the same name: {names}.	已跳过，因为 {remote} 上已有同名但不同的标签：{names}。
+Smaller and faster; Git downloads older file versions when you look at them. Needs a server that supports partial clone.	体积更小、速度更快；查看旧版本文件时 Git 才会下载。需要支持部分克隆的服务器。
+Squash into staged changes	压缩到已暂存的更改中
+Stage one line at a time: press + beside a line in the diff, or drag over several lines first.	在差异中点击行旁的 +，即可逐行暂存；也可先拖选多行。
+Staged changes stay staged and in your files, and only unstaged changes leave your files. The stash still holds a copy of the staged changes, as Git's --keep-index does.	已暂存的更改保持暂存且保留在文件中，只有未暂存的更改会离开文件。与 Git 的 --keep-index 一样，贮藏中仍保存已暂存更改的副本。
+Staged {name}'s changes as a squash. Review and commit them.	已将 {name} 的更改暂存为压缩合并。请检查并提交。
+Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged.	将分支的更改暂存而不提交，以便你把它们作为一个新提交来提交。该分支不会被记录为已合并。
+Start from	起始于
+Start work	开始工作
+Start work on issue #{number}	开始处理议题 #{number}
+Started work on issue #{number} on {local}.	已在 {local} 上开始处理议题 #{number}。
+Stash only staged changes	仅贮藏已暂存的更改
+Stashed the selected lines of {name}.	已贮藏 {name} 中选中的行。
+Tag message	标签消息
+Tag name	标签名
+Take the {side} version for all conflicts?	所有冲突都采用{side}版本吗？
+Take {side} versions	采用{side}版本
+The folder is created if it does not exist.	如果文件夹不存在，将会创建。
+The remote's default branch is not ready yet. Try again in a moment.	远程的默认分支尚未就绪，请稍后再试。
+The repository was created, but Git needs your name and email before it can make the first commit.	仓库已创建，但 Git 需要你的姓名和邮箱后才能创建首次提交。
+The stash keeps its changes. Once renamed, it moves to the top of the list.	贮藏会保留其更改。重命名后它会移到列表顶部。
+These local tags are not on {remote} yet. Tags already on {remote} are never replaced.	这些本地标签尚未在 {remote} 上。{remote} 上已有的标签绝不会被替换。
+They are removed from the recent list. Their folders are not deleted.	它们会从最近列表中移除，文件夹不会被删除。
+This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile.	此提交已在远程上。修改消息会重写它，已拉取它的人需要重新同步。
+This replaces {path} in your working files and in the staged version with its version from {reference}. Its current changes are lost; other files and the branch are not changed.	这会用 {reference} 中的版本替换工作文件和暂存版本中的 {path}。其当前更改将丢失；其他文件和分支不受影响。
+Type at least one folder, one per line.	请至少输入一个文件夹，每行一个。
+Undid the last commit. Its changes are staged.	已撤销最后一次提交。其更改已暂存。
+Updated the commit message.	已更新提交消息。
+and {count} later	以及之后的 {count} 个
+by an unknown author	作者未知
+signed tag	签名标签
+tag	标签
+untracked	未跟踪
+{branches} already up to date on {remote}.	{branches}在 {remote} 上已是最新。
+{count} branches	{count} 个分支
+{count} could not be resolved: {names} (open them in the conflict editor).	{count} 个无法解决：{names}（请在冲突编辑器中打开）。
+{count} tags	{count} 个标签
+{count} uncommitted changes	{count} 项未提交的更改
+{names} and {count} more	{names} 以及另外 {count} 个
+{names}, and {count} more	{names}，以及另外 {count} 个
+{path} already exists; choose another folder.	{path} 已存在，请选择其他文件夹。
+{path} does not exist in that version, so it will be deleted.	该版本中不存在 {path}，因此它将被删除。
+{path} will be replaced with that version.	{path} 将被替换为该版本。
+{remote} refused {branches}: {names}. Nothing was forced, so fetch and review them.	{remote} 拒绝了{branches}：{names}。没有强制推送任何内容，请先获取并检查。
+{remote}'s default branch	{remote} 的默认分支
+{remote}/{branch} (the default branch)	{remote}/{branch}（默认分支）
+{what} Staged and unstaged changes to it are lost; other files and the branch are not changed.	{what} 其已暂存和未暂存的更改将丢失；其他文件和分支不受影响。
+“{subject}” has {count} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.	“{subject}”有 {count} 个父提交。请选择变更所对比的父提交；通常是第一个，即它被合并进的分支。
+…and {count} more	……以及另外 {count} 个

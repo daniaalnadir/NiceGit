@@ -1,0 +1,300 @@
+# zh-Hans: the commit history, changes, and diff views.
+(and {count} earlier)	（另有 {count} 个）
+A binary file has no lines	二进制文件没有行
+A large file. GitHub warns about files over 50 MB and refuses files over 100 MB; consider Git LFS or ignoring it.	大文件。GitHub 会对超过 50 MB 的文件发出警告，并拒绝超过 100 MB 的文件；请考虑使用 Git LFS 或将其忽略。
+A new commit on {branch} undoes the changes from “{subject}”.	在 {branch} 上新建一个提交，撤销“{subject}”的更改。
+Absorb staged changes into the earlier commits that last changed their lines	将已暂存的更改合并到最后修改这些行的更早提交中
+Add trailers	添加 Trailer
+Added line	新增行
+All .{extension} files in .gitignore	.gitignore 中所有 .{extension} 文件
+All {count} commits are already on {branch}.	全部 {count} 个提交已在 {branch} 上。
+Amend last commit	修补上一次提交
+Binary file, {bytes} bytes	二进制文件，{bytes} 字节
+Branch / tag	分支 / 标签
+Branch label {name}	分支标签 {name}
+Branches shown	显示的分支
+Breaking	破坏性变更
+Check out	检出
+Check out a branch before cherry-picking.	请先检出分支，再进行拣选。
+Check out {branch}	检出 {branch}
+Check out {name} and cherry-pick {commits}?	检出 {name} 并拣选 {commits}？
+Cherry-pick	拣选
+Cherry-pick this commit?	拣选此提交？
+Cherry-pick {count} commit	拣选 {count} 个提交
+Cherry-pick {count} commits	拣选 {count} 个提交
+Cherry-pick {count} commits?	拣选 {count} 个提交？
+Cherry-pick {hash}	拣选 {hash}
+Choose a type first	请先选择类型
+Choose the branch and tag labels the graph draws, and whether stashes are shown	选择图中显示的分支和标签，以及是否显示贮藏
+Clear filters	清除筛选
+Close this file's conflict editor first	请先关闭此文件的冲突编辑器
+Columns	列
+Combine the selected commits into one, in the interactive rebase window to review	将所选提交合并为一个，在交互式变基窗口中检查
+Commit and push	提交并推送
+Commit description	提交描述
+Commit history	提交历史
+Commit message	提交消息
+Commit options	提交选项
+Commit or stash your changes before cherry-picking.	请先提交或贮藏更改，再进行拣选。
+Commit or stash your changes first	请先提交或贮藏更改
+Commit scope	提交范围
+Commit staged changes as fixup	将已暂存的更改提交为 fixup
+Commit summary	提交摘要
+Commit type	提交类型
+Commit {count} file to {branch}	将 {count} 个文件提交到 {branch}
+Commit {count} files to {branch}	将 {count} 个文件提交到 {branch}
+Commit {id}	提交 {id}
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)	提交，然后推送到 {upstream}（Shift-Ctrl/Cmd-Enter）
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.	提交，然后推送到 {upstream}（Shift-Ctrl/Cmd-Enter）。提交和推送将跳过 Git 钩子。
+Committing as {name} <{email}>	以 {name} <{email}> 提交
+Compare with marked commit	与已标记的提交比较
+Compare with working files	与工作文件比较
+Conflicts stop the sequence for you to resolve or abort.	出现冲突时会暂停整个序列，以便你解决或中止。
+Copied the commit message.	已复制提交消息。
+Copy folder path	复制文件夹路径
+Copy path	复制路径
+Could not read the commits on {branch}: {error}	无法读取 {branch} 上的提交：{error}
+Create a branch at {hash}	在 {hash} 处创建分支
+Create tag here…	在此创建标签…
+Discard all	全部丢弃
+Discard all changes?	丢弃全部更改？
+Discard all changes…	丢弃全部更改…
+Discard changes in {path}?	丢弃 {path} 中的更改？
+Discard changes?	丢弃更改？
+Discard changes…	丢弃更改…
+Discard folder changes…	丢弃文件夹中的更改…
+Discard this change from the file. You can undo it.	从文件中丢弃此更改。可以撤销。
+Discarded changes to {path}{more}	已丢弃 {path} 的更改{more}
+Discards changes to all {count} unstaged files, including those hidden by the filter	丢弃全部 {count} 个未暂存文件的更改，包括被筛选隐藏的文件
+Divides this commit into two, with a message for each	将此提交拆分为两个，各自附带消息
+Drag a column's edge to resize it. Right-click to choose columns.	拖动列的边缘可调整宽度，右键单击可选择显示的列。
+Drop…	删除…
+Each stash as a row above the commit it was made on, when that commit is loaded	每个贮藏显示为其所在提交上方的一行（前提是该提交已加载）
+Edit file	编辑文件
+Edit message…	编辑消息…
+File history	文件历史
+File or folder in the repository	仓库中的文件或文件夹
+File view	文件视图
+Files hidden by the filter are included.	包括被筛选隐藏的文件。
+Fill in the template to commit	填写模板后再提交
+Filter authors	筛选作者
+Filter by author	按作者筛选
+Filter by path	按路径筛选
+Filter changed files	筛选已更改的文件
+Filter loaded commits	筛选已加载的提交
+Filter…	筛选…
+Find in diff	在差异中查找
+Finish or abort the current Git operation before cherry-picking.	请先完成或中止当前的 Git 操作，再进行拣选。
+Finish or abort the current Git operation before switching branches.	请先完成或中止当前的 Git 操作，再切换分支。
+Finish the current Git operation first	请先完成当前的 Git 操作
+Fix up	合并修正
+Fix up with staged changes…	用已暂存的更改进行修正…
+Fix up “{subject}”?	修正“{subject}”？
+Folder {name}, {files}	文件夹 {name}，{files}
+Folds the staged changes into this commit and replays the commits after it	将已暂存的更改合并到此提交，并重放之后的提交
+From commit.template	来自 commit.template
+Git hooks are skipped for this commit	此次提交将跳过 Git 钩子
+Graph	图
+History columns	历史列
+Hunk at line {start}	第 {start} 行处的块
+Hunk at lines {start} to {end}	第 {start} 至 {end} 行的块
+Ignore	忽略
+Interactive rebase from here…	从此处开始交互式变基…
+It is applied to {branch} as a new commit.	它将作为新提交应用到 {branch}。
+Labels such as origin/main. A local branch that tracks one keeps its label.	例如 origin/main 这样的标签。跟踪它的本地分支会保留自己的标签。
+Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when committing and pushing. Resets after each commit.	下一次提交跳过 pre-commit 和 commit-msg 钩子；提交并推送时还跳过 pre-push 钩子。每次提交后重置。
+Line	行
+Listing files…	正在列出文件…
+Load older history	加载更早的历史
+Lock file (LFS)	锁定文件 (LFS)
+Locked {path} with Git LFS.	已用 Git LFS 锁定 {path}。
+Mark for comparison	标记以便比较
+Marked {hash}. Right-click another commit to compare.	已标记 {hash}。右键单击另一个提交即可比较。
+Matches each commit's message, author, ID, branches, and tags	匹配每个提交的消息、作者、ID、分支和标签
+Merge commits can't be edited here	此处无法编辑合并提交
+Merge commits can't be fixed up here	此处无法修正合并提交
+Merge commits can't be split	合并提交无法拆分
+More actions for this file	此文件的更多操作
+Name or email	名称或邮箱
+New commits on {branch} undo the changes from {count} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.	在 {branch} 上新建提交，按从新到旧的顺序撤销 {count} 个提交的更改。原提交保留在历史中。出现冲突时会暂停整个序列，以便你解决或中止。
+Next match (Enter)	下一个匹配项 (Enter)
+NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}.	NiceGit 会先切换到 {name}，并像检出一样把未提交的更改存入贮藏。然后你需要在 {name} 上确认拣选。
+No Git identity set. Choose one under Identity in the repository menu.	未设置 Git 身份。请在仓库菜单的“身份”中选择一个。
+No authors match	没有匹配的作者
+No changes to show	没有可显示的更改
+No matching files	没有匹配的文件
+No other authors in the loaded history	已加载的历史中没有其他作者
+No unstaged changes	没有未暂存的更改
+Not available right now	目前不可用
+Not committed yet	尚未提交
+Only files shown by the filter are included.	仅包括筛选后显示的文件。
+Open anyway	仍然打开
+Open file	打开文件
+Open in default app	用默认应用打开
+Open in diff tool	在差异工具中打开
+Open in {name}	在 {name} 中打开
+Path	路径
+Previous match (Shift+Enter)	上一个匹配项 (Shift+Enter)
+Reading file…	正在读取文件…
+Recent commit summaries	最近的提交摘要
+Records a fixup! commit for this commit. An interactive rebase folds it in later	为此提交记录一个 fixup! 提交。之后由交互式变基合并
+Remote branch labels	远程分支标签
+Remove the selected commits and their changes, in the interactive rebase window to review	移除所选提交及其更改，在交互式变基窗口中检查
+Removed line	删除行
+Reorder, edit, squash, or drop the commits after this one	重新排序、编辑、压缩或删除此提交之后的提交
+Reset {branch} to here…	将 {branch} 重置到此处…
+Resize the {column} column	调整 {column} 列的大小
+Resolve conflict…	解决冲突…
+Resolve in {name}	在 {name} 中解决
+Resolve the conflicted files first	请先解决有冲突的文件
+Resolved from memory	已根据记录解决
+Restore column widths	恢复列宽
+Revert this commit?	还原此提交？
+Revert {count} commits?	还原 {count} 个提交？
+Revert…	还原…
+Rewrites this commit and the ones after it	重写此提交及之后的提交
+Save a copy…	保存副本…
+Save as ZIP…	另存为 ZIP…
+Save as patch	另存为补丁
+Save as patch…	另存为补丁…
+Save staged changes as a patch	将已暂存的更改另存为补丁
+Save staged changes as a patch, including files hidden by the filter	将已暂存的更改另存为补丁，包括被筛选隐藏的文件
+Save unstaged changes as a patch, including untracked files	将未暂存的更改另存为补丁，包括未跟踪的文件
+Save unstaged changes as a patch, including untracked files and those hidden by the filter	将未暂存的更改另存为补丁，包括未跟踪的文件和被筛选隐藏的文件
+Saved {file}.	已保存 {file}。
+Saved {name}.	已保存 {name}。
+Search all history	搜索全部历史
+Search all history (Shift-Ctrl/Cmd-F)	搜索全部历史 (Shift-Ctrl/Cmd-F)
+Search files in this commit…	在此提交中搜索文件…
+Search history	搜索历史
+Select at least two commits to squash	请至少选择两个提交进行压缩
+Set your Git name and email first	请先设置 Git 的名称和邮箱
+Short commit ID	短提交 ID
+Show all	全部显示
+Show all branches	显示全部分支
+Show all branches to choose which the graph includes	显示全部分支，以选择图中包括哪些分支
+Show in file manager	在文件管理器中显示
+Show in the graph	在图中显示
+Show only commits by an author, or that touch a path.	仅显示某位作者的提交，或涉及某个路径的提交。
+Show only the commits by an author, or that touch a file or folder	仅显示某位作者的提交，或涉及某个文件或文件夹的提交
+Showing commits {filters}.	正在显示提交：{filters}。
+Showing local branches.	正在显示本地分支。
+Showing only {branch}.	仅显示 {branch}。
+Showing the current branch and its upstream.	正在显示当前分支及其上游分支。
+Showing the first {shown} of {total} entries in this commit.	正在显示此提交中 {total} 项中的前 {shown} 项。
+Show…	显示…
+Sign the next commit, amend, or Commit and push with your signing key, or leave it unsigned. Starts from commit.gpgSign and resets after each commit.	使用你的签名密钥为下一次提交、修补或提交并推送签名，或保持不签名。以 commit.gpgSign 为起点，每次提交后重置。
+Sign this commit	为此提交签名
+Skip Git hooks	跳过 Git 钩子
+Split commit…	拆分提交…
+Squash…	压缩…
+Stage All	全部暂存
+Stage All Changes	暂存全部更改
+Stage all {changes} and commit	暂存全部 {changes} 项更改并提交
+Stage every change, as Stage All Changes does, then commit	与“暂存全部更改”相同，暂存每项更改后提交
+Stage files to commit	暂存要提交的文件
+Stage files to include them in the next commit	暂存文件以将其包含在下一次提交中
+Stage folder	暂存文件夹
+Stage the changes to commit as a fixup first	请先暂存要作为 fixup 提交的更改
+Stage the changes to fold into this commit first	请先暂存要合并到此提交的更改
+Stage this change	暂存此更改
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}	{count} 个文件的已暂存和未暂存更改将丢失，未跟踪的文件将被删除。此操作无法撤销。{hidden}
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}	{count} 个文件的已暂存和未暂存更改将丢失，未跟踪的文件将被删除。此操作无法撤销。{scope}
+Staged and unstaged changes to {path} are discarded. {note}	{path} 的已暂存和未暂存更改将被丢弃。{note}
+Staged files	已暂存的文件
+Staged files ({count})	已暂存的文件 ({count})
+Staged {files} in {folder}.	已暂存 {folder} 中的 {files}。
+Stages all {count} unstaged files, including those hidden by the filter	暂存全部 {count} 个未暂存文件，包括被筛选隐藏的文件
+Start bisect: this commit is good	开始 bisect：此提交正常
+Stash or discard unstaged changes first	请先贮藏或丢弃未暂存的更改
+Stash this change and remove it from the file	将此更改贮藏，并从文件中移除
+Stash this file…	贮藏此文件…
+Stashed {path}.	已贮藏 {path}。
+Subject	主题
+Tag labels	标签
+Tag {name}	标签 {name}
+Take {side} version	采用 {side} 版本
+That commit is already on {branch}.	此提交已在 {branch} 上。
+The last commit is already on a remote. Amending rewrites it, so others who pulled it will need to reconcile.	上一次提交已在远程仓库上。修补会重写该提交，已拉取它的人需要重新同步。
+The selected commits must be in the loaded history, and none can be a merge	所选提交必须在已加载的历史中，且不能包含合并提交
+The staged changes become part of {commit}, and the commits after it on {branch} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.	所暂存的更改将成为 {commit} 的一部分，{branch} 上其后的提交会被重写，因此哈希会改变。如果它们已推送，你需要强制推送。
+They are applied to {branch} oldest first.	它们将按从旧到新的顺序应用到 {branch}。
+They are applied to {branch} oldest first. Conflicts stop the sequence for you to resolve or abort.	它们将按从旧到新的顺序应用到 {branch}。出现冲突时会暂停整个序列，以便你解决或中止。
+This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy.	此操作无法撤销：重命名、冲突、文件夹和子模块将在不保存副本的情况下被丢弃。
+This commit's tree has no files.	此提交的树中没有文件。
+This file in .gitignore	.gitignore 中的此文件
+This file is empty.	此文件为空。
+This file is {size}. Large files are not shown until you open them.	此文件大小为 {size}。大文件需先打开才会显示。
+This file on this computer only	仅此计算机上的此文件
+This is a submodule. It records commit {commit}, but its files are in its own repository, so they are not shown here.	这是一个子模块。它记录的是提交 {commit}，但其文件位于自己的仓库中，因此不在此处显示。
+This repository uses Conventional Commits	此仓库使用 Conventional Commits
+Took the {side} version of {path}.	已采用 {path} 的 {side} 版本。
+Tree	树形
+Try again	重试
+Type	类型
+Undo commit	撤销提交
+Undo discard	撤销丢弃
+Undo the last commit?	撤销上一次提交？
+Undo the selected commits with new commits, newest first	用新提交撤销所选提交，从新到旧
+Undo this commit…	撤销此提交…
+Unlock file (LFS)	解除文件锁定 (LFS)
+Unstage All	全部取消暂存
+Unstage All Changes	取消暂存全部更改
+Unstage folder	取消暂存文件夹
+Unstage this change	取消暂存此更改
+Unstaged files	未暂存的文件
+Unstaged files ({count})	未暂存的文件 ({count})
+Unstaged {files} in {folder}.	已取消暂存 {folder} 中的 {files}。
+Unstages all {count} staged files, including those hidden by the filter	取消暂存全部 {count} 个已暂存文件，包括被筛选隐藏的文件
+Updated the ignore rules.	已更新忽略规则。
+Use a recent summary	使用最近的摘要
+Wait for the current Git action to finish before cherry-picking.	请等待当前的 Git 操作完成后再进行拣选。
+Which branches the graph includes	图中包括的分支
+Working tree	工作区
+Write a summary to commit	请填写摘要后再提交
+You are here	当前位置
+You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.	你当前不在任何分支上，因此在此提交的内容不属于任何分支，可能会丢失。请先创建分支。
+You can undo this from the Changes panel until the file changes again.	在文件再次更改之前，可以从“更改”面板撤销此操作。
+[added: {text}]	[新增：{text}]
+[removed: {text}]	[删除：{text}]
+binary	二进制
+in {hash}	位于 {hash}
+labels {refs}	标签 {refs}
+scope	范围
+staged	已暂存
+touching {path}	涉及 {path}
+unstaged	未暂存
+{count} branch hidden.	已隐藏 {count} 个分支。
+{count} branches hidden.	已隐藏 {count} 个分支。
+{count} commits selected	已选择 {count} 个提交
+{count} file change on	{count} 项文件更改：
+{count} file changes on	{count} 项文件更改：
+{count} line added	新增 {count} 行
+{count} line removed	删除 {count} 行
+{count} lines added	新增 {count} 行
+{count} lines removed	删除 {count} 行
+{count} of them are already on {branch}.	其中 {count} 个已在 {branch} 上。
+{count} uncommitted file	{count} 个未提交的文件
+{count} uncommitted files	{count} 个未提交的文件
+{current} of {count}	第 {current} 项，共 {count} 项
+{kind} {number}: {code}	{kind} {number}：{code}
+{kind}: {code}	{kind}：{code}
+{label} this change	{label}此更改
+{name}, {kind}, {place}	{name}，{kind}，{place}
+{path} is untracked and will be deleted. {note}	{path} 未被跟踪，将被删除。{note}
+{shown} of {total}	{shown}/{total}
+{title} ({count})	{title} ({count})
+{total}{more} commits	{total}{more} 个提交
+{verb} line {number}	{verb}第 {number} 行
+{verb} this line	{verb}此行
+“{subject}” is applied to {branch} as a new commit.	“{subject}”将作为新提交应用到 {branch}。
+“{subject}” is removed from {branch}. Its changes stay staged so you can commit them again.	“{subject}”已从 {branch} 中移除。其更改保留在暂存区，你可以重新提交。
+Local branches	本地分支
+Current branch	当前分支
+Added	已添加
+Modified	已修改
+Renamed	已重命名
+Conflict	冲突
+Untracked	未跟踪
+No diff tool is set. Set one with `git config --global diff.tool <name>`.	未设置差异工具。请使用 `git config --global diff.tool <name>` 设置。
+No merge tool is set. Set one with `git config --global merge.tool <name>`.	未设置合并工具。请使用 `git config --global merge.tool <name>` 设置。

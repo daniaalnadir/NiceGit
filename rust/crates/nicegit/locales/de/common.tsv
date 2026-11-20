@@ -1,0 +1,42 @@
+# de: words used all over the interface. Any part of the app may use these keys.
+Cancel	Abbrechen
+OK	OK
+Close	Schließen
+Save	Sichern
+Delete	Löschen
+Delete…	Löschen …
+Remove	Entfernen
+Rename…	Umbenennen …
+Open	Öffnen
+Copy	Kopieren
+Refresh	Aktualisieren
+Search	Suchen
+Done	Fertig
+Apply	Anwenden
+Continue	Fortfahren
+Abort	Abbrechen
+Commit	Commit
+Push	Push
+Pull	Pull
+Fetch	Abrufen
+Stage	Bereitstellen
+Unstage	Nicht bereitstellen
+Discard	Verwerfen
+Merge	Zusammenführen
+Rebase	Rebase
+Stash	Stash
+Branch	Branch
+Branches	Branches
+Tags	Tags
+Remotes	Remotes
+Stashes	Stashes
+Changes	Änderungen
+History	Verlauf
+Files	Dateien
+Author	Autor
+Date	Datum
+Message	Nachricht
+Repository	Repository
+Loading…	Wird geladen …
+Yes	Ja
+No	Nein

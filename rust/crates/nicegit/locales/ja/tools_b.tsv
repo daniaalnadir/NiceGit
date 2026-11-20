@@ -1,0 +1,463 @@
+# ja: tools and the repository pickers.
+Save as ZIP	ZIP として保存
+Writing {name}…	{name} を書き込み中…
+Saved {name} ({size}).	{name} を保存しました（{size}）。
+{name} output	{name} の出力
+The program printed nothing.	プログラムは何も出力しませんでした。
+Error output	エラー出力
+This file is not UTF-8 text, so it cannot be edited here.	このファイルは UTF-8 のテキストではないため、ここでは編集できません。
+The file changed on disk since you opened it. Reload it, then reapply your edits.	ファイルを開いた後に変更されました。再読み込みしてから、編集をやり直してください。
+{name} — edited	{name} — 編集済み
+Saved {path}.	{path} を保存しました。
+Revert	元に戻す
+Discard your edits and reload the file	編集内容を破棄して、ファイルを再読み込みします
+File contents	ファイルの内容
+Clean Up Branches	ブランチを整理
+Clean up {count} branch	{count} 件のブランチを整理
+Clean up {count} branches	{count} 件のブランチを整理
+Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.	{current} にマージ済みのローカルブランチのうち、リモートブランチが削除されたもの、またはしばらくコミットがないもの。
+Also list unmerged branches with no commit for	次の期間コミットがない未マージのブランチも表示：
+ days	 日
+Deleted {count} branch.	{count} 件のブランチを削除しました。
+Deleted {count} branches.	{count} 件のブランチを削除しました。
+Undo	取り消す
+Restore {count} branch	{count} 件のブランチを復元
+Restore {count} branches	{count} 件のブランチを復元
+Finding branches…	ブランチを検索中…
+No branches to clean up.	整理するブランチはありません。
+{count} to review	確認が必要な {count} 件
+Select merged	マージ済みを選択
+Main branch	メインブランチ
+The main line is never selected automatically. Tick it only if you mean to delete it.	メインラインは自動では選択されません。削除する場合のみチェックしてください。
+Merged	マージ済み
+Not merged	未マージ
+Upstream gone	アップストリームなし
+Its branch on the remote was deleted, as usually happens once a pull request is merged	リモートのブランチが削除されています。プルリクエストがマージされると通常こうなります
+{count} selected branch is the main line. Deleting it removes that line of work locally.	選択中の {count} 件のブランチはメインラインです。削除するとその作業ラインがローカルから消えます。
+{count} selected branches are the main line. Deleting it removes that line of work locally.	選択中の {count} 件のブランチはメインラインです。削除するとその作業ラインがローカルから消えます。
+{count} selected branch has commits on no other branch. Undo can restore it until another deletion.	選択中の {count} 件のブランチには、他のブランチにないコミットがあります。取り消しで次の削除まで復元できます。
+{count} selected branches have commits on no other branch. Undo can restore them until another deletion.	選択中の {count} 件のブランチには、他のブランチにないコミットがあります。取り消しで次の削除まで復元できます。
+Delete {count} branch…	{count} 件のブランチを削除…
+Delete {count} branches…	{count} 件のブランチを削除…
+{count} selected	{count} 件選択中
+Delete {count} local branch?	ローカルのブランチ {count} 件を削除しますか？
+Delete {count} local branches?	ローカルのブランチ {count} 件を削除しますか？
+Remote branches are not changed.	リモートのブランチは変更されません。
+Unmerged branches hold commits found on no other branch.	未マージのブランチには、他のブランチにないコミットがあります。
+Undo restores them until you take another undoable action.	次に取り消し可能な操作を行うまで、取り消しで復元できます。
+Delete, including unmerged	未マージを含めて削除
+Delete branches	ブランチを削除
+Delete {count} branch	{count} 件のブランチを削除
+Delete {count} branches	{count} 件のブランチを削除
+Deleted {count} branch. Undo restores them.	{count} 件のブランチを削除しました。取り消しで復元できます。
+Deleted {count} branches. Undo restores them.	{count} 件のブランチを削除しました。取り消しで復元できます。
+Deleted {deleted} of {total} before stopping. Undo restores those. {error}	停止前に {total} 件中 {deleted} 件を削除しました。取り消しでこれらを復元できます。{error}
+Restored {restored} of {total} before stopping. {error}	停止前に {total} 件中 {restored} 件を復元しました。{error}
+Restored {count} branch.	{count} 件のブランチを復元しました。
+Restored {count} branches.	{count} 件のブランチを復元しました。
+{count}+ commits	{count}+ 件のコミット
+{count} commit	{count} 件のコミット
+{count} commits	{count} 件のコミット
+{first} on {other} that {current} does not have · {second} on {current} that {other} does not have	{other} にあって {current} にない {first} · {current} にあって {other} にない {second}
+These branches share no history.	これらのブランチには共通の履歴がありません。
+Changed files…	変更されたファイル…
+The files that merging {branch} would change	{branch} をマージすると変更されるファイル
+No commits.	コミットはありません。
+Only the newest {count} are listed.	最新の {count} 件だけを表示しています。
+{other} and {current}	{other} と {current}
+Comparing the branches…	ブランチを比較中…
+On {other} but not on {current}	{other} にあり、{current} にない
+On {current} but not on {other}	{current} にあり、{other} にない
+Search commit messages	コミットメッセージを検索
+Search author names and emails	作成者の名前とメールアドレスを検索
+Text added or removed in a file	ファイルに追加または削除されたテキスト
+Full or abbreviated commit ID	コミットIDの全体または省略形
+Code change	コードの変更
+Commit ID	コミットID
+Search commits	コミットを検索
+Press Return to search every branch, including history not yet loaded in the graph.	グラフにまだ読み込まれていない履歴も含め、すべてのブランチを検索するには Return を押してください。
+Searching	検索中…
+No commits found	コミットが見つかりません
+Showing the newest {limit} matches	最新の {limit} 件の一致を表示しています
+Open {hash} in the inspector	{hash} をインスペクターで開く
+Before	変更前
+After	変更後
+Added in this change	この変更で追加
+Deleted in this change	この変更で削除
+Compare	比較
+Comparing files	ファイルを比較中…
+No differences in tracked files	追跡中のファイルに差分はありません
+working files	作業ツリーのファイル
+{count} changed file	変更されたファイル {count} 件
+{count} changed files	変更されたファイル {count} 件
+Comparison unavailable	比較できません
+Comparing…	比較中…
+Select a file to see how it changed	変更内容を見るにはファイルを選択してください
+Side by side	並べて表示
+Loading the change	変更を読み込み中…
+{title} image	{title} の画像
+This format cannot be previewed	この形式はプレビューできません
+{bytes} bytes	{bytes} バイト
+commit {revision}	コミット {revision}
+Find in {label}	{label} を検索
+Text in files	ファイル内のテキスト
+Match case	大文字と小文字を区別
+Searching {label}	{label} を検索中…
+Press Return to search every tracked text file.	Return を押すと、追跡中のすべてのテキストファイルを検索します。
+No matches	一致する結果はありません
+First {limit} matches	最初の {limit} 件の一致
+{matches} in {files}	{files} 個のファイル内に {matches} 件
+{count} match	{count} 件の一致
+{count} matches	{count} 件の一致
+{count} file	{count} 個のファイル
+Blame	責任追跡
+Show who last changed this line	この行を最後に変更した人を表示
+File history: {name}	ファイルの履歴: {name}
+Latest {limit} commits	最新の {limit} 件のコミット
+Select a commit to see how it changed this file.	このファイルを変更したコミットを選択すると、変更内容が表示されます。
+in commit {revision}	コミット {revision} で
+Reading history	履歴を読み込み中…
+No commits in this checkout changed this file.	このチェックアウトでこのファイルを変更したコミットはありません。
+As {path}	{path} として
+Delete file to this version…	この版でファイルを削除…
+Restore file to this version…	この版にファイルを復元…
+Blame at this commit	このコミットで責任追跡
+Copy commit hash	コミットハッシュをコピー
+Delete file	ファイルを削除
+Restore this version	この版を復元
+Restore file	ファイルを復元
+Finish the current Git operation first.	先に進行中の Git 操作を完了してください。
+Git restores by path. This commit holds the file under another name.	Git はパスごとに復元します。このコミットではファイルが別の名前で保存されています。
+Replace this file with its version in the selected commit.	このファイルを、選択したコミットでのバージョンに置き換えます。
+Loading change	変更を読み込み中…
+Delete {path}?	{path} を削除しますか？
+Restore {path}?	{path} を復元しますか？
+This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.	このファイルは{description}に存在しません。作業ファイルから削除され、削除がステージされます。未コミットの変更は失われます。コミットや他のファイルは変更されません。
+Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.	このファイルの作業コピーは{description}のバージョンに置き換えられ、変更がステージされます。ステージ済み・未ステージの変更は失われます。コミットや他のファイルは変更されません。
+Deleted	削除
+Restored	復元
+{verb} {path} {description}.	{path} {description} を{verb}しました。
+Restore {path}	{path} を復元
+Soft: keep changes staged	Soft: 変更をステージしたまま保持
+Mixed: keep changes unstaged	Mixed: 変更を未ステージのまま保持
+Hard: discard local changes	Hard: ローカルの変更を破棄
+Moves the branch without changing the index or working files. Changes from the removed commits remain staged.	インデックスと作業ファイルを変更せずにブランチを移動します。削除されたコミットの変更はステージされたままになります。
+Moves the branch and resets the index. Working files are kept, and the changes become unstaged.	ブランチを移動し、インデックスをリセットします。作業ファイルは保持され、変更は未ステージになります。
+Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.	ブランチを移動し、インデックスと追跡中のファイルを置き換えます。未コミットの追跡ファイルの変更は失われます。復元するパスをふさいでいる未追跡ファイルも削除される場合があります。
+Reset to {target}	{target} にリセット
+Moves {branch} to this commit.	{branch} をこのコミットに移動します。
+Mode	モード
+Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.	ハードリセットは、追跡中のファイルの未コミットの変更を破棄します。これは NiceGit の変更パネルから元に戻せません。
+The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.	ブランチは選択したコミットを指すようになります。その履歴外のコミットはこのブランチに含まれなくなります。リモートのブランチは変更されません。
+Reset and discard changes	リセットして変更を破棄
+Reset branch	ブランチをリセット
+Waiting for the current action	現在の操作を待っています
+Reset {branch}	{branch} をリセット
+Reset {branch} to {target}.	{branch} を {target} にリセットしました。
+Reset	リセット
+line {start}	{start} 行目
+lines {start}–{end}	{start}〜{end} 行
+History of {file} {lines}	{file} の履歴（{lines}）
+Select a commit to see how it changed these lines.	これらの行を変更したコミットを選択すると、変更内容が表示されます。
+Uncommitted changes are not included.	未コミットの変更は含まれません。
+No commits changed these lines.	これらの行を変更したコミットはありません。
+GitFlow	GitFlow
+Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.	リリース、継続的な開発、短期の作業のためのブランチ。git-flow ツールと互換性があります。
+Reading GitFlow settings…	GitFlow の設定を読み込み中…
+Production branch	本番ブランチ
+Development branch	開発ブランチ
+Feature prefix	フィーチャーの接頭辞
+Release prefix	リリースの接頭辞
+Hotfix prefix	ホットフィックスの接頭辞
+Version tag prefix	バージョンタグの接頭辞
+The production and development branches need different names.	本番ブランチと開発ブランチには異なる名前が必要です。
+Set up GitFlow	GitFlow をセットアップ
+GitFlow is set up.	GitFlow をセットアップしました。
+Production  {branch}	本番  {branch}
+Development  {branch}	開発  {branch}
+Start	開始
+Finish	完了
+Feature name	フィーチャー名
+Version, such as 1.2.0	バージョン（例: 1.2.0）
+Creates {name} from {base} and checks it out.	{base} から {name} を作成してチェックアウトします。
+Feature	フィーチャー
+Release	リリース
+Hotfix	ホットフィックス
+feature	フィーチャー
+release	リリース
+hotfix	ホットフィックス
+Start {kind}	{kind} を開始
+Start {kind} {name}	{kind} {name} を開始
+Started {branch}.	{branch} を開始しました。
+Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.	完了するには {feature}…、{release}…、{hotfix}… のいずれかのブランチをチェックアウトしてください。
+Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	{branch} を fast-forward せずに {develop} へマージし、その後 {branch} を削除します。競合した場合は NiceGit が停止するので、解決してから再度完了してください。
+Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	{branch} を fast-forward せずに {main} と {develop} へマージし、{main} に {tag_prefix}{version} のタグを付け、その後 {branch} を削除します。競合した場合は NiceGit が停止するので、解決してから再度完了してください。
+Tag message (optional)	タグのメッセージ（任意）
+Commit or stash your changes before finishing.	完了する前に変更をコミットまたは退避してください。
+Finish {branch}	{branch} を完了
+Git Settings	Git の設定
+Settings saved in this repository's own Git configuration.	このリポジトリ自身の Git 設定に保存された設定です。
+Filter settings	設定を絞り込み
+Read the settings again	設定を再読み込み
+Reading the settings…	設定を読み込み中…
+No settings are saved in this repository yet. Add one below.	このリポジトリにはまだ設定が保存されていません。下で追加してください。
+No setting matches the filter.	フィルターに一致する設定はありません。
+Remove {key}	{key} を削除
+Edit {key}	{key} を編集
+Setting value	設定の値
+Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.	{key} を削除しますか？Git はこのリポジトリからこの設定を削除します。他の設定は変わりません。
+Has several values; edit in a terminal	複数の値があります。ターミナルで編集してください。
+Global settings, read only	グローバルの設定（読み取り専用）
+From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.	すべてのリポジトリに適用される、グローバルな Git 設定です。変更するにはターミナルで git config --global を使ってください。
+Reading global settings…	グローバルの設定を読み込み中…
+Add a setting	設定を追加
+section.name	section.name
+Setting name	設定名
+Value	値
+Add	追加
+{key} is already set. Edit its row instead.	{key} は既に設定されています。その行を編集してください。
+Set {key}	{key} を設定
+Set {key}.	{key} を設定しました。
+Removed {key}.	{key} を削除しました。
+Jan	1月
+Feb	2月
+Mar	3月
+Apr	4月
+May	5月
+Jun	6月
+Jul	7月
+Aug	8月
+Sep	9月
+Oct	10月
+Nov	11月
+Dec	12月
+{day} {month} {year}	{year}年{month}{day}日
+Period	期間
+30 days	30 日
+90 days	90 日
+1 year	1 年
+All time	全期間
+This branch	このブランチ
+All branches	すべてのブランチ
+Reading history… {count} commits so far	履歴を読み込み中… これまでに {count} 件のコミット
+Insights	インサイト
+Reading the history was cancelled.	履歴の読み込みはキャンセルされました。
+Read again	もう一度読み込む
+No commits in this period.	この期間のコミットはありません。
+Showing the newest 20,000 commits.	最新の 20,000 件のコミットを表示しています。
+{first} – {last}	{first} – {last}
+Commits	コミット
+Authors	作成者
+Active days	活動日数
+First to last commit	最初のコミットから最後まで
+Commits over time	時系列のコミット
+Week of {date}: {commits}	{date} の週: {commits}
+{date}: {commits}	{date}: {commits}
+Lines	行
+Last active	最終アクティビティ
+Most changed files	変更の多いファイル
+No files changed in this period.	この期間に変更されたファイルはありません。
+Open its history	履歴を開く
+{count} lines	{count} 行
+Folders	フォルダー
+just now	たった今
+{count} minute ago	{count} 分前
+{count} minutes ago	{count} 分前
+{count} hour ago	{count} 時間前
+{count} hours ago	{count} 時間前
+{count} day ago	{count} 日前
+{count} days ago	{count} 日前
+{count} month ago	{count} か月前
+{count} months ago	{count} か月前
+{count} year ago	{count} 年前
+{count} years ago	{count} 年前
+Tip history of {branch}	{branch} の先端の履歴
+Recover Lost Work	失われた作業を復元
+Every commit {branch} has pointed to, including ones it no longer points to.	{branch} がこれまで指していたすべてのコミット（もう指していないものを含む）。
+Every position HEAD has had, including commits that no branch points to any more.	HEAD がこれまで指していたすべての位置（どのブランチも指していないコミットを含む）。
+Read the reflog again	reflog を再読み込み
+Reading the reflog…	reflog を読み込み中…
+No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.	先端の履歴はありません。Git はこのブランチの reflog を保持しないため、以前の先端は記録されません。
+No history yet.	まだ履歴はありません。
+Not on any branch	どのブランチにもありません
+Only the reflog keeps this commit. Git may delete it after the reflog expires.	このコミットを保持しているのは reflog だけです。reflog の期限切れ後、Git が削除する場合があります。
+Create branch here…	ここにブランチを作成…
+Reset {name} to here…	{name} をここにリセット…
+Select an entry to see its commit.	項目を選択すると、そのコミットが表示されます。
+Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.	このコミットを保持しているのは reflog だけです。reflog の期限切れ時に Git が削除する場合があります。ブランチを作成して保持してください。
+Show in graph	グラフで表示
+Copy hash	ハッシュをコピー
+Create branch at {hash}	{hash} にブランチを作成
+The branch keeps this commit and its history. Your current checkout does not change.	ブランチはこのコミットとその履歴を保持します。現在のチェックアウトは変わりません。
+Branch name	ブランチ名
+Create branch	ブランチを作成
+Create branch {name}	ブランチ {name} を作成
+Created branch {name}.	ブランチ {name} を作成しました。
+{count} change	{count} 件の変更
+{count} changes	{count} 件の変更
+(some changes)	（一部の変更）
+moves as a whole	全体として移動
+Hide the changes	変更を非表示
+Show the changes	変更を表示
+Change {number}	変更 {number}
+{count} more lines	他 {count} 行
+Split commit	コミットを分割
+Rewrites {branch} as two commits. The commits after it are replayed.	{branch} を 2 つのコミットに書き直します。その後のコミットは再適用されます。
+Reading the commit's changes	コミットの変更を読み込み中…
+This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.	このコミットはリモートに既にあります。分割すると書き換えられるため、強制プッシュが必要になり、持っている人は各自のコピーを調整する必要があります。
+Changes in the first commit	最初のコミットの変更
+This commit has no changes to split.	このコミットには分割する変更がありません。
+{first} in the first commit, {second} in the second.	最初のコミットに {first}、2 番目に {second}。
+First commit	最初のコミット
+Second commit	2 番目のコミット
+First commit message	最初のコミットのメッセージ
+Second commit message	2 番目のコミットのメッセージ
+Wait for the current Git action to finish	現在の Git 操作が完了するまでお待ちください
+Check out a branch first	先にブランチをチェックアウトしてください
+Check at least one change for the first commit	最初のコミットに含める変更を 1 つ以上選択してください
+Leave at least one change for the second commit	2 番目のコミットに残す変更を 1 つ以上残してください
+Both commits need a message	両方のコミットにメッセージが必要です
+Rewrites the commit as two commits	コミットを 2 つのコミットに書き直します
+Split {hash}	{hash} を分割
+Split {hash} into two commits.	{hash} を 2 つのコミットに分割しました。
+No worktrees were listed for this repository.	このリポジトリのワークツリーは一覧に表示されませんでした。
+Remove worktree {path}	ワークツリー {path} を削除
+Removed the worktree. Its branch was kept.	ワークツリーを削除しました。そのブランチは残しています。
+A worktree folder no longer exists on disk. Forget it to remove it from Git's list.	ワークツリーのフォルダーがディスク上に存在しません。Git の一覧から削除するには「忘れる」を実行してください。
+{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.	{count} 個のワークツリーのフォルダーがディスク上に存在しません。Git の一覧から削除するには「忘れる」を実行してください。
+Forgot the missing worktrees.	見つからないワークツリーを忘れました。
+Create a worktree	ワークツリーを作成
+Check a local branch out in its own folder, so you can work on it without switching this checkout.	ローカルブランチを専用のフォルダーにチェックアウトします。現在のチェックアウトを切り替えずに作業できます。
+Every local branch is already checked out. Create a branch first.	すべてのローカルブランチはすでにチェックアウトされています。先にブランチを作成してください。
+Choose a branch	ブランチを選択
+Parent folder	親フォルダー
+Choose folder	フォルダーを選択
+Choose where the new worktree folder goes	新しいワークツリーのフォルダーの場所を選択
+Type a path or choose a folder	パスを入力するか、フォルダーを選択
+Folder name	フォルダー名
+feature-branch	feature-branch
+Creates {path}	{path} を作成します
+Checking the branch	ブランチを確認中…
+Create worktree	ワークツリーを作成
+Create worktree for {name}	{name} のワークツリーを作成
+Created a worktree for {name} at {path}.	{name} のワークツリーを {path} に作成しました。
+{name} moved after it was selected. Choose it again and review it.	{name} は選択後に変更されました。もう一度選択して確認してください。
+Could not read {name}: {error}	{name} を読み取れませんでした: {error}
+A linked worktree checks out another branch in its own folder and shares this repository's history.	リンクされたワークツリーは、別のブランチを専用のフォルダーにチェックアウトし、このリポジトリの履歴を共有します。
+Main	メイン
+Open here	ここで開いています
+Locked	ロック済み
+Missing	見つかりません
+Bare repository	ベアリポジトリ
+Detached HEAD	HEAD がデタッチされています
+A locked worktree must be unlocked in a terminal before it can be removed	ロックされたワークツリーは、削除する前にターミナルでロックを解除する必要があります
+The main worktree and the checkout open here cannot be removed	メインのワークツリーとここで開いているチェックアウトは削除できません
+Remove this worktree and its folder	このワークツリーとそのフォルダーを削除
+Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.	このワークツリーとそのフォルダーを削除しますか？フォルダーに未コミットまたは未追跡のファイルがあると Git は削除を拒否します。ブランチは残ります。
+Remove worktree	ワークツリーを削除
+Choose a remote to see its GitHub pull requests and issues.	リモートを選択すると、その GitHub のプルリクエストと Issue が表示されます。
+Checking the GitHub CLI	GitHub CLI を確認中…
+Read GitHub again	GitHub を再読み込み
+Pull requests	プルリクエスト
+Issues	Issue
+pull requests	プルリクエスト
+issues	Issue
+Closed	クローズ
+all	すべて
+Filter loaded items by title, author, or number	読み込み済みの項目をタイトル、作成者、番号で絞り込み
+No {state} {kind}	{state} の{kind}はありません
+No matches in the loaded items	読み込み済みの項目に一致するものはありません
+Load more	もっと読み込む
+Showing the first 1,000 items	最初の 1,000 件を表示しています
+Back to the newer blame	新しい方の blame に戻る
+at {revision}	{revision} 時点
+at {revision} ({summary})	{revision} 時点（{summary}）
+Ignore whitespace	空白を無視
+Attribute lines past whitespace-only changes to the commit that changed their content	空白だけの変更の後の行は、内容を変更したコミットに帰属させます
+Skip commits in .git-blame-ignore-revs	.git-blame-ignore-revs のコミットを無視
+Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does.	.git-blame-ignore-revs に記載されたコミットだけで変更された行（整形など）は、GitHub の blame と同様に、その直前の変更に帰属されます。
+Blame: {name}	Blame: {name}
+Reading blame	blame を読み込み中…
+The ignore list could not be used, so every commit is shown: {reason}	無視リストを使用できなかったため、すべてのコミットを表示しています: {reason}
+Uncommitted	未コミット
+Your working changes	作業中の変更
+Blame at HEAD	HEAD で blame
+Show commit in history	履歴でコミットを表示
+Copy commit ID	コミットIDをコピー
+History of {lines}…	{lines} の履歴…
+This commit has no earlier version of the file	このコミットには、このファイルの以前のバージョンがありません
+Blame before this change	この変更の前を blame
+Close this change	この変更を閉じる
+Shell	シェル
+{title} (exited)	{title}（終了）
+[Process exited with status {code}]	[プロセスが終了しました。ステータス {code}]
+[Process exited]	[プロセスが終了しました]
+Restart	再起動
+Could not start a shell: {error}	シェルを起動できませんでした: {error}
+New shell tab	新しいシェルタブ
+End this shell…	このシェルを終了…
+End this shell? Programs running in it stop.	このシェルを終了しますか？実行中のプログラムは停止します。
+End shell	シェルを終了
+No shell open	シェルは開いていません
+Give the workspace a name.	ワークスペースに名前を付けてください。
+Another workspace already has this name.	別のワークスペースが既にこの名前を使用しています。
+{count} repository	{count} 件のリポジトリ
+{count} repositories	{count} 件のリポジトリ
+Save open tabs as workspace…	開いているタブをワークスペースとして保存…
+Open workspace	ワークスペースを開く
+Manage workspaces…	ワークスペースを管理…
+Workspaces	ワークスペース
+Save workspace	ワークスペースを保存
+Workspace name	ワークスペース名
+Replace workspace {name}?	ワークスペース {name} を置き換えますか？
+It will hold the {count} open now instead of the folders it holds. Folders on disk are not changed.	保持するフォルダーの代わりに、現在開いている {count} を保持します。ディスク上のフォルダーは変更されません。
+Saved workspace {name} with {count}.	ワークスペース {name} を保存しました（{count}）。
+Workspace {name} has {missing}, which did not open: {list}.	ワークスペース {name} で開けなかったフォルダーがあります（{missing}）: {list}。
+{count} missing folder	見つからないフォルダー {count} 件
+{count} missing folders	見つからないフォルダー {count} 件
+Every repository in workspace {name} is already open.	ワークスペース {name} のリポジトリはすべて既に開かれています。
+Opened workspace {name}.	ワークスペース {name} を開きました。
+Deleted workspace {name}. Its folders are unchanged.	ワークスペース {name} を削除しました。フォルダーは変更されていません。
+Name of {name}	{name} の名前
+Renamed workspace {from} to {to}.	ワークスペース {from} を {to} に名前変更しました。
+Delete workspace {name}?	ワークスペース {name} を削除しますか？
+The saved list is removed. Its folders stay on disk, and any tabs open from it stay open.	保存されたリストが削除されます。フォルダーはディスク上に残り、そこから開いたタブも開いたままです。
+Find repositories	リポジトリを検索
+Looking for repositories…	リポジトリを検索中…
+No repositories found	リポジトリが見つかりません
+No repositories found in {folder}.	{folder} にリポジトリは見つかりませんでした。
+Found {repositories} in {folder}	{folder} 内で {repositories} を検出
+Showing the first {count}. Choose a folder inside this one to find the rest.	最初の {count} 件を表示しています。残りを探すには、この中のフォルダーを選択してください。
+Select all	すべて選択
+Select none	すべて解除
+Also open them as tabs	タブとしても開く
+Opening many tabs reads each repository in the background.	多くのタブを開くと、各リポジトリをバックグラウンドで読み込みます。
+Add {count} to Recent	{count} 件を最近使ったリポジトリに追加
+Not a repository	リポジトリではありません
+This folder isn't a repository. Look for repositories inside it?	このフォルダーはリポジトリではありません。内部のリポジトリを探しますか？
+Find	検索
+Find repositories in a folder	フォルダー内のリポジトリを検索
+Added {count} to Recent.	{count} 件を最近使ったリポジトリに追加しました。
+Added {added} of {total} to Recent. Recent keeps only the {limit} newest.	{total} 件中 {added} 件を最近使ったリポジトリに追加しました。最近使ったリポジトリには最新の {limit} 件のみ保持されます。
+The repositories were not opened as tabs, because an action is running.	操作が実行中のため、リポジトリはタブとして開かれませんでした。
+The repositories were not opened as tabs, because a file is being edited.	ファイルを編集中のため、リポジトリはタブとして開かれませんでした。
+Opened {count} as tabs.	{count} 件をタブとして開きました。
+Host	ホスト
+Use SSH	SSH を使用
+Filter repositories	リポジトリを絞り込み
+Loading your repositories from GitHub	GitHub からリポジトリを読み込み中…
+GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.	{host} で GitHub CLI にサインインしていません。ターミナルで {command} を実行してから、もう一度確認してください。
+No repositories on this host	このホストにリポジトリはありません
+Showing the first {count} repositories. Filter to narrow them.	最初の {count} 件のリポジトリを表示しています。絞り込んでください。
+No repositories match the filter	フィルターに一致するリポジトリはありません
+Private	プライベート
+Fork	フォーク
+Type a file name	ファイル名を入力
+Loading files…	ファイルを読み込み中…
+Type to find a file	入力してファイルを検索
+Enter history · {command}-Enter blame · {alt}-Enter edit	Enter で履歴 · {command}-Enter で blame · {alt}-Enter で編集
+Delete {name}	{name} を削除
+Rename {name}	{name} の名前を変更
+No saved workspaces. Save the open tabs as one from the Workspaces menu in the repositories column.	保存されたワークスペースはありません。リポジトリ欄のワークスペースメニューから、開いているタブを保存できます。
+Reading history…	履歴を読み込み中…
+working file	作業ツリーのファイル

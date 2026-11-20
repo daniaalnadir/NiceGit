@@ -1,0 +1,99 @@
+# pt-BR translations. Format: English source, a tab, then the translation.
+Settings	Configurações
+General	Geral
+Language	Idioma
+Translations may be incomplete. Corrections are welcome on GitHub.	As traduções podem estar incompletas. Correções são bem-vindas no GitHub.
+Check for new versions	Verificar novas versões
+Asks GitHub once a day for the latest version number. Nothing else is sent.	Consulta o GitHub uma vez por dia pelo número da versão mais recente. Nada mais é enviado.
+Notify me when work finishes in the background	Avisar quando um trabalho terminar em segundo plano
+Shows a desktop notification when an action you started finishes while NiceGit is not in focus.	Mostra uma notificação na área de trabalho quando uma ação iniciada termina enquanto o NiceGit não está em foco.
+Appearance	Aparência
+System	Sistema
+Light	Claro
+Dark	Escuro
+System ({language})	Sistema ({language})
+No Japanese font was found; some text may not display.	Nenhuma fonte japonesa foi encontrada; alguns textos podem não aparecer.
+No Chinese font was found; some text may not display.	Nenhuma fonte chinesa foi encontrada; alguns textos podem não aparecer.
+Graph colours	Cores do grafo
+Diffs	Diffs
+Hide whitespace-only changes	Ocultar alterações apenas de espaços
+Show diffs side by side	Mostrar diffs lado a lado
+Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides.	Não está em vigor agora: o painel de diffs é mais estreito que {minimum} pontos. Alargue-o para ver os dois lados.
+Needs a diff panel at least {minimum} points wide.	Requer um painel de diffs com pelo menos {minimum} pontos de largura.
+Show changed words inline	Mostrar palavras alteradas na linha
+Syntax highlighting	Realce de sintaxe
+External editor	Editor externo
+The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.	O comando que abre um arquivo no seu editor; o caminho do arquivo é acrescentado depois. Os arquivos alterados passam a oferecer abri-lo nele.
+Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. Automatic turns this on when at least five of the last twenty commits use the convention.	Oferece um menu de tipo, escopo e Breaking acima do resumo, que escrevem o tipo no resumo. Automático ativa isso quando pelo menos cinco dos últimos vinte commits usam a convenção.
+Committing	Commits
+Refresh automatically when files change outside NiceGit	Atualizar automaticamente quando arquivos mudarem fora do NiceGit
+Fetch from remotes	Buscar nos remotos
+Off	Desativado
+5 min	5 min
+15 min	15 min
+30 min	30 min
+1 hour	1 hora
+How often the open repository is fetched in the background, so ahead and behind counts stay current	Com que frequência o repositório aberto é buscado em segundo plano, para que os contadores de à frente e atrás fiquem atualizados
+Pull with	Puxar com
+How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.	Define como Puxar traz os commits do upstream. «Seguir as configurações do Git» lê pull.rebase, branch.<nome>.rebase e pull.ff; sem nenhum deles definido, Puxar só faz avanço rápido. O menu Buscar e puxar também executa uma vez um pull com mesclagem ou rebase.
+Clone into	Clonar em
+Not set	Não definido
+Choose…	Escolher…
+Clones go into this folder by default	Os clones vão para esta pasta por padrão
+Clear	Limpar
+Default folder for clones	Pasta padrão para clones
+The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.	A caixa Clonar preenche o destino a partir desta pasta. Se nenhuma estiver definida, a pasta pai do primeiro clone é lembrada.
+Custom actions	Ações personalizadas
+Show pull request checks on branches	Mostrar as verificações de pull requests nos branches
+A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.	Um ponto no rótulo de um branch e na barra lateral indica se as verificações do seu pull request ou merge request aberto passaram, falharam ou estão pendentes. Desativar isso também interrompe a leitura delas.
+Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.	Remotos nestes hosts recebem pull requests, issues e «Abrir no GitHub», como os remotos do github.com.
+One hostname per line, such as github.example.com	Um nome de host por linha, como github.example.com
+GitHub Enterprise hosts	Hosts do GitHub Enterprise
+Not saved, as these are not hostnames: {hosts}. Use a name such as github.example.com, without https:// or a port.	Não salvo, pois não são nomes de host: {hosts}. Use um nome como github.example.com, sem https:// nem porta.
+Remotes on these hosts get Open on GitLab links, as gitlab.com remotes do.	Remotos nestes hosts recebem links «Abrir no GitLab», como os remotos do gitlab.com.
+One hostname per line, such as gitlab.example.com	Um nome de host por linha, como gitlab.example.com
+GitLab hosts	Hosts do GitLab
+Not saved, as these are not hostnames: {hosts}. Use a name such as gitlab.example.com, without https:// or a port.	Não salvo, pois não são nomes de host: {hosts}. Use um nome como gitlab.example.com, sem https:// nem porta.
+Layout	Layout
+Interface size	Tamanho da interface
+Smaller (Ctrl/Cmd-minus)	Menor (Ctrl/Cmd-menos)
+Larger (Ctrl/Cmd-plus)	Maior (Ctrl/Cmd-mais)
+Normal size	Tamanho normal
+Restore default panel widths	Restaurar a largura padrão dos painéis
+Columns and panels return to their original sizes	As colunas e os painéis voltam ao tamanho original
+Accessibility	Acessibilidade
+Larger text	Texto maior
+Draws the interface a quarter larger again, on top of the interface size	Desenha a interface um quarto maior, além do tamanho da interface
+Reduce motion	Reduzir movimento
+Switches off the fades and eased movements in the interface	Desliga os esmaecimentos e os movimentos suaves da interface
+Keyboard shortcuts	Atalhos de teclado
+Request a feature	Solicitar um recurso
+Report a problem	Relatar um problema
+Issue links	Links de issues
+Link #123 to the repository's host	Vincular #123 ao host do repositório
+For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). On Azure DevOps, AB#123 links to the work item.	Para o remoto origin no GitHub, GitLab ou Bitbucket, #123 vincula à issue (no GitLab, !123 ao merge request). No Azure DevOps, AB#123 vincula ao item de trabalho.
+No custom rules. A rule can link text such as JIRA-7 to your tracker.	Nenhuma regra personalizada. Uma regra pode vincular texto como JIRA-7 ao seu rastreador.
+Only for repositories whose remote contains "{remote}"	Somente para repositórios cujo remoto contém "{remote}"
+Edit	Editar
+Change this rule	Alterar esta regra
+Remove this rule	Remover esta regra
+Add rule	Adicionar regra
+Add a rule that links text in messages	Adicionar uma regra que vincula texto nas mensagens
+Pattern (a regular expression)	Padrão (uma expressão regular)
+Address to open ($0 is the match, $1 to $9 its groups)	Endereço a abrir ($0 é a correspondência, $1 a $9 seus grupos)
+Only for repositories whose remote contains (empty for all)	Somente para repositórios cujo remoto contém (vazio para todos)
+Rule pattern	Padrão da regra
+Rule address	Endereço da regra
+Rule remote filter	Filtro de remoto da regra
+Save rule	Salvar regra
+3 lines	3 linhas
+10 lines	10 linhas
+25 lines	25 linhas
+Always	Sempre
+Automatic	Automático
+Colour-blind safe	Seguro para daltônicos
+Fast-forward only	Somente avanço rápido
+File	Arquivo
+Follow Git's settings	Seguir as configurações do Git
+Muted	Suave
+Standard	Padrão

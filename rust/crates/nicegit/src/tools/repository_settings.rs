@@ -10,6 +10,7 @@ use nicegit_core::settings::{IdentityProfile, PushUrlChange};
 use nicegit_core::{GitClient, GitError, Snapshot};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 use crate::worker::ActionResult;
@@ -38,21 +39,18 @@ impl StoredProfile {
     }
 }
 
-/// The label prefix of every action that applies a saved profile.
-const APPLY_PROFILE_LABEL: &str = "Apply identity";
-
 /// Whether an action with this label changes the repository's commit identity, so the identity is
 /// read again after it.
 pub fn changes_identity(label: &str) -> bool {
-    label == "Save identity" || label.starts_with(APPLY_PROFILE_LABEL)
+    label == tr("Save identity") || label.starts_with(tr("Apply identity"))
 }
 
 /// The action that applies a saved profile to the open repository, and its label. The window's Apply
 /// button and the Identity menu both run this, so they apply a profile the same way.
 pub fn apply_profile(profile: &StoredProfile) -> (String, impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
     let profile = profile.to_core();
-    let label = format!("{APPLY_PROFILE_LABEL} {}", profile.label);
-    let message = format!("Applied {} to this repository.", profile.label);
+    let label = format!("{} {}", tr("Apply identity"), profile.label);
+    let message = tr_fmt!("Applied {label} to this repository.", label = profile.label);
     let run = move |client: &GitClient, dir: &Path| {
         client.apply_identity(&profile.name, &profile.email, profile.signing_key.as_deref(), dir)?;
         Ok(Some(message))
@@ -201,9 +199,9 @@ impl RepositorySettingsWindow {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let tabs = [
-                (Section::Identity, icon::USER_CIRCLE, "Identity"),
-                (Section::Profiles, icon::IDENTIFICATION_CARD, "Profiles"),
-                (Section::Remotes, icon::CLOUD, "Remotes"),
+                (Section::Identity, icon::USER_CIRCLE, tr("Identity")),
+                (Section::Profiles, icon::IDENTIFICATION_CARD, tr("Profiles")),
+                (Section::Remotes, icon::CLOUD, tr("Remotes")),
             ];
             for (section, glyph, text) in tabs {
                 ui.selectable_value(&mut self.section, section, format!("{glyph}  {text}"));
@@ -216,23 +214,23 @@ impl RepositorySettingsWindow {
         let idle = cx.idle;
         let loading = self.identity_task.is_some();
         let editable = idle && !loading;
-        widgets::section(ui, "Commit identity");
+        widgets::section(ui, tr("Commit identity"));
         ui.label(
-            RichText::new("Commits made in this repository use this name and email. Other repositories keep their own.")
+            RichText::new(tr("Commits made in this repository use this name and email. Other repositories keep their own."))
                 .color(theme::of(ui).muted),
         );
         ui.add_space(8.0);
         if loading {
-            widgets::loading(ui, "Reading the identity");
+            widgets::loading(ui, tr("Reading the identity"));
         }
         egui::Grid::new("repository_identity_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
-            ui.label("Name");
+            ui.label(tr("Name"));
             ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.name).hint_text("Ada Lovelace").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Name"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Name")));
             ui.end_row();
-            ui.label("Email");
+            ui.label(tr("Email"));
             ui.add_enabled(editable, egui::TextEdit::singleline(&mut self.email).hint_text("ada@example.com").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Email"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Email")));
             ui.end_row();
         });
         if let Some(error) = self.identity_error.clone() {
@@ -243,7 +241,7 @@ impl RepositorySettingsWindow {
         let ready = editable && valid_identity(&self.name, &self.email);
         let save = ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                widgets::primary_button(ui, &format!("{}  Save identity", icon::FLOPPY_DISK), ready).clicked()
+                widgets::primary_button(ui, &format!("{}  {}", icon::FLOPPY_DISK, tr("Save identity")), ready).clicked()
             })
             .inner
         });
@@ -251,9 +249,9 @@ impl RepositorySettingsWindow {
             let name = self.name.trim().to_string();
             let email = self.email.trim().to_string();
             self.identity_refresh_pending = true;
-            cx.act("Save identity", move |client, dir| {
+            cx.act(tr("Save identity"), move |client, dir| {
                 client.set_identity(&name, &email, dir)?;
-                Ok(Some("Saved the commit identity for this repository.".to_string()))
+                Ok(Some(tr("Saved the commit identity for this repository.").to_string()))
             });
         }
     }
@@ -261,34 +259,34 @@ impl RepositorySettingsWindow {
     fn profiles_section(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let idle = cx.idle;
         let c = theme::of(ui);
-        widgets::section(ui, "Saved profiles");
+        widgets::section(ui, tr("Saved profiles"));
         ui.label(
-            RichText::new("A profile stores a name, email, and optional signing key. Applying one sets this repository's identity. A profile with a key also turns on commit signing.")
+            RichText::new(tr("A profile stores a name, email, and optional signing key. Applying one sets this repository's identity. A profile with a key also turns on commit signing."))
                 .color(c.muted),
         );
         ui.add_space(8.0);
 
         let can_save = idle && valid_identity(&self.name, &self.email);
         egui::Grid::new("identity_profile_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
-            ui.label("Signing key");
+            ui.label(tr("Signing key"));
             ui.add_enabled(
                 idle,
                 egui::TextEdit::singleline(&mut self.signing_key)
-                    .hint_text("Optional: GPG key ID or SSH public key path")
+                    .hint_text(tr("Optional: GPG key ID or SSH public key path"))
                     .desired_width(320.0),
             )
-            .on_hover_text("When set, applying this profile signs commits with this key.");
+            .on_hover_text(tr("When set, applying this profile signs commits with this key."));
             ui.end_row();
         });
         ui.add_space(6.0);
         let save = ui.horizontal(|ui| {
             ui.label(
-                RichText::new(format!("Saves {} from the Identity tab.", describe_identity(&self.name, &self.email)))
+                RichText::new(tr_fmt!("Saves {identity} from the Identity tab.", identity = describe_identity(&self.name, &self.email)))
                     .small()
                     .color(c.muted),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                widgets::primary_button(ui, &format!("{}  Save as profile", icon::PLUS), can_save).clicked()
+                widgets::primary_button(ui, &format!("{}  {}", icon::PLUS, tr("Save as profile")), can_save).clicked()
             })
             .inner
         });
@@ -310,7 +308,7 @@ impl RepositorySettingsWindow {
 
         ui.add_space(12.0);
         if self.profiles.is_empty() {
-            widgets::empty_state(ui, icon::IDENTIFICATION_CARD, "No saved profiles yet");
+            widgets::empty_state(ui, icon::IDENTIFICATION_CARD, tr("No saved profiles yet"));
             return;
         }
 
@@ -323,13 +321,17 @@ impl RepositorySettingsWindow {
                     ui.label(RichText::new(icon::USER_CIRCLE).color(c.muted));
                     ui.label(RichText::new(&core.label).strong());
                     if core.signing_key.is_some() {
-                        widgets::pill(ui, "Signs commits", c.accent);
+                        widgets::pill(ui, tr("Signs commits"), c.accent);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button(format!("{}  Delete", icon::TRASH)).on_hover_text("Forget this profile on this computer").clicked() {
+                        if ui
+                            .button(format!("{}  {}", icon::TRASH, tr("Delete")))
+                            .on_hover_text(tr("Forget this profile on this computer"))
+                            .clicked()
+                        {
                             delete = Some(index);
                         }
-                        if ui.add_enabled(idle, egui::Button::new(format!("{}  Apply", icon::CHECK))).clicked() {
+                        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::CHECK, tr("Apply")))).clicked() {
                             apply = Some(index);
                         }
                     });
@@ -360,9 +362,9 @@ impl RepositorySettingsWindow {
     fn remotes_section(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let snapshot: &Snapshot = cx.snapshot;
         let idle = cx.idle;
-        widgets::section(ui, "Remotes");
+        widgets::section(ui, tr("Remotes"));
         if snapshot.remotes.is_empty() {
-            widgets::empty_state(ui, icon::CLOUD, "No remotes yet. Add one below.");
+            widgets::empty_state(ui, icon::CLOUD, tr("No remotes yet. Add one below."));
         }
         for remote in &snapshot.remotes {
             let fetch = snapshot.remote_fetch_addresses.get(remote).cloned().unwrap_or_default();
@@ -374,20 +376,20 @@ impl RepositorySettingsWindow {
         }
 
         ui.add_space(10.0);
-        widgets::section(ui, "Add a remote");
+        widgets::section(ui, tr("Add a remote"));
         egui::Grid::new("add_remote_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
-            ui.label("Name");
+            ui.label(tr("Name"));
             ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.new_remote_name).hint_text("origin").desired_width(320.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Remote name"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, tr("Remote name")));
             ui.end_row();
-            ui.label("URL");
+            ui.label(tr("URL"));
             ui.add_enabled(
                 idle,
                 egui::TextEdit::singleline(&mut self.new_remote_address)
                     .hint_text("https://example.com/repo.git or /path/to/repo.git")
                     .desired_width(320.0),
             )
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Remote URL"));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, tr("Remote URL")));
             ui.end_row();
         });
         ui.add_space(8.0);
@@ -397,18 +399,21 @@ impl RepositorySettingsWindow {
         let ready = idle && !name.is_empty() && !address.is_empty() && !taken;
         let add = ui.horizontal(|ui| {
             if taken && !name.is_empty() {
-                ui.label(RichText::new(format!("{}  A remote named {name} already exists.", icon::WARNING)).color(theme::of(ui).warning));
+                ui.label(
+                    RichText::new(format!("{}  {}", icon::WARNING, tr_fmt!("A remote named {name} already exists.", name = name)))
+                        .color(theme::of(ui).warning),
+                );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                widgets::primary_button(ui, &format!("{}  Add remote", icon::PLUS), ready).clicked()
+                widgets::primary_button(ui, &format!("{}  {}", icon::PLUS, tr("Add remote")), ready).clicked()
             })
             .inner
         });
         if add.inner {
             self.pending = Some(RemotePending::Add(name.clone()));
-            cx.act(format!("Add remote {name}"), move |client, dir| {
+            cx.act(tr_fmt!("Add remote {name}", name = name), move |client, dir| {
                 client.add_remote(&name, &address, dir)?;
-                Ok(Some(format!("Added remote {name}.")))
+                Ok(Some(tr_fmt!("Added remote {name}.", name = name)))
             });
         }
     }
@@ -423,25 +428,25 @@ impl RepositorySettingsWindow {
             if let Some(edit) = self.edit.as_mut().filter(|edit| edit.original == name) {
                 ui.label(RichText::new(icon::PENCIL_SIMPLE).color(c.muted));
                 egui::Grid::new(("edit_remote", name)).num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                    ui.label("Name");
+                    ui.label(tr("Name"));
                     ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.name).desired_width(320.0))
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit remote name"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, tr("Edit remote name")));
                     ui.end_row();
-                    ui.label("Fetch URL");
+                    ui.label(tr("Fetch URL"));
                     ui.add_enabled(idle, egui::TextEdit::singleline(&mut edit.address).desired_width(320.0))
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit fetch URL"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, tr("Edit fetch URL")));
                     ui.end_row();
-                    ui.label("Push URL");
+                    ui.label(tr("Push URL"));
                     if edit.push_editable {
                         ui.add_enabled(
                             idle,
-                            egui::TextEdit::singleline(&mut edit.push).hint_text("Same as fetch URL").desired_width(320.0),
+                            egui::TextEdit::singleline(&mut edit.push).hint_text(tr("Same as fetch URL")).desired_width(320.0),
                         )
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, "Edit push URL"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, idle, tr("Edit push URL")));
                     } else {
                         ui.add(
                             egui::Label::new(
-                                RichText::new("This remote pushes to several URLs; NiceGit leaves them as they are.")
+                                RichText::new(tr("This remote pushes to several URLs; NiceGit leaves them as they are."))
                                     .small()
                                     .color(c.muted),
                             )
@@ -456,11 +461,11 @@ impl RepositorySettingsWindow {
                     || (edit.push_editable && edit.push.trim() != displayed_push);
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(idle, egui::Button::new("Cancel")).clicked() {
+                    if ui.add_enabled(idle, egui::Button::new(tr("Cancel"))).clicked() {
                         action = Some(RemoteAction::CancelEdit);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::primary_button(ui, "Save remote", idle && valid && changed).clicked() {
+                        if widgets::primary_button(ui, tr("Save remote"), idle && valid && changed).clicked() {
                             action = Some(RemoteAction::SaveEdit);
                         }
                     });
@@ -472,20 +477,23 @@ impl RepositorySettingsWindow {
                 ui.label(RichText::new(icon::CLOUD).color(c.muted));
                 ui.label(RichText::new(name).monospace().strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Remove", icon::TRASH))).clicked() {
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Remove")))).clicked() {
                         action = Some(RemoteAction::AskRemove);
                     }
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Edit", icon::PENCIL_SIMPLE))).clicked() {
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Edit")))).clicked() {
                         action = Some(RemoteAction::StartEdit);
                     }
                 });
             });
-            let fetch_text = if displayed.is_empty() { "No fetch URL".to_string() } else { displayed.clone() };
+            let fetch_text = if displayed.is_empty() { tr("No fetch URL").to_string() } else { displayed.clone() };
             ui.add(egui::Label::new(RichText::new(fetch_text).monospace().small().color(c.muted)).wrap());
             // A remote's push URLs replace its fetch URL for pushes, so show them when they differ.
             if !push.is_empty() && push != fetch {
                 for address in push {
-                    ui.add(egui::Label::new(RichText::new(format!("Push: {address}")).monospace().small().color(c.muted)).wrap());
+                    ui.add(
+                        egui::Label::new(RichText::new(tr_fmt!("Push: {address}", address = address)).monospace().small().color(c.muted))
+                            .wrap(),
+                    );
                 }
             }
 
@@ -493,15 +501,17 @@ impl RepositorySettingsWindow {
                 ui.add_space(6.0);
                 widgets::callout(
                     ui,
-                    "NiceGit forgets this remote and deletes its remote-tracking branches from this repository. Local branches that track it lose their upstream. Nothing on the server changes.",
+                    tr("NiceGit forgets this remote and deletes its remote-tracking branches from this repository. Local branches that track it lose their upstream. Nothing on the server changes."),
                     true,
                 );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    if widgets::danger_button(ui, &format!("{}  Remove remote {name}", icon::TRASH), idle).clicked() {
+                    if widgets::danger_button(ui, &format!("{}  {}", icon::TRASH, tr_fmt!("Remove remote {name}", name = name)), idle)
+                        .clicked()
+                    {
                         action = Some(RemoteAction::ConfirmRemove);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel")).clicked() {
                         action = Some(RemoteAction::CancelRemove);
                     }
                 });
@@ -538,9 +548,9 @@ impl RepositorySettingsWindow {
                 let old = name.to_string();
                 self.pending =
                     Some(RemotePending::Edit { name: new_name.clone(), address: new_address.clone(), push: push_change.clone() });
-                cx.act(format!("Save remote {name}"), move |client, dir| {
+                cx.act(tr_fmt!("Save remote {name}", name = name), move |client, dir| {
                     client.edit_remote(&old, &new_name, &new_address, push_change, &fetch, &push, dir)?;
-                    Ok(Some(format!("Saved remote {new_name}.")))
+                    Ok(Some(tr_fmt!("Saved remote {name}.", name = new_name)))
                 });
             }
             RemoteAction::AskRemove => self.confirming_removal = Some(name.to_string()),
@@ -548,9 +558,9 @@ impl RepositorySettingsWindow {
             RemoteAction::ConfirmRemove => {
                 self.pending = Some(RemotePending::Remove(name.to_string()));
                 let name = name.to_string();
-                cx.act(format!("Remove remote {name}"), move |client, dir| {
+                cx.act(tr_fmt!("Remove remote {name}", name = name), move |client, dir| {
                     client.remove_remote(&name, &fetch, dir)?;
-                    Ok(Some(format!("Removed remote {name}.")))
+                    Ok(Some(tr_fmt!("Removed remote {name}.", name = name)))
                 });
             }
         }
@@ -603,7 +613,7 @@ impl ToolWindow for RepositorySettingsWindow {
     }
 
     fn title(&self) -> String {
-        "Repository Settings".to_string()
+        tr("Repository Settings").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -618,7 +628,7 @@ impl ToolWindow for RepositorySettingsWindow {
 
         self.header(ui, cx);
         if !cx.idle {
-            widgets::loading(ui, "An action is running. Controls return when it finishes.");
+            widgets::loading(ui, tr("An action is running. Controls return when it finishes."));
             ui.add_space(4.0);
         }
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -701,6 +711,6 @@ fn describe_identity(name: &str, email: &str) -> String {
     if valid_identity(name, email) {
         format!("{} <{}>", name.trim(), email.trim())
     } else {
-        "the name and email".to_string()
+        tr("the name and email").to_string()
     }
 }

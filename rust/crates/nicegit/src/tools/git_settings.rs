@@ -1,6 +1,7 @@
 //! Repository > Git settings: the repository's own Git configuration, one key at a time. Global
 //! values are shown read-only for reference; NiceGit never writes global configuration.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::PathBuf;
 
 use egui::{Margin, RichText, Ui};
@@ -75,7 +76,7 @@ impl ToolWindow for GitSettingsWindow {
     }
 
     fn title(&self) -> String {
-        "Git Settings".to_string()
+        tr("Git Settings").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -110,14 +111,14 @@ impl ToolWindow for GitSettingsWindow {
         let mut reload = false;
         let mut change: Option<Change> = None;
 
-        ui.label(RichText::new("Settings saved in this repository's own Git configuration.").small().color(c.muted));
+        ui.label(RichText::new(tr("Settings saved in this repository's own Git configuration.")).small().color(c.muted));
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             let width = (ui.available_width() - 40.0).max(160.0);
-            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filter settings").desired_width(width))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter settings"));
+            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text(tr("Filter settings")).desired_width(width))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter settings")));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read the settings again", true).clicked() {
+                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, tr("Read the settings again"), true).clicked() {
                     reload = true;
                 }
             });
@@ -128,7 +129,7 @@ impl ToolWindow for GitSettingsWindow {
         egui::ScrollArea::vertical().id_salt("git_settings_body").max_height(body_height).auto_shrink([false, false]).show(ui, |ui| {
             let entries = match &shown {
                 None => {
-                    widgets::loading(ui, "Reading the settings…");
+                    widgets::loading(ui, tr("Reading the settings…"));
                     return;
                 }
                 Some(Err(error)) => {
@@ -138,7 +139,7 @@ impl ToolWindow for GitSettingsWindow {
                 Some(Ok(entries)) => entries,
             };
             if entries.is_empty() {
-                ui.label(RichText::new("No settings are saved in this repository yet. Add one below.").small().color(c.muted));
+                ui.label(RichText::new(tr("No settings are saved in this repository yet. Add one below.")).small().color(c.muted));
             }
             let needle = self.filter.trim().to_lowercase();
             let matching: Vec<&ConfigEntry> = entries
@@ -150,7 +151,7 @@ impl ToolWindow for GitSettingsWindow {
                 })
                 .collect();
             if !entries.is_empty() && matching.is_empty() {
-                ui.label(RichText::new("No setting matches the filter.").small().color(c.muted));
+                ui.label(RichText::new(tr("No setting matches the filter.")).small().color(c.muted));
             }
 
             for entry in matching {
@@ -161,14 +162,14 @@ impl ToolWindow for GitSettingsWindow {
                         ui.add(egui::Label::new(RichText::new(&entry.key).monospace()).truncate());
                         if !entry.is_multi_valued() && !editing_this && !removing_this {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let remove = ui.add_enabled(idle, egui::Button::new("Remove"));
-                                remove.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Remove {}", entry.key)));
+                                let remove = ui.add_enabled(idle, egui::Button::new(tr("Remove")));
+                                remove.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr_fmt!("Remove {key}", key = entry.key)));
                                 if remove.clicked() {
                                     self.editing = None;
                                     self.removing = Some(Removing { key: entry.key.clone(), expected: entry.values.clone() });
                                 }
-                                let edit = ui.add_enabled(idle, egui::Button::new("Edit"));
-                                edit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Edit {}", entry.key)));
+                                let edit = ui.add_enabled(idle, egui::Button::new(tr("Edit")));
+                                edit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr_fmt!("Edit {key}", key = entry.key)));
                                 if edit.clicked() {
                                     self.removing = None;
                                     self.editing = Some(Editing {
@@ -185,38 +186,38 @@ impl ToolWindow for GitSettingsWindow {
                         let mut cancel = false;
                         if let Some(editing) = self.editing.as_mut() {
                             ui.add(egui::TextEdit::multiline(&mut editing.value).desired_rows(2).desired_width(f32::INFINITY))
-                                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Setting value"));
+                                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Setting value")));
                             ui.horizontal(|ui| {
-                                if widgets::primary_button(ui, "Save", idle).clicked() {
+                                if widgets::primary_button(ui, tr("Save"), idle).clicked() {
                                     change = Some(Change::Set {
                                         key: editing.key.clone(),
                                         expected: editing.expected.clone(),
                                         value: editing.value.clone(),
                                     });
                                 }
-                                cancel = ui.button("Cancel").clicked();
+                                cancel = ui.button(tr("Cancel")).clicked();
                             });
                         }
                         if cancel {
                             self.editing = None;
                         }
                     } else if removing_this {
-                        ui.label(format!(
-                            "Remove {}? Git deletes this setting from this repository. Other settings stay as they are.",
-                            entry.key
+                        ui.label(tr_fmt!(
+                            "Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.",
+                            key = entry.key
                         ));
                         ui.horizontal(|ui| {
-                            if widgets::danger_button(ui, "Remove", idle).clicked() {
+                            if widgets::danger_button(ui, tr("Remove"), idle).clicked() {
                                 // The values from when Remove was chosen, not the row's current ones.
                                 let expected = self.removing.as_ref().map(|removing| removing.expected.clone()).unwrap_or_default();
                                 change = Some(Change::Unset { key: entry.key.clone(), expected });
                             }
-                            if ui.button("Cancel").clicked() {
+                            if ui.button(tr("Cancel")).clicked() {
                                 self.removing = None;
                             }
                         });
                     } else if entry.is_multi_valued() {
-                        ui.label(RichText::new("Has several values; edit in a terminal").small().color(c.muted));
+                        ui.label(RichText::new(tr("Has several values; edit in a terminal")).small().color(c.muted));
                         for value in &entry.values {
                             ui.add(egui::Label::new(RichText::new(one_line(value)).monospace()).truncate());
                         }
@@ -229,15 +230,15 @@ impl ToolWindow for GitSettingsWindow {
             }
 
             ui.add_space(10.0);
-            egui::CollapsingHeader::new("Global settings, read only").id_salt("git_settings_globals").default_open(false).show(ui, |ui| {
+            egui::CollapsingHeader::new(tr("Global settings, read only")).id_salt("git_settings_globals").default_open(false).show(ui, |ui| {
                 ui.label(
-                    RichText::new("From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.")
+                    RichText::new(tr("From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global."))
                         .small()
                         .color(c.muted),
                 );
                 ui.add_space(4.0);
                 match &self.shown_globals {
-                    None => widgets::loading(ui, "Reading global settings…"),
+                    None => widgets::loading(ui, tr("Reading global settings…")),
                     Some(values) => {
                         for (key, result) in values {
                             ui.horizontal(|ui| {
@@ -247,7 +248,7 @@ impl ToolWindow for GitSettingsWindow {
                                         ui.add(egui::Label::new(RichText::new(one_line(value)).monospace()).truncate());
                                     }
                                     Ok(None) => {
-                                        ui.label(RichText::new("Not set").small().color(c.muted));
+                                        ui.label(RichText::new(tr("Not set")).small().color(c.muted));
                                     }
                                     Err(error) => {
                                         ui.label(RichText::new(error.to_string()).small().color(c.conflict));
@@ -261,17 +262,17 @@ impl ToolWindow for GitSettingsWindow {
         });
 
         ui.separator();
-        widgets::section(ui, "Add a setting");
+        widgets::section(ui, tr("Add a setting"));
         ui.add_space(4.0);
         let loaded = matches!(shown, Some(Ok(_)));
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.new_key).hint_text("section.name").desired_width(200.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Setting name"));
+            ui.add(egui::TextEdit::singleline(&mut self.new_key).hint_text(tr("section.name")).desired_width(200.0))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Setting name")));
             let width = (ui.available_width() - 90.0).max(140.0);
-            ui.add(egui::TextEdit::singleline(&mut self.new_value).hint_text("Value").desired_width(width))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Setting value"));
+            ui.add(egui::TextEdit::singleline(&mut self.new_value).hint_text(tr("Value")).desired_width(width))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Setting value")));
             let can_add = idle && loaded && !self.new_key.trim().is_empty();
-            if widgets::primary_button(ui, "Add", can_add).clicked() {
+            if widgets::primary_button(ui, tr("Add"), can_add).clicked() {
                 let key = self.new_key.trim().to_string();
                 self.add_error = match validate_config_key(&key) {
                     Err(reason) => Some(reason),
@@ -279,7 +280,7 @@ impl ToolWindow for GitSettingsWindow {
                         Some(Ok(entries)) => entries
                             .iter()
                             .find(|entry| same_config_key(&entry.key, &key))
-                            .map(|existing| format!("{} is already set. Edit its row instead.", existing.key)),
+                            .map(|existing| tr_fmt!("{key} is already set. Edit its row instead.", key = existing.key)),
                         _ => None,
                     },
                 };
@@ -301,14 +302,14 @@ impl ToolWindow for GitSettingsWindow {
         match change {
             Some(Change::Set { key, expected, value }) => {
                 self.editing = None;
-                cx.act(format!("Set {key}"), move |client, directory| {
-                    client.set_config_value(directory, &key, &expected, &value).map(|()| Some(format!("Set {key}.")))
+                cx.act(tr_fmt!("Set {key}", key = key), move |client, directory| {
+                    client.set_config_value(directory, &key, &expected, &value).map(|()| Some(tr_fmt!("Set {key}.", key = key)))
                 });
             }
             Some(Change::Unset { key, expected }) => {
                 self.removing = None;
-                cx.act(format!("Remove {key}"), move |client, directory| {
-                    client.unset_config_value(directory, &key, &expected).map(|()| Some(format!("Removed {key}.")))
+                cx.act(tr_fmt!("Remove {key}", key = key), move |client, directory| {
+                    client.unset_config_value(directory, &key, &expected).map(|()| Some(tr_fmt!("Removed {key}.", key = key)))
                 });
             }
             None => {}

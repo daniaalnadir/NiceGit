@@ -8,6 +8,7 @@ use nicegit_core::{Branch, Commit, GitClient, HistoryFilter, Snapshot, Stash, St
 
 use crate::app::{NiceGitApp, Selection};
 use crate::graph_view::{self, Entry, Node};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::settings::HistoryScope;
 use crate::theme;
 use crate::tools::{self, widgets, Task};
@@ -50,8 +51,8 @@ fn cherry_pick_drag_label(ctx: &egui::Context) {
     let Some(payload) = egui::DragAndDrop::payload::<DraggedCommits>(ctx) else { return };
     let Some(pointer) = ctx.pointer_latest_pos() else { return };
     let text = match payload.0.as_slice() {
-        [one] => format!("Cherry-pick {}", short(one)),
-        many => format!("Cherry-pick {} commits", many.len()),
+        [one] => tr_fmt!("Cherry-pick {hash}", hash = short(one)),
+        many => tr_count("Cherry-pick {count} commit", "Cherry-pick {count} commits", many.len()),
     };
     egui::Area::new(ctx.viewport_id().root_ui_id().with_salt(egui::IdSalt::new("cherry-pick drag label")))
         .order(egui::Order::Tooltip)
@@ -152,12 +153,12 @@ pub fn focused_row_key() -> egui::Id {
 /// What a screen reader adds to a commit's row: its short ID, author, age, the labels on it, and
 /// whether it is HEAD. Built only when a screen reader is listening.
 fn commit_description(commit: &Commit, is_head: bool) -> String {
-    let mut parts = vec![format!("Commit {}", commit.short_hash), format!("by {}", commit.author_name)];
+    let mut parts = vec![tr_fmt!("Commit {id}", id = commit.short_hash), tr_fmt!("by {author}", author = commit.author_name)];
     if !commit.relative_date.is_empty() {
         parts.push(commit.relative_date.clone());
     }
     if !commit.refs.is_empty() {
-        parts.push(format!("labels {}", commit.refs.join(", ")));
+        parts.push(tr_fmt!("labels {refs}", refs = commit.refs.join(", ")));
     }
     if is_head {
         parts.push("HEAD".into());
@@ -167,9 +168,9 @@ fn commit_description(commit: &Commit, is_head: bool) -> String {
 
 fn scope_title(scope: HistoryScope) -> &'static str {
     match scope {
-        HistoryScope::All => "All branches",
-        HistoryScope::Local => "Local branches",
-        HistoryScope::Current => "Current branch",
+        HistoryScope::All => tr("All branches"),
+        HistoryScope::Local => tr("Local branches"),
+        HistoryScope::Current => tr("Current branch"),
     }
 }
 
@@ -236,7 +237,7 @@ impl NiceGitApp {
                 response
             };
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Commit history").size(16.0).strong());
+                ui.label(RichText::new(tr("Commit history")).size(16.0).strong());
                 ui.add_space(8.0);
                 let mut scope = shown;
                 // While a branch is shown alone the scope does not apply, so its menu waits.
@@ -251,39 +252,39 @@ impl NiceGitApp {
                             }
                         })
                         .response;
-                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, can_scope, "Branches shown"));
-                    response.on_hover_text("Which branches the graph includes").on_disabled_hover_text("Show all branches to choose which the graph includes");
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, can_scope, tr("Branches shown")));
+                    response.on_hover_text(tr("Which branches the graph includes")).on_disabled_hover_text(tr("Show all branches to choose which the graph includes"));
                 });
                 if scope != shown {
                     scope_change = Some(scope);
                 }
                 // Author and path filters narrow the history whatever the scope or solo branch.
-                let filter_button = header_button(ui, idle, icon::FUNNEL_SIMPLE, "Filter…")
-                    .on_hover_text("Show only the commits by an author, or that touch a file or folder")
-                    .on_disabled_hover_text("Wait for the current Git action to finish");
+                let filter_button = header_button(ui, idle, icon::FUNNEL_SIMPLE, tr("Filter…"))
+                    .on_hover_text(tr("Show only the commits by an author, or that touch a file or folder"))
+                    .on_disabled_hover_text(tr("Wait for the current Git action to finish"));
                 egui::Popup::menu(&filter_button).show(|ui| {
                     ui.set_width(260.0);
-                    ui.label(RichText::new("Show only commits by an author, or that touch a path.").small().color(c.muted));
-                    ui.label("Author");
+                    ui.label(RichText::new(tr("Show only commits by an author, or that touch a path.")).small().color(c.muted));
+                    ui.label(tr("Author"));
                     let author = ui.add(
                         egui::TextEdit::singleline(&mut filter_draft.author)
-                            .hint_text("Name or email")
+                            .hint_text(tr("Name or email"))
                             .desired_width(f32::INFINITY),
                     );
-                    author.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter by author"));
-                    ui.label("Path");
+                    author.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter by author")));
+                    ui.label(tr("Path"));
                     let path = ui.add(
                         egui::TextEdit::singleline(&mut filter_draft.path)
-                            .hint_text("File or folder in the repository")
+                            .hint_text(tr("File or folder in the repository"))
                             .desired_width(f32::INFINITY),
                     );
-                    path.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter by path"));
+                    path.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter by path")));
                     ui.horizontal(|ui| {
-                        if ui.button("Apply").clicked() {
+                        if ui.button(tr("Apply")).clicked() {
                             filter_change = Some(filter_draft.clone());
                             ui.close();
                         }
-                        if ui.button("Clear").clicked() {
+                        if ui.button(tr("Clear")).clicked() {
                             filter_draft = HistoryFilter::default();
                             filter_change = Some(HistoryFilter::default());
                             ui.close();
@@ -292,20 +293,20 @@ impl NiceGitApp {
                 });
                 // What the graph draws. These only change what is drawn, so no Git runs and the menu
                 // is never disabled. It stays open while several are toggled.
-                let show_button = header_button(ui, true, icon::EYE, "Show…")
-                    .on_hover_text("Choose the branch and tag labels the graph draws, and whether stashes are shown");
+                let show_button = header_button(ui, true, icon::EYE, tr("Show…"))
+                    .on_hover_text(tr("Choose the branch and tag labels the graph draws, and whether stashes are shown"));
                 egui::Popup::menu(&show_button).close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                     ui.set_width(240.0);
-                    ui.label(RichText::new("Show in the graph").small().color(c.muted));
-                    ui.checkbox(&mut self.settings.show_remote_labels, "Remote branch labels")
-                        .on_hover_text("Labels such as origin/main. A local branch that tracks one keeps its label.");
-                    ui.checkbox(&mut self.settings.show_tag_labels, "Tag labels");
-                    ui.checkbox(&mut self.settings.show_stashes, "Stashes")
-                        .on_hover_text("Each stash as a row above the commit it was made on, when that commit is loaded");
+                    ui.label(RichText::new(tr("Show in the graph")).small().color(c.muted));
+                    ui.checkbox(&mut self.settings.show_remote_labels, tr("Remote branch labels"))
+                        .on_hover_text(tr("Labels such as origin/main. A local branch that tracks one keeps its label."));
+                    ui.checkbox(&mut self.settings.show_tag_labels, tr("Tag labels"));
+                    ui.checkbox(&mut self.settings.show_stashes, tr("Stashes"))
+                        .on_hover_text(tr("Each stash as a row above the commit it was made on, when that commit is loaded"));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let more = if snapshot.has_more_commits { "+" } else { "" };
-                    let count = RichText::new(format!("{total_commits}{more} commits")).small().monospace().color(c.muted);
+                    let count = RichText::new(tr_fmt!("{total}{more} commits", total = total_commits, more = more)).small().monospace().color(c.muted);
                     let needed = egui::WidgetText::from(count.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Small).size().x;
                     // In a narrow pane the count gives way rather than overlap the buttons.
                     if ui.available_width() >= needed {
@@ -315,8 +316,8 @@ impl NiceGitApp {
             });
             if let Some(branch) = &solo {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Showing only {}.", branch.display_name())).small().color(c.muted));
-                    if ui.add_enabled(idle, egui::Link::new("Show all")).clicked() {
+                    ui.label(RichText::new(tr_fmt!("Showing only {branch}.", branch = branch.display_name())).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new(tr("Show all"))).clicked() {
                         clear_solo = true;
                     }
                 });
@@ -324,11 +325,11 @@ impl NiceGitApp {
             if shown != HistoryScope::All && solo.is_none() {
                 ui.horizontal(|ui| {
                     let what = match shown {
-                        HistoryScope::Current => "Showing the current branch and its upstream.",
-                        _ => "Showing local branches.",
+                        HistoryScope::Current => tr("Showing the current branch and its upstream."),
+                        _ => tr("Showing local branches."),
                     };
                     ui.label(RichText::new(what).small().color(c.muted));
-                    if ui.add_enabled(idle, egui::Link::new("Show all branches")).clicked() {
+                    if ui.add_enabled(idle, egui::Link::new(tr("Show all branches"))).clicked() {
                         scope_change = Some(HistoryScope::All);
                     }
                 });
@@ -336,9 +337,8 @@ impl NiceGitApp {
             // Hidden branches are not in the Current scope's history, so the note waits for the others.
             if hidden_count > 0 && shown != HistoryScope::Current {
                 ui.horizontal(|ui| {
-                    let branches = if hidden_count == 1 { "branch" } else { "branches" };
-                    ui.label(RichText::new(format!("{hidden_count} {branches} hidden.")).small().color(c.muted));
-                    if ui.add_enabled(idle, egui::Link::new("Show all")).clicked() {
+                    ui.label(RichText::new(tr_count("{count} branch hidden.", "{count} branches hidden.", hidden_count)).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new(tr("Show all"))).clicked() {
                         show_hidden = true;
                     }
                 });
@@ -347,13 +347,13 @@ impl NiceGitApp {
                 ui.horizontal(|ui| {
                     let mut parts = Vec::new();
                     if let Some(author) = applied_filter.author_text() {
-                        parts.push(format!("by {author}"));
+                        parts.push(tr_fmt!("by {author}", author = author));
                     }
                     if let Some(path) = applied_filter.path_text() {
-                        parts.push(format!("touching {path}"));
+                        parts.push(tr_fmt!("touching {path}", path = path));
                     }
-                    ui.label(RichText::new(format!("Showing commits {}.", parts.join(" · "))).small().color(c.muted));
-                    if ui.add_enabled(idle, egui::Link::new("Clear filters")).clicked() {
+                    ui.label(RichText::new(tr_fmt!("Showing commits {filters}.", filters = parts.join(" · "))).small().color(c.muted));
+                    if ui.add_enabled(idle, egui::Link::new(tr("Clear filters"))).clicked() {
                         filter_change = Some(HistoryFilter::default());
                     }
                 });
@@ -361,7 +361,7 @@ impl NiceGitApp {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let search_width = if narrow { 140.0 } else { 170.0 };
-                let search_text = if narrow { "Search history" } else { "Search all history" };
+                let search_text = if narrow { tr("Search history") } else { tr("Search all history") };
                 // A border, as on other text fields, so the light theme's white field reads as one.
                 egui::Frame::new()
                     .fill(ui.visuals().extreme_bg_color)
@@ -376,18 +376,18 @@ impl NiceGitApp {
                             let field = ui
                                 .add(
                                     egui::TextEdit::singleline(filter)
-                                        .hint_text("Filter loaded commits")
+                                        .hint_text(tr("Filter loaded commits"))
                                         .frame(egui::Frame::NONE)
                                         .desired_width(f32::INFINITY),
                                 )
-                                .on_hover_text("Matches each commit's message, author, ID, branches, and tags");
-                            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter loaded commits"));
+                                .on_hover_text(tr("Matches each commit's message, author, ID, branches, and tags"));
+                            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter loaded commits")));
                         });
                     });
                 let search = ui
                     .add_sized([search_width, 28.0], egui::Button::new(format!("{}  {search_text}", icon::MAGNIFYING_GLASS)))
-                    .on_hover_text("Search all history (Shift-Ctrl/Cmd-F)");
-                search.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Search all history"));
+                    .on_hover_text(tr("Search all history (Shift-Ctrl/Cmd-F)"));
+                search.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Search all history")));
                 if search.clicked() {
                     self.open_tool(Box::new(tools::commit_search::CommitSearchWindow::new()));
                 }
@@ -396,19 +396,19 @@ impl NiceGitApp {
                 ui.add_space(4.0);
                 // Wraps onto a second line in a narrow graph pane, rather than running off its edge.
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new(format!("{}  {} commits selected", icon::CHECK_SQUARE, marked.len())).color(c.accent));
+                    ui.label(RichText::new(format!("{}  {}", icon::CHECK_SQUARE, tr_fmt!("{count} commits selected", count = marked.len()))).color(c.accent));
                     let can = self.idle() && snapshot.operation.is_none() && snapshot.is_on_branch() && snapshot.status.is_empty();
-                    if widgets::primary_button(ui, "Cherry-pick", can)
-                        .on_disabled_hover_text("Commit or stash your changes first")
+                    if widgets::primary_button(ui, tr("Cherry-pick"), can)
+                        .on_disabled_hover_text(tr("Commit or stash your changes first"))
                         .clicked()
                     {
                         self.confirm(
-                            format!("Cherry-pick {} commits?", marked.len()),
-                            format!(
-                                "They are applied to {} oldest first. Conflicts stop the sequence for you to resolve or abort.",
-                                snapshot.current_branch
+                            tr_fmt!("Cherry-pick {count} commits?", count = marked.len()),
+                            tr_fmt!(
+                                "They are applied to {branch} oldest first. Conflicts stop the sequence for you to resolve or abort.",
+                                branch = snapshot.current_branch
                             ),
-                            "Cherry-pick",
+                            tr("Cherry-pick"),
                             Pending::CherryPick {
                                 commits: marked.iter().cloned().collect(),
                                 branch: snapshot.current_branch.clone(),
@@ -420,47 +420,47 @@ impl NiceGitApp {
                     // nothing is rewritten until its own Rewrite button is clicked.
                     let rewritable = tools::interactive_rebase::selection_base(&marked, &snapshot).is_some();
                     let rewrite_reason = if !can {
-                        "Commit or stash your changes first"
+                        tr("Commit or stash your changes first")
                     } else if !rewritable {
-                        "The selected commits must be in the loaded history, and none can be a merge"
+                        tr("The selected commits must be in the loaded history, and none can be a merge")
                     } else {
-                        "Select at least two commits to squash"
+                        tr("Select at least two commits to squash")
                     };
                     if ui
-                        .add_enabled(can && rewritable && marked.len() >= 2, egui::Button::new("Squash…"))
-                        .on_hover_text("Combine the selected commits into one, in the interactive rebase window to review")
+                        .add_enabled(can && rewritable && marked.len() >= 2, egui::Button::new(tr("Squash…")))
+                        .on_hover_text(tr("Combine the selected commits into one, in the interactive rebase window to review"))
                         .on_disabled_hover_text(rewrite_reason)
                         .clicked()
                     {
                         self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::squash(&marked, &snapshot)));
                     }
                     let drop_reason = if !can {
-                        "Commit or stash your changes first"
+                        tr("Commit or stash your changes first")
                     } else {
-                        "The selected commits must be in the loaded history, and none can be a merge"
+                        tr("The selected commits must be in the loaded history, and none can be a merge")
                     };
                     if ui
-                        .add_enabled(can && rewritable, egui::Button::new("Drop…"))
-                        .on_hover_text("Remove the selected commits and their changes, in the interactive rebase window to review")
+                        .add_enabled(can && rewritable, egui::Button::new(tr("Drop…")))
+                        .on_hover_text(tr("Remove the selected commits and their changes, in the interactive rebase window to review"))
                         .on_disabled_hover_text(drop_reason)
                         .clicked()
                     {
                         self.open_tool(Box::new(tools::interactive_rebase::InteractiveRebaseWindow::drop_commits(&marked, &snapshot)));
                     }
                     if ui
-                        .add_enabled(can, egui::Button::new("Revert…"))
-                        .on_hover_text("Undo the selected commits with new commits, newest first")
-                        .on_disabled_hover_text("Commit or stash your changes first")
+                        .add_enabled(can, egui::Button::new(tr("Revert…")))
+                        .on_hover_text(tr("Undo the selected commits with new commits, newest first"))
+                        .on_disabled_hover_text(tr("Commit or stash your changes first"))
                         .clicked()
                     {
                         self.confirm(
-                            format!("Revert {} commits?", marked.len()),
-                            format!(
-                                "New commits on {} undo the changes from {} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.",
-                                snapshot.current_branch,
-                                marked.len()
+                            tr_fmt!("Revert {count} commits?", count = marked.len()),
+                            tr_fmt!(
+                                "New commits on {branch} undo the changes from {count} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.",
+                                branch = snapshot.current_branch,
+                                count = marked.len()
                             ),
-                            "Revert",
+                            tr("Revert"),
                             Pending::RevertMany {
                                 commits: marked.iter().cloned().collect(),
                                 branch: snapshot.current_branch.clone(),
@@ -468,7 +468,7 @@ impl NiceGitApp {
                             },
                         );
                     }
-                    if ui.button("Clear").clicked() {
+                    if ui.button(tr("Clear")).clicked() {
                         self.repos[self.active].marked.clear();
                     }
                 });
@@ -564,7 +564,10 @@ impl NiceGitApp {
                         let layout = self.settings.history_columns.layout(left, left + ui.available_width(), graph_width);
                         ui.add_space(layout.message().min - left);
                         let clicked = ui
-                            .add_enabled(self.idle(), egui::Button::new(format!("{}  Load older history", icon::CARET_DOUBLE_DOWN)))
+                            .add_enabled(
+                                self.idle(),
+                                egui::Button::new(format!("{}  {}", icon::CARET_DOUBLE_DOWN, tr("Load older history"))),
+                            )
                             .clicked();
                         load_older = clicked || scrolled;
                     });
@@ -614,7 +617,7 @@ impl NiceGitApp {
         // which tests and screen readers find it by; the commit's details are its description.
         let description = match &commit {
             Some(commit) => commit.subject.clone(),
-            None => "Working tree".to_string(),
+            None => tr("Working tree").to_string(),
         };
         let selected = matches!(&selection, Selection::Commit { hash, .. } if commit.as_ref().is_some_and(|c| &c.hash == hash));
         let head_hash = self.snapshot().and_then(|s| s.head_hash.as_deref());
@@ -695,14 +698,14 @@ impl NiceGitApp {
         if is_working_tree {
             let count = snapshot.status.len();
             if let Some(refs) = layout.get(Column::Refs) {
-                let label = format!("{}  Working tree", icon::PENCIL_SIMPLE);
+                let label = format!("{}  {}", icon::PENCIL_SIMPLE, tr("Working tree"));
                 text_at(&painter.with_clip_rect(cell(refs)), refs.min + 18.0, y, label, body.clone(), c.accent);
             }
-            let subject = format!("{count} uncommitted file{}", if count == 1 { "" } else { "s" });
+            let subject = tr_count("{count} uncommitted file", "{count} uncommitted files", count);
             let clip = egui::Rect::from_min_max(egui::pos2(message_left, rect.top()), egui::pos2(subject_right, rect.bottom()));
             text_at(&painter.with_clip_rect(clip), message_left + 10.0, y, subject, FontId::proportional(13.5), text);
             // Beside the message when there is room; it already says the files are uncommitted.
-            let note = painter.layout_no_wrap("Not committed yet".into(), small, c.muted);
+            let note = painter.layout_no_wrap(tr("Not committed yet").into(), small, c.muted);
             if let Some(trailing) = layout.trailing().filter(|span| span.span() >= note.size().x + 20.0) {
                 painter.galley(egui::pos2(trailing.max - 12.0 - note.size().x, y - note.size().y / 2.0), note, c.muted);
             }
@@ -792,14 +795,14 @@ impl NiceGitApp {
             }
         }
 
-        // Subject, "You are here", author, date, and ID.
+        // Subject, tr("You are here"), author, date, and ID.
         let is_head = snapshot.head_hash.as_deref() == Some(commit.hash.as_str());
         let subject_rect = egui::Rect::from_min_max(egui::pos2(message_left + 10.0, rect.top()), egui::pos2(subject_right, rect.bottom()));
         let subject_painter = painter.with_clip_rect(subject_rect);
         let subject_font = if is_head { FontId::new(13.5, egui::FontFamily::Proportional) } else { body.clone() };
         let drawn = text_at(&subject_painter, subject_rect.left(), y, &commit.subject, subject_font, text);
         if is_head && drawn.right() + 90.0 < subject_right {
-            text_at(&painter, drawn.right() + 10.0, y, "You are here", FontId::proportional(11.0), c.accent);
+            text_at(&painter, drawn.right() + 10.0, y, tr("You are here"), FontId::proportional(11.0), c.accent);
         }
         for (column, text, font) in [
             (Column::Author, commit.author_name.as_str(), small.clone()),
@@ -820,7 +823,7 @@ impl NiceGitApp {
         let mut label_clicked = false;
         for (index, (pill, branch)) in branch_pills.into_iter().enumerate() {
             let label = ui.interact(pill, ui.scope_id().with(("label", &commit.hash, index)), Sense::click_and_drag());
-            let name = format!("Branch label {}", branch.display_name());
+            let name = tr_fmt!("Branch label {name}", name = branch.display_name());
             label.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
             label_clicked |= label.clicked();
             let label = label.on_hover_text(branch.display_name());
@@ -848,7 +851,7 @@ impl NiceGitApp {
         // Tag labels are named for screen readers and tests; hovering passes through to the row.
         for (index, (pill, name)) in tag_pills.into_iter().enumerate() {
             let tag = ui.interact(pill, ui.scope_id().with(("tag", &commit.hash, index)), Sense::hover());
-            tag.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, format!("Tag {name}")));
+            tag.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, tr_fmt!("Tag {name}", name = name)));
         }
         if is_head && snapshot.is_on_branch() && response.dnd_hover_payload::<Branch>().is_some() {
             if let Some(source) = response.dnd_release_payload::<Branch>() {
@@ -888,23 +891,24 @@ impl NiceGitApp {
             return;
         }
         if self.busy.is_some() {
-            self.notify("Wait for the current Git action to finish before cherry-picking.", true);
+            self.notify(tr("Wait for the current Git action to finish before cherry-picking."), true);
             return;
         }
         let Some(snapshot) = self.repo().and_then(|repo| repo.snapshot.clone()) else { return };
         if snapshot.operation.is_some() {
-            self.notify("Finish or abort the current Git operation before switching branches.", true);
+            self.notify(tr("Finish or abort the current Git operation before switching branches."), true);
             return;
         }
         let name = target.display_name();
         let count = commits.len();
-        let noun = if count == 1 { "commit" } else { "commits" };
+        let commit_count = tr_count("{count} commit", "{count} commits", count);
         self.confirm(
-            format!("Check out {name} and cherry-pick {count} {noun}?"),
-            format!(
-                "NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}."
+            tr_fmt!("Check out {name} and cherry-pick {commits}?", name = name, commits = commit_count),
+            tr_fmt!(
+                "NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}.",
+                name = name
             ),
-            "Check out",
+            tr("Check out"),
             Pending::CheckOutAndCherryPick { branch: target, commits },
         );
     }
@@ -914,22 +918,22 @@ impl NiceGitApp {
     /// the confirmation opens when that read finishes.
     fn begin_cherry_pick_review(&mut self, commits: Vec<String>) {
         if self.busy.is_some() {
-            self.notify("Wait for the current Git action to finish before cherry-picking.", true);
+            self.notify(tr("Wait for the current Git action to finish before cherry-picking."), true);
             return;
         }
         let Some(repo) = self.repo() else { return };
         let Some(snapshot) = repo.snapshot.clone() else { return };
         let path = repo.path.clone();
         if snapshot.operation.is_some() {
-            self.notify("Finish or abort the current Git operation before cherry-picking.", true);
+            self.notify(tr("Finish or abort the current Git operation before cherry-picking."), true);
             return;
         }
         if !snapshot.is_on_branch() {
-            self.notify("Check out a branch before cherry-picking.", true);
+            self.notify(tr("Check out a branch before cherry-picking."), true);
             return;
         }
         if !snapshot.status.is_empty() {
-            self.notify("Commit or stash your changes before cherry-picking.", true);
+            self.notify(tr("Commit or stash your changes before cherry-picking."), true);
             return;
         }
         let Some(head) = snapshot.head_hash.clone() else { return };
@@ -953,7 +957,7 @@ impl NiceGitApp {
         let already = match result {
             Ok(already) => already,
             Err(error) => {
-                self.notify(format!("Could not read the commits on {}: {error}", review.branch), true);
+                self.notify(tr_fmt!("Could not read the commits on {branch}: {error}", branch = review.branch, error = error), true);
                 return;
             }
         };
@@ -962,24 +966,24 @@ impl NiceGitApp {
         let branch = review.branch;
         if remaining.is_empty() {
             let text = if skipped == 1 {
-                format!("That commit is already on {branch}.")
+                tr_fmt!("That commit is already on {branch}.", branch = branch)
             } else {
-                format!("All {skipped} commits are already on {branch}.")
+                tr_fmt!("All {count} commits are already on {branch}.", count = skipped, branch = branch)
             };
             self.notify(text, false);
             return;
         }
         let count = remaining.len();
         let (title, mut message) = if count == 1 {
-            ("Cherry-pick this commit?".to_string(), format!("It is applied to {branch} as a new commit."))
+            (tr("Cherry-pick this commit?").to_string(), tr_fmt!("It is applied to {branch} as a new commit.", branch = branch))
         } else {
-            (format!("Cherry-pick {count} commits?"), format!("They are applied to {branch} oldest first."))
+            (tr_fmt!("Cherry-pick {count} commits?", count = count), tr_fmt!("They are applied to {branch} oldest first.", branch = branch))
         };
-        message.push_str(" Conflicts stop the sequence for you to resolve or abort.");
+        message.push_str(&format!(" {}", tr("Conflicts stop the sequence for you to resolve or abort.")));
         if skipped > 0 {
-            message.push_str(&format!(" {skipped} of them are already on {branch}."));
+            message.push_str(&format!(" {}", tr_fmt!("{count} of them are already on {branch}.", count = skipped, branch = branch)));
         }
-        self.confirm(title, message, "Cherry-pick", Pending::CherryPick { commits: remaining, branch, head: Some(review.head) });
+        self.confirm(title, message, tr("Cherry-pick"), Pending::CherryPick { commits: remaining, branch, head: Some(review.head) });
     }
 
     /// Opens the cherry-pick confirmation once the checkout started by a drop has finished, if it
@@ -1062,12 +1066,18 @@ impl NiceGitApp {
         let is_head = snapshot.head_hash.as_deref() == Some(commit.hash.as_str());
         ui.set_min_width(260.0);
         for branch in snapshot.branches.iter().filter(|b| b.tip == commit.hash && !b.is_current && !b.is_detached()) {
-            if ui.add_enabled(can_switch, egui::Button::new(format!("{}  Check out {}", icon::CHECK, branch.display_name()))).clicked() {
+            if ui
+                .add_enabled(
+                    can_switch,
+                    egui::Button::new(format!("{}  {}", icon::CHECK, tr_fmt!("Check out {branch}", branch = branch.display_name()))),
+                )
+                .clicked()
+            {
                 ui.close();
                 self.checkout(branch.clone());
             }
         }
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Create branch here…")))).clicked() {
             ui.close();
             let source = Branch {
                 name: commit.hash.clone(),
@@ -1078,13 +1088,13 @@ impl NiceGitApp {
                 upstream: None,
             };
             self.dialog = Some(Dialog::input(
-                "New branch",
-                &format!("Create a branch at {}", commit.short_hash),
+                tr("New branch"),
+                &tr_fmt!("Create a branch at {hash}", hash = commit.short_hash),
                 "",
                 InputKind::CreateBranchFrom(source),
             ));
         }
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Create tag here…", icon::TAG))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TAG, tr("Create tag here…")))).clicked() {
             ui.close();
             self.dialog = Some(Dialog::new_tag(commit.hash.clone(), snapshot));
         }
@@ -1104,8 +1114,8 @@ impl NiceGitApp {
         };
         if !is_head
             && ui
-                .add_enabled(can_rewrite, egui::Button::new(format!("{}  Cherry-pick", icon::ARROW_BEND_DOWN_RIGHT)))
-                .on_disabled_hover_text("Commit or stash your changes first")
+                .add_enabled(can_rewrite, egui::Button::new(format!("{}  {}", icon::ARROW_BEND_DOWN_RIGHT, tr("Cherry-pick"))))
+                .on_disabled_hover_text(tr("Commit or stash your changes first"))
                 .clicked()
         {
             ui.close();
@@ -1114,9 +1124,9 @@ impl NiceGitApp {
                 return;
             }
             self.confirm(
-                "Cherry-pick this commit?",
-                format!("“{}” is applied to {} as a new commit.", commit.subject, snapshot.current_branch),
-                "Cherry-pick",
+                tr("Cherry-pick this commit?"),
+                tr_fmt!("“{subject}” is applied to {branch} as a new commit.", subject = commit.subject, branch = snapshot.current_branch),
+                tr("Cherry-pick"),
                 Pending::CherryPick {
                     commits: vec![commit.hash.clone()],
                     branch: snapshot.current_branch.clone(),
@@ -1125,8 +1135,8 @@ impl NiceGitApp {
             );
         }
         if ui
-            .add_enabled(can_rewrite, egui::Button::new(format!("{}  Revert", icon::ARROW_U_UP_LEFT)))
-            .on_disabled_hover_text("Commit or stash your changes first")
+            .add_enabled(can_rewrite, egui::Button::new(format!("{}  {}", icon::ARROW_U_UP_LEFT, tr("Revert"))))
+            .on_disabled_hover_text(tr("Commit or stash your changes first"))
             .clicked()
         {
             ui.close();
@@ -1135,9 +1145,13 @@ impl NiceGitApp {
                 return;
             }
             self.confirm(
-                "Revert this commit?",
-                format!("A new commit on {} undoes the changes from “{}”.", snapshot.current_branch, commit.subject),
-                "Revert",
+                tr("Revert this commit?"),
+                tr_fmt!(
+                    "A new commit on {branch} undoes the changes from “{subject}”.",
+                    branch = snapshot.current_branch,
+                    subject = commit.subject
+                ),
+                tr("Revert"),
                 Pending::Revert { commit: commit.hash.clone(), branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
             );
         }
@@ -1145,7 +1159,11 @@ impl NiceGitApp {
             && ui
                 .add_enabled(
                     idle && on_branch && snapshot.operation.is_none(),
-                    egui::Button::new(format!("{}  Reset {} to here…", icon::ARROW_ARC_LEFT, snapshot.current_branch)),
+                    egui::Button::new(format!(
+                        "{}  {}",
+                        icon::ARROW_ARC_LEFT,
+                        tr_fmt!("Reset {branch} to here…", branch = snapshot.current_branch)
+                    )),
                 )
                 .clicked()
         {
@@ -1154,8 +1172,8 @@ impl NiceGitApp {
         }
         if !is_head
             && ui
-                .add_enabled(can_rewrite, egui::Button::new(format!("{}  Interactive rebase from here…", icon::LIST_NUMBERS)))
-                .on_hover_text("Reorder, edit, squash, or drop the commits after this one")
+                .add_enabled(can_rewrite, egui::Button::new(format!("{}  {}", icon::LIST_NUMBERS, tr("Interactive rebase from here…"))))
+                .on_hover_text(tr("Reorder, edit, squash, or drop the commits after this one"))
                 .clicked()
         {
             ui.close();
@@ -1164,10 +1182,10 @@ impl NiceGitApp {
         if !is_head {
             // Older messages are edited in the interactive rebase window, with this commit set to Reword.
             let merge = commit.parents.len() > 1;
-            let reason = if merge { "Merge commits can't be edited here" } else { "Commit or stash your changes first" };
+            let reason = if merge { tr("Merge commits can't be edited here") } else { tr("Commit or stash your changes first") };
             if ui
-                .add_enabled(can_rewrite && !merge, egui::Button::new(format!("{}  Edit message…", icon::PENCIL_SIMPLE)))
-                .on_hover_text("Rewrites this commit and the ones after it")
+                .add_enabled(can_rewrite && !merge, egui::Button::new(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Edit message…"))))
+                .on_hover_text(tr("Rewrites this commit and the ones after it"))
                 .on_disabled_hover_text(reason)
                 .clicked()
             {
@@ -1183,32 +1201,33 @@ impl NiceGitApp {
             let has_unstaged = snapshot.status.iter().any(|entry| entry.kind != StatusKind::Untracked && entry.is_unstaged());
             let enabled = idle && on_branch && snapshot.operation.is_none() && !merge && has_staged && !has_unstaged;
             let reason = if merge {
-                Some("Merge commits can't be fixed up here")
+                Some(tr("Merge commits can't be fixed up here"))
             } else if !has_staged {
-                Some("Stage the changes to fold into this commit first")
+                Some(tr("Stage the changes to fold into this commit first"))
             } else if has_unstaged {
-                Some("Stash or discard unstaged changes first")
+                Some(tr("Stash or discard unstaged changes first"))
             } else if !on_branch {
-                Some("Check out a branch first")
+                Some(tr("Check out a branch first"))
             } else if snapshot.operation.is_some() {
-                Some("Finish the current Git operation first")
+                Some(tr("Finish the current Git operation first"))
             } else {
                 None
             };
-            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Fix up with staged changes…", icon::WRENCH)));
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  {}", icon::WRENCH, tr("Fix up with staged changes…"))));
             let button = match reason {
                 Some(reason) => button.on_disabled_hover_text(reason),
-                None => button.on_hover_text("Folds the staged changes into this commit and replays the commits after it"),
+                None => button.on_hover_text(tr("Folds the staged changes into this commit and replays the commits after it")),
             };
             if button.clicked() {
                 ui.close();
                 self.confirm(
-                    format!("Fix up “{}”?", commit.subject),
-                    format!(
-                        "The staged changes become part of {}, and the commits after it on {} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.",
-                        commit.short_hash, snapshot.current_branch
+                    tr_fmt!("Fix up “{subject}”?", subject = commit.subject),
+                    tr_fmt!(
+                        "The staged changes become part of {commit}, and the commits after it on {branch} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.",
+                        commit = commit.short_hash,
+                        branch = snapshot.current_branch
                     ),
-                    "Fix up",
+                    tr("Fix up"),
                     Pending::FixupInto {
                         target: commit.hash.clone(),
                         subject: commit.subject.clone(),
@@ -1228,22 +1247,23 @@ impl NiceGitApp {
             let conflicted = snapshot.status.iter().any(|entry| entry.kind == StatusKind::Conflicted);
             let enabled = idle && !merge && has_staged && !conflicted && snapshot.operation.is_none();
             let reason = if !idle {
-                Some("Wait for the current Git action to finish")
+                Some(tr("Wait for the current Git action to finish"))
             } else if merge {
-                Some("Merge commits can't be fixed up here")
+                Some(tr("Merge commits can't be fixed up here"))
             } else if !has_staged {
-                Some("Stage the changes to commit as a fixup first")
+                Some(tr("Stage the changes to commit as a fixup first"))
             } else if conflicted {
-                Some("Resolve the conflicted files first")
+                Some(tr("Resolve the conflicted files first"))
             } else if snapshot.operation.is_some() {
-                Some("Finish the current Git operation first")
+                Some(tr("Finish the current Git operation first"))
             } else {
                 None
             };
-            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Commit staged changes as fixup", icon::GIT_COMMIT)));
+            let button =
+                ui.add_enabled(enabled, egui::Button::new(format!("{}  {}", icon::GIT_COMMIT, tr("Commit staged changes as fixup"))));
             let button = match reason {
                 Some(reason) => button.on_disabled_hover_text(reason),
-                None => button.on_hover_text("Records a fixup! commit for this commit. An interactive rebase folds it in later"),
+                None => button.on_hover_text(tr("Records a fixup! commit for this commit. An interactive rebase folds it in later")),
             };
             if button.clicked() {
                 ui.close();
@@ -1255,18 +1275,18 @@ impl NiceGitApp {
             // that is not on the checked-out branch is refused by the core, which says why.
             let merge = commit.parents.len() > 1;
             let reason = if !idle {
-                "Wait for the current Git action to finish"
+                tr("Wait for the current Git action to finish")
             } else if !on_branch {
-                "Check out a branch first"
+                tr("Check out a branch first")
             } else if snapshot.operation.is_some() {
-                "Finish the current Git operation first"
+                tr("Finish the current Git operation first")
             } else {
-                "Merge commits can't be split"
+                tr("Merge commits can't be split")
             };
             let enabled = idle && on_branch && snapshot.operation.is_none() && !merge;
-            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  Split commit…", icon::SCISSORS)));
+            let button = ui.add_enabled(enabled, egui::Button::new(format!("{}  {}", icon::SCISSORS, tr("Split commit…"))));
             let button = if enabled {
-                button.on_hover_text("Divides this commit into two, with a message for each")
+                button.on_hover_text(tr("Divides this commit into two, with a message for each"))
             } else {
                 button.on_disabled_hover_text(reason)
             };
@@ -1279,7 +1299,7 @@ impl NiceGitApp {
             && ui
                 .add_enabled(
                     idle && on_branch && snapshot.operation.is_none(),
-                    egui::Button::new(format!("{}  Edit message…", icon::PENCIL_SIMPLE)),
+                    egui::Button::new(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Edit message…"))),
                 )
                 .clicked()
         {
@@ -1297,51 +1317,54 @@ impl NiceGitApp {
             && ui
                 .add_enabled(
                     idle && on_branch && snapshot.operation.is_none(),
-                    egui::Button::new(format!("{}  Undo this commit…", icon::ARROW_COUNTER_CLOCKWISE)),
+                    egui::Button::new(format!("{}  {}", icon::ARROW_COUNTER_CLOCKWISE, tr("Undo this commit…"))),
                 )
                 .clicked()
         {
             ui.close();
             if let Some(head) = snapshot.head_hash.clone() {
                 self.confirm(
-                    "Undo the last commit?",
-                    format!(
-                        "“{}” is removed from {}. Its changes stay staged so you can commit them again.",
-                        commit.subject, snapshot.current_branch
+                    tr("Undo the last commit?"),
+                    tr_fmt!(
+                        "“{subject}” is removed from {branch}. Its changes stay staged so you can commit them again.",
+                        subject = commit.subject,
+                        branch = snapshot.current_branch
                     ),
-                    "Undo commit",
+                    tr("Undo commit"),
                     Pending::UndoCommit { branch: snapshot.current_branch.clone(), head },
                 );
             }
         }
         ui.separator();
-        if ui.button(format!("{}  Compare with working files", icon::GIT_DIFF)).clicked() {
+        if ui.button(format!("{}  {}", icon::GIT_DIFF, tr("Compare with working files"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::compare::CompareWindow::new(commit.hash.clone(), None)));
         }
         let base = self.repo().and_then(|r| r.compare_base.clone());
         match base {
             Some(base) if base != commit.hash => {
-                if ui.button(format!("{}  Compare with marked commit", icon::ARROWS_LEFT_RIGHT)).clicked() {
+                if ui.button(format!("{}  {}", icon::ARROWS_LEFT_RIGHT, tr("Compare with marked commit"))).clicked() {
                     ui.close();
                     self.open_tool(Box::new(tools::compare::CompareWindow::new(base, Some(commit.hash.clone()))));
                     self.repos[self.active].compare_base = None;
                 }
             }
             _ => {
-                if ui.button(format!("{}  Mark for comparison", icon::PUSH_PIN)).clicked() {
+                if ui.button(format!("{}  {}", icon::PUSH_PIN, tr("Mark for comparison"))).clicked() {
                     ui.close();
                     self.repos[self.active].compare_base = Some(commit.hash.clone());
-                    self.notify(format!("Marked {}. Right-click another commit to compare.", commit.short_hash), false);
+                    self.notify(tr_fmt!("Marked {hash}. Right-click another commit to compare.", hash = commit.short_hash), false);
                 }
             }
         }
-        if ui.button(format!("{}  Search files in this commit…", icon::FILE_MAGNIFYING_GLASS)).clicked() {
+        if ui.button(format!("{}  {}", icon::FILE_MAGNIFYING_GLASS, tr("Search files in this commit…"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::content_search::ContentSearchWindow::new(Some(commit.hash.clone()))));
         }
         if snapshot.operation.is_none()
-            && ui.add_enabled(idle && clean, egui::Button::new(format!("{}  Start bisect: this commit is good", icon::BUG))).clicked()
+            && ui
+                .add_enabled(idle && clean, egui::Button::new(format!("{}  {}", icon::BUG, tr("Start bisect: this commit is good"))))
+                .clicked()
         {
             ui.close();
             self.open_tool(Box::new(tools::bisect::BisectWindow::start_from(commit.hash.clone())));
@@ -1354,41 +1377,41 @@ impl NiceGitApp {
         };
         self.custom_actions_submenu(ui, crate::settings::ActionScope::Commit, &values, idle);
         ui.separator();
-        ui.menu_button(format!("{}  Copy", icon::COPY), |ui| {
-            if ui.button("Commit ID").clicked() {
+        ui.menu_button(format!("{}  {}", icon::COPY, tr("Copy")), |ui| {
+            if ui.button(tr("Commit ID")).clicked() {
                 ui.close();
                 ui.ctx().copy_text(commit.hash.clone());
             }
             // The short ID the graph shows, which Git lengthens in large repositories.
-            if ui.button("Short commit ID").clicked() {
+            if ui.button(tr("Short commit ID")).clicked() {
                 ui.close();
                 ui.ctx().copy_text(commit.short_hash.clone());
             }
-            if ui.button("Subject").clicked() {
+            if ui.button(tr("Subject")).clicked() {
                 ui.close();
                 ui.ctx().copy_text(commit.subject.clone());
             }
-            if ui.button("Message").clicked() {
+            if ui.button(tr("Message")).clicked() {
                 ui.close();
                 self.copy_commit_message(ui.ctx(), commit);
             }
-            if ui.button("Author").clicked() {
+            if ui.button(tr("Author")).clicked() {
                 ui.close();
                 ui.ctx().copy_text(format!("{} <{}>", commit.author_name, commit.author_email));
             }
         });
         crate::git_ext::web_open_menu(
             ui,
-            "Open",
+            tr("Open"),
             crate::git_ext::hosted_commit_links(snapshot, &commit.hash, self.settings.listed_hosts()),
             crate::git_ext::PUSHED_COMMIT_NOTE,
         );
         crate::git_ext::commit_link_menu(ui, snapshot, &commit.hash, self.settings.listed_hosts());
-        if ui.button(format!("{}  Save as patch…", icon::FLOPPY_DISK)).clicked() {
+        if ui.button(format!("{}  {}", icon::FLOPPY_DISK, tr("Save as patch…"))).clicked() {
             ui.close();
             self.export_patch(commit);
         }
-        if ui.button(format!("{}  Save as ZIP…", icon::FILE_ZIP)).clicked() {
+        if ui.button(format!("{}  {}", icon::FILE_ZIP, tr("Save as ZIP…"))).clicked() {
             ui.close();
             self.export_zip(commit);
         }
@@ -1406,7 +1429,7 @@ impl NiceGitApp {
         };
         if let Some(Ok(details)) = loaded {
             ctx.copy_text(details.message.clone());
-            self.notify("Copied the commit message.", false);
+            self.notify(tr("Copied the commit message."), false);
             return;
         }
         let (path, hash) = (repo.path.clone(), commit.hash.clone());
@@ -1418,7 +1441,7 @@ impl NiceGitApp {
         let repo_path = repo.path.clone();
         let prefix = tools::archive::archive_prefix(&repo_path, &commit.short_hash);
         let name = format!("{prefix}.zip");
-        if let Some(file) = crate::file_dialog::save_file("Save as ZIP", &name) {
+        if let Some(file) = crate::file_dialog::save_file(tr("Save as ZIP"), &name) {
             self.open_tool(Box::new(tools::archive::SaveZipWindow::new(repo_path, commit.hash.clone(), prefix, file)));
         }
     }
@@ -1426,10 +1449,10 @@ impl NiceGitApp {
     fn export_patch(&mut self, commit: &Commit) {
         let Some(repo) = self.repo() else { return };
         let name = format!("{}.patch", commit.short_hash);
-        if let Some(file) = crate::file_dialog::save_file("Save as patch", &name) {
+        if let Some(file) = crate::file_dialog::save_file(tr("Save as patch"), &name) {
             match nicegit_core::GitClient::new().export_commit_patch(&commit.hash, &repo.path) {
                 Ok(patch) => match std::fs::write(&file, patch) {
-                    Ok(()) => self.notify(format!("Saved {}.", file.display()), false),
+                    Ok(()) => self.notify(tr_fmt!("Saved {file}.", file = file.display()), false),
                     Err(error) => self.notify(error.to_string(), true),
                 },
                 Err(error) => self.notify(error.to_string(), true),

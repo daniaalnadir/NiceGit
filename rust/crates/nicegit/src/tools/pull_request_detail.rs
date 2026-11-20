@@ -14,6 +14,7 @@ use nicegit_core::github::{
 };
 use nicegit_core::github_review::{file_diffs, FileDiff, ReviewThread};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::github::{label_pill, message, Refreshing};
 use crate::tools::pull_request_files::{self, Confirm as ThreadConfirm, FilesState, FilesView, Pull, Write as ThreadWrite};
@@ -182,7 +183,7 @@ impl ToolWindow for PullRequestDetailWindow {
     }
 
     fn title(&self) -> String {
-        format!("Pull request #{}", self.number)
+        tr_fmt!("Pull request #{number}", number = self.number)
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -259,26 +260,30 @@ impl ToolWindow for PullRequestDetailWindow {
         let diff = self.diff.latest();
         let mut requested: Option<ThreadConfirm> = None;
         match answer {
-            None => widgets::loading(ui, "Loading from GitHub"),
+            None => widgets::loading(ui, tr("Loading from GitHub")),
             Some(Err(error)) => widgets::callout(ui, &message(error), true),
             Some(Ok(Loaded::NotInstalled)) => {
                 widgets::callout(
                     ui,
-                    "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.",
+                    tr("The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again."),
                     true,
                 );
                 ui.add_space(6.0);
-                refresh |= ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked();
+                refresh |= ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked();
             }
             Some(Ok(Loaded::SignedOut(explanation))) => {
                 let command = if host == "github.com" { "gh auth login".to_string() } else { format!("gh auth login --hostname {host}") };
-                widgets::callout(ui, &format!("GitHub CLI is not signed in. Run {command} in a terminal, then check again."), true);
+                widgets::callout(
+                    ui,
+                    &tr_fmt!("GitHub CLI is not signed in. Run {command} in a terminal, then check again.", command = command),
+                    true,
+                );
                 if !explanation.is_empty() {
                     ui.add_space(4.0);
                     ui.label(RichText::new(explanation.as_str()).small().color(theme::of(ui).muted));
                 }
                 ui.add_space(6.0);
-                refresh |= ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked();
+                refresh |= ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked();
             }
             Some(Ok(Loaded::Read { detail, .. })) => {
                 tabs(ui, &mut tab, detail);
@@ -393,15 +398,19 @@ impl PullRequestDetailWindow {
         let task = query(ctx, cx.repo, move |client, directory| match write {
             ThreadWrite::Reply { thread_id, body } => {
                 client.reply_to_thread(&repository, &thread_id, &body, &GhProgram::Search, directory)?;
-                Ok(format!("Replied on #{number}."))
+                Ok(tr_fmt!("Replied on #{number}.", number = number))
             }
             ThreadWrite::Line(comment) => {
                 client.add_line_comment(&repository, number, &comment, &GhProgram::Search, directory)?;
-                Ok(format!("Commented on #{number}."))
+                Ok(tr_fmt!("Commented on #{number}.", number = number))
             }
             ThreadWrite::Resolve { thread_id, resolved } => {
                 client.set_thread_resolved(&repository, &thread_id, resolved, &GhProgram::Search, directory)?;
-                Ok(if resolved { format!("Resolved a thread on #{number}.") } else { format!("Reopened a thread on #{number}.") })
+                Ok(if resolved {
+                    tr_fmt!("Resolved a thread on #{number}.", number = number)
+                } else {
+                    tr_fmt!("Reopened a thread on #{number}.", number = number)
+                })
             }
         });
         self.thread_write = Some(task);
@@ -429,14 +438,14 @@ impl PullRequestDetailWindow {
             Submit::Review { choice, body } => {
                 client.pull_request_review(&repository, number, choice, &body, &GhProgram::Search, directory)?;
                 Ok(match choice {
-                    ReviewChoice::Approve => format!("Approved #{number}."),
-                    ReviewChoice::RequestChanges => format!("Requested changes on #{number}."),
-                    ReviewChoice::Comment => format!("Commented on #{number}."),
+                    ReviewChoice::Approve => tr_fmt!("Approved #{number}.", number = number),
+                    ReviewChoice::RequestChanges => tr_fmt!("Requested changes on #{number}.", number = number),
+                    ReviewChoice::Comment => tr_fmt!("Commented on #{number}.", number = number),
                 })
             }
             Submit::Merge { method, head_oid } => {
                 client.pull_request_merge(&repository, number, method, &head_oid, &GhProgram::Search, directory)?;
-                Ok(format!("Merged #{number}."))
+                Ok(tr_fmt!("Merged #{number}.", number = number))
             }
         });
         self.write = Some(task);
@@ -454,23 +463,23 @@ fn header(ui: &mut Ui, number: u64, detail: Option<&PullRequestDetail>, pending:
         ui.label(RichText::new(icon::GIT_PULL_REQUEST).size(16.0).color(c.muted));
         ui.label(RichText::new(format!("#{number}")).monospace().color(c.muted));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, "Refresh", true).clicked() {
+            if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, tr("Refresh"), true).clicked() {
                 clicks.refresh = true;
             }
             if pending {
                 ui.spinner();
             }
-            if detail.is_some() && widgets::labeled_button(ui, icon::ARROW_SQUARE_OUT, "Open in browser", true).clicked() {
+            if detail.is_some() && widgets::labeled_button(ui, icon::ARROW_SQUARE_OUT, tr("Open in browser"), true).clicked() {
                 clicks.open = true;
             }
-            if widgets::labeled_button(ui, icon::GIT_MERGE, "Merge…", merge.enabled)
+            if widgets::labeled_button(ui, icon::GIT_MERGE, tr("Merge…"), merge.enabled)
                 .on_hover_text(merge.hover)
                 .on_disabled_hover_text(merge.hover)
                 .clicked()
             {
                 clicks.merge = true;
             }
-            if widgets::labeled_button(ui, icon::EYE, "Review…", review.enabled)
+            if widgets::labeled_button(ui, icon::EYE, tr("Review…"), review.enabled)
                 .on_hover_text(review.hover)
                 .on_disabled_hover_text(review.hover)
                 .clicked()
@@ -479,7 +488,7 @@ fn header(ui: &mut Ui, number: u64, detail: Option<&PullRequestDetail>, pending:
             }
         });
     });
-    let title = detail.map(|detail| detail.title.clone()).unwrap_or_else(|| format!("Pull request #{number}"));
+    let title = detail.map(|detail| detail.title.clone()).unwrap_or_else(|| tr_fmt!("Pull request #{number}", number = number));
     ui.add(egui::Label::new(RichText::new(title).strong().size(16.0)).wrap());
     if let Some(detail) = detail {
         badges(ui, detail, now_seconds());
@@ -491,10 +500,10 @@ fn header(ui: &mut Ui, number: u64, detail: Option<&PullRequestDetail>, pending:
 fn badges(ui: &mut Ui, detail: &PullRequestDetail, now: i64) {
     let c = theme::of(ui);
     let (word, color) = match detail.state {
-        PrState::Open => ("open", c.added),
-        PrState::Draft => ("draft", c.muted),
-        PrState::Merged => ("merged", c.renamed),
-        PrState::Closed => ("closed", c.removed),
+        PrState::Open => (tr("open"), c.added),
+        PrState::Draft => (tr("draft"), c.muted),
+        PrState::Merged => (tr("merged"), c.renamed),
+        PrState::Closed => (tr("closed"), c.removed),
     };
     ui.horizontal_wrapped(|ui| {
         widgets::pill(ui, word, color);
@@ -505,18 +514,18 @@ fn badges(ui: &mut Ui, detail: &PullRequestDetail, now: i64) {
         for label in &detail.labels {
             label_pill(ui, &label.name, &label.color);
         }
-        let author = detail.author.as_deref().unwrap_or("no author");
-        ui.label(RichText::new(format!("by {author}")).small().color(c.muted));
+        let author = detail.author.as_deref().unwrap_or(tr("no author"));
+        ui.label(RichText::new(tr_fmt!("by {author}", author = author)).small().color(c.muted));
         ui.label(RichText::new(format!("{} \u{2190} {}", detail.base_ref, detail.head_ref)).monospace().small().color(c.muted));
         ui.label(RichText::new(format!("+{}", detail.additions)).small().color(c.added));
         ui.label(RichText::new(format!("\u{2212}{}", detail.deletions)).small().color(c.removed));
-        ui.label(RichText::new(format!("{} files", detail.changed_files)).small().color(c.muted));
-        ui.label(RichText::new(format!("{} commits", detail.commit_count)).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("{count} files", count = detail.changed_files)).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("{count} commits", count = detail.commit_count)).small().color(c.muted));
         if let Some(opened) = relative_time(&detail.created_at, now) {
-            ui.label(RichText::new(format!("opened {opened}")).small().color(c.muted));
+            ui.label(RichText::new(tr_fmt!("opened {when}", when = opened)).small().color(c.muted));
         }
         if let Some(updated) = relative_time(&detail.updated_at, now) {
-            ui.label(RichText::new(format!("updated {updated}")).small().color(c.muted));
+            ui.label(RichText::new(tr_fmt!("updated {when}", when = updated)).small().color(c.muted));
         }
     });
 }
@@ -525,10 +534,10 @@ fn badges(ui: &mut Ui, detail: &PullRequestDetail, now: i64) {
 fn tabs(ui: &mut Ui, tab: &mut Tab, detail: &PullRequestDetail) {
     let conversation = detail.reviews.len() + detail.comments.len();
     let sections = [
-        (Tab::Description, "Description".to_string()),
-        (Tab::Checks, format!("Checks ({})", detail.check_rows.len())),
-        (Tab::Conversation, format!("Conversation ({conversation})")),
-        (Tab::Files, format!("Files ({})", detail.changed_files)),
+        (Tab::Description, tr("Description").to_string()),
+        (Tab::Checks, tr_fmt!("Checks ({count})", count = detail.check_rows.len())),
+        (Tab::Conversation, tr_fmt!("Conversation ({count})", count = conversation)),
+        (Tab::Files, tr_fmt!("Files ({count})", count = detail.changed_files)),
     ];
     ui.horizontal(|ui| {
         for (section, text) in sections {
@@ -543,12 +552,17 @@ fn tabs(ui: &mut Ui, tab: &mut Tab, detail: &PullRequestDetail) {
 fn files_summary(ui: &mut Ui, detail: &PullRequestDetail) {
     let c = theme::of(ui);
     ui.label(
-        RichText::new(format!("{} files changed, +{} \u{2212}{}", detail.changed_files, detail.additions, detail.deletions))
-            .small()
-            .color(c.muted),
+        RichText::new(tr_fmt!(
+            "{files} files changed, +{added} −{removed}",
+            files = detail.changed_files,
+            added = detail.additions,
+            removed = detail.deletions
+        ))
+        .small()
+        .color(c.muted),
     );
     if (detail.files.len() as u64) < detail.changed_files {
-        ui.label(RichText::new(format!("Showing the first {} files.", detail.files.len())).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("Showing the first {count} files.", count = detail.files.len())).small().color(c.muted));
     }
     ui.add_space(4.0);
 }
@@ -567,7 +581,7 @@ fn content(
     match tab {
         Tab::Description => {
             if detail.body.is_empty() {
-                ui.label(RichText::new("No description.").color(c.muted));
+                ui.label(RichText::new(tr("No description.")).color(c.muted));
             } else {
                 ui.add(egui::Label::new(RichText::new(detail.body.as_str())).wrap());
             }
@@ -575,13 +589,18 @@ fn content(
         Tab::Checks => {
             let checks = detail.checks;
             ui.label(
-                RichText::new(format!("{} passed, {} failed, {} pending", checks.passed, checks.failed, checks.pending))
-                    .small()
-                    .color(c.muted),
+                RichText::new(tr_fmt!(
+                    "{passed} passed, {failed} failed, {pending} pending",
+                    passed = checks.passed,
+                    failed = checks.failed,
+                    pending = checks.pending
+                ))
+                .small()
+                .color(c.muted),
             );
             ui.add_space(4.0);
             if detail.check_rows.is_empty() {
-                ui.label(RichText::new("No checks reported.").color(c.muted));
+                ui.label(RichText::new(tr("No checks reported.")).color(c.muted));
             }
             for row in &detail.check_rows {
                 let (glyph, color) = match row.outcome {
@@ -595,7 +614,7 @@ fn content(
                     ui.label(RichText::new(row.detail.as_str()).small().color(c.muted));
                     if let Some(url) = &row.url {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.link(format!("{}  Open check", icon::ARROW_SQUARE_OUT)).on_hover_text(url.as_str()).clicked() {
+                            if ui.link(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open check"))).on_hover_text(url.as_str()).clicked() {
                                 *open_link = Some(url.clone());
                             }
                         });
@@ -608,7 +627,7 @@ fn content(
             review_thread_count(ui, threads, switch);
             let entries = detail.conversation();
             if entries.is_empty() {
-                ui.label(RichText::new("No reviews or comments yet.").color(c.muted));
+                ui.label(RichText::new(tr("No reviews or comments yet.")).color(c.muted));
             }
             for (index, entry) in entries.iter().enumerate() {
                 if index > 0 {
@@ -617,7 +636,7 @@ fn content(
                 match entry {
                     ConversationEntry::Review(review) => conversation_review(ui, review, now),
                     ConversationEntry::Comment(comment) => {
-                        conversation_header(ui, comment.author.as_deref(), "commented", None, &comment.created_at, now);
+                        conversation_header(ui, comment.author.as_deref(), tr("commented"), None, &comment.created_at, now);
                         if !comment.body.is_empty() {
                             ui.add(egui::Label::new(RichText::new(comment.body.as_str())).wrap());
                         }
@@ -635,7 +654,7 @@ fn content(
 fn review_thread_count(ui: &mut Ui, threads: Option<&nicegit_core::Result<Vec<ReviewThread>>>, switch: &mut Option<Tab>) {
     let Some(Ok(threads)) = threads else { return };
     let unresolved = threads.iter().filter(|thread| !thread.resolved).count();
-    if ui.link(format!("{} review threads ({unresolved} unresolved)", threads.len())).clicked() {
+    if ui.link(tr_fmt!("{count} review threads ({unresolved} unresolved)", count = threads.len(), unresolved = unresolved)).clicked() {
         *switch = Some(Tab::Files);
     }
     ui.add_space(6.0);
@@ -654,7 +673,7 @@ fn conversation_review(ui: &mut Ui, review: &PullRequestReview, now: i64) {
 fn conversation_header(ui: &mut Ui, author: Option<&str>, word: &str, color: Option<Color32>, stamp: &str, now: i64) {
     let c = theme::of(ui);
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(author.unwrap_or("Unknown author")).strong());
+        ui.label(RichText::new(author.unwrap_or(tr("Unknown author"))).strong());
         if let Some(color) = color {
             widgets::pill(ui, word, color);
         } else {
@@ -669,49 +688,51 @@ fn conversation_header(ui: &mut Ui, author: Option<&str>, word: &str, color: Opt
 /// A review state, or a review decision, as a word and its colour.
 fn decision_label(state: &str, c: &theme::Colors) -> (&'static str, Color32) {
     match state {
-        "APPROVED" => ("approved", c.added),
-        "CHANGES_REQUESTED" => ("changes requested", c.danger),
-        "REVIEW_REQUIRED" => ("review required", c.warning),
-        "COMMENTED" => ("commented", c.muted),
-        "DISMISSED" => ("dismissed", c.muted),
-        "PENDING" => ("pending", c.warning),
-        _ => ("reviewed", c.muted),
+        "APPROVED" => (tr("approved"), c.added),
+        "CHANGES_REQUESTED" => (tr("changes requested"), c.danger),
+        "REVIEW_REQUIRED" => (tr("review required"), c.warning),
+        "COMMENTED" => (tr("commented"), c.muted),
+        "DISMISSED" => (tr("dismissed"), c.muted),
+        "PENDING" => (tr("pending"), c.warning),
+        _ => (tr("reviewed"), c.muted),
     }
 }
 
 /// The Review button: enabled for an open or draft pull request while the window is idle.
 fn review_gate(detail: Option<&PullRequestDetail>, idle: bool) -> Gate {
-    let Some(detail) = detail else { return Gate { enabled: false, hover: "The pull request is still loading." } };
+    let Some(detail) = detail else { return Gate { enabled: false, hover: tr("The pull request is still loading.") } };
     if !idle {
-        return Gate { enabled: false, hover: "Wait for the current action to finish." };
+        return Gate { enabled: false, hover: tr("Wait for the current action to finish.") };
     }
     match detail.state {
-        PrState::Merged | PrState::Closed => Gate { enabled: false, hover: "A merged or closed pull request cannot be reviewed." },
-        PrState::Open | PrState::Draft => Gate { enabled: true, hover: "Approve, request changes on, or comment on this pull request." },
+        PrState::Merged | PrState::Closed => Gate { enabled: false, hover: tr("A merged or closed pull request cannot be reviewed.") },
+        PrState::Open | PrState::Draft => {
+            Gate { enabled: true, hover: tr("Approve, request changes on, or comment on this pull request.") }
+        }
     }
 }
 
 /// The Merge button: enabled only for an open pull request that is not a draft and that GitHub
 /// reports as mergeable, while the window is idle.
 fn merge_gate(detail: Option<&PullRequestDetail>, idle: bool) -> Gate {
-    let Some(detail) = detail else { return Gate { enabled: false, hover: "The pull request is still loading." } };
+    let Some(detail) = detail else { return Gate { enabled: false, hover: tr("The pull request is still loading.") } };
     if !idle {
-        return Gate { enabled: false, hover: "Wait for the current action to finish." };
+        return Gate { enabled: false, hover: tr("Wait for the current action to finish.") };
     }
     match merge_refusal(detail.state, detail.mergeable.as_deref()) {
         Some(reason) => Gate { enabled: false, hover: reason },
-        None => Gate { enabled: true, hover: "Merge this pull request into its base branch." },
+        None => Gate { enabled: true, hover: tr("Merge this pull request into its base branch.") },
     }
 }
 
 /// Why the pull request cannot be merged as it stands, or `None` when it can.
 fn merge_refusal(state: PrState, mergeable: Option<&str>) -> Option<&'static str> {
     match state {
-        PrState::Draft => Some("A draft cannot be merged. Mark it ready for review first."),
-        PrState::Merged => Some("This pull request is already merged."),
-        PrState::Closed => Some("A closed pull request cannot be merged."),
+        PrState::Draft => Some(tr("A draft cannot be merged. Mark it ready for review first.")),
+        PrState::Merged => Some(tr("This pull request is already merged.")),
+        PrState::Closed => Some(tr("A closed pull request cannot be merged.")),
         PrState::Open if mergeable == Some("MERGEABLE") => None,
-        PrState::Open => Some("GitHub does not report this pull request as mergeable. Refresh to check again."),
+        PrState::Open => Some(tr("GitHub does not report this pull request as mergeable. Refresh to check again.")),
     }
 }
 
@@ -720,11 +741,11 @@ fn merge_refusal(state: PrState, mergeable: Option<&str>) -> Option<&'static str
 /// window is idle.
 fn thread_refusal(state: PrState, idle: bool) -> Option<&'static str> {
     if !idle {
-        return Some("Wait for the current action to finish.");
+        return Some(tr("Wait for the current action to finish."));
     }
     match state {
         PrState::Open | PrState::Draft => None,
-        PrState::Merged | PrState::Closed => Some("A merged or closed pull request cannot take review comments."),
+        PrState::Merged | PrState::Closed => Some(tr("A merged or closed pull request cannot take review comments.")),
     }
 }
 
@@ -734,17 +755,17 @@ fn thread_refusal(state: PrState, idle: bool) -> Option<&'static str> {
 /// too. A comment is always allowed.
 fn review_refusal(shown: &Shown, choice: ReviewChoice) -> Option<&'static str> {
     if matches!(shown.state, PrState::Merged | PrState::Closed) {
-        return Some("A merged or closed pull request cannot be reviewed.");
+        return Some(tr("A merged or closed pull request cannot be reviewed."));
     }
     if choice == ReviewChoice::Comment {
         return None;
     }
     let Some(login) = shown.login.as_deref() else {
-        return Some("Your GitHub login could not be read, so the author cannot be checked. Refresh to try again.");
+        return Some(tr("Your GitHub login could not be read, so the author cannot be checked. Refresh to try again."));
     };
     match shown.author.as_deref() {
         Some(author) if author.eq_ignore_ascii_case(login) => {
-            Some("You wrote this pull request, so you cannot approve or request changes on it. You can still comment.")
+            Some(tr("You wrote this pull request, so you cannot approve or request changes on it. You can still comment."))
         }
         _ => None,
     }
@@ -781,8 +802,8 @@ fn confirm_body(ui: &mut Ui, confirm: &mut Confirm, busy: bool, error: Option<&s
     let c = theme::of(ui);
     ui.set_width(460.0);
     let (heading, shown) = match confirm {
-        Confirm::Review { shown, .. } => ("Review pull request", shown.clone()),
-        Confirm::Merge { shown, .. } => ("Merge pull request", shown.clone()),
+        Confirm::Review { shown, .. } => (tr("Review pull request"), shown.clone()),
+        Confirm::Merge { shown, .. } => (tr("Merge pull request"), shown.clone()),
     };
     ui.label(RichText::new(heading).strong().size(16.0));
     ui.add_space(4.0);
@@ -810,11 +831,13 @@ fn review_form(ui: &mut Ui, shown: &Shown, choice: &mut ReviewChoice, body: &mut
     if review_refusal(shown, *choice).is_some() {
         *choice = ReviewChoice::Comment;
     }
-    widgets::section(ui, "Review");
+    widgets::section(ui, tr("Review"));
     ui.add_space(2.0);
-    for (option, text) in
-        [(ReviewChoice::Approve, "Approve"), (ReviewChoice::RequestChanges, "Request changes"), (ReviewChoice::Comment, "Comment")]
-    {
+    for (option, text) in [
+        (ReviewChoice::Approve, tr("Approve")),
+        (ReviewChoice::RequestChanges, tr("Request changes")),
+        (ReviewChoice::Comment, tr("Comment")),
+    ] {
         let refusal = review_refusal(shown, option);
         let response = ui.add_enabled(!busy && refusal.is_none(), egui::RadioButton::new(*choice == option, text));
         let response = match refusal {
@@ -827,9 +850,11 @@ fn review_form(ui: &mut Ui, shown: &Shown, choice: &mut ReviewChoice, body: &mut
     }
     ui.add_space(6.0);
     let (hint, explanation) = match choice {
-        ReviewChoice::Approve => ("Optional comment", "Approving tells the author the pull request is ready."),
-        ReviewChoice::RequestChanges => ("Say what needs to change", "Asks the author to make changes. A comment is required."),
-        ReviewChoice::Comment => ("Write a comment", "Posts your comment without approving or requesting changes. A comment is required."),
+        ReviewChoice::Approve => (tr("Optional comment"), tr("Approving tells the author the pull request is ready.")),
+        ReviewChoice::RequestChanges => (tr("Say what needs to change"), tr("Asks the author to make changes. A comment is required.")),
+        ReviewChoice::Comment => {
+            (tr("Write a comment"), tr("Posts your comment without approving or requesting changes. A comment is required."))
+        }
     };
     ui.label(RichText::new(explanation).small().color(c.muted));
     ui.add_space(4.0);
@@ -840,29 +865,29 @@ fn review_form(ui: &mut Ui, shown: &Shown, choice: &mut ReviewChoice, body: &mut
         ui.label(RichText::new(reason).small().color(c.warning));
     }
     let ready = !busy && refusal.is_none() && (!choice.needs_body() || !body.trim().is_empty());
-    let (send, cancel) = footer(ui, "Submit review", ready, busy);
+    let (send, cancel) = footer(ui, tr("Submit review"), ready, busy);
     (send.then(|| Submit::Review { choice: *choice, body: body.clone() }), cancel)
 }
 
 /// The merge methods and the footer. The merge goes ahead only if the head commit is still the one shown.
 fn merge_form(ui: &mut Ui, shown: &Shown, method: &mut MergeMethod, busy: bool) -> (Option<Submit>, bool) {
     let c = theme::of(ui);
-    widgets::section(ui, "Method");
+    widgets::section(ui, tr("Method"));
     ui.add_space(2.0);
     for (option, text) in [
-        (MergeMethod::Merge, "Create a merge commit"),
-        (MergeMethod::Squash, "Squash and merge"),
-        (MergeMethod::Rebase, "Rebase and merge"),
+        (MergeMethod::Merge, tr("Create a merge commit")),
+        (MergeMethod::Squash, tr("Squash and merge")),
+        (MergeMethod::Rebase, tr("Rebase and merge")),
     ] {
         if ui.add_enabled(!busy, egui::RadioButton::new(*method == option, text)).clicked() {
             *method = option;
         }
     }
     ui.add_space(6.0);
-    ui.label(RichText::new(format!("From {} into {}", shown.head_ref, shown.base_ref)).monospace().small());
-    ui.label(RichText::new(format!("Head commit {}", short_oid(&shown.head_oid))).small().color(c.muted));
-    ui.label(RichText::new("The merge goes ahead only if the head commit is still this one.").small().color(c.muted));
-    let (send, cancel) = footer(ui, "Merge pull request", !busy, busy);
+    ui.label(RichText::new(tr_fmt!("From {head} into {base}", head = shown.head_ref, base = shown.base_ref)).monospace().small());
+    ui.label(RichText::new(tr_fmt!("Head commit {oid}", oid = short_oid(&shown.head_oid))).small().color(c.muted));
+    ui.label(RichText::new(tr("The merge goes ahead only if the head commit is still this one.")).small().color(c.muted));
+    let (send, cancel) = footer(ui, tr("Merge pull request"), !busy, busy);
     (send.then(|| Submit::Merge { method: *method, head_oid: shown.head_oid.clone() }), cancel)
 }
 
@@ -874,12 +899,12 @@ pub(crate) fn footer(ui: &mut Ui, confirm_text: &str, ready: bool, busy: bool) -
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             clicks.0 = widgets::primary_button(ui, confirm_text, ready).clicked();
-            if ui.add_enabled(!busy, egui::Button::new("Cancel")).clicked() {
+            if ui.add_enabled(!busy, egui::Button::new(tr("Cancel"))).clicked() {
                 clicks.1 = true;
             }
             if busy {
                 ui.spinner();
-                ui.label(RichText::new("Sending to GitHub").small().color(c.muted));
+                ui.label(RichText::new(tr("Sending to GitHub")).small().color(c.muted));
             }
         });
     });

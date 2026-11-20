@@ -1,0 +1,281 @@
+# ja: ツールバー、サイドバー、主なメニュー。
+Nothing to undo	元に戻すものはありません
+Nothing to redo	やり直すものはありません
+Redo	やり直す
+{verb} {step}	{verb} {step}
+{verb} {step} ({count} steps)	{verb} {step}（{count} 件の手順）
+Undo steps, newest first	元に戻す手順（新しい順）
+and {count} more	ほか {count} 件
+Toolbar button	ツールバーのボタン
+Download from all remotes	すべてのリモートから取得
+Download from all remotes · {count} commit to pull	すべてのリモートから取得 · プル待ちのコミット {count} 件
+Download from all remotes · {count} commits to pull	すべてのリモートから取得 · プル待ちのコミット {count} 件
+Fetch, then pull the current branch as Settings chooses	取得してから、設定に従って現在のブランチをプル
+Pull {count}	プル {count}
+Push {count}	プッシュ {count}
+Publish	公開
+Send the current branch to its upstream	現在のブランチを上流に送信
+Create a branch at HEAD and switch to it	HEAD にブランチを作成して切り替えます
+Save all changes in a stash	すべての変更をスタッシュに保存
+Apply the latest stash and delete it	最新のスタッシュを適用して削除
+Terminal	ターミナル
+Show the terminal (Ctrl-`)	ターミナルを表示 (Ctrl-`)
+Reload the repository (Ctrl/Cmd-R)	リポジトリを再読み込み (Ctrl/Cmd-R)
+Commands	コマンド
+Command palette (Shift-Ctrl/Cmd-P)	コマンドパレット (Shift-Ctrl/Cmd-P)
+Pop	ポップ
+Stash changes	変更をスタッシュ
+Message (optional)	メッセージ（任意）
+New branch	新しいブランチ
+New branch…	新しいブランチ…
+Pop {stash}?	{stash} をポップしますか？
+“{message}” is applied to your working files and then deleted. If applying fails, the stash is kept.	「{message}」を作業ファイルに適用してから削除します。適用に失敗した場合、スタッシュは残ります。
+More actions	その他の操作
+More	その他
+Open repository…	リポジトリを開く…
+Find repositories in a folder…	フォルダー内のリポジトリを検索…
+Clone repository…	リポジトリをクローン…
+New repository…	新しいリポジトリ…
+Recent repositories	最近のリポジトリ
+Repositories you open appear here	開いたリポジトリがここに表示されます
+Show all in the sidebar	すべてをサイドバーに表示
+Repository settings…	リポジトリの設定…
+Git settings…	Git の設定…
+Stashes…	スタッシュ…
+Search history…	履歴を検索…
+Search file contents…	ファイルの内容を検索…
+Recover lost work…	失われた作業を復元…
+Insights…	インサイト…
+Clean up branches…	ブランチを整理…
+Bisect…	バイセクト…
+Worktrees…	ワークツリー…
+Submodules…	サブモジュール…
+Pull requests and issues…	プルリクエストと Issue…
+Manage custom actions…	カスタムアクションを管理…
+Publish branch…	ブランチを公開…
+The branch already has an upstream, or there is no remote	ブランチには既に上流があるか、リモートがありません
+Fetch full history	完全な履歴を取得
+Wait for the current action to finish	現在の操作が終わるまで待ってください
+Fetched the full history.	完全な履歴を取得しました。
+Show all folders…	すべてのフォルダーを表示…
+Show all folders?	すべてのフォルダーを表示しますか？
+Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change.	Git はこのリポジトリのすべてのフォルダーをチェックアウトするため、すべてのファイルがフォルダーに書き込まれます。部分クローンでは、先にファイルがダウンロードされ、大きなプロジェクトでは時間がかかることがあります。コミットとブランチは変わりません。
+Show all folders	すべてのフォルダーを表示
+Apply patch…	パッチを適用…
+No saved profiles	保存されたプロファイルはありません
+Manage identities…	ユーザー情報を管理…
+Undo {step}?	{step} を元に戻しますか？
+Redo {step}?	{step} をやり直しますか？
+NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.	NiceGit は変更を元の状態に戻します。その後ブランチが動いている場合は拒否するため、新しい作業が失われることはありません。
+NiceGit puts back what the undo reversed. It refuses if the branch has moved since.	NiceGit は、元に戻された内容を再適用します。その後ブランチが動いている場合は拒否します。
+Undo history	元に戻す履歴
+Show the steps Undo will step back through	元に戻す操作でさかのぼる手順を表示
+Fetch and Pull	取得とプル
+Choose what Fetch and Pull does	「取得とプル」の動作を選択
+{label} options	{label} のオプション
+Pull (merge)	プル（マージ）
+Pull (rebase)	プル（リベース）
+Fetch, then merge the upstream's commits into the current branch	取得してから、上流のコミットを現在のブランチにマージします
+Fetch, then replay the current branch's commits onto the upstream	取得してから、現在のブランチのコミットを上流の上に付け替えます
+{label}: {tooltip}	{label}: {tooltip}
+Save or close the file you are editing first.	編集中のファイルを先に保存するか閉じてください。
+Hide the terminal (Ctrl-`); its shells keep running	ターミナルを隠します (Ctrl-`)。シェルは実行されたままです
+Welcome to NiceGit	NiceGit へようこそ
+A fast Git client that keeps your work safe.	作業を安全に守る、高速な Git クライアントです。
+Create repository…	リポジトリを作成…
+Or drag a folder onto this window.	またはフォルダーをこのウィンドウにドラッグします。
+Next tip	次のヒント
+Git was not found. Install Git, then restart NiceGit.	Git が見つかりません。Git をインストールしてから NiceGit を再起動してください。
+Opening repository…	リポジトリを開いています…
+A fast Git client for macOS, Windows, and Linux.	macOS、Windows、Linux 向けの高速な Git クライアントです。
+Clone…	クローン…
+Recent	最近
+Ctrl/Cmd-O to open · Shift-Ctrl/Cmd-P for commands	Ctrl/Cmd-O で開く · Shift-Ctrl/Cmd-P でコマンド
+Dismiss	閉じる
+Stash changes…	変更をスタッシュ…
+Set your identity…	ユーザー情報を設定…
+Merge or rebase…	マージまたはリベース…
+Fetch, then choose whether to merge the remote's commits or rebase onto them	取得してから、リモートのコミットをマージするか、その上にリベースするかを選びます
+Apply into my changes	自分の変更に適用
+Apply the stash's changes on top of your changes, and keep your changes	スタッシュの変更を現在の変更の上に適用し、現在の変更は残します
+Commit without hooks	フックを使わずにコミット
+Make the same commit again with Git hooks skipped	Git フックをスキップして同じコミットをやり直します
+Git said:	Git の出力:
+Apply into changes	変更に適用
+Applied the stash on top of your changes and removed it.	スタッシュを現在の変更の上に適用し、削除しました。
+Applied the stash on top of your changes.	スタッシュを現在の変更の上に適用しました。
+Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept.	スタッシュの未ステージの変更を現在の変更の上に適用しました。適用されなかったステージ済みの変更も保存されているため、スタッシュは残ります。
+Current checkout: {branch}	現在のチェックアウト: {branch}
+Couldn't fetch	取得できませんでした
+The last automatic fetch failed. {plain}{said}	前回の自動取得に失敗しました。{plain}{said}
+Remotes are fetched automatically; change how often in Settings.	リモートは自動的に取得されます。頻度は設定で変更できます。
+Rebase stopped to edit a commit: stage your changes, then Continue.	コミットを編集するためリベースを停止しました。変更をステージしてから続行してください。
+A {operation} is in progress. Continue when ready, or abort to return to where you started.	{operation} が進行中です。準備ができたら続行するか、中止して開始時点に戻ってください。
+A {operation} stopped with {count} conflicted file(s). Resolve each one, then continue.	{operation} は {count} 件のコンフリクトのあるファイルで停止しました。それぞれ解決してから続行してください。
+Open the conflict editor	コンフリクトエディターを開く
+Abort…	中止…
+Abort the {operation}?	{operation} を中止しますか？
+Git returns the branch and files to the state before it started. Resolutions you made are lost.	Git はブランチとファイルを開始前の状態に戻します。行った競合の解決は失われます。
+Resolve all…	すべて解決…
+Take {side} for all	すべてで {side} を採用
+Take one side of every conflicted file	競合したすべてのファイルで一方の側を採用します
+First bad commit: {hash} {subject}	最初の不具合のコミット: {hash} {subject}
+ · about {count} step left	 · 残り約 {count} 手順
+ · about {count} steps left	 · 残り約 {count} 手順
+Bisecting: test {hash} and mark it{steps}	バイセクト: {hash} をテストして印を付ける{steps}
+Good	良い
+Bad	悪い
+Skip	スキップ
+Mark good	良いとマーク
+Mark bad	悪いとマーク
+Mark skip	スキップとマーク
+Bisecting: mark a good and a bad commit to begin.	バイセクト: 開始するには良いコミットと悪いコミットに印を付けてください。
+End bisect, return to {branch}	バイセクトを終了し、{branch} に戻る
+End bisect	バイセクトを終了
+Ended the bisect.	バイセクトを終了しました。
+Back to the commit history (Esc)	コミット履歴に戻る (Esc)
+Previous file ({shortcut}-Up)	前のファイル ({shortcut}-上)
+Next file ({shortcut}-Down)	次のファイル ({shortcut}-下)
+{position} of {count}	{position} / {count}
+{count} line selected	{count} 行を選択中
+{count} lines selected	{count} 行を選択中
+Unstage selected lines	選択した行のステージを解除
+Stage selected lines	選択した行をステージ
+Discard selected lines	選択した行を破棄
+Stash selected lines	選択した行をスタッシュ
+Press − beside a line to unstage it, or click and drag over lines to choose several.	行の横の − を押すとその行のステージを解除します。クリックしてドラッグすると複数の行を選べます。
+Press + beside a line to stage it, or click and drag over lines to choose several.	行の横の + を押すとその行をステージします。クリックしてドラッグすると複数の行を選べます。
+stage	ステージ
+unstage	ステージを解除
+Switch to Unified to {verb} single lines.	1 行ずつ{verb}には「統合」に切り替えてください。
+A new or deleted file has only one side, so it is shown in one column	新規または削除されたファイルは片側しかないため、1 列で表示されます
+Widen the diff panel to show changes side by side	差分パネルを広げると変更を並べて表示できます
+Split	分割
+Unified	統合
+Words	単語
+Show changed words merged into each line	変更された単語を各行に統合して表示
+Hide whitespace	空白を非表示
+How many unchanged lines to show around each change	各変更の前後に表示する変更のない行数
+Context lines	コンテキストの行数
+Edit this file in NiceGit	このファイルを NiceGit で編集
+Unstage file	ファイルのステージを解除
+Stage file	ファイルをステージ
+Discard this file's changes…	このファイルの変更を破棄…
+Open in {editor}	{editor} で開く
+Copy this diff	この差分をコピー
+Copied the diff.	差分をコピーしました。
+Fetched just now	たった今取得
+Fetched {minutes} min ago	{minutes} 分前に取得
+Fetched {hours} h ago	{hours} 時間前に取得
+Staged	ステージ済み
+Unstaged	未ステージ
+Stage lines	行をステージ
+Unstage lines	行のステージを解除
+{done} {lines} in {name}.	{done}: {lines}（{name}）
+{count} line	{count} 行
+{count} new line	{count} 行の新規行
+{count} new lines	{count} 行の新規行
+{lines} are removed from {path}.	{lines}を {path} から削除します。
+{count} changed line	{count} 行の変更
+{count} changed lines	{count} 行の変更
+{lines} in {path} go back to their staged version.	{path} の{lines}は、ステージ済みの版に戻ります。
+{what} You can undo this from the Changes panel until the file changes again.	{what} 変更パネルから、ファイルが再び変わるまで元に戻せます。
+Discard this change?	この変更を破棄しますか？
+Save or close the file you are editing before changing the repository.	リポジトリを変更する前に、編集中のファイルを保存するか閉じてください。
+Selected lines from {path}	{path} の選択行
+Stash lines	行をスタッシュ
+Show repositories	リポジトリを表示
+Filter references	参照を絞り込む
+New branch at HEAD	HEAD に新しいブランチ
+Local	ローカル
+   No local branches	   ローカルブランチはありません
+gone	削除済み
+Its upstream branch no longer exists on the remote	上流のブランチはリモートにもう存在しません
+{commits} to push, {behind} to pull	プッシュ待ち {commits}、プル待ち {behind}
+Checked out in another worktree	別のワークツリーでチェックアウト中
+Hidden from the graph	グラフで非表示
+Add a remote…	リモートを追加…
+missing	見つかりません
+Manage worktrees…	ワークツリーを管理…
+   No tags	   タグはありません
+Push tags to {remote}…	{remote} にタグをプッシュ…
+   No stashes	   スタッシュはありません
+Manage stashes…	スタッシュを管理…
+Applied the stash.	スタッシュを適用しました。
+Apply {stash}	{stash} を適用
+Pop (apply and delete)	ポップ（適用して削除）
+Create branch from stash…	スタッシュからブランチを作成…
+Branch from stash	スタッシュからのブランチ
+Rename {stash}	{stash} の名前を変更
+Delete {stash}?	{stash} を削除しますか？
+“{message}” will be deleted.	「{message}」は削除されます。
+not checked out	未チェックアウト
+at recorded commit	記録されたコミット
+on {commit}	{commit} 上
+{state} · changed	{state} · 変更あり
+Recorded commit {commit}	記録されたコミット {commit}
+Update submodule	サブモジュールを更新
+Checked out {path} at its recorded commit.	{path} を記録されたコミットでチェックアウトしました。
+Copy name	名前をコピー
+Push to {remote}	{remote} にプッシュ
+Push tag	タグをプッシュ
+Pushed {tag} to {remote}.	{tag} を {remote} にプッシュしました。
+Delete from {remote}…	{remote} から削除…
+The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept.	このタグは、ローカルのタグと一致している間、{remote} からすべての利用者向けに削除されます。ローカルのタグは残ります。
+Delete from remote	リモートから削除
+Delete {tag} from {remote}?	{tag} を {remote} から削除しますか？
+The tag is removed from this repository only, not from remotes.	このタグはこのリポジトリからのみ削除され、リモートからは削除されません。
+Delete tag {tag}?	タグ {tag} を削除しますか？
+Push all branches to {remote}…	すべてのブランチを {remote} にプッシュ…
+Copy fetch URL	取得 URL をコピー
+Open on {host}	{host} で開く
+Actions	Actions
+Edit in Repository Settings…	リポジトリの設定で編集…
+The current branch cannot be selected for deletion.	現在のブランチは削除用に選択できません。
+Deletes {names}.	{names} を削除します。
+{shown}, and {more} more	{shown} ほか {more} 件
+Delete {count} branches?	{count} 件のブランチを削除しますか？
+ Not merged into {branch}: {names}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.	 {branch} に未マージ: {names}。これらには他のブランチにないコミットが含まれるため、表示された先端を指したままの場合にのみ削除されます。
+ Undo restores them at their tips until you take another undoable action.	 元に戻すと、取り消せる別の操作を行うまで、それらを先端の位置に復元します。
+Create the {noun} through the {tool}	{tool} で {noun} を作成します
+Open branch on {host}	ブランチを {host} で開く
+Replaces the remote branch with yours, if no one else has pushed since you last fetched	前回の取得後に他の人がプッシュしていなければ、リモートのブランチをこのブランチで置き換えます。
+Push to {remote}/{name}…	{remote}/{name} にプッシュ…
+Updates {remote}/{name} to {tip} ({subject}). Only this branch is pushed; tags are not.	{remote}/{name} を {tip}（{subject}）に更新します。このブランチのみプッシュし、タグはプッシュしません。
+Push {branch} to {remote}?	{branch} を {remote} にプッシュしますか？
+Merge into {current}…	{current} にマージ…
+Rebase {current} onto this…	{current} をこの上にリベース…
+Reset {current} to here…	{current} をここにリセット…
+Compare with {current}…	{current} と比較…
+Compare with previous version…	前のバージョンと比較…
+Tip history…	先端の履歴…
+Create a branch at {branch}	{branch} にブランチを作成
+Delete {display}…	{display} を削除…
+The branch is removed from {remote} for everyone who uses it, while it still points to {tip}. Local branches are not changed.	このブランチは、{tip} を指している間、{remote} からすべての利用者向けに削除されます。ローカルのブランチは変わりません。
+ {branch} tracks it; its upstream will be gone.	 {branch} がこれを追跡しています。その上流は削除されます。
+ {branches} track it; their upstreams will be gone.	 {branches} がこれを追跡しています。それらの上流は削除されます。
+Delete {display}?	{display} を削除しますか？
+Create worktree…	ワークツリーを作成…
+Upstream	上流
+{branch} now tracks {name}.	{branch} は {name} を追跡するようになりました。
+Set upstream	上流を設定
+Stop tracking	追跡を停止
+Unset upstream	上流を解除
+Rename {branch}	{branch} の名前を変更
+This branch is merged into the current branch, so no commits are lost.	このブランチは現在のブランチにマージ済みのため、コミットは失われません。
+This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {tip}.	このブランチには現在のブランチにないコミットがあるため、Git は削除を拒否します。先にマージするか、「ブランチを整理」で未マージのブランチを削除してください。先端は {tip} です。
+Delete branch {branch}?	ブランチ {branch} を削除しますか？
+Hide in graph	グラフで非表示
+The current branch is always shown.	現在のブランチは常に表示されます。
+Stop showing only this branch	このブランチだけの表示を停止
+Show only this branch	このブランチだけを表示
+Merge {source} into {branch}?	{source} を {branch} にマージしますか？
+Rebase {branch} onto {onto}?	{branch} を {onto} にリベースしますか？
+Set an upstream branch before force pushing.	強制プッシュの前に上流のブランチを設定してください。
+Force push {branch}?	{branch} を強制プッシュしますか？
+Force push	強制プッシュ
+Your branch's commits are replayed on top of the other branch. Conflicts stop the rebase for you to resolve or abort.	現在のブランチのコミットは、もう一方のブランチの上に付け替えられます。競合があるとリベースが止まるため、解決するか中止してください。
+Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.	Git はブランチのコミットを現在のブランチにマージします。競合があるとマージが止まるため、解決するか中止してください。
+Delete local tag…	ローカルのタグを削除…
+Lightweight tag at {commit}	軽量タグ（{commit}）
+Could not read this tag: {error}	このタグを読み取れませんでした: {error}

@@ -27,6 +27,8 @@ regex = "1"
 # Pure-Rust regex (no C toolchain) with the default Sublime Text syntaxes and themes, for diff colours.
 syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 notify-rust = "4"
+# The operating system's language, for the System choice in Settings (see i18n.rs).
+sys-locale = "0.3"
 
 # Windows machines without GPU drivers (virtual machines, Remote Desktop) lack the OpenGL 2.0
 # the default renderer needs; wgpu draws through Direct3D 12, with a software fallback.

@@ -47,10 +47,14 @@ pub mod widgets;
 pub mod worktrees;
 
 /// Shown on a disabled diff tool item when no diff tool is configured.
-pub const DIFF_TOOL_HINT: &str = "No diff tool is set. Set one with `git config --global diff.tool <name>`.";
+pub fn diff_tool_hint() -> &'static str {
+    crate::i18n::tr("No diff tool is set. Set one with `git config --global diff.tool <name>`.")
+}
 
 /// Shown on a disabled merge tool item when no merge tool is configured.
-pub const MERGE_TOOL_HINT: &str = "No merge tool is set. Set one with `git config --global merge.tool <name>`.";
+pub fn merge_tool_hint() -> &'static str {
+    crate::i18n::tr("No merge tool is set. Set one with `git config --global merge.tool <name>`.")
+}
 
 /// A repository-changing action, run in the background by the app.
 pub type Action = Box<dyn FnOnce(&GitClient, &Path) -> ActionResult + Send>;

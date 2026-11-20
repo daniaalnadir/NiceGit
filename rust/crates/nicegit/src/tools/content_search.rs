@@ -2,6 +2,7 @@
 //! Content search: finds lines containing some text across tracked files, at a commit or in the
 //! working files. Each match can open blame at its line.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::collections::HashSet;
 
 use egui::{Key, Margin, RichText, Ui};
@@ -31,8 +32,8 @@ impl ContentSearchWindow {
     /// Searches the files at `revision`, or the working files when it is `None`.
     pub fn new(revision: Option<String>) -> Self {
         let label = match &revision {
-            Some(revision) => format!("commit {}", short_revision(revision)),
-            None => "working files".to_string(),
+            Some(revision) => tr_fmt!("commit {revision}", revision = short_revision(revision)),
+            None => tr("working files").to_string(),
         };
         Self { revision, label, query: String::new(), match_case: false, results: None, focus_requested: true }
     }
@@ -67,7 +68,7 @@ impl ToolWindow for ContentSearchWindow {
     }
 
     fn title(&self) -> String {
-        format!("Find in {}", self.label)
+        tr_fmt!("Find in {label}", label = self.label)
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -82,10 +83,10 @@ impl ToolWindow for ContentSearchWindow {
             ui.label(RichText::new(icon::FILE_TEXT).size(16.0).color(theme::of(ui).muted));
             let response = ui.add(
                 egui::TextEdit::singleline(&mut self.query)
-                    .hint_text("Text in files")
+                    .hint_text(tr("Text in files"))
                     .desired_width((ui.available_width() - 150.0).max(160.0)),
             );
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Text in files"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Text in files")));
             if self.focus_requested {
                 response.request_focus();
                 self.focus_requested = false;
@@ -93,7 +94,7 @@ impl ToolWindow for ContentSearchWindow {
             if response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter)) {
                 run = true;
             }
-            if crate::tools::widgets::checkbox(ui, true, &mut self.match_case, "Match case").changed() {
+            if crate::tools::widgets::checkbox(ui, true, &mut self.match_case, tr("Match case")).changed() {
                 match_case_changed = true;
             }
         });
@@ -110,27 +111,25 @@ impl ToolWindow for ContentSearchWindow {
         let muted = theme::of(ui).muted;
         let Self { revision, label, results, .. } = self;
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Searching {label}")).small().color(muted));
+            ui.label(RichText::new(tr_fmt!("Searching {label}", label = label)).small().color(muted));
         });
         ui.separator();
 
         match results.as_mut() {
-            None => widgets::empty_state(ui, icon::FILE_TEXT, "Press Return to search every tracked text file."),
+            None => widgets::empty_state(ui, icon::FILE_TEXT, tr("Press Return to search every tracked text file.")),
             Some(task) => match task.get() {
-                None => widgets::loading(ui, "Searching"),
+                None => widgets::loading(ui, tr("Searching")),
                 Some(Err(error)) => widgets::error(ui, &error.to_string()),
-                Some(Ok(matches)) if matches.is_empty() => widgets::empty_state(ui, icon::FILE_TEXT, "No matches"),
+                Some(Ok(matches)) if matches.is_empty() => widgets::empty_state(ui, icon::FILE_TEXT, tr("No matches")),
                 Some(Ok(matches)) => {
                     let files = matches.iter().map(|found| found.path.as_str()).collect::<HashSet<_>>().len();
                     let summary = if matches.len() == LIMIT {
-                        format!("First {LIMIT} matches")
+                        tr_fmt!("First {limit} matches", limit = LIMIT)
                     } else {
-                        format!(
-                            "{} {} in {} {}",
-                            matches.len(),
-                            if matches.len() == 1 { "match" } else { "matches" },
-                            files,
-                            if files == 1 { "file" } else { "files" }
+                        tr_fmt!(
+                            "{matches} in {files}",
+                            matches = tr_count("{count} match", "{count} matches", matches.len()),
+                            files = tr_count("{count} file", "{count} files", files),
                         )
                     };
                     ui.label(RichText::new(summary).small().monospace().color(muted));
@@ -159,7 +158,7 @@ fn match_row(ui: &mut Ui, cx: &mut Ctx, revision: Option<&str>, found: &ContentM
     ui.horizontal(|ui| {
         ui.add_space(12.0);
         ui.add_sized([48.0, 18.0], egui::Label::new(RichText::new(found.line.to_string()).monospace().color(c.muted)));
-        if ui.small_button(format!("{}  Blame", icon::USER)).on_hover_text("Show who last changed this line").clicked() {
+        if ui.small_button(format!("{}  {}", icon::USER, tr("Blame"))).on_hover_text(tr("Show who last changed this line")).clicked() {
             cx.open(Box::new(BlameWindow::new(found.path.clone(), revision.map(str::to_string)).focused_on(found.line)));
         }
         ui.add_space(8.0);

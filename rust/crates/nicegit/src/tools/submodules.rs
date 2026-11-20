@@ -9,6 +9,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::submodule::{submodule_path_problem, Submodule, SubmoduleState};
 use nicegit_core::Snapshot;
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
@@ -100,30 +101,30 @@ impl SubmodulesWindow {
                     ui.label(RichText::new(&submodule.path).monospace().strong());
                     match &submodule.state {
                         SubmoduleState::NotCheckedOut => {
-                            widgets::pill(ui, "Not checked out", c.muted);
+                            widgets::pill(ui, tr("Not checked out"), c.muted);
                         }
                         SubmoduleState::AtRecordedCommit => {
-                            widgets::pill(ui, "At recorded commit", c.accent);
+                            widgets::pill(ui, tr("At recorded commit"), c.accent);
                         }
                         SubmoduleState::OnAnotherCommit(_) => {
-                            widgets::pill(ui, "Different commit", c.warning);
+                            widgets::pill(ui, tr("Different commit"), c.warning);
                         }
                     }
                     if submodule.has_local_changes {
-                        widgets::pill(ui, "Local changes", c.danger);
+                        widgets::pill(ui, tr("Local changes"), c.danger);
                     }
                 });
                 ui.label(
-                    RichText::new(format!("Recorded  {}", short(&submodule.recorded_commit))).monospace().small().color(c.muted),
+                    RichText::new(tr_fmt!("Recorded  {commit}", commit = short(&submodule.recorded_commit))).monospace().small().color(c.muted),
                 );
                 if let SubmoduleState::OnAnotherCommit(head) = &submodule.state {
-                    ui.label(RichText::new(format!("Checked out  {}", short(head))).monospace().small().color(c.muted));
+                    ui.label(RichText::new(tr_fmt!("Checked out  {commit}", commit = short(head))).monospace().small().color(c.muted));
                 }
                 if submodule.has_local_changes {
                     ui.add_space(4.0);
                     widgets::callout(
                         ui,
-                        "This submodule has uncommitted changes. Checking out the recorded commit keeps them when Git can, and Git refuses when they would be overwritten.",
+                        tr("This submodule has uncommitted changes. Checking out the recorded commit keeps them when Git can, and Git refuses when they would be overwritten."),
                         true,
                     );
                 }
@@ -131,25 +132,25 @@ impl SubmodulesWindow {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let checked_out = submodule.state != SubmoduleState::NotCheckedOut;
-                    if ui.add_enabled(checked_out, egui::Button::new(format!("{}  Open", icon::ARROW_SQUARE_OUT))).clicked() {
+                    if ui.add_enabled(checked_out, egui::Button::new(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open")))).clicked() {
                         action = Some(SubmoduleAction::Open(root.join(&submodule.path)));
                     }
                     let needs_checkout = submodule.state != SubmoduleState::AtRecordedCommit;
-                    let label = if checked_out { "Check out recorded commit" } else { "Initialise and check out" };
+                    let label = if checked_out { tr("Check out recorded commit") } else { tr("Initialise and check out") };
                     let checkout = ui.add_enabled(idle && needs_checkout, egui::Button::new(format!("{}  {label}", icon::GIT_COMMIT)));
                     if checkout.clicked() {
                         action = Some(SubmoduleAction::CheckOut(submodule.path.clone()));
                     }
                     if !needs_checkout {
-                        checkout.on_disabled_hover_text("Already at the recorded commit");
+                        checkout.on_disabled_hover_text(tr("Already at the recorded commit"));
                     }
                     if !confirming {
-                        let remove = ui.add_enabled(idle && !submodule.has_local_changes, egui::Button::new(format!("{}  Remove…", icon::TRASH)));
+                        let remove = ui.add_enabled(idle && !submodule.has_local_changes, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Remove…"))));
                         if remove.clicked() {
                             action = Some(SubmoduleAction::AskRemove(submodule.path.clone()));
                         }
                         if submodule.has_local_changes {
-                            remove.on_disabled_hover_text("Commit or discard its changes before removing it");
+                            remove.on_disabled_hover_text(tr("Commit or discard its changes before removing it"));
                         }
                     }
                 });
@@ -158,15 +159,15 @@ impl SubmodulesWindow {
                     ui.add_space(6.0);
                     widgets::callout(
                         ui,
-                        "Removing deletes this submodule's checkout and stages the removal of its .gitmodules entry and its gitlink, so the change takes effect when you commit. The module's Git data in .git/modules is kept. Removal is refused while the checkout has uncommitted or ignored files.",
+                        tr("Removing deletes this submodule's checkout and stages the removal of its .gitmodules entry and its gitlink, so the change takes effect when you commit. The module's Git data in .git/modules is kept. Removal is refused while the checkout has uncommitted or ignored files."),
                         true,
                     );
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             action = Some(SubmoduleAction::CancelRemove);
                         }
-                        if widgets::danger_button(ui, &format!("{}  Remove submodule", icon::TRASH), idle).clicked() {
+                        if widgets::danger_button(ui, &format!("{}  {}", icon::TRASH, tr("Remove submodule")), idle).clicked() {
                             action = Some(SubmoduleAction::Remove(submodule.path.clone()));
                         }
                     });
@@ -179,29 +180,31 @@ impl SubmodulesWindow {
     fn add_form(&mut self, ui: &mut Ui, cx: &mut Ctx) {
         let c = theme::of(ui);
         let idle = cx.idle;
-        widgets::section(ui, "Add a submodule");
+        widgets::section(ui, tr("Add a submodule"));
         ui.label(
-            RichText::new("Clones the repository at this URL into the path, then stages the new .gitmodules entry and gitlink for commit.")
-                .color(c.muted),
+            RichText::new(tr(
+                "Clones the repository at this URL into the path, then stages the new .gitmodules entry and gitlink for commit.",
+            ))
+            .color(c.muted),
         );
         ui.add_space(8.0);
         egui::Grid::new("submodule_add_form").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
-            ui.label("Repository URL");
-            ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.url).hint_text("https://… or a local path").desired_width(360.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Repository URL"));
+            ui.label(tr("Repository URL"));
+            ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.url).hint_text(tr("https://… or a local path")).desired_width(360.0))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Repository URL")));
             ui.end_row();
 
-            ui.label("Path");
+            ui.label(tr("Path"));
             ui.add_enabled(idle, egui::TextEdit::singleline(&mut self.path).hint_text("vendor/library").desired_width(360.0))
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Path"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Path")));
             ui.end_row();
 
-            ui.label("Branch");
+            ui.label(tr("Branch"));
             ui.add_enabled(
                 idle,
-                egui::TextEdit::singleline(&mut self.branch).hint_text("Optional, the remote's default").desired_width(360.0),
+                egui::TextEdit::singleline(&mut self.branch).hint_text(tr("Optional, the remote's default")).desired_width(360.0),
             )
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Branch"));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Branch")));
             ui.end_row();
         });
 
@@ -215,12 +218,12 @@ impl SubmodulesWindow {
         }
         ui.add_space(8.0);
         let ready = idle && !url.is_empty() && !path.is_empty() && problem.is_none();
-        if widgets::primary_button(ui, &format!("{}  Add submodule", icon::PLUS), ready).clicked() {
+        if widgets::primary_button(ui, &format!("{}  {}", icon::PLUS, tr("Add submodule")), ready).clicked() {
             let branch = (!branch.is_empty()).then_some(branch);
-            let label = format!("Add submodule {path}");
+            let label = tr_fmt!("Add submodule {path}", path = path);
             cx.act(label, move |client, dir| {
                 client.add_submodule(&url, &path, branch.as_deref(), dir)?;
-                Ok(Some(format!("Added {path}. Its .gitmodules entry and gitlink are staged for commit.")))
+                Ok(Some(tr_fmt!("Added {path}. Its .gitmodules entry and gitlink are staged for commit.", path = path)))
             });
         }
     }
@@ -238,7 +241,7 @@ impl ToolWindow for SubmodulesWindow {
     }
 
     fn title(&self) -> String {
-        "Submodules".to_string()
+        tr("Submodules").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -255,36 +258,38 @@ impl ToolWindow for SubmodulesWindow {
 
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("Submodules are repositories nested in this one. Each is checked out at the commit this repository records.")
-                    .color(c.muted),
+                RichText::new(tr(
+                    "Submodules are repositories nested in this one. Each is checked out at the commit this repository records.",
+                ))
+                .color(c.muted),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(format!("{}  Refresh", icon::ARROWS_CLOCKWISE)).clicked() {
+                if ui.button(format!("{}  {}", icon::ARROWS_CLOCKWISE, tr("Refresh"))).clicked() {
                     self.stale = true;
                 }
             });
         });
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(idle && listed, egui::Button::new(format!("{}  Update all", icon::ARROWS_CLOCKWISE))).clicked() {
-                cx.act("Update all submodules", |client, dir| {
+            if ui.add_enabled(idle && listed, egui::Button::new(format!("{}  {}", icon::ARROWS_CLOCKWISE, tr("Update all")))).clicked() {
+                cx.act(tr("Update all submodules"), |client, dir| {
                     client.update_submodules(dir)?;
-                    Ok(Some("Checked out every submodule at its recorded commit.".to_string()))
+                    Ok(Some(tr("Checked out every submodule at its recorded commit.").to_string()))
                 });
             }
-            if ui.add_enabled(idle && listed, egui::Button::new(format!("{}  Sync URLs", icon::LINK))).clicked() {
-                cx.act("Sync submodule URLs", |client, dir| {
+            if ui.add_enabled(idle && listed, egui::Button::new(format!("{}  {}", icon::LINK, tr("Sync URLs")))).clicked() {
+                cx.act(tr("Sync submodule URLs"), |client, dir| {
                     client.sync_submodules(dir)?;
-                    Ok(Some("Copied the submodule URLs from .gitmodules into their checkouts.".to_string()))
+                    Ok(Some(tr("Copied the submodule URLs from .gitmodules into their checkouts.").to_string()))
                 });
             }
-            let toggle = if self.adding { "Close" } else { "Add submodule…" };
+            let toggle = if self.adding { tr("Close") } else { tr("Add submodule…") };
             if ui.add_enabled(idle, egui::Button::new(format!("{}  {toggle}", icon::PLUS))).clicked() {
                 self.adding = !self.adding;
             }
         });
         if !idle {
             ui.add_space(4.0);
-            widgets::loading(ui, "An action is running. Controls return when it finishes.");
+            widgets::loading(ui, tr("An action is running. Controls return when it finishes."));
         }
         ui.add_space(6.0);
         if let Some(error) = self.error.clone() {
@@ -301,9 +306,9 @@ impl ToolWindow for SubmodulesWindow {
                 ui.add_space(14.0);
             }
             if loading && self.submodules.is_empty() {
-                widgets::loading(ui, "Reading submodules");
+                widgets::loading(ui, tr("Reading submodules"));
             } else if self.submodules.is_empty() && self.error.is_none() {
-                widgets::empty_state(ui, icon::PACKAGE, "This repository has no submodules.");
+                widgets::empty_state(ui, icon::PACKAGE, tr("This repository has no submodules."));
             }
             for submodule in &self.submodules {
                 if let Some(action) = self.submodule_card(ui, idle, &root, submodule) {
@@ -316,18 +321,18 @@ impl ToolWindow for SubmodulesWindow {
             match action {
                 SubmoduleAction::Open(path) => cx.open_repository(path),
                 SubmoduleAction::CheckOut(path) => {
-                    cx.act(format!("Check out {path}"), move |client, dir| {
+                    cx.act(tr_fmt!("Check out {path}", path = path), move |client, dir| {
                         client.update_submodule(&path, dir)?;
-                        Ok(Some(format!("Checked out the recorded commit in {path}.")))
+                        Ok(Some(tr_fmt!("Checked out the recorded commit in {path}.", path = path)))
                     });
                 }
                 SubmoduleAction::AskRemove(path) => self.confirming_removal = Some(path),
                 SubmoduleAction::CancelRemove => self.confirming_removal = None,
                 SubmoduleAction::Remove(path) => {
                     self.confirming_removal = None;
-                    cx.act(format!("Remove submodule {path}"), move |client, dir| {
+                    cx.act(tr_fmt!("Remove submodule {path}", path = path), move |client, dir| {
                         client.remove_submodule(&path, dir)?;
-                        Ok(Some(format!("Removed {path}. Its .gitmodules entry and gitlink are staged for commit.")))
+                        Ok(Some(tr_fmt!("Removed {path}. Its .gitmodules entry and gitlink are staged for commit.", path = path)))
                     });
                 }
             }

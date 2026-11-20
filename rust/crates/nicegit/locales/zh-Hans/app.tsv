@@ -1,0 +1,222 @@
+# zh-Hans: 通知、对话框、命令面板、快捷键、更新，以及 Claude 起草。
+That name cannot be used. Names cannot contain spaces, "..", "~", "^", ":", "?", "*", or "[", or end with ".lock" or "/".	此名称不可用。名称不能包含空格、".."、"~"、"^"、":"、"?"、"*" 或 "["，也不能以 ".lock" 或 "/" 结尾。
+A branch with that name already exists. Choose another name, or check out the existing branch.	已存在同名分支。请选择其他名称，或切换到现有分支。
+A tag with that name already exists. Choose another name, or delete the old tag first.	已存在同名标签。请选择其他名称，或先删除旧标签。
+That folder already has files in it. Choose a new or empty folder.	该文件夹中已有文件。请选择新的或空的文件夹。
+A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.	远程上的同名标签指向的位置与你的标签不同，因此 Git 不会替换你的标签。
+The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.	远程拒绝了你的 SSH 密钥。请检查该密钥是否已添加到你的账户并已加载到 ssh-agent 中。
+The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.	远程拒绝了你的登录。对于 HTTPS，请通过凭据助手登录（gh auth login 可为 GitHub 设置一个）；对于 SSH，请检查你的密钥。
+The remote could not be reached. Check your internet connection, and that the remote's address is right.	无法连接到远程。请检查网络连接，并确认远程地址是否正确。
+The remote repository was not found, or your account cannot see it. Check its address and your access.	未找到远程仓库，或你的账户无权访问。请检查其地址和访问权限。
+your files	你的文件
+Save or close the file you are editing before opening another repository.	请先保存或关闭正在编辑的文件，再打开另一个仓库。
+Drop a folder to open it, or a patch to apply it	拖入文件夹即可打开，拖入补丁即可应用
+Drop a folder to open it as a repository, or a .patch or .diff file to apply it.	拖入文件夹可将其作为仓库打开，拖入 .patch 或 .diff 文件可将其应用。
+Open a repository before applying a patch.	应用补丁前，请先打开一个仓库。
+Save or close the file you are editing before switching repositories.	请先保存或关闭正在编辑的文件，再切换仓库。
+Open a Git repository	打开 Git 仓库
+A Git hook stopped the commit.	Git 钩子中止了提交。
+The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.	自你上次拉取以来远程分支已发生变化，因此没有推送任何内容。请重新拉取、检查后再试。
+Your commit was made, but the push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	提交已完成，但推送被拒绝，因为远程有此分支没有的提交。请合并或变基到这些提交后再推送。
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	推送被拒绝，因为远程有此分支没有的提交。请合并或变基到这些提交后再推送。
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again. If you rewrote commits that were already pushed, use Force push… instead.	推送被拒绝，因为远程有此分支没有的提交。请合并或变基到这些提交后再推送。如果你改写了已推送的提交，请改用「强制推送…」。
+its upstream	上游分支
+Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them.	你的分支和 {upstream} 都有变化，因此拉取无法直接将你的分支向前推进。请合并 {upstream} 的提交，或变基到其上。
+Stage or discard your unstaged changes before continuing.	继续之前，请先暂存或丢弃未暂存的更改。
+Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead.	Git 会覆盖你对 {files} 的更改。NiceGit 可以改为将贮藏应用到这些更改之上。
+Git would overwrite your changes to {files}. Commit or stash them, then try again.	Git 会覆盖你对 {files} 的更改。请先提交或贮藏，然后重试。
+{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again.	{label} 会覆盖相同文件中未提交的更改，因此 Git 已停止。请贮藏或提交这些更改，然后重试。
+Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.	Git 需要你的姓名和邮箱才能提交。请在仓库设置中设置，可针对此仓库或作为配置。
+The {operation} stopped at conflicts in {files}. Resolve them from the banner above the history, then continue, or abort to go back.	{operation} 在 {files} 中遇到冲突而停止。请在历史上方的提示中解决冲突，然后继续，或中止以返回。
+1 file	1 个文件
+Git reused 1 recorded resolution. Check it before continuing.	Git 复用了 1 个已记录的解决方式。继续之前请检查。
+Git reused {count} recorded resolutions. Check them before continuing.	Git 复用了 {count} 个已记录的解决方式。继续之前请检查。
+Could not read the commit message: {error}	无法读取提交信息：{error}
+Commit {hash}	提交 {hash}
+That file is not listed for this commit. Select the commit again.	此提交中没有该文件。请重新选择提交。
+Save a copy	保存副本
+That file is not listed for this stash. Select the stash again.	此贮藏中没有该文件。请重新选择贮藏。
+Switch to {name}	切换到 {name}
+Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.	已切换到 {name}。未提交的更改已保存到贮藏中；需要时可在「贮藏」中应用。
+Switched to {name}.	已切换到 {name}。
+Amended the last commit.	已修改上一次提交。
+Fixup commit	修正提交
+Committed a fixup for {short}. An interactive rebase can fold it in.	已为 {short} 创建修正提交。可通过交互式变基将其合并。
+The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again.	提交中止后分支已发生变化，因此没有提交任何内容。请检查后重新提交。
+Committed and pushed.	已提交并推送。
+Pulled the latest changes.	已拉取最新更改。
+Add a remote in Repository Settings before pushing.	推送前，请先在仓库设置中添加远程。
+Pushed.	已推送。
+Fetched from all remotes.	已从所有远程获取。
+Fetched {remote}.	已从 {remote} 获取。
+Restored your changes to {name}.	已恢复 {name} 的更改。
+{verb} {title}	{verb} {title}
+Save or close the file you are editing before opening the merge tool.	打开合并工具前，请先保存或关闭正在编辑的文件。
+A merge tool is already open. Close it first.	合并工具已打开，请先将其关闭。
+Opened the merge tool for {path}.	已为 {path} 打开合并工具。
+Resolve {path} in merge tool	在合并工具中解决 {path}
+Closed the merge tool for {path}.	已关闭 {path} 的合并工具。
+The merge tool for {path} exited without resolving it.	{path} 的合并工具已退出，但未解决冲突。
+Could not wait for the merge tool: {error}	无法等待合并工具：{error}
+Save or discard your edits before closing the editor.	关闭编辑器前，请保存或放弃你的编辑。
+Cloned into {path}.	已克隆到 {path}。
+Clone failed: {error}	克隆失败：{error}
+Read tags	正在读取标签
+Could not read the tags on {remote}: {error}	无法读取 {remote} 上的标签：{error}
+Every local tag is already on {remote}.	所有本地标签都已在 {remote} 上。
+No local tags are missing from {remote}. {count} differ there and were not pushed.	{remote} 上没有缺少的本地标签。其中 {count} 个标签内容不同，未推送。
+Push tags	推送标签
+There are no local branches to push.	没有可推送的本地分支。
+Push branches	推送分支
+Mark bisect	标记二分查找
+Forgot missing worktrees.	已忘记缺失的工作树。
+Forget missing worktrees	忘记缺失的工作树
+This repository now commits as {name} <{email}>.	此仓库现在将以 {name} <{email}> 身份提交。
+Older undo steps were cleared because the repository changed.	由于仓库已更改，较早的撤销步骤已被清除。
+Older redo steps were cleared because the repository changed.	由于仓库已更改，较早的重做步骤已被清除。
+{done}Refreshing the repository failed: {error}	{done}刷新仓库失败：{error}
+Force push…	强制推送…
+Replace the remote branch with yours, if no one pushed since you last fetched	如果自你上次获取后没有人推送，则用你的分支替换远程分支
+Stage all changes	暂存所有更改
+Unstage all changes	取消暂存所有更改
+Show terminal	显示终端
+Appearance, graph colours, and diffs	外观、图表颜色和差异
+Show a tip	显示提示
+The next tip about NiceGit, as a notice	以通知形式显示下一条 NiceGit 提示
+Open a GitHub issue with NiceGit's version and your platform filled in	打开 GitHub issue，并已填入 NiceGit 版本和你的平台
+Open a GitHub feature request	打开 GitHub 功能请求
+Add every repository inside a folder	添加文件夹中的所有仓库
+Repository settings	仓库设置
+Identity, profiles, and remotes	身份、配置和远程
+Git settings	Git 设置
+This repository's Git configuration	此仓库的 Git 配置
+Remember conflict resolutions: turn on	记住冲突解决方式：开启
+Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase	当同一冲突再次出现时（例如之后的变基），重用你之前的解决方式
+Remember conflict resolutions: turn off	记住冲突解决方式：关闭
+Stop recording how you resolve conflicts in this repository	停止记录此仓库中的冲突解决方式
+Save selected files, preview, apply, or delete stashes	保存所选文件、预览、应用或删除贮藏
+Shift-Ctrl/Cmd-F · every branch	Shift-Ctrl/Cmd-F · 所有分支
+Search file contents	搜索文件内容
+Go to file…	转到文件…
+Find a tracked file by name	按名称查找已跟踪的文件
+Go to HEAD	转到 HEAD
+Select the checked-out commit in the history	在历史中选择当前检出的提交
+Go to upstream	转到上游
+Select {upstream}'s latest commit	选择 {upstream} 的最新提交
+Select the upstream's latest commit	选择上游的最新提交
+Recover lost work	恢复丢失的工作
+Commits from resets, rebases, and deleted branches	来自重置、变基和已删除分支的提交
+Commits over time, authors, and the files and folders that change most	随时间变化的提交、作者，以及变动最多的文件和文件夹
+Compare branch versions…	比较分支版本…
+Which commits changed after a rebase, amend, or force push	在变基、修改或强制推送后有哪些提交发生了变化
+Clean up branches	清理分支
+Delete merged, inactive, or gone local branches	删除已合并、不活跃或远程已不存在的本地分支
+Bisect	二分查找
+Find the commit that introduced a bug	查找引入错误的提交
+Worktrees	工作树
+Linked worktrees	关联的工作树
+Submodules	子模块
+Feature, release, and hotfix branches	功能、发布和热修复分支
+Tracked patterns and large files	已跟踪的模式和大文件
+Pull requests and issues	拉取请求和 issue
+GitHub remotes, through the GitHub CLI	通过 GitHub CLI 访问 GitHub 远程
+Open pull requests across your open repositories and workspaces	你打开的所有仓库和工作区中的拉取请求
+Absorb staged changes…	吸收已暂存的更改…
+Fold staged changes into the unpushed commits that last changed their lines	将已暂存的更改合并到最后修改这些行的未推送提交中
+For the current branch, through the {cli}	通过 {cli} 操作当前分支
+Open repository on {host}	在 {host} 上打开仓库
+Open {kind} on {host}	在 {host} 上打开{kind}
+Open Actions on {host}	在 {host} 上打开 Actions
+Push it to a remote and track it	推送到远程并跟踪
+Continue {operation}	继续{operation}
+After resolving conflicts	解决冲突后
+Abort {operation}	中止{operation}
+Return to the state before it started	恢复到开始之前的状态
+Worktree folders deleted outside Git	在 Git 之外删除的工作树文件夹
+Bisect: mark good	二分查找：标记为良好
+This commit does not have the problem	此提交没有该问题
+Bisect: mark bad	二分查找：标记为有问题
+This commit has the problem	此提交存在该问题
+Bisect: skip	二分查找：跳过
+This commit cannot be tested	此提交无法测试
+Return to the original checkout	返回原来的检出位置
+Undo {name}	撤销{name}
+Redo {name}	重做{name}
+Remote branch	远程分支
+Fetch {remote}	获取 {remote}
+Download from this remote only	仅从此远程下载
+{email} · signs commits	{email} · 为提交签名
+Use identity {name}	使用身份 {name}
+Run {name}	运行 {name}
+Custom action	自定义操作
+Open {name}	打开 {name}
+Open workspace {name}	打开工作区 {name}
+Type a command, branch, or repository	输入命令、分支或仓库
+No matching commands	没有匹配的命令
+Anywhere	任何位置
+Diff	差异
+Command palette	命令面板
+Go to a file	转到文件
+Open a repository	打开仓库
+Go to a repository tab; Cmd-9 for the last	转到某个仓库标签页；Cmd-9 转到最后一个
+Close the open window, or else the repository tab	关闭打开的窗口，否则关闭仓库标签页
+Refresh the repository	刷新仓库
+Search the history of every branch	搜索所有分支的历史
+Filter the changed files	筛选已更改的文件
+Go to the checked-out commit	转到当前检出的提交
+Show or hide the terminal	显示或隐藏终端
+Make everything larger or smaller	放大或缩小所有内容
+These shortcuts	这些快捷键
+Select the previous or next commit	选择上一个或下一个提交
+Jump to the top or bottom of the loaded history	跳到已加载历史的顶部或底部
+Mark several commits to cherry-pick	标记多个提交以进行拣选
+Clear the selection	清除选择
+Open the previous or next changed file	打开上一个或下一个已更改的文件
+Stage or unstage the open file	暂存或取消暂存打开的文件
+Find in the diff	在差异中查找
+Next or previous match	下一个或上一个匹配项
+Back to the history	返回历史
+Commit the staged changes	提交已暂存的更改
+Save in the built-in editor	在内置编辑器中保存
+Restart NiceGit	重新启动 NiceGit
+Download	下载
+Download and install	下载并安装
+NiceGit {version}: {stage}	NiceGit {version}：{stage}
+NiceGit {version} is installed.	NiceGit {version} 已安装。
+NiceGit {version} is available. {hint}	NiceGit {version} 可用。{hint}
+NiceGit {version} is available	NiceGit {version} 可用
+Check now	立即检查
+Checking…	正在检查…
+NiceGit is up to date.	NiceGit 已是最新版本。
+NiceGit {version} is available.	NiceGit {version} 可用。
+Could not check: {reason}	无法检查：{reason}
+Drafting…	正在起草…
+Draft	起草
+Drafting. Click to stop.	正在起草。点击即可停止。
+Draft a message from the staged changes with Claude	使用 Claude 根据已暂存的更改起草消息
+Draft a message with Claude	使用 Claude 起草消息
+Replace the current message?	替换当前消息？
+Replace	替换
+Keep mine	保留我的
+Draft commit messages with Claude	使用 Claude 起草提交消息
+When you click Draft, the staged diff and recent commit subjects are sent to Anthropic's API using your key. Nothing is sent otherwise.	点击“起草”时，已暂存的差异和最近的提交标题会使用你的密钥发送到 Anthropic 的 API。否则不会发送任何内容。
+Model	模型
+Using {variable} from the environment.	正在使用环境变量 {variable}。
+A key is saved.	已保存一个密钥。
+No API key is saved.	未保存 API 密钥。
+Paste your key	粘贴你的密钥
+Anthropic API key	Anthropic API 密钥
+Delete the saved key	删除已保存的密钥
+That does not look like an API key. It must have no spaces.	这看起来不像 API 密钥。密钥不能包含空格。
+That does not look like an API key.	这看起来不像 API 密钥。
+No settings folder is available, so the key cannot be saved here.	没有可用的设置文件夹，因此无法在此保存密钥。
+The key could not be saved: {error}	无法保存密钥：{error}
+The key could not be removed: {error}	无法删除密钥：{error}
+{passed} passed	{passed} 项通过
+{passed} passed, {failed} failed	{passed} 项通过，{failed} 项失败
+Checks: {count} failed	检查：{count} 项失败
+Checks: {count} pending	检查：{count} 项待定
+Checks: {count} passed	检查：{count} 项通过
+{marker}{number} {title} — {counts}\nClick to open checks	{marker}{number} {title} — {counts}\n点击打开检查
+Staged and committed 1 file.	已暂存并提交 1 个文件。
+Staged and committed {count} files.	已暂存并提交 {count} 个文件。

@@ -9,6 +9,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::bisect::{BisectMark, BisectStatus};
 use nicegit_core::{GitClient, GitError, Snapshot};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
@@ -50,7 +51,7 @@ impl ToolWindow for BisectWindow {
     }
 
     fn title(&self) -> String {
-        "Bisect".to_string()
+        tr("Bisect").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -73,7 +74,7 @@ impl ToolWindow for BisectWindow {
         let idle = cx.idle;
         ui.add_space(4.0);
         match self.loaded.value(&()) {
-            None => widgets::loading(ui, "Reading the bisect status"),
+            None => widgets::loading(ui, tr("Reading the bisect status")),
             Some(Err(error)) => widgets::callout(ui, &message(error), true),
             Some(Ok(loaded)) => match &loaded.status {
                 None => start_view(ui, cx, snapshot, idle, &mut self.good),
@@ -102,47 +103,47 @@ fn load_bisect(client: &GitClient, directory: &Path) -> nicegit_core::Result<Loa
 /// from the current commit, which is taken as bad.
 fn start_view(ui: &mut Ui, cx: &mut Ctx, snapshot: &Snapshot, idle: bool, good: &mut String) {
     let c = theme::of(ui);
-    widgets::section(ui, "Start a bisect");
-    ui.label("Bisect finds the commit that introduced a problem. Give a commit that is known to be good; NiceGit then tests the commits between it and the current commit.");
+    widgets::section(ui, tr("Start a bisect"));
+    ui.label(tr("Bisect finds the commit that introduced a problem. Give a commit that is known to be good; NiceGit then tests the commits between it and the current commit."));
     ui.add_space(10.0);
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Bad").strong());
+        ui.label(RichText::new(tr("Bad")).strong());
         match &snapshot.head_hash {
             Some(head) => {
                 widgets::hash_label(ui, head);
-                ui.label(RichText::new("current commit").color(c.muted));
+                ui.label(RichText::new(tr("current commit")).color(c.muted));
             }
             None => {
-                ui.label(RichText::new("This repository has no commits yet.").color(c.muted));
+                ui.label(RichText::new(tr("This repository has no commits yet.")).color(c.muted));
             }
         }
     });
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Good").strong());
-        ui.add(egui::TextEdit::singleline(good).hint_text("Commit, branch, or tag known to work").desired_width(ui.available_width()));
+        ui.label(RichText::new(tr("Good")).strong());
+        ui.add(egui::TextEdit::singleline(good).hint_text(tr("Commit, branch, or tag known to work")).desired_width(ui.available_width()));
     });
     ui.add_space(10.0);
 
     if snapshot.operation.is_some() {
-        widgets::callout(ui, "Finish the current Git operation before starting a bisect.", true);
+        widgets::callout(ui, tr("Finish the current Git operation before starting a bisect."), true);
         ui.add_space(6.0);
     }
     let head = snapshot.head_hash.clone();
     let good_text = good.trim().to_string();
     let can_start = idle && head.is_some() && snapshot.operation.is_none() && !good_text.is_empty();
     ui.horizontal(|ui| {
-        if widgets::primary_button(ui, "Start bisect", can_start).clicked() {
+        if widgets::primary_button(ui, tr("Start bisect"), can_start).clicked() {
             if let Some(bad) = head {
                 let branch = snapshot.current_branch.clone();
-                cx.act("Start bisect", move |client, directory| {
+                cx.act(tr("Start bisect"), move |client, directory| {
                     client.start_bisect(&bad, &good_text, &branch, Some(&bad), directory)?;
-                    Ok(Some("Bisect started. Mark the checked-out commit as good or bad.".to_string()))
+                    Ok(Some(tr("Bisect started. Mark the checked-out commit as good or bad.").to_string()))
                 });
             }
         }
-        ui.label(RichText::new("Checkouts happen during a bisect, so commit or stash changes first.").small().color(c.muted));
+        ui.label(RichText::new(tr("Checkouts happen during a bisect, so commit or stash changes first.")).small().color(c.muted));
     });
 }
 
@@ -152,29 +153,29 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
     let c = theme::of(ui);
     match &status.first_bad {
         Some(first_bad) => {
-            widgets::section(ui, "First bad commit");
+            widgets::section(ui, tr("First bad commit"));
             ui.horizontal(|ui| {
                 ui.label(RichText::new(icon::TARGET).color(c.danger).size(18.0));
                 widgets::hash_label(ui, first_bad);
             });
-            ui.label(RichText::new(loaded.first_bad_subject.as_deref().unwrap_or("Subject unavailable")).strong());
+            ui.label(RichText::new(loaded.first_bad_subject.as_deref().unwrap_or(tr("Subject unavailable"))).strong());
             ui.add_space(4.0);
-            ui.label(RichText::new("Git narrowed the search to this commit. Select it in the graph to inspect it.").color(c.muted));
+            ui.label(RichText::new(tr("Git narrowed the search to this commit. Select it in the graph to inspect it.")).color(c.muted));
             ui.add_space(12.0);
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  Select commit", icon::GIT_COMMIT)).clicked() {
+                if ui.button(format!("{}  {}", icon::GIT_COMMIT, tr("Select commit"))).clicked() {
                     cx.select_commit(first_bad.clone());
                 }
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  End bisect", icon::STOP))).clicked() {
-                    cx.act("End bisect", |client, directory| {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::STOP, tr("End bisect")))).clicked() {
+                    cx.act(tr("End bisect"), |client, directory| {
                         client.end_bisect(directory)?;
-                        Ok(Some("Bisect ended. Returned to the starting checkout.".to_string()))
+                        Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
                     });
                 }
             });
         }
         None => {
-            widgets::section(ui, "Testing");
+            widgets::section(ui, tr("Testing"));
             match &status.testing {
                 Some(testing) => {
                     ui.horizontal(|ui| {
@@ -185,18 +186,18 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
                     });
                 }
                 None => {
-                    ui.label(RichText::new("No commit is checked out for testing.").color(c.muted));
+                    ui.label(RichText::new(tr("No commit is checked out for testing.")).color(c.muted));
                 }
             }
             ui.label(RichText::new(steps_text(status.remaining_steps)).color(c.muted).small());
             ui.add_space(4.0);
             ui.label(
-                RichText::new(format!(
-                    "{} good, {} bad, {} skipped so far. Returns to {} when ended.",
-                    status.good.len(),
-                    usize::from(status.bad.is_some()),
-                    status.skipped.len(),
-                    checkout_name(&status.original_checkout),
+                RichText::new(tr_fmt!(
+                    "{good} good, {bad} bad, {skipped} skipped so far. Returns to {checkout} when ended.",
+                    good = status.good.len(),
+                    bad = usize::from(status.bad.is_some()),
+                    skipped = status.skipped.len(),
+                    checkout = checkout_name(&status.original_checkout)
                 ))
                 .small()
                 .color(c.muted),
@@ -212,19 +213,19 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
                     testing.as_deref(),
                     BisectMark::Good,
                     icon::CHECK_CIRCLE,
-                    "This commit does not have the problem",
+                    tr("This commit does not have the problem"),
                 );
-                mark_button(ui, cx, can_mark, testing.as_deref(), BisectMark::Bad, icon::X_CIRCLE, "This commit has the problem");
-                mark_button(ui, cx, can_mark, testing.as_deref(), BisectMark::Skip, icon::SKIP_FORWARD, "This commit cannot be tested");
+                mark_button(ui, cx, can_mark, testing.as_deref(), BisectMark::Bad, icon::X_CIRCLE, tr("This commit has the problem"));
+                mark_button(ui, cx, can_mark, testing.as_deref(), BisectMark::Skip, icon::SKIP_FORWARD, tr("This commit cannot be tested"));
                 ui.add_space(12.0);
                 if ui
-                    .add_enabled(idle, egui::Button::new(format!("{}  End bisect", icon::STOP)))
-                    .on_hover_text(format!("Return to {}", checkout_name(&status.original_checkout)))
+                    .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::STOP, tr("End bisect"))))
+                    .on_hover_text(tr_fmt!("Return to {checkout}", checkout = checkout_name(&status.original_checkout)))
                     .clicked()
                 {
-                    cx.act("End bisect", |client, directory| {
+                    cx.act(tr("End bisect"), |client, directory| {
                         client.end_bisect(directory)?;
-                        Ok(Some("Bisect ended. Returned to the starting checkout.".to_string()))
+                        Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
                     });
                 }
             });
@@ -235,9 +236,9 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
 /// A verdict button. It marks the commit under test and reports Git's progress.
 fn mark_button(ui: &mut Ui, cx: &mut Ctx, enabled: bool, testing: Option<&str>, mark: BisectMark, glyph: &str, tooltip: &str) {
     let label = match mark {
-        BisectMark::Good => "Good",
-        BisectMark::Bad => "Bad",
-        BisectMark::Skip => "Skip",
+        BisectMark::Good => tr("Good"),
+        BisectMark::Bad => tr("Bad"),
+        BisectMark::Skip => tr("Skip"),
     };
     let text = format!("{glyph}  {label}");
     let response = match mark {
@@ -247,10 +248,10 @@ fn mark_button(ui: &mut Ui, cx: &mut Ctx, enabled: bool, testing: Option<&str>, 
         }
         _ => ui.add_enabled(enabled, egui::Button::new(text)),
     };
-    if response.on_hover_text(tooltip).on_disabled_hover_text("Wait for the current action to finish").clicked() {
+    if response.on_hover_text(tooltip).on_disabled_hover_text(tr("Wait for the current action to finish")).clicked() {
         if let Some(testing) = testing {
             let testing = testing.to_string();
-            cx.act(format!("Mark {label}"), move |client, directory| {
+            cx.act(tr_fmt!("Mark {label}", label = label), move |client, directory| {
                 let output = client.mark_bisect(mark, &testing, directory)?;
                 Ok(output.lines().next().map(str::to_string).filter(|line| !line.is_empty()))
             });
@@ -260,16 +261,16 @@ fn mark_button(ui: &mut Ui, cx: &mut Ctx, enabled: bool, testing: Option<&str>, 
 
 fn steps_text(remaining: Option<usize>) -> String {
     match remaining {
-        Some(0) => "One more mark should find the first bad commit.".to_string(),
-        Some(1) => "About 1 more mark after this one.".to_string(),
-        Some(count) => format!("About {count} more marks after this one."),
-        None => "Mark this commit good or bad.".to_string(),
+        Some(0) => tr("One more mark should find the first bad commit.").to_string(),
+        Some(1) => tr("About 1 more mark after this one.").to_string(),
+        Some(count) => tr_fmt!("About {count} more marks after this one.", count = count),
+        None => tr("Mark this commit good or bad.").to_string(),
     }
 }
 
 fn checkout_name(original: &str) -> &str {
     if original.is_empty() {
-        "the starting checkout"
+        tr("the starting checkout")
     } else {
         original
     }

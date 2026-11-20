@@ -2,6 +2,7 @@
 //! History of a range of lines: the commits that changed those lines, beside the selected
 //! commit's change to them. Blame opens it from a line group's right-click menu.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::Path;
 
 use egui::{vec2, Align, Layout, RichText, Ui};
@@ -49,9 +50,9 @@ pub struct LineHistoryWindow {
 /// The lines as people read them: "line 4", or "lines 4–9" for a range.
 pub fn lines_text(start: usize, end: usize) -> String {
     if start == end {
-        format!("line {start}")
+        tr_fmt!("line {start}", start = start)
     } else {
-        format!("lines {start}–{end}")
+        tr_fmt!("lines {start}–{end}", start = start, end = end)
     }
 }
 
@@ -75,7 +76,7 @@ impl ToolWindow for LineHistoryWindow {
     }
 
     fn title(&self) -> String {
-        format!("History of {} {}", file_name(&self.path), lines_text(self.start, self.end))
+        tr_fmt!("History of {file} {lines}", file = file_name(&self.path), lines = lines_text(self.start, self.end))
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -117,9 +118,9 @@ impl ToolWindow for LineHistoryWindow {
             ui.separator();
             ui.allocate_ui_with_layout(vec2(ui.available_width(), height), Layout::top_down(Align::Min), |ui| {
                 match (outcome, selected.as_ref()) {
-                    (None, _) => widgets::loading(ui, "Reading history"),
+                    (None, _) => widgets::loading(ui, tr("Reading history")),
                     (Some(_), Some(current)) => diff_pane(ui, current, split),
-                    (Some(_), None) => widgets::empty_state(ui, icon::GIT_DIFF, "Select a commit to see how it changed these lines."),
+                    (Some(_), None) => widgets::empty_state(ui, icon::GIT_DIFF, tr("Select a commit to see how it changed these lines.")),
                 }
             });
         });
@@ -148,14 +149,13 @@ fn header(ui: &mut Ui, path: &str, outcome: Option<&Outcome>, working_copy: bool
     ui.vertical(|ui| {
         ui.label(RichText::new(path).monospace());
         let summary = match outcome {
-            Some(Ok(list)) if list.len() == LIMIT => format!("Latest {LIMIT} commits"),
-            Some(Ok(list)) if list.len() == 1 => "1 commit".to_string(),
-            Some(Ok(list)) => format!("{} commits", list.len()),
+            Some(Ok(list)) if list.len() == LIMIT => tr_fmt!("Latest {limit} commits", limit = LIMIT),
+            Some(Ok(list)) => tr_count("{count} commit", "{count} commits", list.len()),
             _ => String::new(),
         };
         ui.label(RichText::new(summary).small().color(c.muted));
         if working_copy {
-            ui.label(RichText::new("Uncommitted changes are not included.").small().color(c.muted));
+            ui.label(RichText::new(tr("Uncommitted changes are not included.")).small().color(c.muted));
         }
     });
 }
@@ -163,9 +163,9 @@ fn header(ui: &mut Ui, path: &str, outcome: Option<&Outcome>, working_copy: bool
 /// The commits that changed the lines, newest first. Clicking a row selects it.
 fn list(ui: &mut Ui, outcome: Option<&Outcome>, selected: &mut Option<Selected>) {
     match outcome {
-        None => widgets::loading(ui, "Reading history"),
+        None => widgets::loading(ui, tr("Reading history")),
         Some(Err(error)) => widgets::error(ui, &error.to_string()),
-        Some(Ok(entries)) if entries.is_empty() => widgets::empty_state(ui, icon::FILE_TEXT, "No commits changed these lines."),
+        Some(Ok(entries)) if entries.is_empty() => widgets::empty_state(ui, icon::FILE_TEXT, tr("No commits changed these lines.")),
         Some(Ok(entries)) => {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 for entry in entries {
@@ -177,7 +177,7 @@ fn list(ui: &mut Ui, outcome: Option<&Outcome>, selected: &mut Option<Selected>)
                         *selected = Some(select(entry));
                     }
                     response.context_menu(|ui| {
-                        if ui.button("Copy commit hash").clicked() {
+                        if ui.button(tr("Copy commit hash")).clicked() {
                             ui.ctx().copy_text(commit.hash.clone());
                             ui.close();
                         }
@@ -194,7 +194,7 @@ fn diff_pane(ui: &mut Ui, selection: &Selected, split: &mut bool) {
         widgets::hash_label(ui, &selection.hash);
         ui.add(egui::Label::new(RichText::new(&selection.subject).strong()).truncate());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            crate::tools::widgets::checkbox(ui, true, split, "Side by side");
+            crate::tools::widgets::checkbox(ui, true, split, tr("Side by side"));
         });
     });
     ui.separator();

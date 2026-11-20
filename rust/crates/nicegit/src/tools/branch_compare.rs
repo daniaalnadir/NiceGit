@@ -1,6 +1,7 @@
 //! Compares a branch with the checked-out branch: the commits that only one of them has, and the
 //! files that merging the other branch would change.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use egui::{Margin, RichText, Sense, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::branch_compare::{BranchComparison, ComparedCommit};
@@ -32,18 +33,18 @@ impl BranchCompareWindow {
     /// The two summary counts, such as "1 commit on feature that main does not have".
     fn summary(&self, comparison: &BranchComparison) -> String {
         let count = |listed: usize, more: bool| {
-            let text = if more { format!("{listed}+") } else { listed.to_string() };
-            let noun = if listed == 1 && !more { "commit" } else { "commits" };
-            format!("{text} {noun}")
+            if more {
+                tr_fmt!("{count}+ commits", count = listed)
+            } else {
+                tr_count("{count} commit", "{count} commits", listed)
+            }
         };
-        format!(
-            "{} on {} that {} does not have · {} on {} that {} does not have",
-            count(comparison.only_in_other.len(), comparison.more_in_other),
-            self.other,
-            self.current,
-            count(comparison.only_in_current.len(), comparison.more_in_current),
-            self.current,
-            self.other,
+        tr_fmt!(
+            "{first} on {other} that {current} does not have · {second} on {current} that {other} does not have",
+            first = count(comparison.only_in_other.len(), comparison.more_in_other),
+            other = self.other,
+            current = self.current,
+            second = count(comparison.only_in_current.len(), comparison.more_in_current),
         )
     }
 
@@ -52,12 +53,12 @@ impl BranchCompareWindow {
         let c = theme::of(ui);
         ui.label(RichText::new(self.summary(comparison)).strong());
         if comparison.base.is_none() {
-            ui.label(RichText::new("These branches share no history.").small().color(c.muted));
+            ui.label(RichText::new(tr("These branches share no history.")).small().color(c.muted));
         }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            let button = widgets::labeled_button(ui, icon::GIT_DIFF, "Changed files…", comparison.base.is_some())
-                .on_hover_text(format!("The files that merging {} would change", self.other));
+            let button = widgets::labeled_button(ui, icon::GIT_DIFF, tr("Changed files…"), comparison.base.is_some())
+                .on_hover_text(tr_fmt!("The files that merging {branch} would change", branch = self.other));
             if button.clicked() {
                 if let Some(base) = &comparison.base {
                     cx.open(Box::new(CompareWindow::new(base.clone(), Some(self.tip.clone()))));
@@ -71,13 +72,13 @@ impl BranchCompareWindow {
         let c = theme::of(ui);
         ui.label(RichText::new(heading).strong());
         if commits.is_empty() {
-            ui.label(RichText::new("No commits.").small().color(c.muted));
+            ui.label(RichText::new(tr("No commits.")).small().color(c.muted));
         }
         for commit in commits {
             commit_row(ui, cx, commit);
         }
         if more {
-            ui.label(RichText::new(format!("Only the newest {} are listed.", commits.len())).small().color(c.muted));
+            ui.label(RichText::new(tr_fmt!("Only the newest {count} are listed.", count = commits.len())).small().color(c.muted));
         }
         ui.add_space(12.0);
     }
@@ -89,7 +90,7 @@ impl ToolWindow for BranchCompareWindow {
     }
 
     fn title(&self) -> String {
-        format!("{} and {}", self.other, self.current)
+        tr_fmt!("{other} and {current}", other = self.other, current = self.current)
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -113,15 +114,15 @@ impl ToolWindow for BranchCompareWindow {
         }
 
         match &self.comparison {
-            None => widgets::loading(ui, "Comparing the branches…"),
+            None => widgets::loading(ui, tr("Comparing the branches…")),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(comparison)) => {
                 self.header(ui, cx, comparison);
                 ui.separator();
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                    let other_heading = format!("On {} but not on {}", self.other, self.current);
+                    let other_heading = tr_fmt!("On {other} but not on {current}", other = self.other, current = self.current);
                     self.section(ui, cx, &other_heading, &comparison.only_in_other, comparison.more_in_other);
-                    let current_heading = format!("On {} but not on {}", self.current, self.other);
+                    let current_heading = tr_fmt!("On {current} but not on {other}", current = self.current, other = self.other);
                     self.section(ui, cx, &current_heading, &comparison.only_in_current, comparison.more_in_current);
                 });
             }

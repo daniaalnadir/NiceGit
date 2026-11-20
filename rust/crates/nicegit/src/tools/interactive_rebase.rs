@@ -13,6 +13,7 @@ use nicegit_core::rebase::{autosquash, RebaseAction, RebaseOutcome, RebasePlan, 
 use nicegit_core::Snapshot;
 
 use super::{query, widgets, Ctx, Task, ToolWindow};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 
 /// What happens to one commit.
@@ -31,23 +32,23 @@ impl Choice {
 
     fn title(self) -> &'static str {
         match self {
-            Choice::Pick => "Pick",
-            Choice::Reword => "Reword",
-            Choice::Edit => "Edit",
-            Choice::Squash => "Squash",
-            Choice::Fixup => "Fixup",
-            Choice::Drop => "Drop",
+            Choice::Pick => tr("Pick"),
+            Choice::Reword => tr("Reword"),
+            Choice::Edit => tr("Edit"),
+            Choice::Squash => tr("Squash"),
+            Choice::Fixup => tr("Fixup"),
+            Choice::Drop => tr("Drop"),
         }
     }
 
     fn help(self) -> &'static str {
         match self {
-            Choice::Pick => "Keep this commit as it is",
-            Choice::Reword => "Keep this commit with a new message",
-            Choice::Edit => "Stop after this commit so you can change its files",
-            Choice::Squash => "Combine into the nearest kept commit below, keeping both messages",
-            Choice::Fixup => "Combine into the nearest kept commit below, discarding this message",
-            Choice::Drop => "Remove this commit and its changes",
+            Choice::Pick => tr("Keep this commit as it is"),
+            Choice::Reword => tr("Keep this commit with a new message"),
+            Choice::Edit => tr("Stop after this commit so you can change its files"),
+            Choice::Squash => tr("Combine into the nearest kept commit below, keeping both messages"),
+            Choice::Fixup => tr("Combine into the nearest kept commit below, discarding this message"),
+            Choice::Drop => tr("Remove this commit and its changes"),
         }
     }
 }
@@ -157,7 +158,7 @@ impl InteractiveRebaseWindow {
         match selection_base(hashes, snapshot) {
             Some(base) => Self { preset: Some(preset(hashes.iter().cloned().collect())), ..Self::new(base, snapshot) },
             None => Self {
-                error: Some("The selected commits must be in the loaded history, and none can be a merge.".to_string()),
+                error: Some(tr("The selected commits must be in the loaded history, and none can be a merge.").to_string()),
                 ..Self::new(String::new(), snapshot)
             },
         }
@@ -221,10 +222,10 @@ impl InteractiveRebaseWindow {
     /// A reason the rewrite cannot run yet, if any.
     fn problem(&self) -> Option<&'static str> {
         if oldest_kept_combines(&self.entries) {
-            return Some("The oldest kept commit has no earlier commit to combine into. Pick or reword it instead.");
+            return Some(tr("The oldest kept commit has no earlier commit to combine into. Pick or reword it instead."));
         }
         if self.entries.iter().any(|entry| entry.choice == Choice::Reword && entry.message.trim().is_empty()) {
-            return Some("A reworded commit needs a message.");
+            return Some(tr("A reworded commit needs a message."));
         }
         None
     }
@@ -232,11 +233,11 @@ impl InteractiveRebaseWindow {
     fn summary(&self) -> String {
         let kept = self.entries.iter().filter(|entry| matches!(entry.choice, Choice::Pick | Choice::Reword | Choice::Edit)).count();
         let dropped = self.entries.iter().filter(|entry| entry.choice == Choice::Drop).count();
-        let commits = if kept == 1 { "commit" } else { "commits" };
+        let commits = tr_count("commit", "commits", kept);
         if dropped > 0 {
-            format!("Result: {kept} {commits}, {dropped} dropped")
+            tr_fmt!("Result: {kept} {commits}, {dropped} dropped", kept = kept, commits = commits, dropped = dropped)
         } else {
-            format!("Result: {kept} {commits}")
+            tr_fmt!("Result: {kept} {commits}", kept = kept, commits = commits)
         }
     }
 
@@ -282,16 +283,16 @@ impl InteractiveRebaseWindow {
                             ui.label(RichText::new(icon::DOTS_SIX_VERTICAL).color(c.muted));
                         })
                         .response
-                        .on_hover_text("Drag to reorder");
+                        .on_hover_text(tr("Drag to reorder"));
                     } else {
                         ui.label(RichText::new(icon::DOTS_SIX_VERTICAL).color(c.muted));
                     }
                     ui.label(RichText::new(format!("{}", index + 1)).monospace().color(c.muted));
-                    if move_button(ui, icon::ARROW_UP, "Move up", idle && index > 0).clicked() {
+                    if move_button(ui, icon::ARROW_UP, tr("Move up"), idle && index > 0).clicked() {
                         // The slot above the row before this one.
                         *moved = Some((index, index - 1));
                     }
-                    if move_button(ui, icon::ARROW_DOWN, "Move down", idle && index + 1 < count).clicked() {
+                    if move_button(ui, icon::ARROW_DOWN, tr("Move down"), idle && index + 1 < count).clicked() {
                         // The slot below the row after this one.
                         *moved = Some((index, index + 2));
                     }
@@ -305,19 +306,24 @@ impl InteractiveRebaseWindow {
                         })
                         .response
                         .widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::Role::ComboBox, idle, format!("Action for {}", entry.commit.subject))
+                            egui::WidgetInfo::labeled(
+                                egui::Role::ComboBox,
+                                idle,
+                                tr_fmt!("Action for {subject}", subject = entry.commit.subject),
+                            )
                         });
                     widgets::hash_label(ui, &entry.commit.hash);
                     let subject = RichText::new(&entry.commit.subject);
                     let subject = if entry.choice == Choice::Drop { subject.strikethrough().color(c.muted) } else { subject };
                     ui.add(egui::Label::new(subject).truncate());
                     if matches!(entry.choice, Choice::Squash | Choice::Fixup) {
-                        ui.label(RichText::new(icon::ARROW_BEND_DOWN_RIGHT).color(c.muted)).on_hover_text("Combined into the commit below");
+                        ui.label(RichText::new(icon::ARROW_BEND_DOWN_RIGHT).color(c.muted))
+                            .on_hover_text(tr("Combined into the commit below"));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if published.contains(&entry.commit.hash) {
                             ui.add(egui::Label::new(RichText::new(icon::NETWORK).color(c.warning)).sense(egui::Sense::hover()))
-                                .on_hover_text("Already on a remote");
+                                .on_hover_text(tr("Already on a remote"));
                         }
                         ui.label(RichText::new(&entry.commit.author_name).small().color(c.muted));
                     });
@@ -334,10 +340,14 @@ impl InteractiveRebaseWindow {
                             .font(TextStyle::Monospace)
                             .desired_rows(4)
                             .desired_width(f32::INFINITY)
-                            .hint_text("New commit message"),
+                            .hint_text(tr("New commit message")),
                     );
                     message.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::Role::TextInput, true, format!("Message for {}", entry.commit.subject))
+                        egui::WidgetInfo::labeled(
+                            egui::Role::TextInput,
+                            true,
+                            tr_fmt!("Message for {subject}", subject = entry.commit.subject),
+                        )
                     });
                     if focus == Some(entry.commit.hash.as_str()) {
                         message.request_focus();
@@ -378,10 +388,10 @@ impl ToolWindow for InteractiveRebaseWindow {
 
     fn title(&self) -> String {
         match &self.preset {
-            Some(Preset::Reword(_)) => "Edit commit message",
-            Some(Preset::Squash(_)) => "Squash commits",
-            Some(Preset::Drop(_)) => "Drop commits",
-            None => "Interactive rebase",
+            Some(Preset::Reword(_)) => tr("Edit commit message"),
+            Some(Preset::Squash(_)) => tr("Squash commits"),
+            Some(Preset::Drop(_)) => tr("Drop commits"),
+            None => tr("Interactive rebase"),
         }
         .to_string()
     }
@@ -400,19 +410,18 @@ impl ToolWindow for InteractiveRebaseWindow {
         let c = theme::of(ui);
         ui.add_space(4.0);
         let count = self.entries.len();
-        let commits = if count == 1 { "commit" } else { "commits" };
+        let commits = tr_count("commit", "commits", count);
         ui.label(
-            RichText::new(format!(
-                "Rewrite {count} {commits} on {}. Listed newest first; drag a row by its grip or use the arrows to reorder. Squash and fixup combine a commit into the nearest kept commit below it.",
-                self.branch
-            ))
+            RichText::new(tr_fmt!("Rewrite {count} {commits} on {branch}. Listed newest first; drag a row by its grip or use the arrows to reorder. Squash and fixup combine a commit into the nearest kept commit below it.", count = count, commits = commits, branch = self.branch))
             .small()
             .color(c.muted),
         );
         ui.add_space(8.0);
         if self.moved {
             ui.label(
-                RichText::new("Selected commits were moved next to each other; moving commits can cause conflicts.").small().color(c.muted),
+                RichText::new(tr("Selected commits were moved next to each other; moving commits can cause conflicts."))
+                    .small()
+                    .color(c.muted),
             );
             ui.add_space(8.0);
         }
@@ -423,12 +432,10 @@ impl ToolWindow for InteractiveRebaseWindow {
 
         let published = self.published_count();
         if published > 0 {
-            let commits = if published == 1 { "commit is" } else { "commits are" };
+            let commits = tr_count("commit is", "commits are", published);
             widgets::callout(
                 ui,
-                &format!(
-                    "{published} of these {commits} already on a remote. Rewriting them means you will need to force-push, and anyone who has them must reconcile their copies."
-                ),
+                &tr_fmt!("{published} of these {commits} already on a remote. Rewriting them means you will need to force-push, and anyone who has them must reconcile their copies.", published = published, commits = commits),
                 true,
             );
             ui.add_space(8.0);
@@ -437,7 +444,7 @@ impl ToolWindow for InteractiveRebaseWindow {
         if let Some(error) = self.error.clone() {
             widgets::error(ui, &error);
         } else if self.plan.is_none() {
-            widgets::loading(ui, "Reading commits...");
+            widgets::loading(ui, tr("Reading commits..."));
         } else {
             let idle = cx.idle;
             let mut moved: Option<(usize, usize)> = None;
@@ -453,7 +460,7 @@ impl ToolWindow for InteractiveRebaseWindow {
             // The first frame with the list is the only one that focuses the message.
             self.focus_pending = false;
             if self.published_count() > 0 {
-                ui.label(RichText::new(format!("{}  Already on a remote", icon::NETWORK)).small().color(c.warning));
+                ui.label(RichText::new(format!("{}  {}", icon::NETWORK, tr("Already on a remote"))).small().color(c.warning));
             }
             if let Some((from, gap)) = moved.filter(|_| idle) {
                 move_to_gap(&mut self.entries, from, gap);
@@ -477,17 +484,19 @@ impl ToolWindow for InteractiveRebaseWindow {
         ui.horizontal(|ui| {
             let ready = cx.idle && self.plan.is_some() && self.head.is_some() && problem.is_none() && self.has_pending_rewrite();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                start = widgets::primary_button(ui, "Rewrite commits", ready).clicked();
-                if ui.button("Cancel").clicked() {
+                start = widgets::primary_button(ui, tr("Rewrite commits"), ready).clicked();
+                if ui.button(tr("Cancel")).clicked() {
                     cancel = true;
                 }
-                if ui.add_enabled(cx.idle && self.changed(), egui::Button::new("Reset edits")).clicked() {
+                if ui.add_enabled(cx.idle && self.changed(), egui::Button::new(tr("Reset edits"))).clicked() {
                     reset = true;
                 }
                 fixups = ui
-                    .add_enabled(cx.idle && self.plan.is_some(), egui::Button::new("Apply fixups"))
-                    .on_hover_text("Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash")
-                    .on_disabled_hover_text("Wait for the plan to load and for the current Git action to finish")
+                    .add_enabled(cx.idle && self.plan.is_some(), egui::Button::new(tr("Apply fixups")))
+                    .on_hover_text(tr(
+                        "Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash",
+                    ))
+                    .on_disabled_hover_text(tr("Wait for the plan to load and for the current Git action to finish"))
                     .clicked();
             });
         });
@@ -502,12 +511,13 @@ impl ToolWindow for InteractiveRebaseWindow {
         if fixups {
             let (matched, moved) = apply_fixups(&mut self.entries);
             let note = match (matched, moved) {
-                (0, _) => "No fixup! or squash! commit names an earlier commit in this list.".to_string(),
+                (0, _) => tr("No fixup! or squash! commit names an earlier commit in this list.").to_string(),
                 (count, moved) => {
-                    let noun = if count == 1 { "fixup or squash commit" } else { "fixup or squash commits" };
-                    let placed = format!("Applied {count} {noun}; each sits directly after the commit it names.");
+                    let noun = tr_count("fixup or squash commit", "fixup or squash commits", count);
+                    let placed =
+                        tr_fmt!("Applied {count} {noun}; each sits directly after the commit it names.", count = count, noun = noun);
                     if moved {
-                        format!("{placed} Moving commits can cause conflicts.")
+                        tr_fmt!("{placed} Moving commits can cause conflicts.", placed = placed)
                     } else {
                         placed
                     }
@@ -522,22 +532,20 @@ impl ToolWindow for InteractiveRebaseWindow {
                 let rewritten = steps.len();
                 // Git stops at the oldest Edit first, so its subject is the one the notice names.
                 let stop_subject = steps.iter().find(|step| step.action == RebaseAction::Edit).map(|step| step.commit.subject.clone());
-                let detail = format!("{rewritten} commit{}", if rewritten == 1 { "" } else { "s" });
+                let detail = tr_count("{count} commit", "{count} commits", rewritten);
                 cx.act_recording(
-                    format!("Rewrite commits on {branch}"),
-                    "Interactive rebase",
+                    tr_fmt!("Rewrite commits on {branch}", branch = branch),
+                    tr("Interactive rebase"),
                     Some(detail),
                     nicegit_core::undo::UndoMode::Keep,
                     move |client, repo| match client.interactive_rebase(&steps, &plan, &branch, &head, repo)? {
-                        RebaseOutcome::Finished => Ok(Some(format!("Rewrote {rewritten} commits on {branch}."))),
+                        RebaseOutcome::Finished => Ok(Some(tr_fmt!("Rewrote {count} commits on {branch}.", count = rewritten, branch = branch))),
                         RebaseOutcome::Stopped => {
                             let stopped_at = match stop_subject {
-                                Some(subject) => format!("Stopped at “{subject}”"),
-                                None => "Stopped".to_string(),
+                                Some(subject) => tr_fmt!("Stopped at “{subject}”", subject = subject),
+                                None => tr("Stopped").to_string(),
                             };
-                            Ok(Some(format!(
-                                "{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase."
-                            )))
+                            Ok(Some(tr_fmt!("{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase.", stopped_at = stopped_at)))
                         }
                     },
                 );
@@ -620,14 +628,14 @@ pub fn selection_base(hashes: &BTreeSet<String>, snapshot: &Snapshot) -> Option<
 /// Applies `preset` to `entries`, newest first. Returns whether any commit moved, or the message
 /// to show when a commit the preset names is not in the list.
 fn apply_preset(entries: &mut Vec<Entry>, preset: &Preset, branch: &str) -> Result<bool, String> {
-    let missing = || format!("Some selected commits are not part of {branch}'s history.");
+    let missing = || tr_fmt!("Some selected commits are not part of {branch}'s history.", branch = branch);
     match preset {
         Preset::Reword(hash) => {
             if preset_reword(entries, hash) {
                 Ok(false)
             } else {
                 // The commit is on another branch whose parent is in this one's history.
-                Err(format!("This commit is not part of {branch}'s history."))
+                Err(tr_fmt!("This commit is not part of {branch}'s history.", branch = branch))
             }
         }
         Preset::Squash(hashes) => squash_together(entries, hashes).ok_or_else(missing),

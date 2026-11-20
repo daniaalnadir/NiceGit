@@ -4,6 +4,7 @@ use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 use crate::tools::widgets;
 use crate::ui::dialogs::Pending;
@@ -14,17 +15,17 @@ impl NiceGitApp {
         let c = theme::of(ui);
         egui::Frame::new().inner_margin(egui::Margin { left: 12, right: 10, top: 14, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, "Hide repositories", true).clicked() {
+                if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, tr("Hide repositories"), true).clicked() {
                     self.settings.show_repositories = false;
                 }
-                ui.label(RichText::new("Repositories").strong().size(15.0));
+                ui.label(RichText::new(tr("Repositories")).strong().size(15.0));
             });
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                widgets::section(ui, "Open tabs");
+                widgets::section(ui, tr("Open tabs"));
                 ui.label(RichText::new(self.repos.len().to_string()).small().monospace().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, icon::PLUS, "Open another repository", self.busy.is_none()).clicked() {
+                    if widgets::icon_button(ui, icon::PLUS, tr("Open another repository"), self.busy.is_none()).clicked() {
                         self.choose_folder();
                     }
                     self.workspaces_menu(ui);
@@ -32,7 +33,7 @@ impl NiceGitApp {
             });
             ui.add_space(4.0);
             if self.repos.is_empty() {
-                ui.label(RichText::new("No open repositories").small().color(c.muted));
+                ui.label(RichText::new(tr("No open repositories")).small().color(c.muted));
             }
             let mut switch = None;
             let mut close = None;
@@ -64,13 +65,16 @@ impl NiceGitApp {
                                             let row = egui::vec2((ui.available_width() - 24.0).max(40.0), 18.0);
                                             ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                                 if changes > 0 {
-                                                    let plural = if changes == 1 { "" } else { "s" };
                                                     ui.label(
                                                         RichText::new(format!("{} {changes}", icon::PENCIL_SIMPLE))
                                                             .small()
                                                             .color(c.modified),
                                                     )
-                                                    .on_hover_text(format!("{changes} uncommitted change{plural}"));
+                                                    .on_hover_text(tr_count(
+                                                        "1 uncommitted change",
+                                                        "{count} uncommitted changes",
+                                                        changes,
+                                                    ));
                                                 }
                                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                                                     ui.add(egui::Label::new(if active { name.strong() } else { name }).truncate());
@@ -88,8 +92,8 @@ impl NiceGitApp {
                                             } else {
                                                 let close_button = ui
                                                     .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
-                                                    .on_hover_text("Close tab");
-                                                let name = format!("Close {}", repo.name());
+                                                    .on_hover_text(tr("Close tab"));
+                                                let name = tr_fmt!("Close {name}", name = repo.name());
                                                 close_button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                                                 if close_button.clicked() {
                                                     close = Some(index);
@@ -109,20 +113,23 @@ impl NiceGitApp {
                             close = Some(index);
                         }
                         response.context_menu(|ui| {
-                            if ui.button(format!("{}  Close", icon::X)).clicked() {
+                            if ui.button(format!("{}  {}", icon::X, tr("Close"))).clicked() {
                                 tab_action = Some((index, TabAction::Close));
                                 ui.close();
                             }
-                            if ui.add_enabled(tab_count > 1, egui::Button::new(format!("{}  Close other tabs", icon::X_SQUARE))).clicked() {
+                            if ui
+                                .add_enabled(tab_count > 1, egui::Button::new(format!("{}  {}", icon::X_SQUARE, tr("Close other tabs"))))
+                                .clicked()
+                            {
                                 tab_action = Some((index, TabAction::CloseOthers));
                                 ui.close();
                             }
                             ui.separator();
-                            if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+                            if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
                                 tab_action = Some((index, TabAction::CopyPath));
                                 ui.close();
                             }
-                            if ui.button(format!("{}  Show in file manager", icon::FOLDER_OPEN)).clicked() {
+                            if ui.button(format!("{}  {}", icon::FOLDER_OPEN, tr("Show in file manager"))).clicked() {
                                 tab_action = Some((index, TabAction::Reveal));
                                 ui.close();
                             }
@@ -180,7 +187,8 @@ impl NiceGitApp {
         ui.horizontal(|ui| {
             let caret = if expanded { icon::CARET_DOWN } else { icon::CARET_RIGHT };
             let header = ui.add(
-                egui::Button::new(RichText::new(format!("{caret}  RECENT REPOSITORIES")).small().strong().color(c.muted)).frame(false),
+                egui::Button::new(RichText::new(format!("{caret}  {}", tr("RECENT REPOSITORIES"))).small().strong().color(c.muted))
+                    .frame(false),
             );
             if header.clicked() {
                 self.settings.recent_repositories_open = !expanded;
@@ -216,16 +224,16 @@ impl NiceGitApp {
         let missing = rows.iter().filter(|row| row.missing).count();
         let mut footer = None;
         ui.horizontal(|ui| {
-            let remove_missing = egui::Button::new(RichText::new("Remove missing").small().color(c.accent)).frame(false);
+            let remove_missing = egui::Button::new(RichText::new(tr("Remove missing")).small().color(c.accent)).frame(false);
             if ui
                 .add_enabled(missing > 0, remove_missing)
-                .on_hover_text("Forget the repositories whose folders no longer exist. No folder is deleted.")
+                .on_hover_text(tr("Forget the repositories whose folders no longer exist. No folder is deleted."))
                 .clicked()
             {
                 footer = Some(RecentAction::RemoveMissing);
             }
-            let clear = egui::Button::new(RichText::new("Clear all…").small().color(c.accent)).frame(false);
-            if ui.add(clear).on_hover_text("Forget every repository in this list. No folder is deleted.").clicked() {
+            let clear = egui::Button::new(RichText::new(tr("Clear all…")).small().color(c.accent)).frame(false);
+            if ui.add(clear).on_hover_text(tr("Forget every repository in this list. No folder is deleted.")).clicked() {
                 footer = Some(RecentAction::ClearAll);
             }
         });
@@ -241,11 +249,10 @@ impl NiceGitApp {
             Some(RecentAction::ClearAll) => {
                 // The paths are captured now, so the confirmation clears exactly the rows shown.
                 let paths: Vec<PathBuf> = rows.iter().map(|row| row.path.clone()).collect();
-                let plural = if paths.len() == 1 { "y" } else { "ies" };
                 self.confirm(
-                    format!("Clear {} recent repositor{plural}?", paths.len()),
-                    "They are removed from the recent list. Their folders are not deleted.",
-                    "Clear",
+                    tr_count("Clear 1 recent repository?", "Clear {count} recent repositories?", paths.len()),
+                    tr("They are removed from the recent list. Their folders are not deleted."),
+                    tr("Clear"),
                     Pending::ForgetRecent { paths },
                 );
             }
@@ -258,8 +265,14 @@ impl NiceGitApp {
         for path in paths {
             self.settings.forget_recent(path);
         }
-        let plural = if paths.len() == 1 { "y" } else { "ies" };
-        self.notify(format!("Removed {} repositor{plural} from recent. Their folders are unchanged.", paths.len()), false);
+        self.notify(
+            tr_count(
+                "Removed 1 repository from recent. Their folders are unchanged.",
+                "Removed {count} repositories from recent. Their folders are unchanged.",
+                paths.len(),
+            ),
+            false,
+        );
     }
 }
 
@@ -295,7 +308,7 @@ pub fn recent_start_row(ui: &mut Ui, path: &Path, c: theme::Colors) -> bool {
     let fill = if response.hovered() { c.card_bg } else { egui::Color32::TRANSPARENT };
     ui.painter().set(background, egui::Shape::rect_filled(response.rect, 8.0, fill));
     // Not "Recent repository", which the Repositories column's own Recent rows use.
-    let label = format!("Open recent repository {name}");
+    let label = tr_fmt!("Open recent repository {name}", name = name);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
     response.clone().on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(path.display().to_string()).clicked()
 }
@@ -363,7 +376,7 @@ fn recent_row(ui: &mut Ui, row: &RecentRow, c: theme::Colors) -> Option<RecentAc
                         let parent = middle_truncate(&row.parent, 30);
                         ui.add(egui::Label::new(RichText::new(parent).small().color(c.muted)).truncate());
                         let detail = if row.missing {
-                            Some("Folder not found".to_string())
+                            Some(tr("Folder not found").to_string())
                         } else {
                             row.opened.map(|time| crate::tools::blame::relative_time(time as i64))
                         };
@@ -373,10 +386,10 @@ fn recent_row(ui: &mut Ui, row: &RecentRow, c: theme::Colors) -> Option<RecentAc
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if hovered {
-                            let label = format!("Remove {} from recent repositories", row.name);
+                            let label = tr_fmt!("Remove {name} from recent repositories", name = row.name);
                             let remove = ui
                                 .add(egui::Button::new(RichText::new(icon::X).color(c.muted)).frame(false))
-                                .on_hover_text("Remove from recent repositories. The folder is not deleted.");
+                                .on_hover_text(tr("Remove from recent repositories. The folder is not deleted."));
                             remove.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
                             if remove.clicked() {
                                 action = Some(RecentAction::Forget(row.path.clone()));
@@ -388,8 +401,11 @@ fn recent_row(ui: &mut Ui, row: &RecentRow, c: theme::Colors) -> Option<RecentAc
         })
         .response;
     ui.ctx().data_mut(|data| data.insert_temp(rect_id, response.rect));
-    let label =
-        if row.missing { format!("Recent repository {}, folder not found", row.name) } else { format!("Recent repository {}", row.name) };
+    let label = if row.missing {
+        tr_fmt!("Recent repository {name}, folder not found", name = row.name)
+    } else {
+        tr_fmt!("Recent repository {name}", name = row.name)
+    };
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, !row.missing, &label));
     let response = response.on_hover_text(row.path.display().to_string());
     // A missing folder cannot be opened, and a click on the × was handled above.
@@ -397,15 +413,15 @@ fn recent_row(ui: &mut Ui, row: &RecentRow, c: theme::Colors) -> Option<RecentAc
         action = Some(RecentAction::Open(row.path.clone()));
     }
     response.context_menu(|ui| {
-        if ui.button(format!("{}  Remove from recent repositories", icon::X)).clicked() {
+        if ui.button(format!("{}  {}", icon::X, tr("Remove from recent repositories"))).clicked() {
             action = Some(RecentAction::Forget(row.path.clone()));
             ui.close();
         }
-        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
             action = Some(RecentAction::CopyPath(row.path.clone()));
             ui.close();
         }
-        if ui.button(format!("{}  Show in file manager", icon::FOLDER_OPEN)).clicked() {
+        if ui.button(format!("{}  {}", icon::FOLDER_OPEN, tr("Show in file manager"))).clicked() {
             action = Some(RecentAction::Reveal(row.path.clone()));
             ui.close();
         }

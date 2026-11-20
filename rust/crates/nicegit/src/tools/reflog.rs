@@ -2,6 +2,7 @@
 //! create a branch at any entry so the commit is kept.
 #![allow(dead_code)]
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -23,15 +24,14 @@ type Loaded = nicegit_core::Result<(Vec<ReflogEntry>, HashSet<String>)>;
 pub(crate) fn age_text(time: i64) -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_secs() as i64).unwrap_or(0);
     let elapsed = (now - time).max(0);
-    let (value, unit) = match elapsed {
-        0..=59 => return "just now".to_string(),
-        60..=3_599 => (elapsed / 60, "minute"),
-        3_600..=86_399 => (elapsed / 3_600, "hour"),
-        86_400..=2_591_999 => (elapsed / 86_400, "day"),
-        2_592_000..=31_535_999 => (elapsed / 2_592_000, "month"),
-        _ => (elapsed / 31_536_000, "year"),
-    };
-    format!("{value} {unit}{} ago", if value == 1 { "" } else { "s" })
+    match elapsed {
+        0..=59 => tr("just now").to_string(),
+        60..=3_599 => tr_count("{count} minute ago", "{count} minutes ago", (elapsed / 60) as usize),
+        3_600..=86_399 => tr_count("{count} hour ago", "{count} hours ago", (elapsed / 3_600) as usize),
+        86_400..=2_591_999 => tr_count("{count} day ago", "{count} days ago", (elapsed / 86_400) as usize),
+        2_592_000..=31_535_999 => tr_count("{count} month ago", "{count} months ago", (elapsed / 2_592_000) as usize),
+        _ => tr_count("{count} year ago", "{count} years ago", (elapsed / 31_536_000) as usize),
+    }
 }
 
 #[derive(Default)]
@@ -89,8 +89,8 @@ impl ToolWindow for ReflogWindow {
 
     fn title(&self) -> String {
         match &self.branch {
-            Some(branch) => format!("Tip history of {}", branch.display_name()),
-            None => "Recover Lost Work".to_string(),
+            Some(branch) => tr_fmt!("Tip history of {branch}", branch = branch.display_name()),
+            None => tr("Recover Lost Work").to_string(),
         }
     }
 
@@ -145,12 +145,14 @@ impl ToolWindow for ReflogWindow {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
             let intro = match &self.branch {
-                Some(branch) => format!("Every commit {} has pointed to, including ones it no longer points to.", branch.display_name()),
-                None => "Every position HEAD has had, including commits that no branch points to any more.".to_string(),
+                Some(branch) => {
+                    tr_fmt!("Every commit {branch} has pointed to, including ones it no longer points to.", branch = branch.display_name())
+                }
+                None => tr("Every position HEAD has had, including commits that no branch points to any more.").to_string(),
             };
             ui.label(RichText::new(intro).small().color(c.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read the reflog again", self.loading.is_none()).clicked() {
+                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, tr("Read the reflog again"), self.loading.is_none()).clicked() {
                     self.needs_load = true;
                 }
             });
@@ -158,7 +160,7 @@ impl ToolWindow for ReflogWindow {
         ui.add_space(6.0);
 
         if self.loading.is_some() {
-            widgets::loading(ui, "Reading the reflog…");
+            widgets::loading(ui, tr("Reading the reflog…"));
         } else if let Some(error) = &self.error {
             widgets::error(ui, error);
         }
@@ -178,8 +180,8 @@ impl ReflogWindow {
         let c = theme::of(ui);
         if self.entries.is_empty() && self.loading.is_none() && self.error.is_none() {
             let text = match &self.branch {
-                Some(_) => "No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.",
-                None => "No history yet.",
+                Some(_) => tr("No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded."),
+                None => tr("No history yet."),
             };
             widgets::empty_state(ui, icon::CLOCK_COUNTER_CLOCKWISE, text);
             return;
@@ -202,8 +204,9 @@ impl ReflogWindow {
                             ui.add(egui::Label::new(RichText::new(&entry.subject).strong()).truncate());
                             if is_unreachable {
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    widgets::pill(ui, "Not on any branch", c.conflict)
-                                        .on_hover_text("Only the reflog keeps this commit. Git may delete it after the reflog expires.");
+                                    widgets::pill(ui, tr("Not on any branch"), c.conflict).on_hover_text(tr(
+                                        "Only the reflog keeps this commit. Git may delete it after the reflog expires.",
+                                    ));
                                 });
                             }
                         });
@@ -226,19 +229,25 @@ impl ReflogWindow {
                 let short_hash = short(&entry.hash).to_string();
                 let subject = entry.subject.clone();
                 response.context_menu(|ui| {
-                    if ui.add_enabled(cx.idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+                    if ui.add_enabled(cx.idle, egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Create branch here…")))).clicked()
+                    {
                         self.branch_target = Some((hash.clone(), short_hash.clone()));
                         self.branch_name.clear();
                         ui.close();
                     }
                     if let Some(name) = &reset_name {
-                        if ui.add_enabled(cx.idle, egui::Button::new(format!("{}  Reset {name} to here…", icon::ARROW_ARC_LEFT))).clicked()
+                        if ui
+                            .add_enabled(
+                                cx.idle,
+                                egui::Button::new(format!("{}  {}", icon::ARROW_ARC_LEFT, tr_fmt!("Reset {name} to here…", name = name))),
+                            )
+                            .clicked()
                         {
                             cx.open(Box::new(ResetWindow::new(hash.clone(), subject.clone(), snapshot)));
                             ui.close();
                         }
                     }
-                    if ui.button(format!("{}  Copy commit hash", icon::COPY)).clicked() {
+                    if ui.button(format!("{}  {}", icon::COPY, tr("Copy commit hash"))).clicked() {
                         ui.ctx().copy_text(hash.clone());
                         ui.close();
                     }
@@ -251,7 +260,7 @@ impl ReflogWindow {
     fn detail(&mut self, ui: &mut Ui, cx: &mut Ctx, idle: bool) {
         let c = theme::of(ui);
         let Some(entry) = self.selected_entry().cloned() else {
-            widgets::empty_state(ui, icon::ARROW_U_UP_LEFT, "Select an entry to see its commit.");
+            widgets::empty_state(ui, icon::ARROW_U_UP_LEFT, tr("Select an entry to see its commit."));
             return;
         };
         egui::ScrollArea::vertical().id_salt("reflog_detail").auto_shrink([false, false]).show(ui, |ui| {
@@ -267,25 +276,25 @@ impl ReflogWindow {
             if self.unreachable.contains(&entry.hash) {
                 widgets::callout(
                     ui,
-                    "Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.",
+                    tr("Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it."),
                     true,
                 );
                 ui.add_space(8.0);
             }
             ui.horizontal_wrapped(|ui| {
-                if widgets::primary_button(ui, &format!("{}  Create branch here…", icon::GIT_BRANCH), idle).clicked() {
+                if widgets::primary_button(ui, &format!("{}  {}", icon::GIT_BRANCH, tr("Create branch here…")), idle).clicked() {
                     self.branch_target = Some((entry.hash.clone(), short(&entry.hash).to_string()));
                     self.branch_name.clear();
                 }
                 if let Some(name) = self.reset_branch(cx) {
-                    if widgets::labeled_button(ui, icon::ARROW_ARC_LEFT, &format!("Reset {name} to here…"), idle).clicked() {
+                    if widgets::labeled_button(ui, icon::ARROW_ARC_LEFT, &tr_fmt!("Reset {name} to here…", name = name), idle).clicked() {
                         cx.open(Box::new(ResetWindow::new(entry.hash.clone(), entry.subject.clone(), cx.snapshot)));
                     }
                 }
-                if widgets::labeled_button(ui, icon::GIT_COMMIT, "Show in graph", true).clicked() {
+                if widgets::labeled_button(ui, icon::GIT_COMMIT, tr("Show in graph"), true).clicked() {
                     cx.select_commit(entry.hash.clone());
                 }
-                if widgets::labeled_button(ui, icon::COPY, "Copy hash", true).clicked() {
+                if widgets::labeled_button(ui, icon::COPY, tr("Copy hash"), true).clicked() {
                     ui.ctx().copy_text(entry.hash.clone());
                 }
             });
@@ -296,7 +305,7 @@ impl ReflogWindow {
         let Some((hash, short_hash)) = self.branch_target.clone() else { return };
         let mut open = true;
         let mut close = false;
-        let title = format!("Create branch at {short_hash}");
+        let title = tr_fmt!("Create branch at {hash}", hash = short_hash);
         egui::Window::new(title)
             .id(ui.scope_id().with("create_branch"))
             .collapsible(false)
@@ -304,22 +313,24 @@ impl ReflogWindow {
             .default_width(360.0)
             .open(&mut open)
             .show(ui.ctx(), |ui| {
-                ui.label(RichText::new("The branch keeps this commit and its history. Your current checkout does not change.").small());
+                ui.label(RichText::new(tr("The branch keeps this commit and its history. Your current checkout does not change.")).small());
                 ui.add_space(6.0);
-                widgets::text_field(ui, &mut self.branch_name, "Branch name")
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Branch name"));
+                widgets::text_field(ui, &mut self.branch_name, tr("Branch name"))
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Branch name")));
                 ui.add_space(8.0);
                 let name = self.branch_name.trim().to_string();
                 ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel")).clicked() {
                         close = true;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::primary_button(ui, "Create branch", idle && !name.is_empty()).clicked() {
-                            let label = format!("Create branch {name}");
+                        if widgets::primary_button(ui, tr("Create branch"), idle && !name.is_empty()).clicked() {
+                            let label = tr_fmt!("Create branch {name}", name = name);
                             let created = name.clone();
                             cx.act(label, move |client, directory| {
-                                client.create_branch_at(&created, &hash, directory).map(|()| Some(format!("Created branch {created}.")))
+                                client
+                                    .create_branch_at(&created, &hash, directory)
+                                    .map(|()| Some(tr_fmt!("Created branch {name}.", name = created)))
                             });
                             close = true;
                         }

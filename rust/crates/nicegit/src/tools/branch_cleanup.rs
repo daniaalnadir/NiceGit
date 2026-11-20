@@ -2,6 +2,7 @@
 //! while, and deletes the chosen ones in one step that Undo can reverse.
 #![allow(dead_code)]
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -114,7 +115,7 @@ impl ToolWindow for BranchCleanupWindow {
     }
 
     fn title(&self) -> String {
-        "Clean Up Branches".to_string()
+        tr("Clean Up Branches").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -147,7 +148,7 @@ impl ToolWindow for BranchCleanupWindow {
                         .collect(),
                 );
                 let names = deletions.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ");
-                cx.record_undo(format!("Clean up {} {}", deletions.len(), noun(deletions.len())), Some(names), step);
+                cx.record_undo(tr_count("Clean up {count} branch", "Clean up {count} branches", deletions.len()), Some(names), step);
                 self.undo = Some(deletions);
                 self.confirming = false;
             }
@@ -169,8 +170,9 @@ impl ToolWindow for BranchCleanupWindow {
         let c = theme::of(ui);
         let current = cx.snapshot.current_branch.as_str();
         ui.label(
-            RichText::new(format!(
-                "Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while."
+            RichText::new(tr_fmt!(
+                "Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.",
+                current = current
             ))
             .small()
             .color(c.muted),
@@ -178,8 +180,8 @@ impl ToolWindow for BranchCleanupWindow {
         ui.add_space(6.0);
 
         ui.horizontal(|ui| {
-            ui.label("Also list unmerged branches with no commit for");
-            let response = ui.add(egui::Slider::new(&mut self.inactive_days, 7..=730).suffix(" days"));
+            ui.label(tr("Also list unmerged branches with no commit for"));
+            let response = ui.add(egui::Slider::new(&mut self.inactive_days, 7..=730).suffix(tr(" days")));
             slider_dragging = response.dragged();
         });
         ui.add_space(6.0);
@@ -218,13 +220,18 @@ impl ToolWindow for BranchCleanupWindow {
             egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Deleted {} {}.", icon::TRASH, deletions.len(), noun(deletions.len()))));
+                    ui.label(RichText::new(format!(
+                        "{}  {}",
+                        icon::TRASH,
+                        tr_count("Deleted {count} branch.", "Deleted {count} branches.", deletions.len())
+                    )));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::labeled_button(ui, icon::ARROW_COUNTER_CLOCKWISE, "Undo", idle).clicked() {
+                        if widgets::labeled_button(ui, icon::ARROW_COUNTER_CLOCKWISE, tr("Undo"), idle).clicked() {
                             self.undo = None;
-                            cx.act(format!("Restore {} {}", deletions.len(), noun(deletions.len())), move |client, directory| {
-                                restore_all(client, &deletions, directory)
-                            });
+                            cx.act(
+                                tr_count("Restore {count} branch", "Restore {count} branches", deletions.len()),
+                                move |client, directory| restore_all(client, &deletions, directory),
+                            );
                         }
                     });
                 });
@@ -233,10 +240,10 @@ impl ToolWindow for BranchCleanupWindow {
         }
 
         match &self.found {
-            None => widgets::loading(ui, "Finding branches…"),
+            None => widgets::loading(ui, tr("Finding branches…")),
             Some(Err(error)) => widgets::error(ui, &error.to_string()),
             Some(Ok(candidates)) if candidates.is_empty() => {
-                widgets::empty_state(ui, icon::CHECK_CIRCLE, "No branches to clean up.");
+                widgets::empty_state(ui, icon::CHECK_CIRCLE, tr("No branches to clean up."));
             }
             Some(Ok(candidates)) => {
                 let main_line = self.main_line.clone().unwrap_or_default();
@@ -246,12 +253,12 @@ impl ToolWindow for BranchCleanupWindow {
                     .map(|candidate| candidate.name.clone())
                     .collect();
                 ui.horizontal(|ui| {
-                    widgets::section(ui, &format!("{} to review", candidates.len()));
+                    widgets::section(ui, &tr_fmt!("{count} to review", count = candidates.len()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add_enabled(!merged.is_empty(), egui::Button::new("Select merged")).clicked() {
+                        if ui.add_enabled(!merged.is_empty(), egui::Button::new(tr("Select merged"))).clicked() {
                             self.selected = merged.iter().cloned().collect();
                         }
-                        if ui.add_enabled(!self.selected.is_empty(), egui::Button::new("Clear")).clicked() {
+                        if ui.add_enabled(!self.selected.is_empty(), egui::Button::new(tr("Clear"))).clicked() {
                             self.selected.clear();
                         }
                     });
@@ -281,15 +288,16 @@ impl ToolWindow for BranchCleanupWindow {
                                 }
                             }
                             if is_main {
-                                widgets::pill(ui, "Main branch", c.modified)
-                                    .on_hover_text("The main line is never selected automatically. Tick it only if you mean to delete it.");
+                                widgets::pill(ui, tr("Main branch"), c.modified).on_hover_text(tr(
+                                    "The main line is never selected automatically. Tick it only if you mean to delete it.",
+                                ));
                             }
-                            let (label, fill) = if candidate.is_merged { ("Merged", c.added) } else { ("Not merged", c.conflict) };
+                            let (label, fill) = if candidate.is_merged { (tr("Merged"), c.added) } else { (tr("Not merged"), c.conflict) };
                             widgets::pill(ui, label, fill);
                             if candidate.upstream_gone {
-                                widgets::pill(ui, "Upstream gone", c.warning).on_hover_text(
+                                widgets::pill(ui, tr("Upstream gone"), c.warning).on_hover_text(tr(
                                     "Its branch on the remote was deleted, as usually happens once a pull request is merged",
-                                );
+                                ));
                             }
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if let Some(time) = candidate.last_commit_time {
@@ -305,20 +313,24 @@ impl ToolWindow for BranchCleanupWindow {
 
         ui.add_space(8.0);
         if selected_main > 0 {
-            let (branches, verb) = if selected_main == 1 { ("branch", "is") } else { ("branches", "are") };
             widgets::callout(
                 ui,
-                &format!("{selected_main} selected {branches} {verb} the main line. Deleting it removes that line of work locally."),
+                &tr_count(
+                    "{count} selected branch is the main line. Deleting it removes that line of work locally.",
+                    "{count} selected branches are the main line. Deleting it removes that line of work locally.",
+                    selected_main,
+                ),
                 true,
             );
             ui.add_space(6.0);
         }
         if selected_unmerged > 0 {
-            let (branches, verb, them) = if selected_unmerged == 1 { ("branch", "has", "it") } else { ("branches", "have", "them") };
             widgets::callout(
                 ui,
-                &format!(
-                    "{selected_unmerged} selected {branches} {verb} commits on no other branch. Undo can restore {them} until another deletion."
+                &tr_count(
+                    "{count} selected branch has commits on no other branch. Undo can restore it until another deletion.",
+                    "{count} selected branches have commits on no other branch. Undo can restore them until another deletion.",
+                    selected_unmerged,
                 ),
                 true,
             );
@@ -329,9 +341,10 @@ impl ToolWindow for BranchCleanupWindow {
             self.confirm(ui, cx, &selected_candidates, selected_unmerged > 0);
         } else {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} selected", self.selected.len())).small().color(c.muted));
+                ui.label(RichText::new(tr_fmt!("{count} selected", count = self.selected.len())).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let label = format!("{}  Delete {} {}…", icon::TRASH, self.selected.len(), noun(self.selected.len()));
+                    let label =
+                        format!("{}  {}", icon::TRASH, tr_count("Delete {count} branch…", "Delete {count} branches…", self.selected.len()));
                     if widgets::danger_button(ui, &label, idle && !self.selected.is_empty()).clicked() {
                         self.confirming = true;
                     }
@@ -349,25 +362,25 @@ impl BranchCleanupWindow {
         let count = chosen.len();
         egui::Frame::new().fill(c.banner_bg).corner_radius(6.0).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new(format!("Delete {count} local {}?", noun(count))).strong());
-            let mut detail = String::from("Remote branches are not changed. ");
+            ui.label(RichText::new(tr_count("Delete {count} local branch?", "Delete {count} local branches?", count)).strong());
+            let mut detail = format!("{} ", tr("Remote branches are not changed."));
             if includes_unmerged {
-                detail.push_str("Unmerged branches hold commits found on no other branch. ");
+                detail.push_str(&format!("{} ", tr("Unmerged branches hold commits found on no other branch.")));
             }
-            detail.push_str("Undo restores them until you take another undoable action.");
+            detail.push_str(tr("Undo restores them until you take another undoable action."));
             ui.label(RichText::new(detail).small());
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     self.confirming = false;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let label = if includes_unmerged { "Delete, including unmerged" } else { "Delete branches" };
+                    let label = if includes_unmerged { tr("Delete, including unmerged") } else { tr("Delete branches") };
                     if widgets::danger_button(ui, label, cx.idle).clicked() {
                         let chosen = chosen.to_vec();
                         let slot = Arc::clone(&self.deleted);
                         let total = chosen.len();
-                        cx.act(format!("Delete {total} {}", noun(total)), move |client, directory| {
+                        cx.act(tr_count("Delete {count} branch", "Delete {count} branches", total), move |client, directory| {
                             let report = client.delete_branches_keeping_undo(&chosen, includes_unmerged, directory);
                             let deleted = report.deleted.len();
                             if deleted > 0 {
@@ -376,10 +389,19 @@ impl BranchCleanupWindow {
                                 }
                             }
                             match report.failure {
-                                None => Ok(Some(format!("Deleted {deleted} {}. Undo restores them.", noun(deleted)))),
+                                None => Ok(Some(tr_count(
+                                    "Deleted {count} branch. Undo restores them.",
+                                    "Deleted {count} branches. Undo restores them.",
+                                    deleted,
+                                ))),
                                 Some(error) => Err(GitError::failed(
                                     "delete branches",
-                                    format!("Deleted {deleted} of {total} before stopping. Undo restores those. {error}"),
+                                    tr_fmt!(
+                                        "Deleted {deleted} of {total} before stopping. Undo restores those. {error}",
+                                        deleted = deleted,
+                                        total = total,
+                                        error = error
+                                    ),
                                 )),
                             }
                         });
@@ -398,17 +420,14 @@ fn restore_all(client: &GitClient, deletions: &[BranchDeletion], directory: &Pat
         if let Err(error) = client.restore_deleted_branch(deletion, directory) {
             return Err(GitError::failed(
                 "restore branches",
-                format!("Restored {restored} of {} before stopping. {error}", deletions.len()),
+                tr_fmt!(
+                    "Restored {restored} of {total} before stopping. {error}",
+                    restored = restored,
+                    total = deletions.len(),
+                    error = error
+                ),
             ));
         }
     }
-    Ok(Some(format!("Restored {} {}.", deletions.len(), noun(deletions.len()))))
-}
-
-fn noun(count: usize) -> &'static str {
-    if count == 1 {
-        "branch"
-    } else {
-        "branches"
-    }
+    Ok(Some(tr_count("Restored {count} branch.", "Restored {count} branches.", deletions.len())))
 }

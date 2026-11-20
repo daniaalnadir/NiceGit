@@ -5,6 +5,7 @@ use egui::RichText;
 use egui_phosphor::regular as icon;
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_fmt};
 use crate::install::{manual_update_hint, offers_install};
 use crate::theme;
 use crate::tools::widgets;
@@ -27,22 +28,22 @@ impl NiceGitApp {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(icon::CLOUD_ARROW_DOWN).color(c.accent));
                 let text = match (&progress, installed, hint) {
-                    (Some((_, stage)), _, _) => format!("NiceGit {version}: {stage}"),
-                    (None, true, _) => format!("NiceGit {version} is installed."),
-                    (None, false, Some(hint)) => format!("NiceGit {version} is available. {hint}"),
-                    (None, false, None) => format!("NiceGit {version} is available"),
+                    (Some((_, stage)), _, _) => tr_fmt!("NiceGit {version}: {stage}", version = version, stage = stage),
+                    (None, true, _) => tr_fmt!("NiceGit {version} is installed.", version = version),
+                    (None, false, Some(hint)) => tr_fmt!("NiceGit {version} is available. {hint}", version = version, hint = hint),
+                    (None, false, None) => tr_fmt!("NiceGit {version} is available", version = version),
                 };
                 ui.label(text);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    dismiss = widgets::icon_button(ui, icon::X, "Dismiss", true).clicked();
+                    dismiss = widgets::icon_button(ui, icon::X, tr("Dismiss"), true).clicked();
                     if installed {
-                        restart = ui.button("Restart NiceGit").clicked();
+                        restart = ui.button(tr("Restart NiceGit")).clicked();
                     } else if progress.is_some() {
                         ui.spinner();
                     } else {
-                        download = ui.button("Download").on_hover_text(RELEASES_PAGE).clicked();
+                        download = ui.button(tr("Download")).on_hover_text(RELEASES_PAGE).clicked();
                         if offers {
-                            install = ui.add_enabled(can_install, egui::Button::new("Download and install")).clicked();
+                            install = ui.add_enabled(can_install, egui::Button::new(tr("Download and install"))).clicked();
                         }
                     }
                 });
@@ -70,35 +71,36 @@ impl NiceGitApp {
         let (mut download, mut restart) = (false, false);
         let mut install_version = None;
         ui.horizontal(|ui| {
-            if ui.add_enabled(!checking, egui::Button::new("Check now")).clicked() {
+            if ui.add_enabled(!checking, egui::Button::new(tr("Check now"))).clicked() {
                 self.start_update_check(true);
             }
             match self.update_status.clone() {
                 Some(UpdateStatus::Checking) => {
                     ui.spinner();
-                    ui.label(RichText::new("Checking…").color(c.muted));
+                    ui.label(RichText::new(tr("Checking…")).color(c.muted));
                 }
                 Some(UpdateStatus::UpToDate) => {
-                    ui.label(RichText::new("NiceGit is up to date.").color(c.muted));
+                    ui.label(RichText::new(tr("NiceGit is up to date.")).color(c.muted));
                 }
                 Some(UpdateStatus::Available(version)) => {
                     let installed = self.installed_update.as_ref().is_some_and(|(installed, _)| *installed == version);
                     if let Some((_, stage)) = self.install_progress() {
                         ui.spinner();
-                        ui.label(RichText::new(format!("NiceGit {version}: {stage}")).color(c.muted));
+                        ui.label(RichText::new(tr_fmt!("NiceGit {version}: {stage}", version = version, stage = stage)).color(c.muted));
                     } else if installed {
-                        ui.label(format!("NiceGit {version} is installed."));
-                        restart = ui.button("Restart NiceGit").clicked();
+                        ui.label(tr_fmt!("NiceGit {version} is installed.", version = version));
+                        restart = ui.button(tr("Restart NiceGit")).clicked();
                     } else {
-                        ui.label(format!("NiceGit {version} is available."));
-                        download = ui.button("Download").on_hover_text(RELEASES_PAGE).clicked();
-                        if offers_install(&version) && ui.add_enabled(can_install, egui::Button::new("Download and install")).clicked() {
+                        ui.label(tr_fmt!("NiceGit {version} is available.", version = version));
+                        download = ui.button(tr("Download")).on_hover_text(RELEASES_PAGE).clicked();
+                        if offers_install(&version) && ui.add_enabled(can_install, egui::Button::new(tr("Download and install"))).clicked()
+                        {
                             install_version = Some(version);
                         }
                     }
                 }
                 Some(UpdateStatus::Failed(reason)) => {
-                    ui.label(RichText::new(format!("Could not check: {reason}")).color(c.warning));
+                    ui.label(RichText::new(tr_fmt!("Could not check: {reason}", reason = reason)).color(c.warning));
                 }
                 None => {}
             }

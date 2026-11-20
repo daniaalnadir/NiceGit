@@ -15,6 +15,7 @@ use nicegit_core::diff::{side_by_side, DiffLine, DiffLineKind, SplitRow};
 use nicegit_core::inline::{self, InlineChange};
 use nicegit_core::word_diff::{self, WordKind, WordRow, WordSegment};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::syntax;
 use crate::theme;
 use crate::tools::widgets;
@@ -365,7 +366,7 @@ pub fn show_with(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) 
 fn show_inner(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions, find_bar: bool) -> DiffResponse {
     let mut response = DiffResponse::default();
     if content.lines.is_empty() || content.is_empty() {
-        ui.centered_and_justified(|ui| ui.label(RichText::new("No changes to show").weak()));
+        ui.centered_and_justified(|ui| ui.label(RichText::new(tr("No changes to show")).weak()));
         return response;
     }
     let drag_id = Id::unique(("diff-selection-drag", content.title.as_str()));
@@ -502,23 +503,26 @@ fn block_buttons(ui: &mut Ui, buttons: BlockButtons) -> ShownButtons {
                         (
                             BlockAction::Discard,
                             icon::ARROW_COUNTER_CLOCKWISE,
-                            "Discard",
-                            "Discard this change from the file. You can undo it.",
+                            tr("Discard"),
+                            tr("Discard this change from the file. You can undo it."),
                         ),
-                        (BlockAction::Stage, icon::PLUS, "Stage", "Stage this change"),
+                        (BlockAction::Stage, icon::PLUS, tr("Stage"), tr("Stage this change")),
                     ];
                     if stash {
-                        choices.insert(1, (BlockAction::Stash, icon::ARCHIVE, "Stash", "Stash this change and remove it from the file"));
+                        choices.insert(
+                            1,
+                            (BlockAction::Stash, icon::ARCHIVE, tr("Stash"), tr("Stash this change and remove it from the file")),
+                        );
                     }
                     choices
                 }
-                BlockButtons::Unstage => vec![(BlockAction::Unstage, icon::MINUS, "Unstage", "Unstage this change")],
+                BlockButtons::Unstage => vec![(BlockAction::Unstage, icon::MINUS, tr("Unstage"), tr("Unstage this change"))],
             };
             for &(choice, glyph, label, tip) in &choices {
                 let text = RichText::new(format!("{glyph} {label}")).small();
                 let text = if choice == BlockAction::Discard { text.color(c.removed) } else { text };
                 let button = ui.add(egui::Button::new(text).frame(false)).on_hover_text(tip);
-                let name = format!("{label} this change");
+                let name = tr_fmt!("{label} this change", label = label);
                 button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
                 if button.clicked() {
                     action = Some(choice);
@@ -787,15 +791,15 @@ fn line_label(line: &DiffLine) -> String {
     let (kind, number) = match line.kind {
         DiffLineKind::Hunk => return hunk_label(&line.text),
         DiffLineKind::Metadata => return line.text.clone(),
-        DiffLineKind::Addition => ("Added line", line.new_number),
-        DiffLineKind::Deletion => ("Removed line", line.old_number),
-        DiffLineKind::Context => ("Line", line.new_number.or(line.old_number)),
+        DiffLineKind::Addition => (tr("Added line"), line.new_number),
+        DiffLineKind::Deletion => (tr("Removed line"), line.old_number),
+        DiffLineKind::Context => (tr("Line"), line.new_number.or(line.old_number)),
     };
     // The text keeps the diff's marker in front of the code: "+", "-" or a space.
     let code = line.text.strip_prefix(['+', '-', ' ']).unwrap_or(&line.text);
     match number {
-        Some(number) => format!("{kind} {number}: {code}"),
-        None => format!("{kind}: {code}"),
+        Some(number) => tr_fmt!("{kind} {number}: {code}", kind = kind, number = number, code = code),
+        None => tr_fmt!("{kind}: {code}", kind = kind, code = code),
     }
 }
 
@@ -806,8 +810,8 @@ fn hunk_label(header: &str) -> String {
     let start = parts.next().and_then(|start| start.parse::<usize>().ok());
     let count = parts.next().and_then(|count| count.parse::<usize>().ok()).unwrap_or(1);
     match start {
-        Some(start) if count > 1 => format!("Hunk at lines {start} to {}", start + count - 1),
-        Some(start) => format!("Hunk at line {start}"),
+        Some(start) if count > 1 => tr_fmt!("Hunk at lines {start} to {end}", start = start, end = start + count - 1),
+        Some(start) => tr_fmt!("Hunk at line {start}", start = start),
         None => header.to_string(),
     }
 }
@@ -819,8 +823,8 @@ fn word_label(segments: &[WordSegment]) -> String {
         .iter()
         .map(|segment| match segment.kind {
             WordKind::Same => segment.text.clone(),
-            WordKind::Removed => format!("[removed: {}]", segment.text),
-            WordKind::Added => format!("[added: {}]", segment.text),
+            WordKind::Removed => tr_fmt!("[removed: {text}]", text = segment.text),
+            WordKind::Added => tr_fmt!("[added: {text}]", text = segment.text),
         })
         .collect()
 }
@@ -894,13 +898,13 @@ fn line_button(ui: &mut Ui, view: &View, rect: Rect, line: usize, response: &mut
         return;
     }
     let (glyph, action, verb) = match buttons {
-        BlockButtons::StageAndDiscard { .. } => (icon::PLUS, BlockAction::Stage, "Stage"),
-        BlockButtons::Unstage => (icon::MINUS, BlockAction::Unstage, "Unstage"),
+        BlockButtons::StageAndDiscard { .. } => (icon::PLUS, BlockAction::Stage, tr("Stage")),
+        BlockButtons::Unstage => (icon::MINUS, BlockAction::Unstage, tr("Unstage")),
     };
     let area = Rect::from_min_size(rect.min, vec2(view.style.lead, view.style.row_height));
     let button = ui.interact(area, view.drag_id.with(("line button", line)), Sense::click());
     let number = diff_line.new_number.or(diff_line.old_number).unwrap_or(line);
-    let name = format!("{verb} line {number}");
+    let name = tr_fmt!("{verb} line {number}", verb = verb, number = number);
     button.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
     let colors = view.style.colors;
     let line_hovered = ui.rect_contains_pointer(rect);
@@ -916,7 +920,7 @@ fn line_button(ui: &mut Ui, view: &View, rect: Rect, line: usize, response: &mut
         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
     }
     ui.painter().text(area.center(), Align2::CENTER_CENTER, glyph, FontId::proportional(12.0), color);
-    let button = button.on_hover_text(format!("{verb} this line"));
+    let button = button.on_hover_text(tr_fmt!("{verb} this line", verb = verb));
     if button.clicked() {
         response.block_action = Some((action, BTreeSet::from([line])));
     }
@@ -978,8 +982,8 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
         ui.add_space(14.0);
         // A fixed identity: the staging hint above appears once the review loads, and an
         // identity taken from the layout would move the field and drop its focus.
-        let edit = widgets::search_input_with_id(ui, "diff-find", &mut options.find.query, "Find in diff", 180.0);
-        edit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Find in diff"));
+        let edit = widgets::search_input_with_id(ui, "diff-find", &mut options.find.query, tr("Find in diff"), 180.0);
+        edit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Find in diff")));
         // Command-F (Ctrl-F elsewhere) jumps to the search field, as in the Mac app.
         if ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::F))) {
             edit.request_focus();
@@ -991,12 +995,15 @@ fn find_bar_row(ui: &mut Ui, content: &DiffContent, options: &mut DiffOptions) -
         }
         let count = occurrences.len();
         if !options.find.query.is_empty() {
-            let label =
-                if count == 0 { "No matches".to_string() } else { format!("{} of {count}", options.find.current.min(count - 1) + 1) };
+            let label = if count == 0 {
+                tr("No matches").to_string()
+            } else {
+                tr_fmt!("{current} of {count}", current = options.find.current.min(count - 1) + 1, count = count)
+            };
             ui.label(RichText::new(label).color(muted));
         }
-        let previous = widgets::icon_button(ui, icon::CARET_UP, "Previous match (Shift+Enter)", count > 0).clicked();
-        let next = widgets::icon_button(ui, icon::CARET_DOWN, "Next match (Enter)", count > 0).clicked();
+        let previous = widgets::icon_button(ui, icon::CARET_UP, tr("Previous match (Shift+Enter)"), count > 0).clicked();
+        let next = widgets::icon_button(ui, icon::CARET_DOWN, tr("Next match (Enter)"), count > 0).clicked();
         let enter = (edit.has_focus() || edit.lost_focus()) && ui.input(|input| input.key_pressed(Key::Enter));
         let backwards = previous || (enter && ui.input(|input| input.modifiers.shift));
         if (next || previous || enter) && count > 0 {

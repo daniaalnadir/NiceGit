@@ -1,6 +1,7 @@
 //! The output of a custom action that asked to be shown: what the program printed and what it
 //! wrote to its error stream, read only, with a Copy button.
 
+use crate::i18n::{tr, tr_fmt};
 use egui::RichText;
 
 use super::{Ctx, ToolWindow};
@@ -33,7 +34,7 @@ impl ToolWindow for CustomOutputWindow {
     }
 
     fn title(&self) -> String {
-        format!("{} output", self.name)
+        tr_fmt!("{name} output", name = self.name)
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -43,21 +44,21 @@ impl ToolWindow for CustomOutputWindow {
     fn ui(&mut self, ui: &mut egui::Ui, _cx: &mut Ctx) {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
-            if ui.button("Copy").clicked() {
+            if ui.button(tr("Copy")).clicked() {
                 ui.ctx().copy_text(self.combined());
             }
         });
         ui.separator();
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             if self.captured.stdout.is_empty() && self.captured.stderr.is_empty() {
-                ui.label(RichText::new("The program printed nothing.").color(c.muted));
+                ui.label(RichText::new(tr("The program printed nothing.")).color(c.muted));
             }
             if !self.captured.stdout.is_empty() {
                 ui.label(RichText::new(&self.captured.stdout).monospace());
             }
             if !self.captured.stderr.is_empty() {
                 ui.add_space(8.0);
-                ui.label(RichText::new("Error output").small().color(c.muted));
+                ui.label(RichText::new(tr("Error output")).small().color(c.muted));
                 ui.label(RichText::new(&self.captured.stderr).monospace().color(c.danger));
             }
         });

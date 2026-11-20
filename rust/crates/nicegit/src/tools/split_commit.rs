@@ -2,6 +2,7 @@
 //! rest into the second, and both get their own message. The core rebuilds the commit and the commits
 //! after it; the working tree and index are not touched.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -89,11 +90,7 @@ fn checked_changes(file: &SplitFile, pick: &Pick) -> usize {
 }
 
 fn count_text(count: usize) -> String {
-    if count == 1 {
-        "1 change".to_string()
-    } else {
-        format!("{count} changes")
-    }
+    tr_count("{count} change", "{count} changes", count)
 }
 
 /// Splits one commit into two, from the window the commit menu opens.
@@ -140,17 +137,17 @@ fn file_row(ui: &mut egui::Ui, cx: &Ctx, index: usize, file: &SplitFile, pick: &
     let partly = !file.whole_only && checked_now && pick.hunks.len() < file.hunks.len();
     ui.horizontal(|ui| {
         let mut checked = checked_now;
-        let label = if partly { format!("{}  (some changes)", file.path) } else { file.path.clone() };
+        let label = if partly { format!("{}  {}", file.path, tr("(some changes)")) } else { file.path.clone() };
         if widgets::checkbox(ui, cx.idle, &mut checked, label).changed() {
             set_file(file, pick, checked);
         }
         if file.whole_only {
-            ui.label(RichText::new("moves as a whole").small().color(theme::of(ui).muted));
+            ui.label(RichText::new(tr("moves as a whole")).small().color(theme::of(ui).muted));
         } else if !file.hunks.is_empty() {
             let open = expanded.contains(&index);
             let glyph = if open { icon::CARET_DOWN } else { icon::CARET_RIGHT };
             let text = format!("{glyph}  {}", count_text(file.hunks.len()));
-            if ui.small_button(text).on_hover_text(if open { "Hide the changes" } else { "Show the changes" }).clicked() {
+            if ui.small_button(text).on_hover_text(if open { tr("Hide the changes") } else { tr("Show the changes") }).clicked() {
                 if open {
                     expanded.remove(&index);
                 } else {
@@ -164,7 +161,7 @@ fn file_row(ui: &mut egui::Ui, cx: &Ctx, index: usize, file: &SplitFile, pick: &
             ui.horizontal(|ui| {
                 ui.add_space(22.0);
                 let mut checked = pick.hunks.contains(&number);
-                if widgets::checkbox(ui, cx.idle, &mut checked, format!("Change {}", number + 1)).changed() {
+                if widgets::checkbox(ui, cx.idle, &mut checked, tr_fmt!("Change {number}", number = number + 1)).changed() {
                     if checked {
                         pick.hunks.insert(number);
                     } else {
@@ -181,7 +178,9 @@ fn file_row(ui: &mut egui::Ui, cx: &Ctx, index: usize, file: &SplitFile, pick: &
             if hunk.changes.len() > 8 {
                 ui.horizontal(|ui| {
                     ui.add_space(44.0);
-                    ui.label(RichText::new(format!("{} more lines", hunk.changes.len() - 8)).small().color(theme::of(ui).muted));
+                    ui.label(
+                        RichText::new(tr_fmt!("{count} more lines", count = hunk.changes.len() - 8)).small().color(theme::of(ui).muted),
+                    );
                 });
             }
         }
@@ -194,7 +193,7 @@ impl ToolWindow for SplitWindow {
     }
 
     fn title(&self) -> String {
-        "Split commit".to_string()
+        tr("Split commit").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -236,9 +235,13 @@ impl ToolWindow for SplitWindow {
             ui.label(RichText::new(&self.subject).strong().color(ui.visuals().text_color()));
         });
         ui.label(
-            RichText::new(format!("{}  Rewrites {} as two commits. The commits after it are replayed.", icon::SCISSORS, self.branch))
-                .small()
-                .color(c.muted),
+            RichText::new(format!(
+                "{}  {}",
+                icon::SCISSORS,
+                tr_fmt!("Rewrites {branch} as two commits. The commits after it are replayed.", branch = self.branch)
+            ))
+            .small()
+            .color(c.muted),
         );
         ui.add_space(8.0);
 
@@ -247,22 +250,22 @@ impl ToolWindow for SplitWindow {
             return;
         }
         let Some(loaded) = self.loaded.as_mut() else {
-            widgets::loading(ui, "Reading the commit's changes");
+            widgets::loading(ui, tr("Reading the commit's changes"));
             return;
         };
         if loaded.published {
             widgets::callout(
                 ui,
-                "This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.",
+                tr("This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy."),
                 true,
             );
             ui.add_space(8.0);
         }
 
-        widgets::section(ui, "Changes in the first commit");
+        widgets::section(ui, tr("Changes in the first commit"));
         ui.add_space(2.0);
         if loaded.files.is_empty() {
-            ui.label(RichText::new("This commit has no changes to split.").small().color(c.muted));
+            ui.label(RichText::new(tr("This commit has no changes to split.")).small().color(c.muted));
         }
         egui::ScrollArea::vertical().id_salt("split_files").max_height(200.0).auto_shrink([false, false]).show(ui, |ui| {
             for (index, file) in loaded.files.iter().enumerate() {
@@ -278,33 +281,37 @@ impl ToolWindow for SplitWindow {
         let second_count = total - first_count;
         ui.add_space(6.0);
         ui.label(
-            RichText::new(format!("{} in the first commit, {} in the second.", count_text(first_count), count_text(second_count)))
-                .small()
-                .color(c.muted),
+            RichText::new(tr_fmt!(
+                "{first} in the first commit, {second} in the second.",
+                first = count_text(first_count),
+                second = count_text(second_count)
+            ))
+            .small()
+            .color(c.muted),
         );
 
         ui.add_space(8.0);
         // Each box has a name for assistive tools, since its text is the commit message rather than a label.
-        widgets::section(ui, "First commit");
+        widgets::section(ui, tr("First commit"));
         let first =
             ui.add(egui::TextEdit::multiline(&mut self.first).desired_rows(2).desired_width(f32::INFINITY).id_salt("split_first_message"));
-        first.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::MultilineTextInput, true, "First commit message"));
+        first.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::MultilineTextInput, true, tr("First commit message")));
         ui.add_space(6.0);
-        widgets::section(ui, "Second commit");
+        widgets::section(ui, tr("Second commit"));
         let second = ui
             .add(egui::TextEdit::multiline(&mut self.second).desired_rows(4).desired_width(f32::INFINITY).id_salt("split_second_message"));
-        second.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::MultilineTextInput, true, "Second commit message"));
+        second.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::MultilineTextInput, true, tr("Second commit message")));
 
         let reason = if !cx.idle {
-            Some("Wait for the current Git action to finish")
+            Some(tr("Wait for the current Git action to finish"))
         } else if self.head.is_none() {
-            Some("Check out a branch first")
+            Some(tr("Check out a branch first"))
         } else if first_count == 0 {
-            Some("Check at least one change for the first commit")
+            Some(tr("Check at least one change for the first commit"))
         } else if second_count == 0 {
-            Some("Leave at least one change for the second commit")
+            Some(tr("Leave at least one change for the second commit"))
         } else if self.first.trim().is_empty() || self.second.trim().is_empty() {
-            Some("Both commits need a message")
+            Some(tr("Both commits need a message"))
         } else {
             None
         };
@@ -315,18 +322,18 @@ impl ToolWindow for SplitWindow {
         let mut confirmed = false;
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let button = widgets::primary_button(ui, "Split", reason.is_none());
+                let button = widgets::primary_button(ui, tr("Split"), reason.is_none());
                 let button = match reason {
                     Some(reason) => button.on_disabled_hover_text(reason),
-                    None => button.on_hover_text("Rewrites the commit as two commits"),
+                    None => button.on_hover_text(tr("Rewrites the commit as two commits")),
                 };
                 confirmed = button.clicked();
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     self.closing = true;
                 }
                 if !cx.idle {
                     ui.spinner();
-                    ui.label(RichText::new("Waiting for the current action").small().color(c.muted));
+                    ui.label(RichText::new(tr("Waiting for the current action")).small().color(c.muted));
                 }
             });
         });
@@ -346,13 +353,13 @@ impl ToolWindow for SplitWindow {
                         };
                         let short_hash = self.short_hash.clone();
                         cx.act_recording(
-                            format!("Split {}", self.short_hash),
-                            "Split commit",
+                            tr_fmt!("Split {hash}", hash = self.short_hash),
+                            tr("Split commit"),
                             Some(self.subject.clone()),
                             UndoMode::Soft,
                             move |client, repo| {
                                 client.split_commit(&request, repo)?;
-                                Ok(Some(format!("Split {short_hash} into two commits.")))
+                                Ok(Some(tr_fmt!("Split {hash} into two commits.", hash = short_hash)))
                             },
                         );
                         self.closing = true;

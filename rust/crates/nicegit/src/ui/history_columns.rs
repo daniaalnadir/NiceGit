@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use egui::{Rangef, Sense, Ui};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::widgets;
 
@@ -33,12 +34,12 @@ impl Column {
 
     pub fn title(self) -> &'static str {
         match self {
-            Column::Refs => "Branch / tag",
-            Column::Graph => "Graph",
-            Column::Message => "Commit message",
-            Column::Author => "Author",
-            Column::Date => "Date",
-            Column::Id => "Commit",
+            Column::Refs => tr("Branch / tag"),
+            Column::Graph => tr("Graph"),
+            Column::Message => tr("Commit message"),
+            Column::Author => tr("Author"),
+            Column::Date => tr("Date"),
+            Column::Id => tr("Commit"),
         }
     }
 
@@ -198,8 +199,8 @@ impl Layout {
 pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height: f32) {
     let c = theme::of(ui);
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), Sense::click());
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, "History columns"));
-    let response = response.on_hover_text("Drag a column's edge to resize it. Right-click to choose columns.");
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, tr("History columns")));
+    let response = response.on_hover_text(tr("Drag a column's edge to resize it. Right-click to choose columns."));
     let layout = columns.layout(rect.left(), rect.right(), graph);
     let font = egui::TextStyle::Small.resolve(ui.style());
     let y = rect.center().y;
@@ -224,7 +225,9 @@ pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height:
         let edge = if column.before_message() { span.max } else { span.min };
         let grab = egui::Rect::from_x_y_ranges(Rangef::new(edge - GRAB, edge + GRAB), rect.y_range());
         let handle = ui.interact(grab, ui.scope_id().with(("history column edge", column)), Sense::click_and_drag());
-        handle.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("Resize the {} column", column.title())));
+        handle.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Unknown, true, tr_fmt!("Resize the {column} column", column = column.title()))
+        });
         let active = handle.hovered() || handle.dragged();
         if active {
             ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
@@ -253,7 +256,7 @@ pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height:
     }
 
     response.context_menu(|ui| {
-        ui.label(egui::RichText::new("Columns").small().color(c.muted));
+        ui.label(egui::RichText::new(tr("Columns")).small().color(c.muted));
         for column in Column::ALL {
             let mut shown = columns.shown(column);
             let toggle = widgets::checkbox(ui, column != Column::Message, &mut shown, column.title());
@@ -262,7 +265,7 @@ pub fn header(ui: &mut Ui, columns: &mut HistoryColumns, graph: f32, row_height:
             }
         }
         ui.separator();
-        if ui.add_enabled(!columns.widths.is_empty(), egui::Button::new("Restore column widths")).clicked() {
+        if ui.add_enabled(!columns.widths.is_empty(), egui::Button::new(tr("Restore column widths"))).clicked() {
             columns.widths.clear();
             ui.close();
         }

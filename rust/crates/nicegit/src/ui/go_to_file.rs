@@ -1,6 +1,7 @@
 //! Go to file (Command-P): a fuzzy finder over the repository's tracked files. Enter opens the
 //! file's history, Command-Enter its blame, and Option-Enter the built-in editor.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::PathBuf;
 
 use egui::{Key, KeyboardShortcut, Modifiers, RichText};
@@ -147,7 +148,7 @@ impl NiceGitApp {
                 ui.label(RichText::new(icon::FILE_MAGNIFYING_GLASS).size(18.0).color(c.muted));
                 let field = ui.add(
                     egui::TextEdit::singleline(&mut state.query)
-                        .hint_text("Type a file name")
+                        .hint_text(tr("Type a file name"))
                         .frame(egui::Frame::NONE)
                         .font(egui::FontId::proportional(17.0))
                         .desired_width(f32::INFINITY),
@@ -193,16 +194,16 @@ impl NiceGitApp {
             }
             egui::ScrollArea::vertical().max_height(380.0).auto_shrink([false, true]).show(ui, |ui| match &state.listing {
                 Listing::Loading => {
-                    ui.label(RichText::new("Loading files…").color(c.muted));
+                    ui.label(RichText::new(tr("Loading files…")).color(c.muted));
                 }
                 Listing::Failed(error) => {
                     ui.label(RichText::new(error).color(c.danger));
                 }
                 Listing::Ready(_) if state.query.trim().is_empty() => {
-                    ui.label(RichText::new("Type to find a file").color(c.muted));
+                    ui.label(RichText::new(tr("Type to find a file")).color(c.muted));
                 }
                 Listing::Ready(_) if state.matches.is_empty() => {
-                    ui.label(RichText::new("No matching files").color(c.muted));
+                    ui.label(RichText::new(tr("No matching files")).color(c.muted));
                 }
                 Listing::Ready(_) => {
                     for (row, &index) in state.matches.iter().enumerate() {
@@ -255,7 +256,11 @@ impl NiceGitApp {
                 }
             });
             ui.separator();
-            ui.label(RichText::new(format!("Enter history · {command}-Enter blame · {alt}-Enter edit")).small().color(c.muted));
+            ui.label(
+                RichText::new(tr_fmt!("Enter history · {command}-Enter blame · {alt}-Enter edit", command = command, alt = alt))
+                    .small()
+                    .color(c.muted),
+            );
         });
         if modal.should_close() {
             close = true;
@@ -283,7 +288,7 @@ impl NiceGitApp {
                 // A file with unsaved edits in its editor is not replaced by a fresh copy.
                 let id = format!("editor:{path}");
                 if self.tools.iter().any(|tool| tool.id() == id && tool.has_unsaved_changes()) {
-                    self.notify("Save or close the file you are editing first.", true);
+                    self.notify(tr("Save or close the file you are editing first."), true);
                 } else {
                     self.open_tool(Box::new(tools::editor::EditorWindow::new(root, path)));
                 }

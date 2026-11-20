@@ -1,0 +1,99 @@
+# zh-Hans translations. Format: English source, a tab, then the translation.
+Settings	设置
+General	通用
+Language	语言
+Translations may be incomplete. Corrections are welcome on GitHub.	译文可能不完整。欢迎在 GitHub 上提出更正。
+Check for new versions	检查新版本
+Asks GitHub once a day for the latest version number. Nothing else is sent.	每天向 GitHub 查询一次最新版本号，不会发送其他任何信息。
+Notify me when work finishes in the background	后台工作完成时通知我
+Shows a desktop notification when an action you started finishes while NiceGit is not in focus.	当你发起的操作在 NiceGit 不在焦点时完成，显示桌面通知。
+Appearance	外观
+System	系统
+Light	浅色
+Dark	深色
+System ({language})	系统 ({language})
+No Japanese font was found; some text may not display.	未找到日语字体，部分文字可能无法显示。
+No Chinese font was found; some text may not display.	未找到中文字体，部分文字可能无法显示。
+Graph colours	图表颜色
+Diffs	差异
+Hide whitespace-only changes	隐藏仅有空白的更改
+Show diffs side by side	并排显示差异
+Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides.	当前未生效：差异面板窄于 {minimum} 点。加宽面板即可同时查看两侧。
+Needs a diff panel at least {minimum} points wide.	需要至少 {minimum} 点宽的差异面板。
+Show changed words inline	在行内显示更改的词语
+Syntax highlighting	语法高亮
+External editor	外部编辑器
+The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.	在编辑器中打开文件的命令；文件路径会添加在其后。已更改的文件随后会提供在其中打开的选项。
+Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. Automatic turns this on when at least five of the last twenty commits use the convention.	在摘要上方提供类型菜单、范围和 Breaking，选择的类型会写入摘要。“自动”会在最近 20 次提交中至少有 5 次使用该约定时开启此功能。
+Committing	提交
+Refresh automatically when files change outside NiceGit	NiceGit 之外的文件更改时自动刷新
+Fetch from remotes	从远程获取
+Off	关闭
+5 min	5 分钟
+15 min	15 分钟
+30 min	30 分钟
+1 hour	1 小时
+How often the open repository is fetched in the background, so ahead and behind counts stay current	后台获取当前打开的仓库的频率，以保持领先和落后的计数为最新
+Pull with	拉取方式
+How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.	设置“拉取”如何引入上游的提交。“跟随 Git 设置”会读取 pull.rebase、branch.<名称>.rebase 和 pull.ff；若都未设置，拉取只做快进。“获取和拉取”菜单还会一次性执行合并或变基式拉取。
+Clone into	克隆到
+Not set	未设置
+Choose…	选择…
+Clones go into this folder by default	克隆默认放入此文件夹
+Clear	清除
+Default folder for clones	克隆的默认文件夹
+The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.	“克隆”对话框会从此文件夹填入目标位置。未设置时，记住第一次克隆的上级文件夹。
+Custom actions	自定义操作
+Show pull request checks on branches	在分支上显示拉取请求检查
+A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.	分支标签和侧栏中的圆点显示其未关闭的拉取请求或合并请求的检查是通过、失败还是待定。关闭后也将停止读取检查结果。
+Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.	这些主机上的远程仓库与 github.com 远程仓库一样，可使用拉取请求、问题以及“在 GitHub 上打开”。
+One hostname per line, such as github.example.com	每行一个主机名，例如 github.example.com
+GitHub Enterprise hosts	GitHub Enterprise 主机
+Not saved, as these are not hostnames: {hosts}. Use a name such as github.example.com, without https:// or a port.	未保存，因为它们不是主机名：{hosts}。请使用 github.example.com 这样的名称，不要包含 https:// 或端口。
+Remotes on these hosts get Open on GitLab links, as gitlab.com remotes do.	这些主机上的远程仓库与 gitlab.com 远程仓库一样，可使用“在 GitLab 上打开”链接。
+One hostname per line, such as gitlab.example.com	每行一个主机名，例如 gitlab.example.com
+GitLab hosts	GitLab 主机
+Not saved, as these are not hostnames: {hosts}. Use a name such as gitlab.example.com, without https:// or a port.	未保存，因为它们不是主机名：{hosts}。请使用 gitlab.example.com 这样的名称，不要包含 https:// 或端口。
+Layout	布局
+Interface size	界面大小
+Smaller (Ctrl/Cmd-minus)	缩小 (Ctrl/Cmd-减号)
+Larger (Ctrl/Cmd-plus)	放大 (Ctrl/Cmd-加号)
+Normal size	正常大小
+Restore default panel widths	恢复默认面板宽度
+Columns and panels return to their original sizes	列和面板恢复为原始大小
+Accessibility	无障碍
+Larger text	更大的文字
+Draws the interface a quarter larger again, on top of the interface size	在界面大小的基础上再放大四分之一
+Reduce motion	减少动态效果
+Switches off the fades and eased movements in the interface	关闭界面中的淡入淡出和缓动效果
+Keyboard shortcuts	键盘快捷键
+Request a feature	请求新功能
+Report a problem	报告问题
+Issue links	问题链接
+Link #123 to the repository's host	将 #123 链接到仓库的主机
+For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). On Azure DevOps, AB#123 links to the work item.	对于 GitHub、GitLab 或 Bitbucket 上的 origin 远程仓库，#123 链接到问题（在 GitLab 上，!123 链接到合并请求）。在 Azure DevOps 上，AB#123 链接到工作项。
+No custom rules. A rule can link text such as JIRA-7 to your tracker.	没有自定义规则。规则可将 JIRA-7 等文本链接到你的问题跟踪器。
+Only for repositories whose remote contains "{remote}"	仅适用于远程仓库包含 "{remote}" 的仓库
+Edit	编辑
+Change this rule	修改此规则
+Remove this rule	删除此规则
+Add rule	添加规则
+Add a rule that links text in messages	添加一条用于链接消息中文本的规则
+Pattern (a regular expression)	模式（正则表达式）
+Address to open ($0 is the match, $1 to $9 its groups)	要打开的地址（$0 为匹配内容，$1 到 $9 为其分组）
+Only for repositories whose remote contains (empty for all)	仅适用于远程仓库包含以下内容的仓库（留空则适用于全部）
+Rule pattern	规则模式
+Rule address	规则地址
+Rule remote filter	规则的远程过滤
+Save rule	保存规则
+3 lines	3 行
+10 lines	10 行
+25 lines	25 行
+Always	始终
+Automatic	自动
+Colour-blind safe	色盲友好
+Fast-forward only	仅快进
+File	文件
+Follow Git's settings	遵循 Git 设置
+Muted	柔和
+Standard	标准

@@ -1,0 +1,463 @@
+# de: tools and the repository pickers.
+Save as ZIP	Als ZIP speichern
+Writing {name}…	{name} wird geschrieben …
+Saved {name} ({size}).	{name} gespeichert ({size}).
+{name} output	{name}-Ausgabe
+The program printed nothing.	Das Programm hat nichts ausgegeben.
+Error output	Fehlerausgabe
+This file is not UTF-8 text, so it cannot be edited here.	Diese Datei ist kein UTF-8-Text und kann hier nicht bearbeitet werden.
+The file changed on disk since you opened it. Reload it, then reapply your edits.	Die Datei wurde seit dem Öffnen geändert. Lade sie neu und wende deine Änderungen dann erneut an.
+{name} — edited	{name} — bearbeitet
+Saved {path}.	{path} gespeichert.
+Revert	Zurücksetzen
+Discard your edits and reload the file	Änderungen verwerfen und die Datei neu laden
+File contents	Dateiinhalt
+Clean Up Branches	Branches aufräumen
+Clean up {count} branch	{count} Branch aufräumen
+Clean up {count} branches	{count} Branches aufräumen
+Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.	Lokale Branches, die in {current} zusammengeführt wurden und deren Remote-Branch gelöscht wurde oder die eine Zeit lang keine Commits erhalten haben.
+Also list unmerged branches with no commit for	Auch nicht zusammengeführte Branches ohne Commit seit folgender Zeit anzeigen
+ days	 Tage
+Deleted {count} branch.	{count} Branch gelöscht.
+Deleted {count} branches.	{count} Branches gelöscht.
+Undo	Rückgängig
+Restore {count} branch	{count} Branch wiederherstellen
+Restore {count} branches	{count} Branches wiederherstellen
+Finding branches…	Branches werden gesucht …
+No branches to clean up.	Keine Branches zum Aufräumen.
+{count} to review	{count} zu prüfen
+Select merged	Zusammengeführte auswählen
+Main branch	Hauptbranch
+The main line is never selected automatically. Tick it only if you mean to delete it.	Die Hauptlinie wird nie automatisch ausgewählt. Aktiviere sie nur, wenn du sie wirklich löschen willst.
+Merged	Zusammengeführt
+Not merged	Nicht zusammengeführt
+Upstream gone	Upstream gelöscht
+Its branch on the remote was deleted, as usually happens once a pull request is merged	Sein Branch auf dem Remote wurde gelöscht, was meist geschieht, sobald ein Pull Request zusammengeführt wurde
+{count} selected branch is the main line. Deleting it removes that line of work locally.	{count} ausgewählter Branch ist die Hauptlinie. Löschen entfernt diese Arbeitslinie lokal.
+{count} selected branches are the main line. Deleting it removes that line of work locally.	{count} ausgewählte Branches sind die Hauptlinie. Löschen entfernt diese Arbeitslinie lokal.
+{count} selected branch has commits on no other branch. Undo can restore it until another deletion.	{count} ausgewählter Branch hat Commits, die auf keinem anderen Branch vorkommen. Rückgängig kann ihn bis zur nächsten Löschung wiederherstellen.
+{count} selected branches have commits on no other branch. Undo can restore them until another deletion.	{count} ausgewählte Branches haben Commits, die auf keinem anderen Branch vorkommen. Rückgängig kann sie bis zur nächsten Löschung wiederherstellen.
+Delete {count} branch…	{count} Branch löschen …
+Delete {count} branches…	{count} Branches löschen …
+{count} selected	{count} ausgewählt
+Delete {count} local branch?	{count} lokalen Branch löschen?
+Delete {count} local branches?	{count} lokale Branches löschen?
+Remote branches are not changed.	Remote-Branches bleiben unverändert.
+Unmerged branches hold commits found on no other branch.	Nicht zusammengeführte Branches enthalten Commits, die auf keinem anderen Branch vorkommen.
+Undo restores them until you take another undoable action.	Rückgängig stellt sie wieder her, bis du eine weitere rückgängig machbare Aktion ausführst.
+Delete, including unmerged	Einschließlich nicht zusammengeführter löschen
+Delete branches	Branches löschen
+Delete {count} branch	{count} Branch löschen
+Delete {count} branches	{count} Branches löschen
+Deleted {count} branch. Undo restores them.	{count} Branch gelöscht. Rückgängig stellt sie wieder her.
+Deleted {count} branches. Undo restores them.	{count} Branches gelöscht. Rückgängig stellt sie wieder her.
+Deleted {deleted} of {total} before stopping. Undo restores those. {error}	{deleted} von {total} gelöscht, bevor abgebrochen wurde. Rückgängig stellt diese wieder her. {error}
+Restored {restored} of {total} before stopping. {error}	{restored} von {total} wiederhergestellt, bevor abgebrochen wurde. {error}
+Restored {count} branch.	{count} Branch wiederhergestellt.
+Restored {count} branches.	{count} Branches wiederhergestellt.
+{count}+ commits	{count}+ Commits
+{count} commit	{count} Commit
+{count} commits	{count} Commits
+{first} on {other} that {current} does not have · {second} on {current} that {other} does not have	{first} auf {other}, die {current} nicht hat · {second} auf {current}, die {other} nicht hat
+These branches share no history.	Diese Branches haben keinen gemeinsamen Verlauf.
+Changed files…	Geänderte Dateien …
+The files that merging {branch} would change	Die Dateien, die das Zusammenführen von {branch} ändern würde
+No commits.	Keine Commits.
+Only the newest {count} are listed.	Nur die neuesten {count} werden angezeigt.
+{other} and {current}	{other} und {current}
+Comparing the branches…	Branches werden verglichen …
+On {other} but not on {current}	Auf {other}, aber nicht auf {current}
+On {current} but not on {other}	Auf {current}, aber nicht auf {other}
+Search commit messages	Commit-Nachrichten durchsuchen
+Search author names and emails	Autorennamen und E-Mail-Adressen durchsuchen
+Text added or removed in a file	Text, der in einer Datei hinzugefügt oder entfernt wurde
+Full or abbreviated commit ID	Vollständige oder gekürzte Commit-ID
+Code change	Codeänderung
+Commit ID	Commit-ID
+Search commits	Commits suchen
+Press Return to search every branch, including history not yet loaded in the graph.	Drücke Return, um alle Branches zu durchsuchen, auch den Verlauf, der noch nicht im Graphen geladen ist.
+Searching	Wird gesucht …
+No commits found	Keine Commits gefunden
+Showing the newest {limit} matches	Die neuesten {limit} Treffer werden angezeigt
+Open {hash} in the inspector	{hash} im Inspektor öffnen
+Before	Vorher
+After	Nachher
+Added in this change	In dieser Änderung hinzugefügt
+Deleted in this change	In dieser Änderung gelöscht
+Compare	Vergleichen
+Comparing files	Dateien werden verglichen …
+No differences in tracked files	Keine Unterschiede in verfolgten Dateien
+working files	Arbeitsdateien
+{count} changed file	{count} geänderte Datei
+{count} changed files	{count} geänderte Dateien
+Comparison unavailable	Vergleich nicht verfügbar
+Comparing…	Wird verglichen …
+Select a file to see how it changed	Wähle eine Datei aus, um die Änderungen zu sehen
+Side by side	Nebeneinander
+Loading the change	Änderung wird geladen …
+{title} image	{title}-Bild
+This format cannot be previewed	Dieses Format kann nicht angezeigt werden
+{bytes} bytes	{bytes} Bytes
+commit {revision}	Commit {revision}
+Find in {label}	In {label} suchen
+Text in files	Text in Dateien
+Match case	Groß-/Kleinschreibung beachten
+Searching {label}	Suche in {label} …
+Press Return to search every tracked text file.	Drücke Return, um alle verfolgten Textdateien zu durchsuchen.
+No matches	Keine Treffer
+First {limit} matches	Die ersten {limit} Treffer
+{matches} in {files}	{matches} in {files}
+{count} match	{count} Treffer
+{count} matches	{count} Treffer
+{count} file	{count} Datei
+Blame	Blame
+Show who last changed this line	Anzeigen, wer diese Zeile zuletzt geändert hat
+File history: {name}	Dateiverlauf: {name}
+Latest {limit} commits	Neueste {limit} Commits
+Select a commit to see how it changed this file.	Wähle einen Commit aus, um zu sehen, wie er diese Datei geändert hat.
+in commit {revision}	in Commit {revision}
+Reading history	Verlauf wird gelesen …
+No commits in this checkout changed this file.	In diesem Checkout hat kein Commit diese Datei geändert.
+As {path}	Als {path}
+Delete file to this version…	Datei auf diese Version löschen …
+Restore file to this version…	Datei auf diese Version wiederherstellen …
+Blame at this commit	Blame an diesem Commit
+Copy commit hash	Commit-Hash kopieren
+Delete file	Datei löschen
+Restore this version	Diese Version wiederherstellen
+Restore file	Datei wiederherstellen
+Finish the current Git operation first.	Schließe zuerst die laufende Git-Operation ab.
+Git restores by path. This commit holds the file under another name.	Git stellt nach Pfad wieder her. Dieser Commit enthält die Datei unter einem anderen Namen.
+Replace this file with its version in the selected commit.	Ersetzt diese Datei durch ihre Version im ausgewählten Commit.
+Loading change	Änderung wird geladen …
+Delete {path}?	{path} löschen?
+Restore {path}?	{path} wiederherstellen?
+This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.	Diese Datei existiert {description} nicht. Sie wird aus deinen Arbeitsdateien gelöscht, und die Löschung wird vorgemerkt. Nicht committete Änderungen daran gehen verloren. Deine Commits und andere Dateien bleiben unverändert.
+Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.	Deine Arbeitskopie dieser Datei wird durch ihre Version {description} ersetzt, und die Änderung wird vorgemerkt. Vorgemerkte und nicht vorgemerkte Änderungen daran gehen verloren. Deine Commits und andere Dateien bleiben unverändert.
+Deleted	Gelöscht
+Restored	Wiederhergestellt
+{verb} {path} {description}.	{verb}: {path} {description}.
+Restore {path}	{path} wiederherstellen
+Soft: keep changes staged	Soft: Änderungen bereitgestellt lassen
+Mixed: keep changes unstaged	Gemischt: Änderungen nicht bereitgestellt lassen
+Hard: discard local changes	Hart: lokale Änderungen verwerfen
+Moves the branch without changing the index or working files. Changes from the removed commits remain staged.	Verschiebt den Branch, ohne den Index oder die Arbeitsdateien zu ändern. Änderungen aus den entfernten Commits bleiben bereitgestellt.
+Moves the branch and resets the index. Working files are kept, and the changes become unstaged.	Verschiebt den Branch und setzt den Index zurück. Arbeitsdateien bleiben erhalten, und die Änderungen werden nicht bereitgestellt.
+Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.	Verschiebt den Branch und ersetzt den Index und die verfolgten Dateien. Nicht committete Änderungen an verfolgten Dateien gehen verloren. Nicht verfolgte Dateien, die wiederhergestellte Pfade blockieren, können ebenfalls gelöscht werden.
+Reset to {target}	Zurücksetzen auf {target}
+Moves {branch} to this commit.	Verschiebt {branch} auf diesen Commit.
+Mode	Modus
+Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.	Ein Hard-Reset verwirft nicht committete Änderungen an verfolgten Dateien. Dies lässt sich im Änderungen-Bereich von NiceGit nicht rückgängig machen.
+The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.	Der Branch zeigt danach auf den ausgewählten Commit. Commits außerhalb seines Verlaufs sind danach nicht mehr auf diesem Branch. Remote-Branches bleiben unverändert.
+Reset and discard changes	Zurücksetzen und Änderungen verwerfen
+Reset branch	Branch zurücksetzen
+Waiting for the current action	Warte auf die aktuelle Aktion
+Reset {branch}	{branch} zurücksetzen
+Reset {branch} to {target}.	{branch} auf {target} zurückgesetzt.
+Reset	Zurücksetzen
+line {start}	Zeile {start}
+lines {start}–{end}	Zeilen {start}–{end}
+History of {file} {lines}	Verlauf von {file}, {lines}
+Select a commit to see how it changed these lines.	Wähle einen Commit aus, um zu sehen, wie er diese Zeilen geändert hat.
+Uncommitted changes are not included.	Nicht committete Änderungen sind nicht enthalten.
+No commits changed these lines.	Kein Commit hat diese Zeilen geändert.
+GitFlow	GitFlow
+Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.	Branches für Releases, laufende Entwicklung und kurzlebige Arbeit, kompatibel mit dem Werkzeug git-flow.
+Reading GitFlow settings…	GitFlow-Einstellungen werden gelesen …
+Production branch	Produktionsbranch
+Development branch	Entwicklungsbranch
+Feature prefix	Präfix für Features
+Release prefix	Präfix für Releases
+Hotfix prefix	Präfix für Hotfixes
+Version tag prefix	Präfix für Versions-Tags
+The production and development branches need different names.	Produktions- und Entwicklungsbranch brauchen unterschiedliche Namen.
+Set up GitFlow	GitFlow einrichten
+GitFlow is set up.	GitFlow ist eingerichtet.
+Production  {branch}	Produktion  {branch}
+Development  {branch}	Entwicklung  {branch}
+Start	Starten
+Finish	Abschließen
+Feature name	Feature-Name
+Version, such as 1.2.0	Version, z. B. 1.2.0
+Creates {name} from {base} and checks it out.	Erstellt {name} aus {base} und checkt es aus.
+Feature	Feature
+Release	Release
+Hotfix	Hotfix
+feature	Feature
+release	Release
+hotfix	Hotfix
+Start {kind}	{kind} starten
+Start {kind} {name}	{kind} {name} starten
+Started {branch}.	{branch} gestartet.
+Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.	Checke einen {feature}…-, {release}…- oder {hotfix}…-Branch aus, um ihn abzuschließen.
+Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Führt {branch} ohne Fast-Forward in {develop} zusammen und löscht danach {branch}. Tritt ein Konflikt auf, hält NiceGit an, damit du ihn lösen und danach erneut abschließen kannst.
+Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Führt {branch} ohne Fast-Forward in {main} und {develop} zusammen, setzt das Tag {tag_prefix}{version} auf {main} und löscht danach {branch}. Tritt ein Konflikt auf, hält NiceGit an, damit du ihn lösen und danach erneut abschließen kannst.
+Tag message (optional)	Tag-Nachricht (optional)
+Commit or stash your changes before finishing.	Committe oder stashe deine Änderungen, bevor du abschließt.
+Finish {branch}	{branch} abschließen
+Git Settings	Git-Einstellungen
+Settings saved in this repository's own Git configuration.	In der eigenen Git-Konfiguration dieses Repositorys gespeicherte Einstellungen.
+Filter settings	Einstellungen filtern
+Read the settings again	Einstellungen erneut lesen
+Reading the settings…	Einstellungen werden gelesen …
+No settings are saved in this repository yet. Add one below.	In diesem Repository sind noch keine Einstellungen gespeichert. Füge unten eine hinzu.
+No setting matches the filter.	Keine Einstellung passt zum Filter.
+Remove {key}	{key} entfernen
+Edit {key}	{key} bearbeiten
+Setting value	Einstellungswert
+Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.	{key} entfernen? Git löscht diese Einstellung aus diesem Repository. Andere Einstellungen bleiben unverändert.
+Has several values; edit in a terminal	Mehrere Werte vorhanden; im Terminal bearbeiten
+Global settings, read only	Globale Einstellungen, nur lesend
+From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.	Aus deiner globalen Git-Konfiguration, die für jedes Repository gilt. Ändere sie im Terminal mit git config --global.
+Reading global settings…	Globale Einstellungen werden gelesen …
+Add a setting	Eine Einstellung hinzufügen
+section.name	section.name
+Setting name	Name der Einstellung
+Value	Wert
+Add	Hinzufügen
+{key} is already set. Edit its row instead.	{key} ist bereits gesetzt. Bearbeite stattdessen dessen Zeile.
+Set {key}	{key} setzen
+Set {key}.	{key} gesetzt.
+Removed {key}.	{key} entfernt.
+Jan	Jan
+Feb	Feb
+Mar	Mär
+Apr	Apr
+May	Mai
+Jun	Jun
+Jul	Jul
+Aug	Aug
+Sep	Sep
+Oct	Okt
+Nov	Nov
+Dec	Dez
+{day} {month} {year}	{day}. {month} {year}
+Period	Zeitraum
+30 days	30 Tage
+90 days	90 Tage
+1 year	1 Jahr
+All time	Gesamte Zeit
+This branch	Dieser Branch
+All branches	Alle Branches
+Reading history… {count} commits so far	Verlauf wird gelesen … {count} Commits bisher
+Insights	Einblicke
+Reading the history was cancelled.	Das Lesen des Verlaufs wurde abgebrochen.
+Read again	Erneut lesen
+No commits in this period.	In diesem Zeitraum gibt es keine Commits.
+Showing the newest 20,000 commits.	Die neuesten 20.000 Commits werden angezeigt.
+{first} – {last}	{first} – {last}
+Commits	Commits
+Authors	Autoren
+Active days	Aktive Tage
+First to last commit	Erster bis letzter Commit
+Commits over time	Commits im Zeitverlauf
+Week of {date}: {commits}	Woche vom {date}: {commits}
+{date}: {commits}	{date}: {commits}
+Lines	Zeilen
+Last active	Zuletzt aktiv
+Most changed files	Meistgeänderte Dateien
+No files changed in this period.	In diesem Zeitraum wurden keine Dateien geändert.
+Open its history	Verlauf öffnen
+{count} lines	{count} Zeilen
+Folders	Ordner
+just now	gerade eben
+{count} minute ago	vor {count} Minute
+{count} minutes ago	vor {count} Minuten
+{count} hour ago	vor {count} Stunde
+{count} hours ago	vor {count} Stunden
+{count} day ago	vor {count} Tag
+{count} days ago	vor {count} Tagen
+{count} month ago	vor {count} Monat
+{count} months ago	vor {count} Monaten
+{count} year ago	vor {count} Jahr
+{count} years ago	vor {count} Jahren
+Tip history of {branch}	Spitzenverlauf von {branch}
+Recover Lost Work	Verlorene Arbeit wiederherstellen
+Every commit {branch} has pointed to, including ones it no longer points to.	Jeder Commit, auf den {branch} zeigte, einschließlich solcher, auf die er nicht mehr zeigt.
+Every position HEAD has had, including commits that no branch points to any more.	Jede Position, die HEAD jemals hatte, einschließlich Commits, auf die kein Branch mehr zeigt.
+Read the reflog again	Reflog erneut lesen
+Reading the reflog…	Reflog wird gelesen …
+No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.	Kein Spitzenverlauf. Git führt für diesen Branch kein Reflog, daher werden frühere Spitzen nicht erfasst.
+No history yet.	Noch kein Verlauf.
+Not on any branch	Auf keinem Branch
+Only the reflog keeps this commit. Git may delete it after the reflog expires.	Nur das Reflog hält diesen Commit. Git kann ihn nach Ablauf des Reflogs löschen.
+Create branch here…	Branch hier erstellen …
+Reset {name} to here…	{name} hierher zurücksetzen …
+Select an entry to see its commit.	Wähle einen Eintrag aus, um seinen Commit zu sehen.
+Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.	Nur das Reflog hält diesen Commit. Git kann ihn löschen, wenn das Reflog abläuft. Erstelle einen Branch, um ihn zu behalten.
+Show in graph	Im Graphen zeigen
+Copy hash	Hash kopieren
+Create branch at {hash}	Branch bei {hash} erstellen
+The branch keeps this commit and its history. Your current checkout does not change.	Der Branch behält diesen Commit und seinen Verlauf. Dein aktueller Checkout bleibt unverändert.
+Branch name	Branchname
+Create branch	Branch erstellen
+Create branch {name}	Branch {name} erstellen
+Created branch {name}.	Branch {name} erstellt.
+{count} change	{count} Änderung
+{count} changes	{count} Änderungen
+(some changes)	(einige Änderungen)
+moves as a whole	wird als Ganzes verschoben
+Hide the changes	Änderungen ausblenden
+Show the changes	Änderungen anzeigen
+Change {number}	Änderung {number}
+{count} more lines	{count} weitere Zeilen
+Split commit	Commit aufteilen
+Rewrites {branch} as two commits. The commits after it are replayed.	Schreibt {branch} als zwei Commits neu. Die Commits danach werden erneut angewendet.
+Reading the commit's changes	Änderungen des Commits werden gelesen …
+This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.	Dieser Commit ist bereits auf einem Remote. Beim Aufteilen wird er neu geschrieben, daher musst du force-pushen, und alle, die ihn haben, müssen ihre Kopie abgleichen.
+Changes in the first commit	Änderungen im ersten Commit
+This commit has no changes to split.	Dieser Commit hat keine Änderungen zum Aufteilen.
+{first} in the first commit, {second} in the second.	{first} im ersten Commit, {second} im zweiten.
+First commit	Erster Commit
+Second commit	Zweiter Commit
+First commit message	Nachricht des ersten Commits
+Second commit message	Nachricht des zweiten Commits
+Wait for the current Git action to finish	Warte, bis die aktuelle Git-Aktion abgeschlossen ist
+Check out a branch first	Checke zuerst einen Branch aus
+Check at least one change for the first commit	Wähle mindestens eine Änderung für den ersten Commit aus
+Leave at least one change for the second commit	Lass mindestens eine Änderung für den zweiten Commit übrig
+Both commits need a message	Beide Commits brauchen eine Nachricht
+Rewrites the commit as two commits	Schreibt den Commit als zwei Commits neu
+Split {hash}	{hash} aufteilen
+Split {hash} into two commits.	{hash} in zwei Commits aufgeteilt.
+No worktrees were listed for this repository.	Für dieses Repository wurden keine Worktrees aufgelistet.
+Remove worktree {path}	Worktree {path} entfernen
+Removed the worktree. Its branch was kept.	Der Worktree wurde entfernt. Sein Branch bleibt erhalten.
+A worktree folder no longer exists on disk. Forget it to remove it from Git's list.	Ein Worktree-Ordner existiert nicht mehr auf dem Datenträger. Vergiss ihn, um ihn aus Gits Liste zu entfernen.
+{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.	{count} Worktree-Ordner existieren nicht mehr auf dem Datenträger. Vergiss sie, um sie aus Gits Liste zu entfernen.
+Forgot the missing worktrees.	Fehlende Worktrees vergessen.
+Create a worktree	Worktree erstellen
+Check a local branch out in its own folder, so you can work on it without switching this checkout.	Checke einen lokalen Branch in einem eigenen Ordner aus, damit du daran arbeiten kannst, ohne diesen Checkout zu wechseln.
+Every local branch is already checked out. Create a branch first.	Jeder lokale Branch ist bereits ausgecheckt. Erstelle zuerst einen Branch.
+Choose a branch	Branch auswählen
+Parent folder	Übergeordneter Ordner
+Choose folder	Ordner auswählen
+Choose where the new worktree folder goes	Wähle, wo der neue Worktree-Ordner liegen soll
+Type a path or choose a folder	Pfad eingeben oder Ordner wählen
+Folder name	Ordnername
+feature-branch	feature-branch
+Creates {path}	Erstellt {path}
+Checking the branch	Branch wird geprüft …
+Create worktree	Worktree erstellen
+Create worktree for {name}	Worktree für {name} erstellen
+Created a worktree for {name} at {path}.	Worktree für {name} unter {path} erstellt.
+{name} moved after it was selected. Choose it again and review it.	{name} hat sich nach der Auswahl geändert. Wähle es erneut aus und prüfe es.
+Could not read {name}: {error}	{name} konnte nicht gelesen werden: {error}
+A linked worktree checks out another branch in its own folder and shares this repository's history.	Ein verknüpfter Worktree checkt einen anderen Branch in seinem eigenen Ordner aus und teilt den Verlauf dieses Repositorys.
+Main	Haupt
+Open here	Hier geöffnet
+Locked	Gesperrt
+Missing	Fehlt
+Bare repository	Bare-Repository
+Detached HEAD	Losgelöster HEAD
+A locked worktree must be unlocked in a terminal before it can be removed	Ein gesperrter Worktree muss im Terminal entsperrt werden, bevor er entfernt werden kann
+The main worktree and the checkout open here cannot be removed	Der Haupt-Worktree und der hier geöffnete Checkout können nicht entfernt werden
+Remove this worktree and its folder	Diesen Worktree und seinen Ordner entfernen
+Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.	Diesen Worktree und seinen Ordner entfernen? Git verweigert das, wenn der Ordner nicht committete oder nicht verfolgte Dateien enthält. Der Branch bleibt erhalten.
+Remove worktree	Worktree entfernen
+Choose a remote to see its GitHub pull requests and issues.	Wähle ein Remote, um dessen GitHub-Pull-Requests und Issues zu sehen.
+Checking the GitHub CLI	GitHub CLI wird geprüft …
+Read GitHub again	GitHub erneut abrufen
+Pull requests	Pull Requests
+Issues	Issues
+pull requests	Pull Requests
+issues	Issues
+Closed	Geschlossen
+all	alle
+Filter loaded items by title, author, or number	Geladene Einträge nach Titel, Autor oder Nummer filtern
+No {state} {kind}	Keine {kind} ({state})
+No matches in the loaded items	Keine Treffer in den geladenen Einträgen
+Load more	Mehr laden
+Showing the first 1,000 items	Die ersten 1.000 Einträge werden angezeigt
+Back to the newer blame	Zurück zur neueren Blame-Ansicht
+at {revision}	bei {revision}
+at {revision} ({summary})	bei {revision} ({summary})
+Ignore whitespace	Leerraum ignorieren
+Attribute lines past whitespace-only changes to the commit that changed their content	Zeilen nach Änderungen, die nur Leerraum betreffen, dem Commit zuordnen, der ihren Inhalt geändert hat
+Skip commits in .git-blame-ignore-revs	Commits in .git-blame-ignore-revs überspringen
+Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does.	Zeilen, die nur durch die in .git-blame-ignore-revs aufgeführten Commits geändert wurden, etwa durch Umformatierung, werden der Änderung davor zugeordnet, wie es auch die Blame-Ansicht von GitHub tut.
+Blame: {name}	Blame: {name}
+Reading blame	Blame wird gelesen …
+The ignore list could not be used, so every commit is shown: {reason}	Die Ignorierliste konnte nicht verwendet werden, daher werden alle Commits angezeigt: {reason}
+Uncommitted	Nicht committet
+Your working changes	Deine Arbeitsänderungen
+Blame at HEAD	Blame bei HEAD
+Show commit in history	Commit im Verlauf anzeigen
+Copy commit ID	Commit-ID kopieren
+History of {lines}…	Verlauf von {lines} …
+This commit has no earlier version of the file	Dieser Commit hat keine frühere Version der Datei
+Blame before this change	Blame vor dieser Änderung
+Close this change	Diese Änderung schließen
+Shell	Shell
+{title} (exited)	{title} (beendet)
+[Process exited with status {code}]	[Prozess mit Status {code} beendet]
+[Process exited]	[Prozess beendet]
+Restart	Neu starten
+Could not start a shell: {error}	Shell konnte nicht gestartet werden: {error}
+New shell tab	Neuer Shell-Tab
+End this shell…	Diese Shell beenden …
+End this shell? Programs running in it stop.	Diese Shell beenden? Darin laufende Programme werden gestoppt.
+End shell	Shell beenden
+No shell open	Keine Shell geöffnet
+Give the workspace a name.	Gib dem Workspace einen Namen.
+Another workspace already has this name.	Ein anderer Workspace hat bereits diesen Namen.
+{count} repository	{count} Repository
+{count} repositories	{count} Repositories
+Save open tabs as workspace…	Geöffnete Tabs als Workspace speichern …
+Open workspace	Workspace öffnen
+Manage workspaces…	Workspaces verwalten …
+Workspaces	Workspaces
+Save workspace	Workspace speichern
+Workspace name	Name des Workspace
+Replace workspace {name}?	Workspace {name} ersetzen?
+It will hold the {count} open now instead of the folders it holds. Folders on disk are not changed.	Er enthält dann die {count}, die jetzt geöffnet sind, statt der bisherigen Ordner. Ordner auf dem Datenträger bleiben unverändert.
+Saved workspace {name} with {count}.	Workspace {name} mit {count} gespeichert.
+Workspace {name} has {missing}, which did not open: {list}.	Der Workspace {name} hat {missing}, die nicht geöffnet wurden: {list}.
+{count} missing folder	{count} fehlender Ordner
+{count} missing folders	{count} fehlende Ordner
+Every repository in workspace {name} is already open.	Alle Repositorys im Workspace {name} sind bereits geöffnet.
+Opened workspace {name}.	Workspace {name} geöffnet.
+Deleted workspace {name}. Its folders are unchanged.	Workspace {name} gelöscht. Seine Ordner bleiben unverändert.
+Name of {name}	Name von {name}
+Renamed workspace {from} to {to}.	Workspace {from} in {to} umbenannt.
+Delete workspace {name}?	Workspace {name} löschen?
+The saved list is removed. Its folders stay on disk, and any tabs open from it stay open.	Die gespeicherte Liste wird entfernt. Seine Ordner bleiben auf dem Datenträger, und Tabs, die daraus geöffnet sind, bleiben geöffnet.
+Find repositories	Repositories suchen
+Looking for repositories…	Repositories werden gesucht …
+No repositories found	Keine Repositorys gefunden
+No repositories found in {folder}.	In {folder} wurden keine Repositorys gefunden.
+Found {repositories} in {folder}	{repositories} in {folder} gefunden
+Showing the first {count}. Choose a folder inside this one to find the rest.	Die ersten {count} werden angezeigt. Wähle einen Ordner darin, um den Rest zu finden.
+Select all	Alle auswählen
+Select none	Keine auswählen
+Also open them as tabs	Außerdem als Tabs öffnen
+Opening many tabs reads each repository in the background.	Viele Tabs zu öffnen liest jedes Repository im Hintergrund.
+Add {count} to Recent	{count} zu „Zuletzt verwendet“ hinzufügen
+Not a repository	Kein Repository
+This folder isn't a repository. Look for repositories inside it?	Dieser Ordner ist kein Repository. Darin nach Repositorys suchen?
+Find	Suchen
+Find repositories in a folder	Repositorys in einem Ordner suchen
+Added {count} to Recent.	{count} zu „Zuletzt verwendet“ hinzugefügt.
+Added {added} of {total} to Recent. Recent keeps only the {limit} newest.	{added} von {total} zu „Zuletzt verwendet“ hinzugefügt. „Zuletzt verwendet“ behält nur die neuesten {limit}.
+The repositories were not opened as tabs, because an action is running.	Die Repositorys wurden nicht als Tabs geöffnet, weil eine Aktion läuft.
+The repositories were not opened as tabs, because a file is being edited.	Die Repositorys wurden nicht als Tabs geöffnet, weil gerade eine Datei bearbeitet wird.
+Opened {count} as tabs.	{count} als Tabs geöffnet.
+Host	Host
+Use SSH	SSH verwenden
+Filter repositories	Repositorys filtern
+Loading your repositories from GitHub	Deine Repositorys werden von GitHub geladen …
+GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.	Die GitHub-CLI ist für {host} nicht angemeldet. Führe {command} in einem Terminal aus und prüfe dann erneut.
+No repositories on this host	Auf diesem Host gibt es keine Repositorys
+Showing the first {count} repositories. Filter to narrow them.	Die ersten {count} Repositorys werden angezeigt. Filtere, um sie einzugrenzen.
+No repositories match the filter	Kein Repository passt zum Filter
+Private	Privat
+Fork	Fork
+Type a file name	Dateinamen eingeben
+Loading files…	Dateien werden geladen …
+Type to find a file	Gib etwas ein, um eine Datei zu finden
+Enter history · {command}-Enter blame · {alt}-Enter edit	Enter für Verlauf · {command}-Enter für Blame · {alt}-Enter zum Bearbeiten
+Delete {name}	{name} löschen
+Rename {name}	{name} umbenennen
+No saved workspaces. Save the open tabs as one from the Workspaces menu in the repositories column.	Keine gespeicherten Workspaces. Speichere die geöffneten Tabs über das Workspaces-Menü in der Repositorys-Spalte als einen.
+Reading history…	Verlauf wird gelesen …
+working file	Arbeitsdatei

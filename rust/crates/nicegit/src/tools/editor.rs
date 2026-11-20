@@ -2,6 +2,7 @@
 //! operations that could rewrite working files, and it will not overwrite a file that
 //! changed on disk since it was opened.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -45,7 +46,7 @@ impl EditorWindow {
                     self.error = None;
                     self.loaded = true;
                 }
-                Err(_) => self.error = Some("This file is not UTF-8 text, so it cannot be edited here.".into()),
+                Err(_) => self.error = Some(tr("This file is not UTF-8 text, so it cannot be edited here.").into()),
             },
             Err(error) => self.error = Some(error.to_string()),
         }
@@ -55,7 +56,7 @@ impl EditorWindow {
         let file = self.file();
         let current = std::fs::metadata(&file).and_then(|m| m.modified()).ok();
         if current != self.modified {
-            return Err("The file changed on disk since you opened it. Reload it, then reapply your edits.".into());
+            return Err(tr("The file changed on disk since you opened it. Reload it, then reapply your edits.").into());
         }
         std::fs::write(&file, &self.text).map_err(|e| e.to_string())?;
         self.saved = self.text.clone();
@@ -72,7 +73,7 @@ impl ToolWindow for EditorWindow {
     fn title(&self) -> String {
         let name = self.path.rsplit('/').next().unwrap_or(&self.path);
         if self.has_unsaved_changes() {
-            format!("{name} — edited")
+            tr_fmt!("{name} — edited", name = name)
         } else {
             name.to_string()
         }
@@ -102,16 +103,22 @@ impl ToolWindow for EditorWindow {
                 let dirty = self.has_unsaved_changes();
                 let save_shortcut =
                     ui.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::S)));
-                if widgets::primary_button(ui, &format!("{}  Save", icon::FLOPPY_DISK), dirty).clicked() || (save_shortcut && dirty) {
+                if widgets::primary_button(ui, &format!("{}  {}", icon::FLOPPY_DISK, tr("Save")), dirty).clicked()
+                    || (save_shortcut && dirty)
+                {
                     match self.save() {
                         Ok(()) => {
-                            cx.notice(format!("Saved {}.", self.path), false);
+                            cx.notice(tr_fmt!("Saved {path}.", path = self.path), false);
                             cx.refresh();
                         }
                         Err(error) => self.error = Some(error),
                     }
                 }
-                if ui.add_enabled(dirty, egui::Button::new("Revert")).on_hover_text("Discard your edits and reload the file").clicked() {
+                if ui
+                    .add_enabled(dirty, egui::Button::new(tr("Revert")))
+                    .on_hover_text(tr("Discard your edits and reload the file"))
+                    .clicked()
+                {
                     self.load();
                 }
             });
@@ -163,7 +170,7 @@ impl ToolWindow for EditorWindow {
                                 .lock_focus(true)
                                 .layouter(&mut layouter),
                         )
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "File contents"));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("File contents")));
                     });
                 });
         });

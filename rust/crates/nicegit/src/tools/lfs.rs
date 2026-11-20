@@ -7,6 +7,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::lfs::{LfsLock, LfsLocks, LfsStatus, LockTarget};
 use nicegit_core::{GitError, Snapshot};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{blame::relative_time, query, widgets, Ctx, Task, ToolWindow};
 
@@ -85,10 +86,12 @@ impl ToolWindow for LfsWindow {
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::CUBE).size(16.0).color(c.accent));
             ui.label(
-                RichText::new("Stores large files outside Git's history. Git keeps a small pointer in their place.").small().color(c.muted),
+                RichText::new(tr("Stores large files outside Git's history. Git keeps a small pointer in their place."))
+                    .small()
+                    .color(c.muted),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, "Read Git LFS again", true).clicked() {
+                if widgets::icon_button(ui, icon::ARROW_CLOCKWISE, tr("Read Git LFS again"), true).clicked() {
                     reload = true;
                 }
             });
@@ -100,7 +103,7 @@ impl ToolWindow for LfsWindow {
                 self.shown = Some(state.clone());
             }
             let Some(state) = &self.shown else {
-                widgets::loading(ui, "Reading Git LFS status…");
+                widgets::loading(ui, tr("Reading Git LFS status…"));
                 return;
             };
             let status = match state {
@@ -112,20 +115,20 @@ impl ToolWindow for LfsWindow {
             };
 
             if let Some(version) = &status.version {
-                ui.label(RichText::new(format!("{}  Installed, {version}", icon::CHECK_CIRCLE)).small().color(c.added));
+                ui.label(RichText::new(format!("{}  {}", icon::CHECK_CIRCLE, tr_fmt!("Installed, {version}", version = version))).small().color(c.added));
             } else {
                 widgets::callout(
                     ui,
-                    "Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once.",
+                    tr("Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once."),
                     true,
                 );
             }
             ui.add_space(10.0);
 
-            widgets::section(ui, "Tracked patterns");
+            widgets::section(ui, tr("Tracked patterns"));
             ui.add_space(4.0);
             if status.patterns.is_empty() {
-                ui.label(RichText::new("No patterns yet. Files that match a pattern are stored with Git LFS.").small().color(c.muted));
+                ui.label(RichText::new(tr("No patterns yet. Files that match a pattern are stored with Git LFS.")).small().color(c.muted));
             }
             for pattern in &status.patterns {
                 egui::Frame::new()
@@ -137,8 +140,8 @@ impl ToolWindow for LfsWindow {
                             ui.label(RichText::new(pattern).monospace());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let button = ui
-                                    .add_enabled(idle, egui::Button::new("Untrack"))
-                                    .on_hover_text("Store new versions of matching files in Git itself. Files already committed are unchanged.");
+                                    .add_enabled(idle, egui::Button::new(tr("Untrack")))
+                                    .on_hover_text(tr("Store new versions of matching files in Git itself. Files already committed are unchanged."));
                                 if button.clicked() {
                                     untrack = Some(pattern.clone());
                                 }
@@ -149,7 +152,7 @@ impl ToolWindow for LfsWindow {
             }
 
             ui.add_space(10.0);
-            widgets::section(ui, "Track a pattern");
+            widgets::section(ui, tr("Track a pattern"));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let width = (ui.available_width() - 90.0).max(140.0);
@@ -157,15 +160,15 @@ impl ToolWindow for LfsWindow {
                     idle,
                     egui::TextEdit::singleline(&mut self.pattern).hint_text("*.psd, docs/*.pdf").desired_width(width),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "LFS pattern"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("LFS pattern")));
                 let can_track = idle && status.version.is_some() && !self.pattern.trim().is_empty();
-                if widgets::primary_button(ui, "Track", can_track).clicked() {
+                if widgets::primary_button(ui, tr("Track"), can_track).clicked() {
                     track = Some(self.pattern.trim().to_string());
                 }
             });
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Tracking changes .gitattributes. Commit that file so everyone stores these files the same way.")
+                RichText::new(tr("Tracking changes .gitattributes. Commit that file so everyone stores these files the same way."))
                     .small()
                     .color(c.muted),
             );
@@ -179,18 +182,18 @@ impl ToolWindow for LfsWindow {
             }
 
             ui.add_space(12.0);
-            widgets::section(ui, &format!("Files in Git LFS ({})", status.files.len()));
+            widgets::section(ui, &tr_fmt!("Files in Git LFS ({count})", count = status.files.len()));
             ui.add_space(4.0);
             if status.files.is_empty() {
-                ui.label(RichText::new("No tracked files use Git LFS yet.").small().color(c.muted));
+                ui.label(RichText::new(tr("No tracked files use Git LFS yet.")).small().color(c.muted));
             }
             for file in &status.files {
                 ui.horizontal(|ui| {
                     ui.add(egui::Label::new(RichText::new(&file.path).monospace()).truncate());
                     if file.is_pointer_only {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            widgets::pill(ui, "Not downloaded", c.conflict).on_hover_text(
-                                "Only the LFS pointer is here. Install Git LFS and pull to download the content.",
+                            widgets::pill(ui, tr("Not downloaded"), c.conflict).on_hover_text(
+                                tr("Only the LFS pointer is here. Install Git LFS and pull to download the content."),
                             );
                         });
                     }
@@ -199,10 +202,10 @@ impl ToolWindow for LfsWindow {
 
             ui.add_space(12.0);
             ui.horizontal(|ui| {
-                widgets::section(ui, "Locks");
+                widgets::section(ui, tr("Locks"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::labeled_button(ui, icon::ARROW_CLOCKWISE, "Refresh", true)
-                        .on_hover_text("Read the locks from the remote again")
+                    if widgets::labeled_button(ui, icon::ARROW_CLOCKWISE, tr("Refresh"), true)
+                        .on_hover_text(tr("Read the locks from the remote again"))
                         .clicked()
                     {
                         reload_locks = true;
@@ -211,20 +214,20 @@ impl ToolWindow for LfsWindow {
             });
             ui.add_space(4.0);
             match self.shown_locks.clone() {
-                None => widgets::loading(ui, "Reading file locks…"),
+                None => widgets::loading(ui, tr("Reading file locks…")),
                 Some(Err(error)) => widgets::callout(ui, &lock_message(&error), true),
                 Some(Ok(locks)) => {
                     if !locks.verified {
                         let who = if locks.user_name.is_empty() {
-                            "No user.name is set, so no lock is shown as yours.".to_string()
+                            tr("No user.name is set, so no lock is shown as yours.").to_string()
                         } else {
-                            format!("The server could not confirm ownership, so locks are yours when their owner is {}.", locks.user_name)
+                            tr_fmt!("The server could not confirm ownership, so locks are yours when their owner is {name}.", name = locks.user_name)
                         };
                         ui.label(RichText::new(who).small().color(c.muted));
                         ui.add_space(4.0);
                     }
                     if locks.locks.is_empty() {
-                        ui.label(RichText::new("No files are locked.").small().color(c.muted));
+                        ui.label(RichText::new(tr("No files are locked.")).small().color(c.muted));
                     }
                     for lock in &locks.locks {
                         ui.horizontal(|ui| {
@@ -233,13 +236,13 @@ impl ToolWindow for LfsWindow {
                             ui.label(RichText::new(format!("{}  {age}", lock.owner)).small().color(c.muted));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if lock.ours {
-                                    if ui.add_enabled(idle, egui::Button::new("Unlock")).clicked() {
+                                    if ui.add_enabled(idle, egui::Button::new(tr("Unlock"))).clicked() {
                                         let target = LockTarget::Id(lock.id.clone());
                                         unlock = Some((target, false, lock.path.clone()));
                                     }
                                 } else if ui
-                                    .add_enabled(idle, egui::Button::new("Force unlock…"))
-                                    .on_hover_text("Release a lock another person holds")
+                                    .add_enabled(idle, egui::Button::new(tr("Force unlock…")))
+                                    .on_hover_text(tr("Release a lock another person holds"))
                                     .clicked()
                                 {
                                     self.force_unlock = Some(lock.clone());
@@ -249,21 +252,21 @@ impl ToolWindow for LfsWindow {
                     }
                     if let Some(lock) = self.force_unlock.clone() {
                         let owner = if locks.verified {
-                            "The server confirmed the owner.".to_string()
+                            tr("The server confirmed the owner.").to_string()
                         } else {
-                            format!("Ownership was compared with your user.name, \"{}\".", locks.user_name)
+                            tr_fmt!("Ownership was compared with your user.name, \"{name}\".", name = locks.user_name)
                         };
                         egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
-                            ui.label(format!(
-                                "Force unlock {}? It is locked by {}. They may lose unsaved work they meant to upload. {owner}",
-                                lock.path, lock.owner
+                            ui.label(tr_fmt!(
+                                "Force unlock {path}? It is locked by {owner}. They may lose unsaved work they meant to upload. {note}",
+                                path = lock.path, owner = lock.owner, note = owner
                             ));
                             ui.horizontal(|ui| {
-                                if widgets::danger_button(ui, "Force unlock", idle).clicked() {
+                                if widgets::danger_button(ui, tr("Force unlock"), idle).clicked() {
                                     self.force_unlock = None;
                                     unlock = Some((LockTarget::Id(lock.id.clone()), true, lock.path.clone()));
                                 }
-                                if ui.button("Cancel").clicked() {
+                                if ui.button(tr("Cancel")).clicked() {
                                     self.force_unlock = None;
                                 }
                             });
@@ -281,21 +284,21 @@ impl ToolWindow for LfsWindow {
         }
         if let Some(pattern) = track {
             self.tracking = Some(pattern.clone());
-            cx.act(format!("Track {pattern}"), move |client, directory| {
-                client.track_lfs(&pattern, directory).map(|()| Some(format!("Tracking {pattern}.")))
+            cx.act(tr_fmt!("Track {pattern}", pattern = pattern), move |client, directory| {
+                client.track_lfs(&pattern, directory).map(|()| Some(tr_fmt!("Tracking {pattern}.", pattern = pattern)))
             });
         }
         if let Some(pattern) = untrack {
-            cx.act(format!("Untrack {pattern}"), move |client, directory| {
-                client.untrack_lfs(&pattern, directory).map(|()| Some(format!("No longer tracking {pattern}.")))
+            cx.act(tr_fmt!("Untrack {pattern}", pattern = pattern), move |client, directory| {
+                client.untrack_lfs(&pattern, directory).map(|()| Some(tr_fmt!("No longer tracking {pattern}.", pattern = pattern)))
             });
         }
         if let Some((target, force, path)) = unlock {
             // The lock list is read again once the change is made.
             self.locks = None;
-            let label = if force { "Force unlock" } else { "Unlock" };
-            cx.act(format!("{label} {path}"), move |client, directory| {
-                client.unlock(&target, force, directory).map(|()| Some(format!("Unlocked {path}.")))
+            let label = if force { tr("Force unlock") } else { tr("Unlock") };
+            cx.act(tr_fmt!("{action} {path}", action = label, path = path), move |client, directory| {
+                client.unlock(&target, force, directory).map(|()| Some(tr_fmt!("Unlocked {path}.", path = path)))
             });
         }
     }

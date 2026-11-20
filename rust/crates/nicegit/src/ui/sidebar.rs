@@ -8,6 +8,7 @@ use nicegit_core::signature::CommitSignature;
 use nicegit_core::{Branch, GitClient, MergeStyle, Snapshot, TagDetails};
 
 use crate::app::{NiceGitApp, Selection};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 use crate::tools::{self, widgets, Task};
 use crate::ui::branch_checks::{self, Dot, DOT_SPACE};
@@ -148,7 +149,7 @@ impl NiceGitApp {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("NiceGit").small().strong().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::icon_button(ui, icon::GEAR, "Settings", true).clicked() {
+                    if widgets::icon_button(ui, icon::GEAR, tr("Settings"), true).clicked() {
                         self.show_settings = true;
                     }
                 });
@@ -159,7 +160,7 @@ impl NiceGitApp {
                 // With the repositories column hidden, its toggle sits here, top left, where the column's
                 // own Hide button was, so open tabs and recent repositories are one click away.
                 if !self.settings.show_repositories {
-                    if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, "Show repositories", true).clicked() {
+                    if widgets::framed_icon_button(ui, icon::SIDEBAR_SIMPLE, tr("Show repositories"), true).clicked() {
                         self.settings.show_repositories = true;
                         self.settings.forget_missing_recent();
                     }
@@ -179,15 +180,15 @@ impl NiceGitApp {
                 ui.label(RichText::new(icon::MAGNIFYING_GLASS).color(c.muted));
                 ui.add(
                     egui::TextEdit::singleline(filter)
-                        .hint_text("Filter references")
+                        .hint_text(tr("Filter references"))
                         .frame(egui::Frame::NONE)
                         .desired_width((ui.available_width() - 34.0).max(40.0)),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter references"));
-                if widgets::icon_button(ui, icon::PLUS, "New branch at HEAD", idle && snapshot.head_hash.is_some()).clicked() {
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter references")));
+                if widgets::icon_button(ui, icon::PLUS, tr("New branch at HEAD"), idle && snapshot.head_hash.is_some()).clicked() {
                     self.dialog = Some(Dialog::input(
-                        "New branch",
-                        "Create a branch at HEAD and switch to it",
+                        tr("New branch"),
+                        tr("Create a branch at HEAD and switch to it"),
                         "",
                         InputKind::CreateBranch { branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
                     ));
@@ -221,9 +222,9 @@ impl NiceGitApp {
 
         let locals: Vec<Branch> = snapshot.branches.iter().filter(|b| !b.is_remote && matches(&b.name)).cloned().collect();
         let tracking = self.repos[self.active].branch_tracking.as_mut().and_then(|task| task.get()).cloned().flatten().unwrap_or_default();
-        section(ui, "local", icon::LAPTOP, "Local", locals.len(), true, |ui| {
+        section(ui, "local", icon::LAPTOP, tr("Local"), locals.len(), true, |ui| {
             if locals.is_empty() {
-                ui.label(RichText::new("   No local branches").small().color(c.muted));
+                ui.label(RichText::new(tr("   No local branches")).small().color(c.muted));
             }
             for branch in &locals {
                 let in_other = other_worktrees.contains(&branch.name);
@@ -245,15 +246,22 @@ impl NiceGitApp {
                         Some(Tracking::Counts { ahead, behind }) => {
                             Some(RichText::new(format!("↑{ahead} ↓{behind}")).small().monospace().color(c.muted))
                         }
-                        Some(Tracking::Gone) => Some(RichText::new("gone").small().color(c.warning)),
+                        Some(Tracking::Gone) => Some(RichText::new(tr("gone")).small().color(c.warning)),
                         None => None,
                     }
                 };
                 let tracking_note = match tracking.get(&branch.name) {
                     Some(Tracking::Counts { ahead, behind }) if !branch.is_current => {
-                        format!("\n{ahead} commit{} to push, {behind} to pull", if *ahead == 1 { "" } else { "s" })
+                        format!(
+                            "\n{}",
+                            tr_fmt!(
+                                "{commits} to push, {behind} to pull",
+                                commits = tr_count("{count} commit", "{count} commits", *ahead),
+                                behind = behind
+                            )
+                        )
                     }
-                    Some(Tracking::Gone) => "\nIts upstream branch no longer exists on the remote".to_string(),
+                    Some(Tracking::Gone) => format!("\n{}", tr("Its upstream branch no longer exists on the remote")),
                     _ => String::new(),
                 };
                 let hidden = hidden_refs.contains(&branch.full_ref());
@@ -272,8 +280,8 @@ impl NiceGitApp {
                     "{}  {}{}{tracking_note}{}",
                     short(&branch.tip),
                     branch.subject,
-                    if in_other { "\nChecked out in another worktree" } else { "" },
-                    if hidden { "\nHidden from the graph" } else { "" }
+                    if in_other { format!("\n{}", tr("Checked out in another worktree")) } else { String::new() },
+                    if hidden { format!("\n{}", tr("Hidden from the graph")) } else { String::new() }
                 ));
                 // Drag a branch onto the current branch to merge it in or rebase onto it.
                 if !branch.is_current {
@@ -310,11 +318,11 @@ impl NiceGitApp {
         });
 
         let remote_count = snapshot.branches.iter().filter(|b| b.is_remote).count();
-        section(ui, "remote", icon::GLOBE, "Remote", remote_count, true, |ui| {
+        section(ui, "remote", icon::GLOBE, tr("Remote"), remote_count, true, |ui| {
             if snapshot.remotes.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    if ui.small_button("Add a remote…").clicked() {
+                    if ui.small_button(tr("Add a remote…")).clicked() {
                         self.open_tool(Box::new(tools::repository_settings::RepositorySettingsWindow::new()));
                     }
                 });
@@ -360,7 +368,7 @@ impl NiceGitApp {
                                 "{}  {}{}",
                                 short(&branch.tip),
                                 branch.subject,
-                                if hidden { "\nHidden from the graph" } else { "" }
+                                if hidden { format!("\n{}", tr("Hidden from the graph")) } else { String::new() }
                             ));
                             response.dnd_set_drag_payload(branch.clone());
                             if response.double_clicked() && can_switch {
@@ -380,16 +388,16 @@ impl NiceGitApp {
         let worktrees: Vec<&nicegit_core::Worktree> =
             snapshot.worktrees.iter().filter(|w| matches(&w.path) || w.branch.as_deref().is_some_and(matches)).collect();
         {
-            section(ui, "worktrees", icon::FOLDERS, "Worktrees", worktrees.len(), true, |ui| {
+            section(ui, "worktrees", icon::FOLDERS, tr("Worktrees"), worktrees.len(), true, |ui| {
                 for worktree in worktrees {
                     let current = worktree.path == snapshot.root_path;
-                    let label = worktree.branch.clone().unwrap_or_else(|| "Detached HEAD".into());
+                    let label = worktree.branch.clone().unwrap_or_else(|| tr("Detached HEAD").into());
                     let response = row(
                         ui,
                         if current { icon::FOLDER_OPEN } else { icon::FOLDER },
                         if current { c.accent } else { c.muted },
                         RichText::new(label),
-                        worktree.is_prunable.then(|| RichText::new("missing").small().color(c.warning)),
+                        worktree.is_prunable.then(|| RichText::new(tr("missing")).small().color(c.warning)),
                         None,
                         current,
                     )
@@ -399,24 +407,30 @@ impl NiceGitApp {
                     }
                     response.context_menu(|ui| {
                         if ui
-                            .add_enabled(!current && !worktree.is_prunable, egui::Button::new(format!("{}  Open", icon::FOLDER_OPEN)))
+                            .add_enabled(
+                                !current && !worktree.is_prunable,
+                                egui::Button::new(format!("{}  {}", icon::FOLDER_OPEN, tr("Open"))),
+                            )
                             .clicked()
                         {
                             ui.close();
                             self.open(PathBuf::from(&worktree.path));
                         }
-                        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+                        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
                             ui.close();
                             ui.ctx().copy_text(worktree.path.clone());
                         }
                         if ui
-                            .add_enabled(!worktree.is_prunable, egui::Button::new(format!("{}  Show in file manager", icon::FOLDER)))
+                            .add_enabled(
+                                !worktree.is_prunable,
+                                egui::Button::new(format!("{}  {}", icon::FOLDER, tr("Show in file manager"))),
+                            )
                             .clicked()
                         {
                             ui.close();
                             crate::ui::changes::reveal(std::path::Path::new(&worktree.path));
                         }
-                        if ui.button(format!("{}  Manage worktrees…", icon::GEAR)).clicked() {
+                        if ui.button(format!("{}  {}", icon::GEAR, tr("Manage worktrees…"))).clicked() {
                             ui.close();
                             self.open_tool(Box::new(tools::worktrees::WorktreesWindow::new()));
                         }
@@ -426,9 +440,9 @@ impl NiceGitApp {
         }
 
         let tags: Vec<&String> = snapshot.tags.iter().filter(|t| matches(t)).collect();
-        section(ui, "tags", icon::TAG, "Tags", tags.len(), false, |ui| {
+        section(ui, "tags", icon::TAG, tr("Tags"), tags.len(), false, |ui| {
             if tags.is_empty() {
-                ui.label(RichText::new("   No tags").small().color(c.muted));
+                ui.label(RichText::new(tr("   No tags")).small().color(c.muted));
             }
             for tag in tags {
                 let tip = snapshot.tag_tips.get(tag).cloned().unwrap_or_default();
@@ -452,7 +466,13 @@ impl NiceGitApp {
             for remote in &snapshot.remotes {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Push tags to {remote}…", icon::ARROW_LINE_UP)).small()).clicked()
+                    if ui
+                        .add_enabled(
+                            idle,
+                            egui::Button::new(format!("{}  {}", icon::ARROW_LINE_UP, tr_fmt!("Push tags to {remote}…", remote = remote)))
+                                .small(),
+                        )
+                        .clicked()
                     {
                         self.scan_tags_for_remote(remote.clone(), snapshot.remote_push_addresses.clone());
                     }
@@ -462,13 +482,13 @@ impl NiceGitApp {
 
         // Creating a branch from a stash rewrites working files, so the unsaved editor blocks it too.
         let editor_open = self.has_unsaved_editor();
-        section(ui, "stashes", icon::ARCHIVE, "Stashes", snapshot.stashes.len(), true, |ui| {
+        section(ui, "stashes", icon::ARCHIVE, tr("Stashes"), snapshot.stashes.len(), true, |ui| {
             if snapshot.stashes.is_empty() {
-                ui.label(RichText::new("   No stashes").small().color(c.muted));
+                ui.label(RichText::new(tr("   No stashes")).small().color(c.muted));
             }
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                if ui.small_button("Manage stashes…").clicked() {
+                if ui.small_button(tr("Manage stashes…")).clicked() {
                     self.open_tool(Box::new(tools::stash::StashWindow::new()));
                 }
             });
@@ -481,35 +501,41 @@ impl NiceGitApp {
                 }
                 response.context_menu(|ui| {
                     let allowed = idle && snapshot.operation.is_none();
-                    if ui.add_enabled(allowed, egui::Button::new(format!("{}  Apply", icon::TRAY_ARROW_DOWN))).clicked() {
+                    if ui.add_enabled(allowed, egui::Button::new(format!("{}  {}", icon::TRAY_ARROW_DOWN, tr("Apply")))).clicked() {
                         ui.close();
                         let stash = stash.clone();
                         // The label names the stash, so a refusal can offer to apply it into the changes.
-                        self.act(&format!("Apply {}", stash.reference), move |client, path| {
-                            client.apply_stash(&stash, path).map(|_| Some("Applied the stash.".into()))
+                        self.act(&tr_fmt!("Apply {stash}", stash = stash.reference), move |client, path| {
+                            client.apply_stash(&stash, path).map(|_| Some(tr("Applied the stash.").into()))
                         });
                     }
-                    if ui.add_enabled(allowed, egui::Button::new(format!("{}  Pop (apply and delete)", icon::TRAY_ARROW_UP))).clicked() {
+                    if ui
+                        .add_enabled(allowed, egui::Button::new(format!("{}  {}", icon::TRAY_ARROW_UP, tr("Pop (apply and delete)"))))
+                        .clicked()
+                    {
                         ui.close();
                         let stash = stash.clone();
                         self.confirm(
-                            format!("Pop {}?", stash.reference),
-                            format!(
-                                "“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
-                                stash.message
+                            tr_fmt!("Pop {stash}?", stash = stash.reference),
+                            tr_fmt!(
+                                "“{message}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
+                                message = stash.message
                             ),
-                            "Pop",
+                            tr("Pop"),
                             Pending::PopStash(stash),
                         );
                     }
                     if ui
-                        .add_enabled(allowed && !editor_open, egui::Button::new(format!("{}  Create branch from stash…", icon::GIT_BRANCH)))
+                        .add_enabled(
+                            allowed && !editor_open,
+                            egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Create branch from stash…"))),
+                        )
                         .clicked()
                     {
                         ui.close();
                         self.dialog = Some(Dialog::input(
-                            "Branch from stash",
-                            "Branch name",
+                            tr("Branch from stash"),
+                            tr("Branch name"),
                             "",
                             InputKind::BranchFromStash {
                                 stash: stash.clone(),
@@ -518,22 +544,22 @@ impl NiceGitApp {
                             },
                         ));
                     }
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Rename…", icon::PENCIL_SIMPLE))).clicked() {
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Rename…")))).clicked() {
                         ui.close();
                         self.dialog = Some(Dialog::input(
-                            &format!("Rename {}", stash.reference),
-                            "New name",
+                            &tr_fmt!("Rename {stash}", stash = stash.reference),
+                            tr("New name"),
                             &stash.message,
                             InputKind::RenameStash(stash.clone()),
                         ));
                     }
                     ui.separator();
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
+                    if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Delete…")))).clicked() {
                         ui.close();
                         self.confirm(
-                            format!("Delete {}?", stash.reference),
-                            format!("“{}” will be deleted.", stash.message),
-                            "Delete",
+                            tr_fmt!("Delete {stash}?", stash = stash.reference),
+                            tr_fmt!("“{message}” will be deleted.", message = stash.message),
+                            tr("Delete"),
                             Pending::DropStash(stash.clone()),
                         );
                     }
@@ -544,20 +570,20 @@ impl NiceGitApp {
         let submodules =
             self.repos.get_mut(self.active).and_then(|r| r.submodules.as_mut()).and_then(|t| t.get().cloned()).unwrap_or_default();
         if !submodules.is_empty() {
-            section(ui, "submodules", icon::PACKAGE, "Submodules", submodules.len(), false, |ui| {
+            section(ui, "submodules", icon::PACKAGE, tr("Submodules"), submodules.len(), false, |ui| {
                 use nicegit_core::submodule::SubmoduleState;
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  Update all", icon::ARROWS_CLOCKWISE)).small()).clicked() {
-                    self.act("Update all submodules", |client, repo| {
-                        client.update_submodules(repo).map(|_| Some("Checked out every submodule at its recorded commit.".to_string()))
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::ARROWS_CLOCKWISE, tr("Update all"))).small()).clicked() {
+                    self.act(tr("Update all submodules"), |client, repo| {
+                        client.update_submodules(repo).map(|_| Some(tr("Checked out every submodule at its recorded commit.").to_string()))
                     });
                 }
                 for submodule in &submodules {
                     let (state, color) = match &submodule.state {
-                        SubmoduleState::NotCheckedOut => ("not checked out".to_string(), c.muted),
-                        SubmoduleState::AtRecordedCommit => ("at recorded commit".to_string(), c.added),
-                        SubmoduleState::OnAnotherCommit(commit) => (format!("on {}", short(commit)), c.warning),
+                        SubmoduleState::NotCheckedOut => (tr("not checked out").to_string(), c.muted),
+                        SubmoduleState::AtRecordedCommit => (tr("at recorded commit").to_string(), c.added),
+                        SubmoduleState::OnAnotherCommit(commit) => (tr_fmt!("on {commit}", commit = short(commit)), c.warning),
                     };
-                    let state = if submodule.has_local_changes { format!("{state} · changed") } else { state };
+                    let state = if submodule.has_local_changes { tr_fmt!("{state} · changed", state = state) } else { state };
                     let response = row(
                         ui,
                         icon::PACKAGE,
@@ -567,7 +593,7 @@ impl NiceGitApp {
                         None,
                         false,
                     )
-                    .on_hover_text(format!("Recorded commit {}", short(&submodule.recorded_commit)));
+                    .on_hover_text(tr_fmt!("Recorded commit {commit}", commit = short(&submodule.recorded_commit)));
                     let checked_out = submodule.state != SubmoduleState::NotCheckedOut;
                     let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
                     let folder = submodule.path.split('/').fold(repo_path, |path, part| path.join(part));
@@ -575,19 +601,21 @@ impl NiceGitApp {
                         self.open(folder.clone());
                     }
                     response.context_menu(|ui| {
-                        if ui.add_enabled(checked_out, egui::Button::new(format!("{}  Open", icon::FOLDER_OPEN))).clicked() {
+                        if ui.add_enabled(checked_out, egui::Button::new(format!("{}  {}", icon::FOLDER_OPEN, tr("Open")))).clicked() {
                             ui.close();
                             self.open(folder.clone());
                         }
-                        let label = if checked_out { "Check out recorded commit" } else { "Initialise and check out" };
+                        let label = if checked_out { tr("Check out recorded commit") } else { tr("Initialise and check out") };
                         if ui.add_enabled(idle, egui::Button::new(format!("{}  {label}", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
                             ui.close();
                             let path = submodule.path.clone();
-                            self.act("Update submodule", move |client, repo| {
-                                client.update_submodule(&path, repo).map(|_| Some(format!("Checked out {path} at its recorded commit.")))
+                            self.act(tr("Update submodule"), move |client, repo| {
+                                client
+                                    .update_submodule(&path, repo)
+                                    .map(|_| Some(tr_fmt!("Checked out {path} at its recorded commit.", path = path)))
                             });
                         }
-                        if ui.button(format!("{}  Show in file manager", icon::FOLDER)).clicked() {
+                        if ui.button(format!("{}  {}", icon::FOLDER, tr("Show in file manager"))).clicked() {
                             ui.close();
                             crate::ui::changes::reveal(&folder);
                         }
@@ -628,9 +656,9 @@ impl NiceGitApp {
         }
         let Some((_, task)) = repo.tag_details.get_mut(tag) else { return tag.to_string() };
         match task.get() {
-            None => format!("{tag}\nLoading…"),
-            Some(Err(error)) => format!("{tag}\nCould not read this tag: {error}"),
-            Some(Ok((None, _))) => format!("{tag}\nLightweight tag at {}", short(tip)),
+            None => format!("{tag}\n{}", tr("Loading…")),
+            Some(Err(error)) => format!("{tag}\n{}", tr_fmt!("Could not read this tag: {error}", error = error)),
+            Some(Ok((None, _))) => format!("{tag}\n{}", tr_fmt!("Lightweight tag at {commit}", commit = short(tip))),
             Some(Ok((Some(details), signature))) => {
                 let mut text = annotated_tag_text(tag, details);
                 if let Some(signature) = signature {
@@ -644,40 +672,46 @@ impl NiceGitApp {
 
     fn tag_menu(&mut self, ui: &mut Ui, tag: &str, tip: &str, snapshot: &Snapshot) {
         let idle = self.idle();
-        if ui.button(format!("{}  Copy name", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy name"))).clicked() {
             ui.close();
             ui.ctx().copy_text(tag.to_string());
         }
         for remote in &snapshot.remotes {
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Push to {remote}", icon::ARROW_LINE_UP))).clicked() {
+            if ui
+                .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::ARROW_LINE_UP, tr_fmt!("Push to {remote}", remote = remote))))
+                .clicked()
+            {
                 ui.close();
                 let (tag, tip, remote, addresses) =
                     (tag.to_string(), tip.to_string(), remote.clone(), snapshot.remote_push_addresses.clone());
-                self.act("Push tag", move |client, path| {
+                self.act(tr("Push tag"), move |client, path| {
                     client
                         .push_tag(&tag, &remote, &tip, addresses.get(&remote).map(Vec::as_slice).unwrap_or_default(), path)
-                        .map(|_| Some(format!("Pushed {tag} to {remote}.")))
+                        .map(|_| Some(tr_fmt!("Pushed {tag} to {remote}.", tag = tag, remote = remote)))
                 });
             }
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete from {remote}…", icon::CLOUD_X))).clicked() {
+            if ui
+                .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::CLOUD_X, tr_fmt!("Delete from {remote}…", remote = remote))))
+                .clicked()
+            {
                 ui.close();
                 let (tag, tip, remote, addresses) =
                     (tag.to_string(), tip.to_string(), remote.clone(), snapshot.remote_push_addresses.clone());
                 self.confirm(
-                    format!("Delete {tag} from {remote}?"),
-                    format!("The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept."),
-                    "Delete from remote",
+                    tr_fmt!("Delete {tag} from {remote}?", tag = tag, remote = remote),
+                    tr_fmt!("The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept.", remote = remote),
+                    tr("Delete from remote"),
                     Pending::DeleteRemoteTag { tag, tip, remote, addresses },
                 );
             }
         }
         ui.separator();
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete local tag…", icon::TRASH))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Delete local tag…")))).clicked() {
             ui.close();
             self.confirm(
-                format!("Delete tag {tag}?"),
-                "The tag is removed from this repository only, not from remotes.",
-                "Delete",
+                tr_fmt!("Delete tag {tag}?", tag = tag),
+                tr("The tag is removed from this repository only, not from remotes."),
+                tr("Delete"),
                 Pending::DeleteTag { name: tag.to_string(), tip: tip.to_string() },
             );
         }
@@ -686,38 +720,44 @@ impl NiceGitApp {
     /// A remote's menu: a fetch of that remote alone, its first fetch address, and its settings.
     fn remote_menu(&mut self, ui: &mut Ui, remote: &str, snapshot: &Snapshot) {
         let idle = self.idle();
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Fetch {remote}", icon::CLOUD_ARROW_DOWN))).clicked() {
+        if ui
+            .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::CLOUD_ARROW_DOWN, tr_fmt!("Fetch {remote}", remote = remote))))
+            .clicked()
+        {
             ui.close();
             self.fetch_remote(remote.to_string());
         }
         // Every local branch to the same name, after a confirmation that lists them.
         let has_local_branches = snapshot.branches.iter().any(|branch| !branch.is_remote && !branch.is_detached());
         if ui
-            .add_enabled(idle && has_local_branches, egui::Button::new(format!("{}  Push all branches to {remote}…", icon::ARROW_LINE_UP)))
+            .add_enabled(
+                idle && has_local_branches,
+                egui::Button::new(format!("{}  {}", icon::ARROW_LINE_UP, tr_fmt!("Push all branches to {remote}…", remote = remote))),
+            )
             .clicked()
         {
             ui.close();
             self.open_push_branches(remote.to_string());
         }
         if let Some(address) = snapshot.remote_fetch_addresses.get(remote).and_then(|addresses| addresses.first()) {
-            if ui.button(format!("{}  Copy fetch URL", icon::COPY)).clicked() {
+            if ui.button(format!("{}  {}", icon::COPY, tr("Copy fetch URL"))).clicked() {
                 ui.close();
                 ui.ctx().copy_text(address.clone());
             }
         }
         // The repository's pages, from the remote's address only when it is on a supported host.
         if let Some(repository) = crate::git_ext::hosted_repository_for_remote(snapshot, remote, self.settings.listed_hosts()) {
-            ui.menu_button(format!("{}  Open on {}", icon::ARROW_SQUARE_OUT, repository.kind.name()), |ui| {
+            ui.menu_button(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr_fmt!("Open on {host}", host = repository.kind.name())), |ui| {
                 let mut pages = vec![
-                    (crate::git_ext::host_glyph(repository.kind), "Repository", repository.home_url()),
+                    (crate::git_ext::host_glyph(repository.kind), tr("Repository"), repository.home_url()),
                     (icon::GIT_PULL_REQUEST, crate::git_ext::pull_request_label(repository.kind), repository.pull_requests_url()),
                 ];
                 // Issues and Actions are GitHub pages; the other hosts' pages are not listed here.
-                if let Some(url) = repository.github_page_url("issues") {
-                    pages.push((icon::CIRCLE_DASHED, "Issues", url));
+                if let Some(url) = repository.github_page_url(tr("issues")) {
+                    pages.push((icon::CIRCLE_DASHED, tr("Issues"), url));
                 }
                 if let Some(url) = repository.github_page_url("actions") {
-                    pages.push((icon::PLAY, "Actions", url));
+                    pages.push((icon::PLAY, tr("Actions"), url));
                 }
                 for (glyph, label, url) in pages {
                     if ui.button(format!("{glyph}  {label}")).on_hover_text(&url).clicked() {
@@ -728,7 +768,7 @@ impl NiceGitApp {
             });
         }
         ui.separator();
-        if ui.button(format!("{}  Edit in Repository Settings…", icon::GEAR)).clicked() {
+        if ui.button(format!("{}  {}", icon::GEAR, tr("Edit in Repository Settings…"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::repository_settings::RepositorySettingsWindow::on_remotes()));
         }
@@ -737,7 +777,7 @@ impl NiceGitApp {
     /// Adds or removes a local branch from the deletion selection. The current branch cannot be chosen.
     fn toggle_branch_selection(&mut self, branch: &Branch) {
         if branch.is_current {
-            self.notify("The current branch cannot be selected for deletion.", false);
+            self.notify(tr("The current branch cannot be selected for deletion."), false);
             return;
         }
         let Some(repo) = self.repos.get_mut(self.active) else { return };
@@ -780,22 +820,23 @@ impl NiceGitApp {
             let shown = list.iter().take(15).copied().collect::<Vec<_>>().join(", ");
             match list.len().saturating_sub(15) {
                 0 => shown,
-                more => format!("{shown}, and {more} more"),
+                more => tr_fmt!("{shown}, and {more} more", shown = shown, more = more),
             }
         };
         let all: Vec<&str> = branches.iter().map(|(branch, _)| branch.name.as_str()).collect();
         let unmerged: Vec<&str> = branches.iter().filter(|(_, unmerged)| *unmerged).map(|(branch, _)| branch.name.as_str()).collect();
-        let mut message = format!("Deletes {}.", names(all));
+        let mut message = tr_fmt!("Deletes {names}.", names = names(all));
         if !unmerged.is_empty() {
-            message.push_str(&format!(
-                " Not merged into {}: {}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.",
-                snapshot.current_branch,
-                names(unmerged)
-            ));
+            message.push_str(&tr_fmt!(" Not merged into {branch}: {names}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.", branch = snapshot.current_branch, names = names(unmerged)));
         }
-        message.push_str(" Undo restores them at their tips until you take another undoable action.");
+        message.push_str(tr(" Undo restores them at their tips until you take another undoable action."));
         let count = branches.len();
-        self.confirm(format!("Delete {count} branches?"), message, "Delete branches", Pending::DeleteBranches { branches });
+        self.confirm(
+            tr_fmt!("Delete {count} branches?", count = count),
+            message,
+            tr("Delete branches"),
+            Pending::DeleteBranches { branches },
+        );
     }
 
     pub fn branch_menu(&mut self, ui: &mut Ui, branch: &Branch, snapshot: &Snapshot, can_switch: bool) {
@@ -804,19 +845,21 @@ impl NiceGitApp {
         // With two or more branches selected, the menu of one of them deletes the whole selection.
         let deletable = if branch.is_remote { Vec::new() } else { self.deletable_selection(snapshot) };
         let multi_delete = deletable.len() >= 2 && deletable.iter().any(|(selected, _)| selected.name == branch.name);
-        if !branch.is_current && ui.add_enabled(can_switch, egui::Button::new(format!("{}  Check out", icon::CHECK))).clicked() {
+        if !branch.is_current && ui.add_enabled(can_switch, egui::Button::new(format!("{}  {}", icon::CHECK, tr("Check out")))).clicked() {
             ui.close();
             self.checkout(branch.clone());
         }
-        if !snapshot.remotes.is_empty() && ui.add_enabled(idle, egui::Button::new(format!("{}  Fetch", icon::CLOUD_ARROW_DOWN))).clicked() {
+        if !snapshot.remotes.is_empty()
+            && ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::CLOUD_ARROW_DOWN, tr("Fetch")))).clicked()
+        {
             ui.close();
             self.fetch();
         }
         if let Some(target) = crate::git_ext::pull_request_target(snapshot, branch, self.settings.listed_hosts()) {
-            let button = ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, target.repository.create_label())).on_hover_text(format!(
-                "Create the {} through the {}",
-                target.repository.request_noun(),
-                target.repository.cli_name()
+            let button = ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, target.repository.create_label())).on_hover_text(tr_fmt!(
+                "Create the {noun} through the {tool}",
+                noun = target.repository.request_noun(),
+                tool = target.repository.cli_name()
             ));
             if button.clicked() {
                 ui.close();
@@ -825,7 +868,7 @@ impl NiceGitApp {
             }
         }
         if let Some(link) = crate::git_ext::hosted_branch_link(snapshot, branch, self.settings.listed_hosts()) {
-            let text = format!("{}  Open branch on {}", icon::ARROW_SQUARE_OUT, link.host.name());
+            let text = format!("{}  {}", icon::ARROW_SQUARE_OUT, tr_fmt!("Open branch on {host}", host = link.host.name()));
             if ui.button(text).on_hover_text(&link.url).clicked() {
                 ui.close();
                 crate::ui::changes::open_url(&link.url);
@@ -835,21 +878,24 @@ impl NiceGitApp {
             if ui
                 .add_enabled(
                     idle && snapshot.operation.is_none() && snapshot.upstream.is_some(),
-                    egui::Button::new(format!("{}  Pull", icon::ARROW_LINE_DOWN)),
+                    egui::Button::new(format!("{}  {}", icon::ARROW_LINE_DOWN, tr("Pull"))),
                 )
                 .clicked()
             {
                 ui.close();
                 self.pull();
             }
-            if ui.add_enabled(idle && !snapshot.remotes.is_empty(), egui::Button::new(format!("{}  Push", icon::ARROW_LINE_UP))).clicked() {
+            if ui
+                .add_enabled(idle && !snapshot.remotes.is_empty(), egui::Button::new(format!("{}  {}", icon::ARROW_LINE_UP, tr("Push"))))
+                .clicked()
+            {
                 ui.close();
                 self.push();
             }
             let can_force_push = idle && snapshot.is_on_branch() && snapshot.operation.is_none() && snapshot.upstream.is_some();
             let force_push = ui
-                .add_enabled(can_force_push, egui::Button::new(format!("{}  Force push…", icon::WARNING)))
-                .on_hover_text("Replaces the remote branch with yours, if no one else has pushed since you last fetched");
+                .add_enabled(can_force_push, egui::Button::new(format!("{}  {}", icon::WARNING, tr("Force push…"))))
+                .on_hover_text(tr("Replaces the remote branch with yours, if no one else has pushed since you last fetched"));
             if force_push.clicked() {
                 ui.close();
                 self.request_force_push();
@@ -857,18 +903,28 @@ impl NiceGitApp {
         }
         if !branch.is_remote && !branch.is_detached() {
             for remote in &snapshot.remotes {
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  Push to {remote}/{}…", icon::UPLOAD_SIMPLE, branch.name))).clicked()
+                if ui
+                    .add_enabled(
+                        idle,
+                        egui::Button::new(format!(
+                            "{}  {}",
+                            icon::UPLOAD_SIMPLE,
+                            tr_fmt!("Push to {remote}/{name}…", remote = remote, name = branch.name)
+                        )),
+                    )
+                    .clicked()
                 {
                     ui.close();
                     self.confirm(
-                        format!("Push {} to {remote}?", branch.name),
-                        format!(
-                            "Updates {remote}/{name} to {} ({}). Only this branch is pushed; tags are not.",
-                            short(&branch.tip),
-                            branch.subject,
-                            name = branch.name
+                        tr_fmt!("Push {branch} to {remote}?", branch = branch.name, remote = remote),
+                        tr_fmt!(
+                            "Updates {remote}/{name} to {tip} ({subject}). Only this branch is pushed; tags are not.",
+                            remote = remote,
+                            name = branch.name,
+                            tip = short(&branch.tip),
+                            subject = branch.subject
                         ),
-                        "Push",
+                        tr("Push"),
                         Pending::PushBranch {
                             branch: branch.clone(),
                             remote: remote.clone(),
@@ -879,11 +935,22 @@ impl NiceGitApp {
             }
         }
         if !branch.is_current && snapshot.is_on_branch() {
-            if ui.add_enabled(can_switch, egui::Button::new(format!("{}  Merge into {current}…", icon::GIT_MERGE))).clicked() {
+            if ui
+                .add_enabled(
+                    can_switch,
+                    egui::Button::new(format!("{}  {}", icon::GIT_MERGE, tr_fmt!("Merge into {current}…", current = current))),
+                )
+                .clicked()
+            {
                 ui.close();
                 self.request_merge(branch.clone());
             }
-            if ui.add_enabled(can_switch, egui::Button::new(format!("{}  Rebase {current} onto this…", icon::GIT_PULL_REQUEST))).clicked()
+            if ui
+                .add_enabled(
+                    can_switch,
+                    egui::Button::new(format!("{}  {}", icon::GIT_PULL_REQUEST, tr_fmt!("Rebase {current} onto this…", current = current))),
+                )
+                .clicked()
             {
                 ui.close();
                 self.request_rebase(branch.clone());
@@ -894,40 +961,44 @@ impl NiceGitApp {
             && ui
                 .add_enabled(
                     idle && snapshot.operation.is_none(),
-                    egui::Button::new(format!("{}  Reset {current} to here…", icon::ARROW_ARC_LEFT)),
+                    egui::Button::new(format!("{}  {}", icon::ARROW_ARC_LEFT, tr_fmt!("Reset {current} to here…", current = current))),
                 )
                 .clicked()
         {
             ui.close();
             self.open_tool(Box::new(tools::reset::ResetWindow::new(branch.tip.clone(), branch.subject.clone(), snapshot)));
         }
-        if !branch.is_current && snapshot.head_hash.is_some() && ui.button(format!("{}  Compare with {current}…", icon::GIT_DIFF)).clicked()
+        if !branch.is_current
+            && snapshot.head_hash.is_some()
+            && ui.button(format!("{}  {}", icon::GIT_DIFF, tr_fmt!("Compare with {current}…", current = current))).clicked()
         {
             ui.close();
             let other = branch.display_name();
             self.open_tool(Box::new(tools::branch_compare::BranchCompareWindow::new(other, branch.tip.clone(), current.clone())));
         }
-        if !branch.is_remote && !branch.is_detached() && ui.button(format!("{}  Compare with previous version…", icon::GIT_DIFF)).clicked()
+        if !branch.is_remote
+            && !branch.is_detached()
+            && ui.button(format!("{}  {}", icon::GIT_DIFF, tr("Compare with previous version…"))).clicked()
         {
             ui.close();
             let start = tools::range_diff::Start::Branch(branch.name.clone());
             self.open_tool(Box::new(tools::range_diff::RangeDiffWindow::new(start)));
         }
-        if !branch.is_detached() && ui.button(format!("{}  Tip history…", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
+        if !branch.is_detached() && ui.button(format!("{}  {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("Tip history…"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::reflog::ReflogWindow::for_branch(branch)));
         }
         ui.separator();
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Create branch here…")))).clicked() {
             ui.close();
             self.dialog = Some(Dialog::input(
-                "New branch",
-                &format!("Create a branch at {}", branch.display_name()),
+                tr("New branch"),
+                &tr_fmt!("Create a branch at {branch}", branch = branch.display_name()),
                 "",
                 InputKind::CreateBranchFrom(branch.clone()),
             ));
         }
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Create tag here…", icon::TAG))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TAG, tr("Create tag here…")))).clicked() {
             ui.close();
             self.dialog = Some(Dialog::new_tag(branch.tip.clone(), snapshot));
         }
@@ -937,7 +1008,10 @@ impl NiceGitApp {
             let display = branch.display_name();
             let name = display.strip_prefix(&format!("{remote}/")).unwrap_or(&display).to_string();
             ui.separator();
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Delete {display}…", icon::CLOUD_X))).clicked() {
+            if ui
+                .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::CLOUD_X, tr_fmt!("Delete {display}…", display = display))))
+                .clicked()
+            {
                 ui.close();
                 let tracking_ref = format!("refs/{}", branch.name);
                 let trackers: Vec<&str> = snapshot
@@ -946,19 +1020,16 @@ impl NiceGitApp {
                     .filter(|local| !local.is_remote && local.upstream.as_deref() == Some(tracking_ref.as_str()))
                     .map(|local| local.name.as_str())
                     .collect();
-                let mut message = format!(
-                    "The branch is removed from {remote} for everyone who uses it, while it still points to {}. Local branches are not changed.",
-                    short(&branch.tip)
-                );
+                let mut message = tr_fmt!("The branch is removed from {remote} for everyone who uses it, while it still points to {tip}. Local branches are not changed.", remote = remote, tip = short(&branch.tip));
                 match trackers.as_slice() {
                     [] => {}
-                    [only] => message.push_str(&format!(" {only} tracks it; its upstream will be gone.")),
-                    many => message.push_str(&format!(" {} track it; their upstreams will be gone.", many.join(", "))),
+                    [only] => message.push_str(&tr_fmt!(" {branch} tracks it; its upstream will be gone.", branch = only)),
+                    many => message.push_str(&tr_fmt!(" {branches} track it; their upstreams will be gone.", branches = many.join(", "))),
                 }
                 self.confirm(
-                    format!("Delete {display}?"),
+                    tr_fmt!("Delete {display}?", display = display),
                     message,
-                    "Delete from remote",
+                    tr("Delete from remote"),
                     Pending::DeleteRemoteBranch {
                         remote: remote.to_string(),
                         branch: name,
@@ -969,37 +1040,41 @@ impl NiceGitApp {
             }
         }
         if !branch.is_remote && !branch.is_detached() {
-            if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Create worktree…", icon::FOLDERS))).clicked() {
+            if !branch.is_current
+                && ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::FOLDERS, tr("Create worktree…")))).clicked()
+            {
                 ui.close();
                 self.open_tool(Box::new(tools::worktrees::WorktreesWindow::for_branch(branch.name.clone(), branch.tip.clone())));
             }
             let remotes = snapshot.remotes.clone();
             if !remotes.is_empty() {
-                ui.menu_button(format!("{}  Upstream", icon::ARROWS_LEFT_RIGHT), |ui| {
+                ui.menu_button(format!("{}  {}", icon::ARROWS_LEFT_RIGHT, tr("Upstream")), |ui| {
                     for remote_branch in snapshot.branches.iter().filter(|b| b.is_remote) {
                         let name = remote_branch.display_name();
                         let current = branch.upstream.as_deref() == Some(format!("refs/{}", remote_branch.name).as_str());
                         if ui.add_enabled(idle, egui::Button::selectable(current, name.clone())).clicked() {
                             ui.close();
                             let (branch, tip) = (branch.name.clone(), branch.tip.clone());
-                            self.act("Set upstream", move |client, path| {
-                                client.set_upstream(&branch, Some(&name), &tip, path).map(|_| Some(format!("{branch} now tracks {name}.")))
+                            self.act(tr("Set upstream"), move |client, path| {
+                                client
+                                    .set_upstream(&branch, Some(&name), &tip, path)
+                                    .map(|_| Some(tr_fmt!("{branch} now tracks {name}.", branch = branch, name = name)))
                             });
                         }
                     }
                     ui.separator();
-                    if ui.add_enabled(idle && branch.upstream.is_some(), egui::Button::new("Stop tracking")).clicked() {
+                    if ui.add_enabled(idle && branch.upstream.is_some(), egui::Button::new(tr("Stop tracking"))).clicked() {
                         ui.close();
                         let (branch, tip) = (branch.name.clone(), branch.tip.clone());
-                        self.act("Unset upstream", move |client, path| client.set_upstream(&branch, None, &tip, path).map(|_| None));
+                        self.act(tr("Unset upstream"), move |client, path| client.set_upstream(&branch, None, &tip, path).map(|_| None));
                     }
                 });
             }
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Rename…", icon::PENCIL_SIMPLE))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Rename…")))).clicked() {
                 ui.close();
                 self.dialog = Some(Dialog::input(
-                    &format!("Rename {}", branch.name),
-                    "New name",
+                    &tr_fmt!("Rename {branch}", branch = branch.name),
+                    tr("New name"),
                     &branch.name,
                     InputKind::RenameBranch(branch.clone()),
                 ));
@@ -1008,30 +1083,28 @@ impl NiceGitApp {
                 if ui
                     .add_enabled(
                         idle && snapshot.operation.is_none(),
-                        egui::Button::new(format!("{}  Delete {} branches…", icon::TRASH, deletable.len())),
+                        egui::Button::new(format!("{}  {}", icon::TRASH, tr_fmt!("Delete {count} branches…", count = deletable.len()))),
                     )
                     .clicked()
                 {
                     ui.close();
                     self.request_delete_selected_branches(snapshot);
                 }
-            } else if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  Delete…", icon::TRASH))).clicked() {
+            } else if !branch.is_current && ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Delete…")))).clicked()
+            {
                 ui.close();
                 let merged = Self::branch_is_merged(branch, snapshot);
                 // Like the Mac app, this is Git's safe delete: an unmerged branch is refused.
                 // Clean Up Branches can delete unmerged branches after a separate choice.
                 let message = if merged {
-                    "This branch is merged into the current branch, so no commits are lost.".to_string()
+                    tr("This branch is merged into the current branch, so no commits are lost.").to_string()
                 } else {
-                    format!(
-                        "This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {}.",
-                        short(&branch.tip)
-                    )
+                    tr_fmt!("This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {tip}.", tip = short(&branch.tip))
                 };
                 self.confirm(
-                    format!("Delete branch {}?", branch.name),
+                    tr_fmt!("Delete branch {branch}?", branch = branch.name),
                     message,
-                    "Delete",
+                    tr("Delete"),
                     Pending::DeleteBranch { branch: branch.clone(), force: false },
                 );
             }
@@ -1039,13 +1112,14 @@ impl NiceGitApp {
         // Git lists a detached HEAD as a description, not a branch, so it has nothing to hide.
         if !branch.is_detached() {
             if self.hidden_branches().contains(&branch.full_ref()) {
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  Show in graph", icon::EYE))).clicked() {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::EYE, tr("Show in graph")))).clicked() {
                     ui.close();
                     self.set_branch_hidden(branch, false);
                 }
             } else {
-                let hide = ui.add_enabled(idle && !branch.is_current, egui::Button::new(format!("{}  Hide in graph", icon::EYE_SLASH)));
-                let hide = if branch.is_current { hide.on_disabled_hover_text("The current branch is always shown.") } else { hide };
+                let hide =
+                    ui.add_enabled(idle && !branch.is_current, egui::Button::new(format!("{}  {}", icon::EYE_SLASH, tr("Hide in graph"))));
+                let hide = if branch.is_current { hide.on_disabled_hover_text(tr("The current branch is always shown.")) } else { hide };
                 if hide.clicked() {
                     ui.close();
                     self.set_branch_hidden(branch, true);
@@ -1053,21 +1127,21 @@ impl NiceGitApp {
             }
             // Solo shows this branch and HEAD alone, so the current branch can be soloed too.
             if self.solo_branch().as_deref() == Some(branch.full_ref().as_str()) {
-                if ui.add_enabled(idle, egui::Button::new(format!("{}  Stop showing only this branch", icon::EYE))).clicked() {
+                if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::EYE, tr("Stop showing only this branch")))).clicked() {
                     ui.close();
                     self.set_solo_branch(None);
                 }
-            } else if ui.add_enabled(idle, egui::Button::new(format!("{}  Show only this branch", icon::EYE))).clicked() {
+            } else if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::EYE, tr("Show only this branch")))).clicked() {
                 ui.close();
                 self.set_solo_branch(Some(branch.full_ref()));
             }
         }
         ui.separator();
-        if ui.button(format!("{}  Copy name", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy name"))).clicked() {
             ui.close();
             ui.ctx().copy_text(branch.display_name());
         }
-        if ui.button(format!("{}  Copy commit ID", icon::HASH)).clicked() {
+        if ui.button(format!("{}  {}", icon::HASH, tr("Copy commit ID"))).clicked() {
             ui.close();
             ui.ctx().copy_text(branch.tip.clone());
         }
@@ -1078,9 +1152,9 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let preview = self.integration_preview(&source, false);
         self.confirm(
-            format!("Merge {} into {}?", source.display_name(), snapshot.current_branch),
+            tr_fmt!("Merge {source} into {branch}?", source = source.display_name(), branch = snapshot.current_branch),
             preview,
-            "Merge",
+            tr("Merge"),
             Pending::Merge {
                 source,
                 branch: snapshot.current_branch.clone(),
@@ -1094,9 +1168,9 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let preview = self.integration_preview(&onto, true);
         self.confirm(
-            format!("Rebase {} onto {}?", snapshot.current_branch, onto.display_name()),
+            tr_fmt!("Rebase {branch} onto {onto}?", branch = snapshot.current_branch, onto = onto.display_name()),
             preview,
-            "Rebase",
+            tr("Rebase"),
             Pending::Rebase { onto, branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
         );
     }
@@ -1107,7 +1181,7 @@ impl NiceGitApp {
         let (Some(snapshot), Some(repo)) = (self.snapshot().cloned(), self.repo()) else { return };
         let path = repo.path.clone();
         let (Some(head), Some(upstream)) = (snapshot.head_hash.clone(), snapshot.upstream.clone()) else {
-            self.notify("Set an upstream branch before force pushing.", true);
+            self.notify(tr("Set an upstream branch before force pushing."), true);
             return;
         };
         let preview = match GitClient::new().force_push_preview(&snapshot, &path) {
@@ -1119,9 +1193,9 @@ impl NiceGitApp {
         };
         let message = crate::git_ext::force_push_message(&preview, &upstream);
         self.confirm(
-            format!("Force push {}?", snapshot.current_branch),
+            tr_fmt!("Force push {branch}?", branch = snapshot.current_branch),
             message,
-            "Force push",
+            tr("Force push"),
             Pending::ForcePush {
                 branch: snapshot.current_branch.clone(),
                 head,
@@ -1138,11 +1212,11 @@ impl NiceGitApp {
         match crate::git_ext::merge_preview_text(&source.tip, rebase, &repo.path) {
             Ok(text) => text,
             Err(_) if rebase => {
-                "Your branch's commits are replayed on top of the other branch. Conflicts stop the rebase for you to resolve or abort."
+                tr("Your branch's commits are replayed on top of the other branch. Conflicts stop the rebase for you to resolve or abort.")
                     .into()
             }
             Err(_) => {
-                "Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.".into()
+                tr("Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.").into()
             }
         }
     }

@@ -11,6 +11,7 @@ use egui::{RichText, ScrollArea, TextEdit, Ui};
 use nicegit_core::conflict::{has_conflict_markers, ConflictDocument};
 use nicegit_core::{GitClient, Operation};
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
@@ -19,18 +20,18 @@ use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 /// being replayed. Other operations use "Current" and "Incoming".
 pub fn side_names(operation: Option<Operation>) -> (&'static str, &'static str) {
     if operation == Some(Operation::Rebase) {
-        ("Destination", "Replayed commit")
+        (tr("Destination"), tr("Replayed commit"))
     } else {
-        ("Current", "Incoming")
+        (tr("Current"), tr("Incoming"))
     }
 }
 
 /// The notice for turning Git's conflict memory on or off, shared with the command palette.
 pub fn remember_notice(enabled: bool) -> &'static str {
     if enabled {
-        "Git will remember how you resolve conflicts and reuse it when the same conflict happens again."
+        tr("Git will remember how you resolve conflicts and reuse it when the same conflict happens again.")
     } else {
-        "Git will no longer remember how you resolve conflicts."
+        tr("Git will no longer remember how you resolve conflicts.")
     }
 }
 
@@ -115,17 +116,17 @@ fn remember_option(ui: &mut Ui, cx: &mut Ctx, remember: &mut Option<bool>) {
     let known = remember.is_some();
     let mut changed = false;
     ui.horizontal(|ui| {
-        let box_ = egui::Checkbox::new(&mut on, "Remember how I resolve conflicts");
+        let box_ = egui::Checkbox::new(&mut on, tr("Remember how I resolve conflicts"));
         changed = ui.add_enabled(cx.idle && known, box_).changed();
     });
     ui.label(
-        RichText::new("Git will reuse your resolution if the same conflict happens again, for example in a later rebase.")
+        RichText::new(tr("Git will reuse your resolution if the same conflict happens again, for example in a later rebase."))
             .small()
             .color(c.muted),
     );
     if changed {
         *remember = Some(on);
-        cx.act("Remember conflict resolutions", move |client, repo| {
+        cx.act(tr("Remember conflict resolutions"), move |client, repo| {
             client.set_rerere_enabled(on, repo).map(|()| Some(remember_notice(on).to_string()))
         });
     }
@@ -141,7 +142,7 @@ impl ToolWindow for ConflictWindow {
     }
 
     fn title(&self) -> String {
-        format!("Resolve conflict: {}", self.path)
+        tr_fmt!("Resolve conflict: {path}", path = self.path)
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -185,9 +186,16 @@ impl ToolWindow for ConflictWindow {
                 match cx.external.merge.clone() {
                     Some(tool) => {
                         let enabled = cx.idle && !editing;
-                        let hover = if editing { "Save or discard the result first." } else { "Wait for the current action." };
+                        let hover = if editing { tr("Save or discard the result first.") } else { tr("Wait for the current action.") };
                         if ui
-                            .add_enabled(enabled, egui::Button::new(format!("{}  Resolve in {tool}", egui_phosphor::regular::GIT_DIFF)))
+                            .add_enabled(
+                                enabled,
+                                egui::Button::new(format!(
+                                    "{}  {}",
+                                    egui_phosphor::regular::GIT_DIFF,
+                                    tr_fmt!("Resolve in {tool}", tool = tool)
+                                )),
+                            )
                             .on_disabled_hover_text(hover)
                             .clicked()
                         {
@@ -195,8 +203,8 @@ impl ToolWindow for ConflictWindow {
                         }
                     }
                     None => {
-                        ui.add_enabled(false, egui::Button::new("Resolve in merge tool"))
-                            .on_disabled_hover_text(crate::tools::MERGE_TOOL_HINT);
+                        ui.add_enabled(false, egui::Button::new(tr("Resolve in merge tool")))
+                            .on_disabled_hover_text(crate::tools::merge_tool_hint());
                     }
                 }
             }
@@ -206,7 +214,7 @@ impl ToolWindow for ConflictWindow {
             return;
         }
         let Some(document) = self.document.as_ref() else {
-            widgets::loading(ui, "Reading the conflicted file...");
+            widgets::loading(ui, tr("Reading the conflicted file..."));
             return;
         };
 
@@ -218,7 +226,7 @@ impl ToolWindow for ConflictWindow {
         // Read-only versions, side by side. Each can be copied into the result.
         let versions_height = (ui.available_height() * 0.34).clamp(110.0, 250.0);
         let panes = [
-            ("Base", document.base.as_deref(), Version::Base),
+            (tr("Base"), document.base.as_deref(), Version::Base),
             (current, document.current.as_deref(), Version::Current),
             (incoming, document.incoming.as_deref(), Version::Incoming),
         ];
@@ -235,11 +243,11 @@ impl ToolWindow for ConflictWindow {
         }
 
         ui.add_space(6.0);
-        ui.label(RichText::new("Result").strong());
+        ui.label(RichText::new(tr("Result")).strong());
         if markers {
-            widgets::callout(ui, "The result still has conflict markers. Remove them before saving.", true);
+            widgets::callout(ui, tr("The result still has conflict markers. Remove them before saving."), true);
         } else if cx.snapshot.reused_resolutions.contains(&self.path) {
-            widgets::callout(ui, "Git reused a resolution you recorded earlier. Check it, then mark the file resolved.", false);
+            widgets::callout(ui, tr("Git reused a resolution you recorded earlier. Check it, then mark the file resolved."), false);
         }
         remember_option(ui, cx, &mut self.remember);
         // The editor wraps to the window's width, so only the height needs to scroll.
@@ -253,36 +261,38 @@ impl ToolWindow for ConflictWindow {
             let (message, label, enabled) = match pending {
                 Pending::Copy(version) => {
                     let name = match version {
-                        Version::Base => "base",
+                        Version::Base => tr("base"),
                         Version::Current => current,
                         Version::Incoming => incoming,
                     };
                     (
-                        format!("Replace the result with the {} version? Edits in the result are lost.", name.to_lowercase()),
-                        "Use version",
+                        tr_fmt!("Replace the result with the {name} version? Edits in the result are lost.", name = name.to_lowercase()),
+                        tr("Use version"),
                         true,
                     )
                 }
                 Pending::Whole(WholeFile::Current) => (
-                    format!(
-                        "Take the {} version of the whole file? This replaces the working file and discards editor changes.",
-                        current.to_lowercase()
+                    tr_fmt!(
+                        "Take the {name} version of the whole file? This replaces the working file and discards editor changes.",
+                        name = current.to_lowercase()
                     ),
-                    "Take version",
+                    tr("Take version"),
                     idle,
                 ),
                 Pending::Whole(WholeFile::Incoming) => (
-                    format!(
-                        "Take the {} version of the whole file? This replaces the working file and discards editor changes.",
-                        incoming.to_lowercase()
+                    tr_fmt!(
+                        "Take the {name} version of the whole file? This replaces the working file and discards editor changes.",
+                        name = incoming.to_lowercase()
                     ),
-                    "Take version",
+                    tr("Take version"),
                     idle,
                 ),
-                Pending::Whole(WholeFile::Delete) => {
-                    ("Delete this file? This removes the working file and discards editor changes.".to_string(), "Delete file", idle)
-                }
-                Pending::Close => ("Close the editor and discard its changes?".to_string(), "Discard changes", true),
+                Pending::Whole(WholeFile::Delete) => (
+                    tr("Delete this file? This removes the working file and discards editor changes.").to_string(),
+                    tr("Delete file"),
+                    idle,
+                ),
+                Pending::Close => (tr("Close the editor and discard its changes?").to_string(), tr("Discard changes"), true),
             };
             widgets::callout(ui, &message, true);
             let mut confirmed = false;
@@ -295,7 +305,7 @@ impl ToolWindow for ConflictWindow {
                     widgets::primary_button(ui, label, enabled).clicked()
                 };
                 confirmed = confirm;
-                cancelled = ui.button("Cancel").clicked();
+                cancelled = ui.button(tr("Cancel")).clicked();
             });
             if confirmed {
                 match pending {
@@ -321,21 +331,25 @@ impl ToolWindow for ConflictWindow {
         let mut close = false;
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Whole file").weak());
-            if ui.add_enabled(idle, egui::Button::new(format!("Take {}", current.to_lowercase()))).clicked() {
+            ui.label(RichText::new(tr("Whole file")).weak());
+            if ui.add_enabled(idle, egui::Button::new(tr_fmt!("Take {side}", side = current.to_lowercase()))).clicked() {
                 whole = Some(WholeFile::Current);
             }
-            if ui.add_enabled(idle, egui::Button::new(format!("Take {}", incoming.to_lowercase()))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(tr_fmt!("Take {side}", side = incoming.to_lowercase()))).clicked() {
                 whole = Some(WholeFile::Incoming);
             }
-            if widgets::danger_button(ui, "Delete file", idle).clicked() {
+            if widgets::danger_button(ui, tr("Delete file"), idle).clicked() {
                 whole = Some(WholeFile::Delete);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                save = widgets::primary_button(ui, "Save and mark resolved", idle && !markers)
-                    .on_disabled_hover_text(if markers { "Remove the conflict markers first." } else { "Wait for the current action." })
+                save = widgets::primary_button(ui, tr("Save and mark resolved"), idle && !markers)
+                    .on_disabled_hover_text(if markers {
+                        tr("Remove the conflict markers first.")
+                    } else {
+                        tr("Wait for the current action.")
+                    })
                     .clicked();
-                close = ui.button("Close").clicked();
+                close = ui.button(tr("Close")).clicked();
             });
         });
 
@@ -354,10 +368,10 @@ impl ToolWindow for ConflictWindow {
             let text = self.result.clone();
             let resolved = Arc::clone(&self.resolved);
             let path = self.path.clone();
-            cx.act(format!("Resolve {}", self.path), move |client, repo| {
+            cx.act(tr_fmt!("Resolve {path}", path = self.path), move |client, repo| {
                 client.resolve_conflict(&document, &text, repo).map(|()| {
                     resolved.store(true, Ordering::SeqCst);
-                    Some(format!("Resolved {path}"))
+                    Some(tr_fmt!("Resolved {path}", path = path))
                 })
             });
         }
@@ -383,10 +397,10 @@ fn version_pane(ui: &mut Ui, label: &str, text: Option<&str>, height: f32, idle:
             ui.add(egui::Label::new(RichText::new(text).monospace()).extend());
         }
         None => {
-            ui.label(RichText::new("Not available for this file.").weak());
+            ui.label(RichText::new(tr("Not available for this file.")).weak());
         }
     });
-    ui.add_enabled(idle && text.is_some(), egui::Button::new("Copy into result")).clicked()
+    ui.add_enabled(idle && text.is_some(), egui::Button::new(tr("Copy into result"))).clicked()
 }
 
 fn version_text(document: &ConflictDocument, version: Version) -> Option<String> {
@@ -400,9 +414,9 @@ fn version_text(document: &ConflictDocument, version: Version) -> Option<String>
 /// Starts a whole-file resolution. The resolution is marked done only if Git succeeds.
 fn whole_file(path: String, resolved: Arc<AtomicBool>, choice: WholeFile, cx: &mut Ctx) {
     let label = match choice {
-        WholeFile::Current => format!("Take current version of {path}"),
-        WholeFile::Incoming => format!("Take incoming version of {path}"),
-        WholeFile::Delete => format!("Delete {path}"),
+        WholeFile::Current => tr_fmt!("Take current version of {path}", path = path),
+        WholeFile::Incoming => tr_fmt!("Take incoming version of {path}", path = path),
+        WholeFile::Delete => tr_fmt!("Delete {path}", path = path),
     };
     cx.act(label, move |client: &GitClient, repo| {
         let outcome: nicegit_core::Result<()> = match choice {

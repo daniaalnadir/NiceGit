@@ -7,10 +7,23 @@ use nicegit_core::line_counts::LineCount;
 use nicegit_core::{Snapshot, StatusEntry, StatusKind};
 
 use crate::app::{commit_reaches, NiceGitApp, Repo, Selection};
+use crate::i18n::{fill, tr, tr_count, tr_fmt};
 use crate::settings::FileView;
 use crate::theme;
 use crate::tools::{self, widgets};
 use crate::ui::dialogs::Pending;
+
+/// A changed file's status, in the interface's language.
+pub fn kind_title(kind: StatusKind) -> &'static str {
+    match kind {
+        StatusKind::Added => tr("Added"),
+        StatusKind::Modified => tr("Modified"),
+        StatusKind::Deleted => tr("Deleted"),
+        StatusKind::Renamed => tr("Renamed"),
+        StatusKind::Conflicted => tr("Conflict"),
+        StatusKind::Untracked => tr("Untracked"),
+    }
+}
 
 /// The icon and colour for a changed file.
 pub fn kind_icon(ui: &Ui, kind: StatusKind) -> (&'static str, Color32) {
@@ -135,7 +148,7 @@ impl NiceGitApp {
         let show_filter = snapshot.status.len() > FILTER_FROM || filtering || filter_had_focus(ui.ctx()) || focus_requested;
         let shown = |part: &[StatusEntry], whole: &[StatusEntry]| {
             if filtering {
-                format!("{} of {}", part.len(), whole.len())
+                tr_fmt!("{shown} of {total}", shown = part.len(), total = whole.len())
             } else {
                 whole.len().to_string()
             }
@@ -144,20 +157,20 @@ impl NiceGitApp {
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 14, bottom: 6 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let count = snapshot.status.len();
-                ui.label(RichText::new(format!("{count} file change{} on", if count == 1 { "" } else { "s" })).strong());
+                ui.label(RichText::new(tr_count("{count} file change on", "{count} file changes on", count)).strong());
                 widgets::pill(ui, &snapshot.current_branch, c.local_branch);
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("File view").color(c.muted));
-                ui.selectable_value(&mut self.settings.file_view, FileView::Path, "Path");
-                ui.selectable_value(&mut self.settings.file_view, FileView::Tree, "Tree");
+                ui.label(RichText::new(tr("File view")).color(c.muted));
+                ui.selectable_value(&mut self.settings.file_view, FileView::Path, tr("Path"));
+                ui.selectable_value(&mut self.settings.file_view, FileView::Tree, tr("Tree"));
             });
             let mut filter_focused = false;
             if show_filter {
                 ui.add_space(6.0);
-                let field = widgets::search_field(ui, &mut self.repos[self.active].change_filter, "Filter changed files");
-                field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter changed files"));
+                let field = widgets::search_field(ui, &mut self.repos[self.active].change_filter, tr("Filter changed files"));
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter changed files")));
                 if focus_requested {
                     field.request_focus();
                 }
@@ -178,18 +191,26 @@ impl NiceGitApp {
             let more = self.repo().map(|r| r.discard_undo.len().saturating_sub(1)).unwrap_or(0);
             egui::Frame::new().fill(c.subtle_bg).inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    let more = if more > 0 { format!(" (and {more} earlier)") } else { String::new() };
+                    let more = if more > 0 { format!(" {}", tr_fmt!("(and {count} earlier)", count = more)) } else { String::new() };
                     ui.add(
                         egui::Label::new(
-                            RichText::new(format!("{}  Discarded changes to {}{more}", icon::TRASH, undo.path)).color(c.muted),
+                            RichText::new(format!(
+                                "{}  {}",
+                                icon::TRASH,
+                                tr_fmt!("Discarded changes to {path}{more}", path = undo.path, more = more)
+                            ))
+                            .color(c.muted),
                         )
                         .truncate(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::icon_button(ui, icon::X, "Dismiss", true).clicked() {
+                        if widgets::icon_button(ui, icon::X, tr("Dismiss"), true).clicked() {
                             self.repos[self.active].discard_undo.clear();
                         }
-                        if ui.add_enabled(idle, egui::Button::new(format!("{}  Undo discard", icon::ARROW_COUNTER_CLOCKWISE))).clicked() {
+                        if ui
+                            .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::ARROW_COUNTER_CLOCKWISE, tr("Undo discard"))))
+                            .clicked()
+                        {
                             self.undo_discard();
                         }
                     });
@@ -201,7 +222,8 @@ impl NiceGitApp {
         // counts stay visible; if even that does not fit, the title is truncated rather than running
         // under the buttons. The accessible label keeps the full wording.
         let compact = ui.available_width() - 20.0 < 380.0;
-        let noun = if compact { "" } else { " files" };
+        let (unstaged_title, staged_title) =
+            if compact { (tr("Unstaged"), tr("Staged")) } else { (tr("Unstaged files"), tr("Staged files")) };
         let row = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
         // The height of the staged header and the gap above it, measured last frame, so the room
         // can be shared out before they are drawn.
@@ -213,20 +235,20 @@ impl NiceGitApp {
                 ui,
                 |ui| {
                     let count = shown(unstaged, all_unstaged);
-                    let full = format!("Unstaged files ({count})");
-                    ui.label(RichText::new(format!("{}  Unstaged{noun} ({count})", icon::CARET_DOWN)).strong())
+                    let full = tr_fmt!("Unstaged files ({count})", count = count);
+                    ui.label(RichText::new(format!("{}  {}", icon::CARET_DOWN, tr_fmt!("{title} ({count})", title = unstaged_title, count = count))).strong())
                         .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
                 },
                 |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // The bulk buttons act on every file in their section, not only the shown ones.
                         let enabled = idle && !all_unstaged.is_empty();
-                        let stage_all = outlined(ui, if compact { "Stage All" } else { "Stage All Changes" }, c.accent, enabled);
-                        stage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, "Stage All Changes"));
+                        let stage_all = outlined(ui, if compact { tr("Stage All") } else { tr("Stage All Changes") }, c.accent, enabled);
+                        stage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, tr("Stage All Changes")));
                         let stage_all = if filtering {
-                            stage_all.on_hover_text(format!(
-                                "Stages all {} unstaged files, including those hidden by the filter",
-                                all_unstaged.len()
+                            stage_all.on_hover_text(tr_fmt!(
+                                "Stages all {count} unstaged files, including those hidden by the filter",
+                                count = all_unstaged.len()
                             ))
                         } else {
                             stage_all
@@ -240,31 +262,32 @@ impl NiceGitApp {
                         let discardable = all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).count();
                         let discard_all_enabled = idle && discardable > 0;
                         let discard_tip = if filtering {
-                            format!("Discards changes to all {discardable} unstaged files, including those hidden by the filter")
+                            tr_fmt!("Discards changes to all {count} unstaged files, including those hidden by the filter", count = discardable)
                         } else {
-                            "Discard all changes…".to_string()
+                            tr("Discard all changes…").to_string()
                         };
                         let discard_all = widgets::icon_button(ui, icon::TRASH, &discard_tip, discard_all_enabled);
-                        discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, discard_all_enabled, "Discard all changes…"));
+                        discard_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, discard_all_enabled, tr("Discard all changes…")));
                         if discard_all.clicked() {
                             let entries: Vec<StatusEntry> =
                                 all_unstaged.iter().filter(|e| e.kind != StatusKind::Conflicted).cloned().collect();
-                            let hidden = if filtering { " Files hidden by the filter are included." } else { "" };
+                            let hidden = if filtering { format!(" {}", tr("Files hidden by the filter are included.")) } else { String::new() };
                             self.confirm(
-                                "Discard all changes?",
-                                format!(
-                                    "Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}",
-                                    entries.len()
+                                tr("Discard all changes?"),
+                                tr_fmt!(
+                                    "Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}",
+                                    count = entries.len(),
+                                    hidden = hidden
                                 ),
-                                "Discard all",
+                                tr("Discard all"),
                                 Pending::DiscardAll(entries),
                             );
                         }
                         // Saves every unstaged change, untracked files included, for the person to keep or share.
                         let save_tip = if filtering {
-                            "Save unstaged changes as a patch, including untracked files and those hidden by the filter"
+                            tr("Save unstaged changes as a patch, including untracked files and those hidden by the filter")
                         } else {
-                            "Save unstaged changes as a patch, including untracked files"
+                            tr("Save unstaged changes as a patch, including untracked files")
                         };
                         if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_unstaged.is_empty()).clicked() {
                             let name = self.section_patch_name(false);
@@ -284,9 +307,9 @@ impl NiceGitApp {
         let unstaged_height = room / 2.0;
         list_area(ui, "changes-unstaged", unstaged_height, |ui| {
             if unstaged.is_empty() && !all_unstaged.is_empty() {
-                ui.label(RichText::new("   No matching files").small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr("No matching files"))).small().color(c.muted));
             } else if unstaged.is_empty() {
-                ui.label(RichText::new("   No unstaged changes").small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr("No unstaged changes"))).small().color(c.muted));
             } else if tree {
                 self.folder_rows(ui, &lists.unstaged_tree, "", false, idle, &snapshot, 0);
             } else {
@@ -306,19 +329,27 @@ impl NiceGitApp {
                 ui,
                 |ui| {
                     let count = shown(staged, all_staged);
-                    let full = format!("Staged files ({count})");
-                    ui.label(RichText::new(format!("{}  Staged{noun} ({count})", icon::CARET_DOWN)).strong())
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
+                    let full = tr_fmt!("Staged files ({count})", count = count);
+                    ui.label(
+                        RichText::new(format!(
+                            "{}  {}",
+                            icon::CARET_DOWN,
+                            tr_fmt!("{title} ({count})", title = staged_title, count = count)
+                        ))
+                        .strong(),
+                    )
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &full));
                 },
                 |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let enabled = idle && !all_staged.is_empty();
-                        let unstage_all = outlined(ui, if compact { "Unstage All" } else { "Unstage All Changes" }, c.accent, enabled);
-                        unstage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, "Unstage All Changes"));
+                        let unstage_all =
+                            outlined(ui, if compact { tr("Unstage All") } else { tr("Unstage All Changes") }, c.accent, enabled);
+                        unstage_all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, tr("Unstage All Changes")));
                         let unstage_all = if filtering {
-                            unstage_all.on_hover_text(format!(
-                                "Unstages all {} staged files, including those hidden by the filter",
-                                all_staged.len()
+                            unstage_all.on_hover_text(tr_fmt!(
+                                "Unstages all {count} staged files, including those hidden by the filter",
+                                count = all_staged.len()
                             ))
                         } else {
                             unstage_all
@@ -327,15 +358,15 @@ impl NiceGitApp {
                             self.act("Unstage all", |client, path| client.unstage_all(path).map(|_| None));
                         }
                         let save_tip = if filtering {
-                            "Save staged changes as a patch, including files hidden by the filter"
+                            tr("Save staged changes as a patch, including files hidden by the filter")
                         } else {
-                            "Save staged changes as a patch"
+                            tr("Save staged changes as a patch")
                         };
                         if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_staged.is_empty()).clicked() {
                             let name = self.section_patch_name(true);
                             self.save_working_patch(true, None, false, &name);
                         }
-                        let absorb_tip = "Absorb staged changes into the earlier commits that last changed their lines";
+                        let absorb_tip = tr("Absorb staged changes into the earlier commits that last changed their lines");
                         if widgets::icon_button(ui, icon::GIT_MERGE, absorb_tip, absorb_ready).clicked() {
                             self.open_tool(Box::new(tools::absorb::AbsorbWindow::new(&snapshot)));
                         }
@@ -348,9 +379,9 @@ impl NiceGitApp {
         let staged_height = ui.available_height().max(row);
         list_area(ui, "changes-staged", staged_height, |ui| {
             if staged.is_empty() && !all_staged.is_empty() {
-                ui.label(RichText::new("   No matching files").small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr("No matching files"))).small().color(c.muted));
             } else if staged.is_empty() {
-                ui.label(RichText::new("   Stage files to include them in the next commit").small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr("Stage files to include them in the next commit"))).small().color(c.muted));
             } else if tree {
                 self.folder_rows(ui, &lists.staged_tree, "", true, idle, &snapshot, 0);
             } else {
@@ -388,7 +419,14 @@ impl NiceGitApp {
                     // The whole row opens the menu, not only the arrow that opens the folder.
                     let response = ui.interact(row.response.rect, id.with("menu"), egui::Sense::click());
                     let files = child.count();
-                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Folder {name}, {files} files")));
+                    let files_text = tr_count("{count} file", "{count} files", files);
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::Role::Button,
+                            true,
+                            tr_fmt!("Folder {name}, {files}", name = name, files = files_text),
+                        )
+                    });
                     response.context_menu(|ui| self.folder_menu(ui, child, &path, staged, idle));
                 })
                 .body(|ui| self.folder_rows(ui, child, &path, staged, idle, snapshot, depth + 1));
@@ -404,18 +442,18 @@ impl NiceGitApp {
         ui.set_min_width(230.0);
         let entries = folder.entries();
         let filtering = self.repo().is_some_and(|r| !r.change_filter.trim().is_empty());
-        let scope = if filtering { " Only files shown by the filter are included." } else { "" };
+        let scope = if filtering { format!(" {}", tr("Only files shown by the filter are included.")) } else { String::new() };
         if staged {
             let count = entries.len();
-            let noun = if count == 1 { "file" } else { "files" };
-            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  Unstage folder", icon::MINUS_CIRCLE))).clicked() {
+            let files = tr_count("{count} file", "{count} files", count);
+            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  {}", icon::MINUS_CIRCLE, tr("Unstage folder")))).clicked() {
                 ui.close();
                 let folder_path = path.to_string();
                 self.act("Unstage folder", move |client, repo| {
                     for entry in &entries {
                         client.unstage(entry, repo)?;
                     }
-                    Ok(Some(format!("Unstaged {count} {noun} in {folder_path}.")))
+                    Ok(Some(tr_fmt!("Unstaged {files} in {folder}.", files = files, folder = folder_path)))
                 });
             }
         } else {
@@ -423,28 +461,34 @@ impl NiceGitApp {
             // its conflicts resolved.
             let stageable: Vec<String> = entries.iter().filter(|e| e.kind != StatusKind::Conflicted).map(|e| e.path.clone()).collect();
             let count = stageable.len();
-            let noun = if count == 1 { "file" } else { "files" };
-            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  Stage folder", icon::PLUS_CIRCLE))).clicked() {
+            let files = tr_count("{count} file", "{count} files", count);
+            if ui.add_enabled(idle && count > 0, egui::Button::new(format!("{}  {}", icon::PLUS_CIRCLE, tr("Stage folder")))).clicked() {
                 ui.close();
                 let folder_path = path.to_string();
                 self.act("Stage folder", move |client, repo| {
-                    client.stage_paths(&stageable, repo).map(|_| Some(format!("Staged {count} {noun} in {folder_path}.")))
+                    client
+                        .stage_paths(&stageable, repo)
+                        .map(|_| Some(tr_fmt!("Staged {files} in {folder}.", files = files, folder = folder_path)))
                 });
             }
             let discardable: Vec<StatusEntry> = entries.into_iter().filter(|e| e.kind != StatusKind::Conflicted).collect();
             if ui
-                .add_enabled(idle && !discardable.is_empty(), egui::Button::new(format!("{}  Discard folder changes…", icon::TRASH)))
+                .add_enabled(
+                    idle && !discardable.is_empty(),
+                    egui::Button::new(format!("{}  {}", icon::TRASH, tr("Discard folder changes…"))),
+                )
                 .clicked()
             {
                 ui.close();
-                let text = format!(
-                    "Staged and unstaged changes to {} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}",
-                    discardable.len()
+                let text = tr_fmt!(
+                    "Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}",
+                    count = discardable.len(),
+                    scope = scope
                 );
-                self.confirm(format!("Discard changes in {path}?"), text, "Discard", Pending::DiscardAll(discardable));
+                self.confirm(tr_fmt!("Discard changes in {path}?", path = path), text, tr("Discard"), Pending::DiscardAll(discardable));
             }
         }
-        if ui.button(format!("{}  Copy folder path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy folder path"))).clicked() {
             ui.close();
             ui.ctx().copy_text(format!("{path}/"));
         }
@@ -469,8 +513,12 @@ impl NiceGitApp {
         let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
         // "src/app.rs, modified, staged": the row is the file, and its buttons are named apart.
         response.widget_info(|| {
-            let place = if staged { "staged" } else { "unstaged" };
-            egui::WidgetInfo::labeled(egui::Role::ListItem, true, format!("{}, {}, {place}", row_text(entry, label), entry.kind.title()))
+            let place = if staged { tr("staged") } else { tr("unstaged") };
+            egui::WidgetInfo::labeled(
+                egui::Role::ListItem,
+                true,
+                tr_fmt!("{name}, {kind}, {place}", name = row_text(entry, label), kind = kind_title(entry.kind), place = place),
+            )
         });
         widgets::mark_selected(ui.ctx(), response.id, selected);
         if selected {
@@ -485,8 +533,8 @@ impl NiceGitApp {
         // The glyph is a private-use character, so it is named by the status it shows.
         child
             .label(RichText::new(glyph).color(color))
-            .on_hover_text(entry.kind.title())
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, entry.kind.title()));
+            .on_hover_text(kind_title(entry.kind))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, kind_title(entry.kind)));
         let text = row_text(entry, label);
         let mut stage_clicked = false;
         let mut discard_clicked = false;
@@ -506,19 +554,19 @@ impl NiceGitApp {
         });
         child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if staged {
-                stage_clicked = widgets::icon_button(ui, icon::MINUS_CIRCLE, "Unstage", idle).clicked();
+                stage_clicked = widgets::icon_button(ui, icon::MINUS_CIRCLE, tr("Unstage"), idle).clicked();
             } else {
                 discard_clicked =
-                    widgets::icon_button(ui, icon::TRASH, "Discard changes…", idle && entry.kind != StatusKind::Conflicted).clicked();
+                    widgets::icon_button(ui, icon::TRASH, tr("Discard changes…"), idle && entry.kind != StatusKind::Conflicted).clicked();
                 if entry.kind == StatusKind::Conflicted {
-                    resolve_clicked = widgets::icon_button(ui, icon::GIT_DIFF, "Resolve conflict…", true).clicked();
+                    resolve_clicked = widgets::icon_button(ui, icon::GIT_DIFF, tr("Resolve conflict…"), true).clicked();
                     if reused {
                         let c = theme::of(ui);
-                        ui.label(RichText::new("Resolved from memory").small().color(c.muted))
-                            .on_hover_text("Git reused a resolution you recorded earlier. Check it, then mark the file resolved.");
+                        ui.label(RichText::new(tr("Resolved from memory")).small().color(c.muted))
+                            .on_hover_text(tr("Git reused a resolution you recorded earlier. Check it, then mark the file resolved."));
                     }
                 } else {
-                    stage_clicked = widgets::icon_button(ui, icon::PLUS_CIRCLE, "Stage", idle).clicked();
+                    stage_clicked = widgets::icon_button(ui, icon::PLUS_CIRCLE, tr("Stage"), idle).clicked();
                 }
             }
             if let Some(count) = count {
@@ -527,9 +575,9 @@ impl NiceGitApp {
             // A file this large is easy to commit by mistake and hard to remove from history.
             if let Some(bytes) = large {
                 let c = theme::of(ui);
-                ui.label(RichText::new(format!("{} {}", icon::WARNING, megabytes(bytes))).small().color(c.warning)).on_hover_text(
+                ui.label(RichText::new(format!("{} {}", icon::WARNING, megabytes(bytes))).small().color(c.warning)).on_hover_text(tr(
                     "A large file. GitHub warns about files over 50 MB and refuses files over 100 MB; consider Git LFS or ignoring it.",
-                );
+                ));
             }
         });
         if resolve_clicked {
@@ -557,17 +605,19 @@ impl NiceGitApp {
         if !self.uses_lfs(ui.ctx(), path) {
             return;
         }
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Lock file (LFS)", icon::LOCK_SIMPLE))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::LOCK_SIMPLE, tr("Lock file (LFS)")))).clicked() {
             ui.close();
             let path = path.to_string();
-            self.act("Lock file", move |client, repo| client.lock(&path, repo).map(|_| Some(format!("Locked {path} with Git LFS."))));
+            self.act("Lock file", move |client, repo| {
+                client.lock(&path, repo).map(|_| Some(tr_fmt!("Locked {path} with Git LFS.", path = path)))
+            });
         }
-        if ui.add_enabled(idle, egui::Button::new(format!("{}  Unlock file (LFS)", icon::LOCK_SIMPLE_OPEN))).clicked() {
+        if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::LOCK_SIMPLE_OPEN, tr("Unlock file (LFS)")))).clicked() {
             ui.close();
             let path = path.to_string();
             self.act("Unlock file", move |client, repo| {
                 let target = nicegit_core::lfs::LockTarget::Path(path.clone());
-                client.unlock(&target, false, repo).map(|()| Some(format!("Unlocked {path}.")))
+                client.unlock(&target, false, repo).map(|()| Some(tr_fmt!("Unlocked {path}.", path = path)))
             });
         }
     }
@@ -591,16 +641,16 @@ impl NiceGitApp {
             && !matches!(entry.kind, StatusKind::Conflicted | StatusKind::Renamed)
             && !entry.path.ends_with('/');
         let undo_note = if undoable {
-            "You can undo this from the Changes panel until the file changes again."
+            tr("You can undo this from the Changes panel until the file changes again.")
         } else {
-            "This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy."
+            tr("This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy.")
         };
         let what = if entry.kind == StatusKind::Untracked {
-            format!("{} is untracked and will be deleted. {undo_note}", entry.path)
+            tr_fmt!("{path} is untracked and will be deleted. {note}", path = entry.path, note = undo_note)
         } else {
-            format!("Staged and unstaged changes to {} are discarded. {undo_note}", entry.path)
+            tr_fmt!("Staged and unstaged changes to {path} are discarded. {note}", path = entry.path, note = undo_note)
         };
-        self.confirm("Discard changes?", what, "Discard", Pending::Discard(entry));
+        self.confirm(tr("Discard changes?"), what, tr("Discard"), Pending::Discard(entry));
     }
 
     /// The default file name for a section's patch, such as `repo-staged.patch`.
@@ -614,12 +664,12 @@ impl NiceGitApp {
     fn save_working_patch(&mut self, staged: bool, paths: Option<Vec<String>>, include_untracked: bool, default_name: &str) {
         let Some(repo) = self.repo() else { return };
         let directory = repo.path.clone();
-        let Some(file) = crate::file_dialog::save_file("Save as patch", default_name) else { return };
+        let Some(file) = crate::file_dialog::save_file(tr("Save as patch"), default_name) else { return };
         match nicegit_core::GitClient::new().working_changes_patch(staged, paths.as_deref(), include_untracked, &directory) {
             Ok(patch) => match std::fs::write(&file, patch) {
                 Ok(()) => {
                     let name = file.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-                    self.notify(format!("Saved {name}."), false);
+                    self.notify(tr_fmt!("Saved {name}.", name = name), false);
                 }
                 Err(error) => self.notify(error.to_string(), true),
             },
@@ -631,21 +681,24 @@ impl NiceGitApp {
         ui.set_min_width(230.0);
         let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
         let external = self.active_external_tools();
-        if entry.kind == StatusKind::Conflicted && ui.button(format!("{}  Resolve conflict…", icon::GIT_DIFF)).clicked() {
+        if entry.kind == StatusKind::Conflicted && ui.button(format!("{}  {}", icon::GIT_DIFF, tr("Resolve conflict…"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::conflict::ConflictWindow::new(entry.path.clone())));
         }
         if entry.kind == StatusKind::Conflicted {
             match &external.merge {
                 Some(name) => {
-                    if ui.add_enabled(idle, egui::Button::new(format!("{}  Resolve in {name}", icon::GIT_DIFF))).clicked() {
+                    if ui
+                        .add_enabled(idle, egui::Button::new(format!("{}  {}", icon::GIT_DIFF, tr_fmt!("Resolve in {name}", name = name))))
+                        .clicked()
+                    {
                         ui.close();
                         self.open_in_merge_tool(&entry.path, ui.ctx());
                     }
                 }
                 None => {
-                    ui.add_enabled(false, egui::Button::new(format!("{}  Resolve in merge tool", icon::GIT_DIFF)))
-                        .on_disabled_hover_text(tools::MERGE_TOOL_HINT);
+                    ui.add_enabled(false, egui::Button::new(format!("{}  {}", icon::GIT_DIFF, tr("Resolve in merge tool"))))
+                        .on_disabled_hover_text(tools::merge_tool_hint());
                 }
             }
         }
@@ -659,35 +712,39 @@ impl NiceGitApp {
             for (side, from_incoming) in [(current, false), (incoming, true)] {
                 let side = side.to_lowercase();
                 let item = ui
-                    .add_enabled(enabled, egui::Button::new(format!("{}  Take {side} version", icon::CHECK)))
-                    .on_disabled_hover_text(if editing { "Close this file's conflict editor first" } else { "Not available right now" });
+                    .add_enabled(enabled, egui::Button::new(format!("{}  {}", icon::CHECK, tr_fmt!("Take {side} version", side = side))))
+                    .on_disabled_hover_text(if editing {
+                        tr("Close this file's conflict editor first")
+                    } else {
+                        tr("Not available right now")
+                    });
                 if item.clicked() {
                     ui.close();
                     let label = format!("Take {side} version");
-                    let notice = format!("Took the {side} version of {}.", entry.path);
+                    let notice = tr_fmt!("Took the {side} version of {path}.", side = side, path = entry.path);
                     let path = entry.path.clone();
                     self.act(&label, move |client, repo| client.resolve_conflict_side(&path, from_incoming, repo).map(|()| Some(notice)));
                 }
             }
         }
         if staged {
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Unstage", icon::MINUS_CIRCLE))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::MINUS_CIRCLE, tr("Unstage")))).clicked() {
                 ui.close();
                 let entry = entry.clone();
                 self.act("Unstage", move |client, path| client.unstage(&entry, path).map(|_| None));
             }
         } else if entry.kind != StatusKind::Conflicted {
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Stage", icon::PLUS_CIRCLE))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::PLUS_CIRCLE, tr("Stage")))).clicked() {
                 ui.close();
                 let path_text = entry.path.clone();
                 self.act("Stage", move |client, path| client.stage(&path_text, path).map(|_| None));
             }
-            if ui.add_enabled(idle, egui::Button::new(format!("{}  Discard changes…", icon::TRASH))).clicked() {
+            if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::TRASH, tr("Discard changes…")))).clicked() {
                 ui.close();
                 self.confirm_discard(entry.clone());
             }
         }
-        if !staged && entry.kind != StatusKind::Deleted && ui.button(format!("{}  Edit file", icon::PENCIL_SIMPLE)).clicked() {
+        if !staged && entry.kind != StatusKind::Deleted && ui.button(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Edit file"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::editor::EditorWindow::new(repo_path.clone(), entry.path.clone())));
         }
@@ -695,30 +752,35 @@ impl NiceGitApp {
         if entry.kind != StatusKind::Untracked && entry.kind != StatusKind::Conflicted {
             match &external.diff {
                 Some(name) => {
-                    if ui.button(format!("{}  Open in {name}", icon::GIT_DIFF)).clicked() {
+                    if ui.button(format!("{}  {}", icon::GIT_DIFF, tr_fmt!("Open in {name}", name = name))).clicked() {
                         ui.close();
                         self.open_in_diff_tool(&entry.path, staged);
                     }
                 }
                 None => {
-                    ui.add_enabled(false, egui::Button::new(format!("{}  Open in diff tool", icon::GIT_DIFF)))
-                        .on_disabled_hover_text(tools::DIFF_TOOL_HINT);
+                    ui.add_enabled(false, egui::Button::new(format!("{}  {}", icon::GIT_DIFF, tr("Open in diff tool"))))
+                        .on_disabled_hover_text(tools::diff_tool_hint());
                 }
             }
         }
-        if ui.add_enabled(idle && snapshot.operation.is_none(), egui::Button::new(format!("{}  Stash this file…", icon::ARCHIVE))).clicked()
+        if ui
+            .add_enabled(idle && snapshot.operation.is_none(), egui::Button::new(format!("{}  {}", icon::ARCHIVE, tr("Stash this file…"))))
+            .clicked()
         {
             ui.close();
             let path_text = entry.path.clone();
             self.act("Stash file", move |client, path| {
                 client
                     .save_stash_paths(std::slice::from_ref(&path_text), &format!("Changes to {path_text}"), path)
-                    .map(|_| Some(format!("Stashed {path_text}.")))
+                    .map(|_| Some(tr_fmt!("Stashed {path}.", path = path_text)))
             });
         }
         // Only this file, on the side the row shows. A conflicted file has no patch that applies.
         if ui
-            .add_enabled(idle && entry.kind != StatusKind::Conflicted, egui::Button::new(format!("{}  Save as patch…", icon::FLOPPY_DISK)))
+            .add_enabled(
+                idle && entry.kind != StatusKind::Conflicted,
+                egui::Button::new(format!("{}  {}", icon::FLOPPY_DISK, tr("Save as patch…"))),
+            )
             .clicked()
         {
             ui.close();
@@ -738,7 +800,7 @@ impl NiceGitApp {
         };
         self.custom_actions_submenu(ui, crate::settings::ActionScope::File, &values, self.idle());
         if entry.kind == StatusKind::Untracked {
-            ui.menu_button(format!("{}  Ignore", icon::EYE_SLASH), |ui| {
+            ui.menu_button(format!("{}  {}", icon::EYE_SLASH, tr("Ignore")), |ui| {
                 use nicegit_core::settings::{IgnoreRule, IgnoreScope};
                 let extension = std::path::Path::new(&entry.path).extension().map(|e| e.to_string_lossy().into_owned());
                 let ignore = |ui: &mut Ui, app: &mut NiceGitApp, text: String, rule: IgnoreRule, scope: IgnoreScope| {
@@ -746,46 +808,56 @@ impl NiceGitApp {
                         ui.close();
                         let file = entry.path.clone();
                         app.act("Ignore", move |client, path| {
-                            client.ignore(&file, rule, scope, path).map(|_| Some("Updated the ignore rules.".into()))
+                            client.ignore(&file, rule, scope, path).map(|_| Some(tr("Updated the ignore rules.").into()))
                         });
                     }
                 };
-                ignore(ui, self, "This file in .gitignore".to_string(), IgnoreRule::Path, IgnoreScope::Shared);
+                ignore(ui, self, tr("This file in .gitignore").to_string(), IgnoreRule::Path, IgnoreScope::Shared);
                 if let Some(extension) = &extension {
-                    ignore(ui, self, format!("All .{extension} files in .gitignore"), IgnoreRule::FileExtension, IgnoreScope::Shared);
+                    ignore(
+                        ui,
+                        self,
+                        tr_fmt!("All .{extension} files in .gitignore", extension = extension),
+                        IgnoreRule::FileExtension,
+                        IgnoreScope::Shared,
+                    );
                 }
-                ignore(ui, self, "This file on this computer only".into(), IgnoreRule::Path, IgnoreScope::Local);
+                ignore(ui, self, tr("This file on this computer only").into(), IgnoreRule::Path, IgnoreScope::Local);
             });
         }
         ui.separator();
-        if entry.kind != StatusKind::Untracked && ui.button(format!("{}  File history", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
+        if entry.kind != StatusKind::Untracked && ui.button(format!("{}  {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("File history"))).clicked()
+        {
             ui.close();
             self.open_tool(Box::new(tools::file_history::FileHistoryWindow::new(entry.path.clone())));
         }
         if entry.kind != StatusKind::Untracked
             && entry.kind != StatusKind::Deleted
-            && ui.button(format!("{}  Blame", icon::USER_LIST)).clicked()
+            && ui.button(format!("{}  {}", icon::USER_LIST, tr("Blame"))).clicked()
         {
             ui.close();
             self.open_tool(Box::new(tools::blame::BlameWindow::new(entry.path.clone(), None)));
         }
-        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
             ui.close();
             ui.ctx().copy_text(entry.path.clone());
         }
         let file = repo_path.join(&entry.path);
         let editor = self.settings.external_editor.trim().to_string();
-        if !editor.is_empty() && file.is_file() && ui.button(format!("{}  Open in {}", icon::CODE, editor_name(&editor))).clicked() {
+        if !editor.is_empty()
+            && file.is_file()
+            && ui.button(format!("{}  {}", icon::CODE, tr_fmt!("Open in {editor}", editor = editor_name(&editor)))).clicked()
+        {
             ui.close();
             if let Err(error) = open_in_editor(&editor, &file) {
                 self.notify(error, true);
             }
         }
-        if file.is_file() && ui.button(format!("{}  Open in default app", icon::ARROW_SQUARE_OUT)).clicked() {
+        if file.is_file() && ui.button(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open in default app"))).clicked() {
             ui.close();
             open_in_default_app(&file);
         }
-        if ui.button(format!("{}  Show in file manager", icon::FOLDER_OPEN)).clicked() {
+        if ui.button(format!("{}  {}", icon::FOLDER_OPEN, tr("Show in file manager"))).clicked() {
             ui.close();
             reveal(&file);
         }
@@ -795,7 +867,7 @@ impl NiceGitApp {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::GIT_COMMIT).size(18.0).color(c.accent));
-            ui.label(RichText::new("Commit").size(15.0).strong());
+            ui.label(RichText::new(tr("Commit")).size(15.0).strong());
         });
         ui.add_space(6.0);
         // A commit made away from any branch is easily lost; outside a rebase or similar, where
@@ -803,14 +875,14 @@ impl NiceGitApp {
         if !snapshot.is_on_branch() && snapshot.head_hash.is_some() && snapshot.operation.is_none() {
             widgets::callout(
                 ui,
-                "You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.",
+                tr("You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first."),
                 true,
             );
             ui.add_space(4.0);
-            if ui.add_enabled(self.idle(), egui::Button::new(format!("{}  Create branch here…", icon::GIT_BRANCH))).clicked() {
+            if ui.add_enabled(self.idle(), egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Create branch here…")))).clicked() {
                 self.dialog = Some(crate::ui::dialogs::Dialog::input(
-                    "New branch",
-                    "Create a branch at HEAD and switch to it",
+                    tr("New branch"),
+                    tr("Create a branch at HEAD and switch to it"),
                     "",
                     crate::ui::dialogs::InputKind::CreateBranch {
                         branch: snapshot.current_branch.clone(),
@@ -859,11 +931,11 @@ impl NiceGitApp {
                     let reserved = if draft_shown { 124.0 + 110.0 } else { 124.0 };
                     ui.add(
                         egui::TextEdit::singleline(&mut repo.draft.summary)
-                            .hint_text("Commit summary")
+                            .hint_text(tr("Commit summary"))
                             .frame(egui::Frame::NONE)
                             .desired_width((ui.available_width() - reserved).max(40.0)),
                     )
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit summary"));
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Commit summary")));
                     if draft_shown {
                         draft_click = crate::ui::ai_draft::draft_button(ui, drafting, draft_enabled);
                     }
@@ -883,7 +955,7 @@ impl NiceGitApp {
                     visuals.bg_stroke = egui::Stroke::NONE;
                     if !recent.is_empty() {
                         let menu = ui.menu_button(RichText::new(icon::CLOCK_COUNTER_CLOCKWISE).color(c.muted), |ui| {
-                            ui.label(RichText::new("Use a recent summary").small().color(c.muted));
+                            ui.label(RichText::new(tr("Use a recent summary")).small().color(c.muted));
                             for subject in &recent {
                                 if ui.add(egui::Button::new(*subject).truncate()).clicked() {
                                     repo.draft.summary = subject.to_string();
@@ -892,8 +964,8 @@ impl NiceGitApp {
                             }
                         });
                         menu.response
-                            .on_hover_text("Recent commit summaries")
-                            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Recent commit summaries"));
+                            .on_hover_text(tr("Recent commit summaries"))
+                            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Recent commit summaries")));
                     }
                     // The menu is read only while open: its identity is cached until it closes.
                     let (menu, open) = egui::containers::menu::MenuButton::new(RichText::new(icon::USERS).color(c.muted))
@@ -909,7 +981,7 @@ impl NiceGitApp {
                     if open.is_none() {
                         repo.trailer_identity = None;
                     }
-                    menu.on_hover_text("Add trailers").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Add trailers"));
+                    menu.on_hover_text(tr("Add trailers")).widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Add trailers")));
                     // Commit options. Kept open while toggled, like the trailers menu.
                     let gear = if repo.skip_hooks || repo.sign_override.is_some() { c.accent } else { c.muted };
                     let signing = repo.signing.filter(|setup| setup.configured);
@@ -919,18 +991,16 @@ impl NiceGitApp {
                                 .close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside),
                         )
                         .ui(ui, |ui| {
-                            ui.checkbox(&mut repo.skip_hooks, "Skip Git hooks").on_hover_text(
-                                "Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when \
-                                 committing and pushing. Resets after each commit.",
-                            );
+                            ui.checkbox(&mut repo.skip_hooks, tr("Skip Git hooks")).on_hover_text(tr(
+                                "Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when committing and pushing. Resets after each commit.",
+                            ));
                             // Shown only with a signing setup. It starts from commit.gpgSign each commit.
                             if let Some(setup) = signing {
                                 let mut sign = repo.sign_override.unwrap_or(setup.sign_by_default);
                                 if ui
-                                    .checkbox(&mut sign, "Sign this commit")
+                                    .checkbox(&mut sign, tr("Sign this commit"))
                                     .on_hover_text(
-                                        "Sign the next commit, amend, or Commit and push with your signing key, or leave it \
-                                         unsigned. Starts from commit.gpgSign and resets after each commit.",
+                                        tr("Sign the next commit, amend, or Commit and push with your signing key, or leave it unsigned. Starts from commit.gpgSign and resets after each commit."),
                                     )
                                     .changed()
                                 {
@@ -940,8 +1010,8 @@ impl NiceGitApp {
                         })
                         .0;
                     options
-                        .on_hover_text("Commit options")
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Commit options"));
+                        .on_hover_text(tr("Commit options"))
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Commit options")));
                 });
                 // Past 50 characters, a count shows; past 72, it turns to a warning. It never blocks a commit.
                 if let Some((text, over)) = crate::conventional::length_note(&repo.draft.summary) {
@@ -949,18 +1019,18 @@ impl NiceGitApp {
                     ui.label(RichText::new(text).small().monospace().color(color));
                 }
                 if convention_hint && !repo.draft.summary.trim().is_empty() && crate::conventional::prefix(&repo.draft.summary).is_none() {
-                    ui.label(RichText::new("This repository uses Conventional Commits").small().color(c.muted));
+                    ui.label(RichText::new(tr("This repository uses Conventional Commits")).small().color(c.muted));
                 }
                 ui.add(
                     egui::TextEdit::multiline(&mut repo.draft.description)
-                        .hint_text("Description")
+                        .hint_text(tr("Description"))
                         .frame(egui::Frame::NONE)
                         .desired_rows(4)
                         .desired_width(f32::INFINITY),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit description"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Commit description")));
                 if repo.draft_from_template.as_ref() == Some(&repo.draft) {
-                    ui.label(RichText::new("From commit.template").small().color(c.muted));
+                    ui.label(RichText::new(tr("From commit.template")).small().color(c.muted));
                 }
             });
         ui.add_space(6.0);
@@ -969,11 +1039,11 @@ impl NiceGitApp {
         }
         let draft_answer = if draft_question { crate::ui::ai_draft::replace_question(ui) } else { None };
         let mut amend = repo.amend;
-        let amend_changed = crate::tools::widgets::checkbox(ui, can_amend, &mut amend, "Amend last commit").changed();
+        let amend_changed = crate::tools::widgets::checkbox(ui, can_amend, &mut amend, tr("Amend last commit")).changed();
         if amend && head_published {
             widgets::callout(
                 ui,
-                "The last commit is already on a remote. Amending rewrites it, so others who pulled it will need to reconcile.",
+                tr("The last commit is already on a remote. Amending rewrites it, so others who pulled it will need to reconcile."),
                 true,
             );
         }
@@ -1005,17 +1075,19 @@ impl NiceGitApp {
             self.answer_draft(replace);
         }
         let repo = &self.repos[self.active];
-        let label = if repo.draft.summary.trim().is_empty() {
-            format!("{}  Write a summary to commit", icon::CHECK_CIRCLE)
+        let text: String = if repo.draft.summary.trim().is_empty() {
+            tr("Write a summary to commit").into()
         } else if repo.draft_is_untouched_template() {
-            format!("{}  Fill in the template to commit", icon::CHECK_CIRCLE)
+            tr("Fill in the template to commit").into()
         } else if repo.amend {
-            format!("{}  Amend last commit", icon::CHECK_CIRCLE)
+            tr("Amend last commit").into()
         } else if staged == 0 {
-            format!("{}  Stage files to commit", icon::CHECK_CIRCLE)
+            tr("Stage files to commit").into()
         } else {
-            format!("{}  Commit {staged} file{} to {}", icon::CHECK_CIRCLE, if staged == 1 { "" } else { "s" }, snapshot.current_branch)
+            let template = tr_count("Commit {count} file to {branch}", "Commit {count} files to {branch}", staged);
+            fill(&template, &[("branch", snapshot.current_branch.clone())])
         };
+        let label = format!("{}  {text}", icon::CHECK_CIRCLE);
         let enabled = self.can_commit();
         // Outlined and centred even while disabled, so it reads as the commit button rather
         // than another text field.
@@ -1032,13 +1104,15 @@ impl NiceGitApp {
         match self.repos[self.active].identity.clone() {
             Some((name, email)) if !name.is_empty() && !email.is_empty() => {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                    ui.label(RichText::new(format!("Committing as {name} <{email}>")).small().color(c.muted));
+                    ui.label(RichText::new(tr_fmt!("Committing as {name} <{email}>", name = name, email = email)).small().color(c.muted));
                 });
             }
             Some(_) => {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new("No Git identity set. Choose one under Identity in the repository menu.").small().color(c.warning),
+                        RichText::new(tr("No Git identity set. Choose one under Identity in the repository menu."))
+                            .small()
+                            .color(c.warning),
                     );
                 });
             }
@@ -1046,7 +1120,7 @@ impl NiceGitApp {
         }
         if self.repos[self.active].skip_hooks {
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                ui.label(RichText::new("Git hooks are skipped for this commit").small().color(c.muted));
+                ui.label(RichText::new(tr("Git hooks are skipped for this commit")).small().color(c.muted));
             });
         }
         if clicked {
@@ -1056,7 +1130,8 @@ impl NiceGitApp {
         if self.can_stage_all_and_commit() {
             ui.add_space(4.0);
             let changes = snapshot.status.len();
-            let text = RichText::new(format!("{}  Stage all {changes} and commit", icon::CHECK_CIRCLE)).color(c.accent);
+            let text = RichText::new(format!("{}  {}", icon::CHECK_CIRCLE, tr_fmt!("Stage all {changes} and commit", changes = changes)))
+                .color(c.accent);
             let button = egui::Button::new(text)
                 .fill(egui::Color32::TRANSPARENT)
                 .stroke(egui::Stroke::new(1.0, c.accent))
@@ -1064,7 +1139,7 @@ impl NiceGitApp {
             let all = ui
                 .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add(button))
                 .inner
-                .on_hover_text("Stage every change, as Stage All Changes does, then commit");
+                .on_hover_text(tr("Stage every change, as Stage All Changes does, then commit"));
             if all.clicked() {
                 self.stage_all_and_commit();
             }
@@ -1074,7 +1149,11 @@ impl NiceGitApp {
             ui.add_space(4.0);
             let enabled = self.can_commit_and_push();
             // The upstream is in the tooltip, so a long branch name cannot widen the panel.
-            let text = RichText::new(format!("{}  Commit and push", icon::ARROW_LINE_UP)).color(if enabled { c.accent } else { c.muted });
+            let text = RichText::new(format!("{}  {}", icon::ARROW_LINE_UP, tr("Commit and push"))).color(if enabled {
+                c.accent
+            } else {
+                c.muted
+            });
             let button = egui::Button::new(text)
                 .fill(egui::Color32::TRANSPARENT)
                 .stroke(egui::Stroke::new(1.0, if enabled { c.accent } else { c.border }))
@@ -1083,9 +1162,12 @@ impl NiceGitApp {
                 .with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| ui.add_enabled(enabled, button))
                 .inner
                 .on_hover_text(if self.repos[self.active].skip_hooks {
-                    format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.")
+                    tr_fmt!(
+                        "Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.",
+                        upstream = upstream
+                    )
                 } else {
-                    format!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)")
+                    tr_fmt!("Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)", upstream = upstream)
                 });
             if push.clicked() {
                 self.commit_and_push();
@@ -1124,7 +1206,7 @@ fn convention_controls(ui: &mut Ui, summary: &mut String) {
         let mut chosen = None;
         // Kept open while the summary is edited, like the trailers menu beside it.
         let (menu, _) =
-            egui::containers::menu::MenuButton::new(RichText::new(format!("{}  {}", kind.unwrap_or("Type"), icon::CARET_DOWN)).small())
+            egui::containers::menu::MenuButton::new(RichText::new(format!("{}  {}", kind.unwrap_or(tr("Type")), icon::CARET_DOWN)).small())
                 .config(egui::containers::menu::MenuConfig::new().close_behavior(egui::containers::PopupCloseBehavior::CloseOnClickOutside))
                 .ui(ui, |ui| {
                     for (name, description) in crate::conventional::TYPES {
@@ -1137,7 +1219,7 @@ fn convention_controls(ui: &mut Ui, summary: &mut String) {
                         });
                     }
                 });
-        menu.on_hover_text("Commit type").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Commit type"));
+        menu.on_hover_text(tr("Commit type")).widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Commit type")));
         if let Some(name) = chosen {
             let next = with_prefix(summary.as_str(), name, Some(&scope), breaking);
             *summary = next;
@@ -1149,11 +1231,11 @@ fn convention_controls(ui: &mut Ui, summary: &mut String) {
         let mut text =
             if focused { ui.ctx().data(|data| data.get_temp::<String>(scope_id)).unwrap_or_else(|| scope.clone()) } else { scope.clone() };
         let field =
-            ui.add_enabled(kind.is_some(), egui::TextEdit::singleline(&mut text).id(scope_id).hint_text("scope").desired_width(80.0));
+            ui.add_enabled(kind.is_some(), egui::TextEdit::singleline(&mut text).id(scope_id).hint_text(tr("scope")).desired_width(80.0));
         let changed = field.changed();
         field
-            .on_disabled_hover_text("Choose a type first")
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, kind.is_some(), "Commit scope"));
+            .on_disabled_hover_text(tr("Choose a type first"))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, kind.is_some(), tr("Commit scope")));
         if let Some(kind) = kind {
             if changed {
                 let next = with_prefix(summary.as_str(), kind, Some(&text), breaking);
@@ -1162,7 +1244,7 @@ fn convention_controls(ui: &mut Ui, summary: &mut String) {
         }
         ui.ctx().data_mut(|data| data.insert_temp(scope_id, text));
         let mut breaking_now = breaking;
-        let toggled = widgets::checkbox(ui, kind.is_some(), &mut breaking_now, "Breaking").changed();
+        let toggled = widgets::checkbox(ui, kind.is_some(), &mut breaking_now, tr("Breaking")).changed();
         if let (Some(kind), true) = (kind, toggled) {
             let next = with_prefix(summary.as_str(), kind, Some(&scope), breaking_now);
             *summary = next;
@@ -1184,7 +1266,7 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
     let label = signed_off.clone();
     let response = ui
         .add_enabled(identity_set, egui::Button::new(trailer_row(on, &format!("{name} <{email}>"))).truncate())
-        .on_disabled_hover_text("Set your Git name and email first");
+        .on_disabled_hover_text(tr("Set your Git name and email first"));
     response.widget_info(move || egui::WidgetInfo::labeled(egui::Role::Button, identity_set, label.clone()));
     if response.clicked() {
         repo.draft.toggle_trailer(&signed_off);
@@ -1211,12 +1293,12 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
         authors.push((author.to_string(), address.to_string()));
     }
     if authors.is_empty() {
-        ui.label(RichText::new("No other authors in the loaded history").small().color(c.muted));
+        ui.label(RichText::new(tr("No other authors in the loaded history")).small().color(c.muted));
         return;
     }
     if authors.len() > 8 {
-        ui.add(egui::TextEdit::singleline(&mut repo.trailer_filter).hint_text("Filter authors").desired_width(220.0))
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter authors"));
+        ui.add(egui::TextEdit::singleline(&mut repo.trailer_filter).hint_text(tr("Filter authors")).desired_width(220.0))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter authors")));
     }
     let needle = repo.trailer_filter.trim().to_lowercase();
     let shown: Vec<&(String, String)> = authors
@@ -1224,7 +1306,7 @@ fn add_trailers_menu(ui: &mut Ui, repo: &mut Repo, snapshot: &Snapshot, name: &s
         .filter(|(author, address)| needle.is_empty() || format!("{author} <{address}>").to_lowercase().contains(&needle))
         .collect();
     if shown.is_empty() {
-        ui.label(RichText::new("No authors match").small().color(c.muted));
+        ui.label(RichText::new(tr("No authors match")).small().color(c.muted));
     }
     for (author, address) in shown {
         let text = format!("{author} <{address}>");
@@ -1331,10 +1413,13 @@ pub(crate) fn line_count(ui: &mut Ui, count: LineCount) {
     let c = theme::of(ui);
     ui.add_space(4.0);
     let (text, tip) = match count {
-        LineCount::Binary => (RichText::new("binary").small().color(c.muted), "A binary file has no lines".to_string()),
+        LineCount::Binary => (RichText::new(tr("binary")).small().color(c.muted), tr("A binary file has no lines").to_string()),
         LineCount::Text { added, removed } => {
-            let lines = |n: usize| if n == 1 { "line" } else { "lines" };
-            let tip = format!("{added} {} added, {removed} {} removed", lines(added), lines(removed));
+            let tip = format!(
+                "{}, {}",
+                tr_count("{count} line added", "{count} lines added", added),
+                tr_count("{count} line removed", "{count} lines removed", removed)
+            );
             // Right to left: the removed count sits to the right of the added one.
             if removed > 0 {
                 ui.label(RichText::new(format!("−{removed}")).small().monospace().color(c.removed)).on_hover_text(&tip);

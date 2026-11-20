@@ -2,6 +2,7 @@
 //! release, and hotfix branches, and finishes the one that is checked out.
 #![allow(dead_code)]
 
+use crate::i18n::{tr, tr_fmt};
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::gitflow::{GitFlowConfiguration, GitFlowKind};
@@ -55,7 +56,7 @@ impl ToolWindow for GitFlowWindow {
     }
 
     fn title(&self) -> String {
-        "GitFlow".to_string()
+        tr("GitFlow").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -77,14 +78,14 @@ impl ToolWindow for GitFlowWindow {
 
         let c = theme::of(ui);
         ui.label(
-            RichText::new("Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.")
+            RichText::new(tr("Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool."))
                 .small()
                 .color(c.muted),
         );
         ui.add_space(8.0);
 
         match loaded {
-            None => widgets::loading(ui, "Reading GitFlow settings…"),
+            None => widgets::loading(ui, tr("Reading GitFlow settings…")),
             Some(Err(error)) => widgets::error(ui, &error.to_string()),
             Some(Ok(None)) => self.setup(ui, cx),
             Some(Ok(Some(configuration))) => self.flow(ui, cx, &configuration),
@@ -101,12 +102,12 @@ impl GitFlowWindow {
         });
         egui::Grid::new("gitflow_setup").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
             let fields: [(&str, &mut String); 6] = [
-                ("Production branch", &mut draft.main_branch),
-                ("Development branch", &mut draft.develop_branch),
-                ("Feature prefix", &mut draft.feature_prefix),
-                ("Release prefix", &mut draft.release_prefix),
-                ("Hotfix prefix", &mut draft.hotfix_prefix),
-                ("Version tag prefix", &mut draft.version_tag_prefix),
+                (tr("Production branch"), &mut draft.main_branch),
+                (tr("Development branch"), &mut draft.develop_branch),
+                (tr("Feature prefix"), &mut draft.feature_prefix),
+                (tr("Release prefix"), &mut draft.release_prefix),
+                (tr("Hotfix prefix"), &mut draft.hotfix_prefix),
+                (tr("Version tag prefix"), &mut draft.version_tag_prefix),
             ];
             for (label, value) in fields {
                 ui.label(label);
@@ -119,14 +120,14 @@ impl GitFlowWindow {
         let develop = draft.develop_branch.trim().to_string();
         let valid = !main.is_empty() && !develop.is_empty() && main != develop;
         if !valid {
-            widgets::callout(ui, "The production and development branches need different names.", true);
+            widgets::callout(ui, tr("The production and development branches need different names."), true);
             ui.add_space(6.0);
         }
         let to_create = draft.clone();
         ui.horizontal(|ui| {
-            if widgets::primary_button(ui, "Set up GitFlow", cx.idle && valid).clicked() {
-                cx.act("Set up GitFlow", move |client, directory| {
-                    client.initialize_gitflow(&to_create, directory).map(|()| Some("GitFlow is set up.".to_string()))
+            if widgets::primary_button(ui, tr("Set up GitFlow"), cx.idle && valid).clicked() {
+                cx.act(tr("Set up GitFlow"), move |client, directory| {
+                    client.initialize_gitflow(&to_create, directory).map(|()| Some(tr("GitFlow is set up.").to_string()))
                 });
             }
         });
@@ -136,8 +137,8 @@ impl GitFlowWindow {
     fn flow(&mut self, ui: &mut Ui, cx: &mut Ctx, configuration: &GitFlowConfiguration) {
         let c = theme::of(ui);
         ui.horizontal_wrapped(|ui| {
-            widgets::pill(ui, &format!("Production  {}", configuration.main_branch), c.local_branch);
-            widgets::pill(ui, &format!("Development  {}", configuration.develop_branch), c.local_branch);
+            widgets::pill(ui, &tr_fmt!("Production  {branch}", branch = configuration.main_branch), c.local_branch);
+            widgets::pill(ui, &tr_fmt!("Development  {branch}", branch = configuration.develop_branch), c.local_branch);
         });
         ui.add_space(8.0);
 
@@ -155,7 +156,7 @@ impl GitFlowWindow {
             }
         }
 
-        widgets::section(ui, "Start");
+        widgets::section(ui, tr("Start"));
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             for kind in GitFlowKind::ALL {
@@ -163,7 +164,7 @@ impl GitFlowWindow {
             }
         });
         ui.add_space(4.0);
-        let hint = if self.kind == GitFlowKind::Feature { "Feature name" } else { "Version, such as 1.2.0" };
+        let hint = if self.kind == GitFlowKind::Feature { tr("Feature name") } else { tr("Version, such as 1.2.0") };
         ui.add(egui::TextEdit::singleline(&mut self.name).hint_text(hint).desired_width(f32::INFINITY))
             .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, hint));
         let name = self.name.trim().to_string();
@@ -171,21 +172,25 @@ impl GitFlowWindow {
         let base = configuration.start_branch(self.kind).to_string();
         let shown_name = if name.is_empty() { "…".to_string() } else { name.clone() };
         ui.add_space(2.0);
-        ui.label(RichText::new(format!("Creates {prefix}{shown_name} from {base} and checks it out.")).small().color(c.muted));
+        ui.label(
+            RichText::new(tr_fmt!("Creates {name} from {base} and checks it out.", name = format!("{prefix}{shown_name}"), base = base))
+                .small()
+                .color(c.muted),
+        );
         ui.add_space(6.0);
         let can_start = cx.idle && !name.is_empty() && cx.snapshot.operation.is_none();
         ui.horizontal(|ui| {
-            let label = format!("Start {}", self.kind.name());
+            let label = tr_fmt!("Start {kind}", kind = kind_name(self.kind));
             if widgets::primary_button(ui, &label, can_start).clicked() {
                 let kind = self.kind;
                 let expected_branch = cx.snapshot.current_branch.clone();
                 let expected_head = cx.snapshot.head_hash.clone();
                 self.pending_start = Some(format!("{prefix}{name}"));
                 let started = name.clone();
-                cx.act(format!("Start {} {started}", kind.name()), move |client, directory| {
+                cx.act(tr_fmt!("Start {kind} {name}", kind = kind_name(kind), name = started), move |client, directory| {
                     client
                         .start_gitflow(kind, &started, &expected_branch, expected_head.as_deref(), directory)
-                        .map(|branch| Some(format!("Started {branch}.")))
+                        .map(|branch| Some(tr_fmt!("Started {branch}.", branch = branch)))
                 });
             }
         });
@@ -193,16 +198,16 @@ impl GitFlowWindow {
         ui.add_space(12.0);
         ui.separator();
         ui.add_space(8.0);
-        widgets::section(ui, "Finish");
+        widgets::section(ui, tr("Finish"));
         ui.add_space(4.0);
         let current = cx.snapshot.current_branch.clone();
         let Some((kind, version)) = configuration.classify(&current) else {
             ui.label(
-                RichText::new(format!(
-                    "Check out a {}…, {}…, or {}… branch to finish it.",
-                    configuration.prefix(GitFlowKind::Feature),
-                    configuration.prefix(GitFlowKind::Release),
-                    configuration.prefix(GitFlowKind::Hotfix),
+                RichText::new(tr_fmt!(
+                    "Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.",
+                    feature = configuration.prefix(GitFlowKind::Feature),
+                    release = configuration.prefix(GitFlowKind::Release),
+                    hotfix = configuration.prefix(GitFlowKind::Hotfix),
                 ))
                 .small()
                 .color(c.muted),
@@ -211,36 +216,41 @@ impl GitFlowWindow {
         };
         let version = version.to_string();
         let caption = match kind {
-            GitFlowKind::Feature => format!(
-                "Merges {current} into {} without fast-forwarding, then deletes {current}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.",
-                configuration.develop_branch
+            GitFlowKind::Feature => tr_fmt!(
+                "Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.",
+                branch = current,
+                develop = configuration.develop_branch
             ),
-            _ => format!(
-                "Merges {current} into {} and {} without fast-forwarding, tags {}{version} on {}, then deletes {current}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.",
-                configuration.main_branch, configuration.develop_branch, configuration.version_tag_prefix, configuration.main_branch
+            _ => tr_fmt!(
+                "Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.",
+                branch = current,
+                main = configuration.main_branch,
+                develop = configuration.develop_branch,
+                tag_prefix = configuration.version_tag_prefix,
+                version = version
             ),
         };
         ui.label(RichText::new(caption).small().color(c.muted));
         if kind != GitFlowKind::Feature {
             ui.add_space(4.0);
-            ui.add(egui::TextEdit::singleline(&mut self.tag_message).hint_text("Tag message (optional)").desired_width(f32::INFINITY));
+            ui.add(egui::TextEdit::singleline(&mut self.tag_message).hint_text(tr("Tag message (optional)")).desired_width(f32::INFINITY));
         }
         let uncommitted = cx.snapshot.status.iter().any(|entry| entry.kind != StatusKind::Untracked);
         if uncommitted {
             ui.add_space(4.0);
-            widgets::callout(ui, "Commit or stash your changes before finishing.", true);
+            widgets::callout(ui, tr("Commit or stash your changes before finishing."), true);
         }
         ui.add_space(6.0);
         let can_finish = cx.idle && cx.snapshot.operation.is_none() && !uncommitted;
         ui.horizontal(|ui| {
-            let label = format!("{}  Finish {current}", icon::GIT_MERGE);
+            let label = format!("{}  {}", icon::GIT_MERGE, tr_fmt!("Finish {branch}", branch = current));
             if widgets::primary_button(ui, &label, can_finish).clicked() {
                 let expected_branch = current.clone();
                 let expected_head = cx.snapshot.head_hash.clone();
                 let message = self.tag_message.trim().to_string();
                 let tag_message = (!message.is_empty()).then_some(message);
                 self.pending_finish = Some(current.clone());
-                cx.act(format!("Finish {current}"), move |client, directory| {
+                cx.act(tr_fmt!("Finish {branch}", branch = current), move |client, directory| {
                     client.finish_gitflow(&expected_branch, expected_head.as_deref(), tag_message.as_deref(), directory).map(Some)
                 });
             }
@@ -251,9 +261,18 @@ impl GitFlowWindow {
 /// The name shown for a kind of branch in the interface, such as "Feature".
 fn kind_title(kind: GitFlowKind) -> &'static str {
     match kind {
-        GitFlowKind::Feature => "Feature",
-        GitFlowKind::Release => "Release",
-        GitFlowKind::Hotfix => "Hotfix",
+        GitFlowKind::Feature => tr("Feature"),
+        GitFlowKind::Release => tr("Release"),
+        GitFlowKind::Hotfix => tr("Hotfix"),
+    }
+}
+
+/// The lowercase kind name used in the start and finish labels, such as "feature".
+fn kind_name(kind: GitFlowKind) -> &'static str {
+    match kind {
+        GitFlowKind::Feature => tr("feature"),
+        GitFlowKind::Release => tr("release"),
+        GitFlowKind::Hotfix => tr("hotfix"),
     }
 }
 

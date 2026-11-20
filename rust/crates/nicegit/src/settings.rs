@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::claude::ClaudeModel;
 use crate::conventional::ConventionalCommits;
+use crate::i18n::Locale;
 use crate::issue_links::IssueLinkRule;
 use crate::theme::{Appearance, GraphPalette};
 
@@ -48,10 +49,10 @@ impl PullSetting {
 
     pub fn title(self) -> &'static str {
         match self {
-            PullSetting::FollowGit => "Follow Git's settings",
-            PullSetting::FastForwardOnly => "Fast-forward only",
-            PullSetting::Merge => "Merge",
-            PullSetting::Rebase => "Rebase",
+            PullSetting::FollowGit => crate::i18n::tr("Follow Git's settings"),
+            PullSetting::FastForwardOnly => crate::i18n::tr("Fast-forward only"),
+            PullSetting::Merge => crate::i18n::tr("Merge"),
+            PullSetting::Rebase => crate::i18n::tr("Rebase"),
         }
     }
 
@@ -105,10 +106,10 @@ impl DiffContextSetting {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Three => "3 lines",
-            Self::Ten => "10 lines",
-            Self::TwentyFive => "25 lines",
-            Self::WholeFile => "Whole file",
+            Self::Three => crate::i18n::tr("3 lines"),
+            Self::Ten => crate::i18n::tr("10 lines"),
+            Self::TwentyFive => crate::i18n::tr("25 lines"),
+            Self::WholeFile => crate::i18n::tr("Whole file"),
         }
     }
 
@@ -247,9 +248,9 @@ impl ActionScope {
 
     pub fn title(self) -> &'static str {
         match self {
-            ActionScope::Repository => "Repository",
-            ActionScope::Commit => "Commit",
-            ActionScope::File => "File",
+            ActionScope::Repository => crate::i18n::tr("Repository"),
+            ActionScope::Commit => crate::i18n::tr("Commit"),
+            ActionScope::File => crate::i18n::tr("File"),
         }
     }
 }
@@ -278,9 +279,68 @@ pub struct Workspace {
     pub repositories: Vec<PathBuf>,
 }
 
+/// The language the interface is shown in. `System` follows the operating system's language.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Language {
+    #[default]
+    System,
+    English,
+    German,
+    French,
+    Spanish,
+    PortugueseBrazil,
+    Japanese,
+    ChineseSimplified,
+}
+
+impl Language {
+    /// Every choice, in the order the Settings menu lists them.
+    pub const ALL: [Language; 8] = [
+        Language::System,
+        Language::English,
+        Language::German,
+        Language::French,
+        Language::Spanish,
+        Language::PortugueseBrazil,
+        Language::Japanese,
+        Language::ChineseSimplified,
+    ];
+
+    /// The locale this choice shows. `System` asks the operating system once and keeps the answer;
+    /// tests always get English, so they do not depend on the machine's language.
+    pub fn resolve(self) -> Locale {
+        match self {
+            Language::System => system_locale(),
+            Language::English => Locale::English,
+            Language::German => Locale::German,
+            Language::French => Locale::French,
+            Language::Spanish => Locale::Spanish,
+            Language::PortugueseBrazil => Locale::PortugueseBrazil,
+            Language::Japanese => Locale::Japanese,
+            Language::ChineseSimplified => Locale::ChineseSimplified,
+        }
+    }
+}
+
+/// The operating system's language, read once. It reads the environment only, so start-up
+/// does not wait for a process.
+fn system_locale() -> Locale {
+    #[cfg(test)]
+    {
+        Locale::English
+    }
+    #[cfg(not(test))]
+    {
+        static SYSTEM: std::sync::OnceLock<Locale> = std::sync::OnceLock::new();
+        *SYSTEM.get_or_init(|| sys_locale::get_locale().map_or(Locale::English, |tag| Locale::from_tag(&tag)))
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// The language the interface is shown in.
+    pub language: Language,
     pub appearance: Appearance,
     pub graph_palette: GraphPalette,
     pub split_diff: bool,
@@ -437,6 +497,7 @@ fn default_true() -> bool {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: Language::System,
             appearance: Appearance::System,
             graph_palette: GraphPalette::Standard,
             split_diff: false,

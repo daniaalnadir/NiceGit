@@ -94,6 +94,33 @@ run the benchmark on the code as it was, make the change, run it again, and repo
 tables in the pull request. Changes to how the history is drawn also need the interface
 benchmark's frame times before and after.
 
+## Translations
+
+The interface text is written in English and translated in `rust/crates/nicegit/locales/`,
+one file per language (`de.tsv`, `fr.tsv`, `es.tsv`, `pt-BR.tsv`, `ja.tsv`, `zh-Hans.tsv`).
+Each line holds an English string, a tab, and its translation:
+
+```text
+# Comments start with a hash.
+Check for new versions<TAB>Auf neue Versionen prüfen
+```
+
+Inside a field, `\t`, `\n` and `\\` stand for a tab, a newline and a backslash. Keep
+placeholders such as `{count}` or `{branch}` exactly as the English has them. In the code,
+wrap user-visible English with `tr("...")`, `tr_fmt!("...", name = value)` or
+`tr_count("one", "other", n)` (see `rust/crates/nicegit/src/i18n.rs`). Do not change English
+text while wrapping it, because English is the key. Branch names, command names, keyboard
+shortcuts and product names stay as they are.
+
+The test `every_catalog_matches_the_strings_in_the_source` in `i18n.rs` reads every `tr`
+call in the source and fails when a catalog lacks a key, keeps a key no call uses any
+more, or has a translation whose placeholders differ from its English. Run it with
+`cargo test -p nicegit i18n`.
+
+To add a language, add a variant to `Locale` and `Language` and its tag and name, a catalog
+file with every key, and its line in the Settings menu. Fonts for Chinese and Japanese are
+read from the system; add a path to `cjk_font_candidates` if your system keeps one elsewhere.
+
 ## Pull Requests
 
 Describe the behavior changed, tests run, and any known limits. Include screenshots
