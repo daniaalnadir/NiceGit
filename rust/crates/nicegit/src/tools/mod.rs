@@ -11,6 +11,7 @@ use nicegit_core::{GitClient, Snapshot};
 
 use crate::worker::ActionResult;
 
+pub mod apply_patch;
 pub mod archive;
 pub mod bisect;
 pub mod blame;
@@ -104,6 +105,8 @@ pub struct Ctx<'a> {
     pub snapshot: &'a Snapshot,
     /// No action is running; tools disable controls that change the repository otherwise.
     pub idle: bool,
+    /// Another tool holds unsaved text, so actions that change the repository are refused.
+    pub editor_unsaved: bool,
     /// Diffs leave out whitespace-only changes, following the app setting.
     pub ignore_whitespace: bool,
     requests: &'a mut Vec<Request>,
@@ -119,6 +122,7 @@ impl<'a> Ctx<'a> {
             repo,
             snapshot,
             idle,
+            editor_unsaved: false,
             ignore_whitespace: false,
             requests,
             diff_context: DiffContext::default(),
