@@ -14,6 +14,37 @@ pub fn icon_button(ui: &mut Ui, glyph: &str, tooltip: &str, enabled: bool) -> eg
     response.on_hover_text(tooltip).on_disabled_hover_text(tooltip)
 }
 
+/// Names an icon-only control for screen readers, with the words of its tooltip. The label is only
+/// built when a screen reader is listening.
+pub fn name_icon(response: &egui::Response, label: &str) {
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label));
+}
+
+/// Adds a description, which a screen reader reads after the name, to the node of the widget `id`.
+/// The text is only built when a screen reader is listening.
+pub fn describe(ctx: &egui::Context, id: egui::Id, text: impl FnOnce() -> String) {
+    ctx.accesskit_node_builder(id, |node| node.set_description(text()));
+}
+
+/// Marks the row widget `id` as selected or not, as a list item says it, rather than as a toggle,
+/// which egui's `WidgetInfo::selected` would make it. Call after the widget's `widget_info`.
+pub fn mark_selected(ctx: &egui::Context, id: egui::Id, selected: bool) {
+    ctx.accesskit_node_builder(id, |node| {
+        node.clear_toggled();
+        node.set_selected(selected);
+    });
+}
+
+/// Names the title bar egui draws for the window `window_id`, so a screen reader announces the
+/// window's title rather than an unnamed control. egui builds that bar's node itself, so the name
+/// is set once the window has been drawn. Costs nothing unless a screen reader is listening.
+pub fn name_window_title(ctx: &egui::Context, window_id: egui::Id, title: &str) {
+    ctx.accesskit_node_builder(window_id.with("__title_click"), |node| {
+        node.set_role(egui::accesskit::Role::TitleBar);
+        node.set_label(title);
+    });
+}
+
 /// An icon button drawn as a button: a filled, outlined square that lights up under the pointer, for
 /// a control that should read as clickable on its own, such as a panel toggle.
 pub fn framed_icon_button(ui: &mut Ui, glyph: &str, tooltip: &str, enabled: bool) -> egui::Response {
@@ -121,7 +152,14 @@ pub fn change_letter_color(ui: &Ui, letter: &str) -> Color32 {
 
 /// A single-line text field that fills the width.
 pub fn text_field(ui: &mut Ui, value: &mut String, hint: &str) -> egui::Response {
-    ui.add(egui::TextEdit::singleline(value).hint_text(hint).desired_width(f32::INFINITY))
+    let response = ui.add(egui::TextEdit::singleline(value).hint_text(hint).desired_width(f32::INFINITY));
+    name_text_field(&response, hint);
+    response
+}
+
+/// Names a text field by its hint, which says what it is for while it is empty.
+pub fn name_text_field(response: &egui::Response, hint: &str) {
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, response.enabled(), hint));
 }
 
 /// How far a search field's text is inset to leave room for its magnifying glass.
@@ -131,6 +169,7 @@ pub const SEARCH_INSET: f32 = 24.0;
 pub fn search_input(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> egui::Response {
     let margin = egui::Margin { left: SEARCH_INSET as i8, right: 4, top: 2, bottom: 2 };
     let response = ui.add(egui::TextEdit::singleline(value).hint_text(hint).margin(margin).desired_width(width));
+    name_text_field(&response, hint);
     paint_search_glass(ui, &response);
     response
 }
@@ -140,6 +179,7 @@ pub fn search_input(ui: &mut Ui, value: &mut String, hint: &str, width: f32) -> 
 pub fn search_input_with_id(ui: &mut Ui, id_salt: &str, value: &mut String, hint: &str, width: f32) -> egui::Response {
     let margin = egui::Margin { left: SEARCH_INSET as i8, right: 4, top: 2, bottom: 2 };
     let response = ui.add(egui::TextEdit::singleline(value).id_salt(id_salt).hint_text(hint).margin(margin).desired_width(width));
+    name_text_field(&response, hint);
     paint_search_glass(ui, &response);
     response
 }

@@ -58,7 +58,7 @@ fn apply_a_pasted_patch_from_the_palette() {
     harness.event(egui::Event::Paste(CHANGE_FIRST_LINE.to_string()));
     harness.step();
     harness.get_by_role_and_label(Role::Button, "Preview").click();
-    wait(&mut harness, "the preview", |h| h.query_by_label_contains("Applies cleanly").is_some());
+    wait(&mut harness, "the preview", |h| h.query_all_by_label_contains("Applies cleanly").next().is_some());
 
     harness.get_by_role_and_label(Role::Button, "Apply").click();
     idle(&mut harness);
@@ -66,7 +66,7 @@ fn apply_a_pasted_patch_from_the_palette() {
     assert_eq!(git(path, &["diff", "--name-only"]), "notes.txt");
     assert_eq!(std::fs::read_to_string(path.join("notes.txt")).unwrap(), "one\nsecond\n");
     assert!(!apply_patch_window_is_open(&harness), "the window closes after Apply");
-    wait(&mut harness, "the changed file in Changes", |h| h.query_by_label_contains("notes.txt").is_some());
+    wait(&mut harness, "the changed file in Changes", |h| h.query_all_by_label_contains("notes.txt").next().is_some());
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn dropping_a_patch_that_does_not_apply_shows_why_and_changes_nothing() {
     harness.input_mut().dropped_files.push(Arc::new(Dropped(patch)));
     wait(&mut harness, "the Apply patch window", apply_patch_window_is_open);
     harness.get_by_role_and_label(Role::Button, "Preview").click();
-    wait(&mut harness, "the preview", |h| h.query_by_label_contains("does not apply").is_some());
+    wait(&mut harness, "the preview", |h| h.query_all_by_label_contains("does not apply").next().is_some());
 
     // The Apply button is disabled, so the click does nothing.
     harness.get_by_role_and_label(Role::Button, "Apply").click();

@@ -23,10 +23,10 @@ fn empty_app() -> Harness<'static, NiceGitApp> {
 #[test]
 fn the_welcome_screen_shows_its_heading_and_three_ways_to_start() {
     let harness = empty_app();
-    assert!(harness.query_by_label_contains("Welcome to NiceGit").is_some(), "the heading is shown");
-    assert!(harness.query_by_label_contains("Open repository").is_some(), "Open repository is offered");
-    assert!(harness.query_by_label_contains("Clone repository").is_some(), "Clone repository is offered");
-    assert!(harness.query_by_label_contains("Create repository").is_some(), "Create repository is offered");
+    assert!(harness.query_all_by_label_contains("Welcome to NiceGit").next().is_some(), "the heading is shown");
+    assert!(harness.query_all_by_label_contains("Open repository").next().is_some(), "Open repository is offered");
+    assert!(harness.query_all_by_label_contains("Clone repository").next().is_some(), "Clone repository is offered");
+    assert!(harness.query_all_by_label_contains("Create repository").next().is_some(), "Create repository is offered");
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn show_a_tip_in_the_command_palette_posts_the_next_tip_as_a_notice() {
     harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::P);
     wait(&mut harness, "the palette", |h| h.state().palette.is_some());
     harness.event(egui::Event::Text("show a tip".into()));
-    wait(&mut harness, "the tip command", |h| h.query_by_label_contains("Show a tip").is_some());
+    wait(&mut harness, "the tip command", |h| h.query_all_by_label_contains("Show a tip").next().is_some());
     harness.key_press(Key::Enter);
     settle(&mut harness);
 
@@ -114,7 +114,7 @@ fn the_welcome_screen_lays_out_at_the_smallest_window() {
     arm_watchdog();
     let mut harness = Harness::builder().with_size(egui::vec2(900.0, 560.0)).build_eframe(|cc| NiceGitApp::new(cc, None));
     settle(&mut harness);
-    assert!(harness.query_by_label_contains("Welcome to NiceGit").is_some());
+    assert!(harness.query_all_by_label_contains("Welcome to NiceGit").next().is_some());
     harness.get_by_label("Next tip");
     harness.get_by_label_contains("Open repository");
 }

@@ -143,6 +143,28 @@ fn labels(commit: &Commit, snapshot: &Snapshot, hidden: &[String], show: LabelSh
 }
 
 /// The name of a history scope, as the header's menu shows it.
+/// The memory key of the graph row that keyboard moves focus last. Arrow keys still move the graph
+/// while that row has focus.
+pub fn focused_row_key() -> egui::Id {
+    egui::Id::unique("graph focused row")
+}
+
+/// What a screen reader adds to a commit's row: its short ID, author, age, the labels on it, and
+/// whether it is HEAD. Built only when a screen reader is listening.
+fn commit_description(commit: &Commit, is_head: bool) -> String {
+    let mut parts = vec![format!("Commit {}", commit.short_hash), format!("by {}", commit.author_name)];
+    if !commit.relative_date.is_empty() {
+        parts.push(commit.relative_date.clone());
+    }
+    if !commit.refs.is_empty() {
+        parts.push(format!("labels {}", commit.refs.join(", ")));
+    }
+    if is_head {
+        parts.push("HEAD".into());
+    }
+    parts.join(", ")
+}
+
 fn scope_title(scope: HistoryScope) -> &'static str {
     match scope {
         HistoryScope::All => "All branches",
@@ -588,12 +610,34 @@ impl NiceGitApp {
         let selection = repo.selection.clone();
         let width = ui.available_width();
         let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), Sense::click_and_drag());
-        // The row is painted, so describe it for screen readers and UI tests.
+        // The row is painted, so describe it for screen readers and UI tests. Its name is the subject,
+        // which tests and screen readers find it by; the commit's details are its description.
         let description = match &commit {
             Some(commit) => commit.subject.clone(),
             None => "Working tree".to_string(),
         };
+        let selected = matches!(&selection, Selection::Commit { hash, .. } if commit.as_ref().is_some_and(|c| &c.hash == hash));
+        let head_hash = self.snapshot().and_then(|s| s.head_hash.as_deref());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &description));
+        crate::tools::widgets::mark_selected(ui.ctx(), response.id, selected);
+        // A keyboard move focuses the selected row one frame later, so a screen reader announces it.
+        // egui moves focus with the arrow keys at the end of the frame they are pressed, which would
+        // take a row focused in that frame away again.
+        let mut row_focused = ui.memory(|m| m.has_focus(response.id));
+        if selected && repo.focus_row_in == 1 && !row_focused {
+            response.request_focus();
+            row_focused = true;
+        }
+        if row_focused {
+            // A focused row keeps the arrow keys for the graph, so they move the selection and not the focus.
+            let keys = egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, ..Default::default() };
+            ui.memory_mut(|m| m.set_focus_lock_filter(response.id, keys));
+            ui.ctx().data_mut(|d| d.insert_temp(focused_row_key(), response.id));
+        }
+        crate::tools::widgets::describe(ui.ctx(), response.id, || match &commit {
+            Some(commit) => commit_description(commit, head_hash == Some(commit.hash.as_str())),
+            None => String::new(),
+        });
         // Only rows scrolled out of view are skipped. A frame egui is about to discard reports the
         // ui as invisible, and skipping its rows there would drop the labels' and rows' open menus.
         if !rect.intersects(ui.clip_rect()) {

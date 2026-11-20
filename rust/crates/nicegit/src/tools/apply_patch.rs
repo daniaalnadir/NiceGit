@@ -227,7 +227,7 @@ fn file_row(ui: &mut egui::Ui, file: &PatchFile) {
     };
     let counts = if file.binary { "binary".to_string() } else { format!("+{} -{}", file.additions, file.deletions) };
     ui.horizontal(|ui| {
-        ui.label(RichText::new(glyph).color(color));
+        ui.label(RichText::new(glyph).color(color)).widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, kind.title()));
         ui.add(egui::Label::new(RichText::new(path).monospace().small()).truncate());
         ui.label(RichText::new(counts).small().color(c.muted));
     });

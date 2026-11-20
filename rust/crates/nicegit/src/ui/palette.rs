@@ -595,6 +595,7 @@ impl NiceGitApp {
                         .font(egui::FontId::proportional(17.0))
                         .desired_width(f32::INFINITY),
                 );
+                crate::tools::widgets::name_text_field(&field, "Type a command, branch, or repository");
                 if !state.focused {
                     field.request_focus();
                     state.focused = true;
@@ -640,6 +641,17 @@ impl NiceGitApp {
                         })
                         .response
                         .interact(egui::Sense::click());
+                    // Each command is a row a screen reader reads by its name and description, with
+                    // whether it is the one Enter will run.
+                    response.widget_info(|| {
+                        let name = if command.detail.is_empty() {
+                            command.title.clone()
+                        } else {
+                            format!("{}, {}", command.title, command.detail)
+                        };
+                        egui::WidgetInfo::labeled(egui::Role::ListItem, command.enabled, name)
+                    });
+                    crate::tools::widgets::mark_selected(ui.ctx(), response.id, selected);
                     if selected && (down || up) {
                         response.scroll_to_me(None);
                     }
