@@ -35,6 +35,7 @@ impl NiceGitApp {
                 data.remove::<IssueLinkDraft>(issue_link_draft_id());
                 data.remove::<crate::custom_actions::ActionDraft>(egui::Id::unique("custom_action_draft"));
             });
+            crate::ui::ai_draft::forget_key_draft(ctx);
             return;
         }
         let mut open = true;
@@ -147,6 +148,8 @@ impl NiceGitApp {
                     "Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. \
                      Automatic turns this on when at least five of the last twenty commits use the convention.",
                 );
+                ui.add_space(10.0);
+                self.claude_section(ui);
                 ui.add_space(10.0);
                 widgets::section(ui, "Repository");
                 crate::tools::widgets::checkbox(
