@@ -11,6 +11,7 @@ use crate::graph_view::{self, Entry, Node};
 use crate::settings::HistoryScope;
 use crate::theme;
 use crate::tools::{self, widgets, Task};
+use crate::ui::branch_checks::{check_for, show_dot, DOT_SPACE};
 use crate::ui::dialogs::{Dialog, InputKind, Pending};
 use crate::ui::history_columns::{self, Column};
 
@@ -671,6 +672,9 @@ impl NiceGitApp {
         // Branch and tag labels, joined to the node by a line in the lane colour.
         let show = LabelShow { remote: self.settings.show_remote_labels, tags: self.settings.show_tag_labels };
         let all_labels = labels(&commit, snapshot, &hidden, show);
+        // The open requests' checks: a label of a branch with one takes a dot before its name.
+        let requests = self.shown_requests();
+        let mut check_dots = Vec::new();
         let mut branch_pills: Vec<(egui::Rect, Branch)> = Vec::new();
         let mut tag_pills: Vec<(egui::Rect, String)> = Vec::new();
         if let (false, Some(refs)) = (all_labels.is_empty(), layout.get(Column::Refs)) {
@@ -683,6 +687,8 @@ impl NiceGitApp {
                 let remaining = all_labels.len() - shown;
                 let suffix = if i == shown - 1 && remaining > 0 { format!(" +{remaining}") } else { String::new() };
                 let (lead, place) = label_icons(label);
+                let check = check_for(requests.as_deref(), label.branch.as_ref());
+                let dot_space = if check.is_some() { DOT_SPACE } else { 0.0 };
                 let available = (label_limit - x - 6.0).max(30.0);
                 // Every label carries where it lives, after its name: a laptop for local, a cloud for
                 // remote, both side by side for a paired branch.
@@ -690,7 +696,7 @@ impl NiceGitApp {
                 // stay distinguishable; the full name is in the label's tooltip.
                 let fits = |text: &str| {
                     painter.layout_no_wrap(format!("{lead}{text}{place}{suffix}"), small.clone(), Color32::WHITE).size().x
-                        <= available - 12.0
+                        <= available - 12.0 - dot_space
                 };
                 // The last part of a name is what tells branches apart, so a prefix such as
                 // "feature/" goes first, before the middle of what remains.
@@ -702,9 +708,12 @@ impl NiceGitApp {
                     .find(|text| fits(text))
                     .unwrap_or_else(|| middle_ellipsis(&label.text, 4));
                 let full = format!("{lead}{text}{place}{suffix}");
-                let galley =
-                    painter.layout_no_wrap(truncate_to(&painter, &full, available - 12.0, small.clone()), small.clone(), Color32::WHITE);
-                let pill = egui::Rect::from_min_size(egui::pos2(x, y - 10.0), egui::vec2(galley.size().x + 12.0, 20.0));
+                let galley = painter.layout_no_wrap(
+                    truncate_to(&painter, &full, available - 12.0 - dot_space, small.clone()),
+                    small.clone(),
+                    Color32::WHITE,
+                );
+                let pill = egui::Rect::from_min_size(egui::pos2(x, y - 10.0), egui::vec2(galley.size().x + 12.0 + dot_space, 20.0));
                 let fill = match label.kind {
                     LabelKind::Tag => c.tag,
                     _ => shade(lane_color, 0.78),
@@ -713,7 +722,10 @@ impl NiceGitApp {
                 if label.kind == LabelKind::Head || label.kind == LabelKind::Both && label.branch.as_ref().is_some_and(|b| b.is_current) {
                     painter.rect_stroke(pill, 5.0, egui::Stroke::new(1.5, Color32::WHITE.gamma_multiply(0.85)), egui::StrokeKind::Inside);
                 }
-                painter.galley(egui::pos2(pill.left() + 6.0, y - galley.size().y / 2.0), galley, Color32::WHITE);
+                painter.galley(egui::pos2(pill.left() + 6.0 + dot_space, y - galley.size().y / 2.0), galley, Color32::WHITE);
+                if let Some(check) = check {
+                    check_dots.push((egui::pos2(pill.left() + 6.0 + DOT_SPACE / 2.0, y), check, i));
+                }
                 match label.branch.as_ref() {
                     Some(branch) => branch_pills.push((pill, branch.clone())),
                     None if label.kind == LabelKind::Tag => tag_pills.push((pill, label.text.clone())),
@@ -781,6 +793,13 @@ impl NiceGitApp {
                 }
             }
             label.context_menu(|ui| self.branch_menu(ui, &branch, snapshot, can_switch));
+        }
+        // A check dot is drawn over its label and takes its clicks, as it was added after the label.
+        for (center, check, index) in check_dots {
+            let id = ui.scope_id().with(("check", &commit.hash, index));
+            if show_dot(ui, center, id, &check.dot, &c).clicked() {
+                self.open_request_checks(check.forge, check.request);
+            }
         }
         // Tag labels are named for screen readers and tests; hovering passes through to the row.
         for (index, (pill, name)) in tag_pills.into_iter().enumerate() {
