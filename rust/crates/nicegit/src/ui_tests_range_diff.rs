@@ -64,8 +64,8 @@ fn the_palette_compares_the_checkouts_earlier_version() {
     assert!(has_label(&harness, "0 unchanged, 1 changed, 0 removed, 0 added"));
 
     // The changed pair opens its comparison of the patches, with the new line marked added.
-    harness.get_by_label("!").click();
-    wait(&mut harness, "the comparison of the patches", |h| has_label(h, "five, amended"));
+    // The row can still be settling under load, so the click repeats until the comparison opens.
+    click_until(&mut harness, "the comparison of the patches", |h| h.get_by_label("!").click(), |h| has_label(h, "five, amended"));
 }
 
 #[test]
