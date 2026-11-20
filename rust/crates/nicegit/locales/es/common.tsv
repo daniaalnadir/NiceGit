@@ -1,0 +1,42 @@
+# es: words used all over the interface. Any part of the app may use these keys.
+Cancel	Cancelar
+OK	Aceptar
+Close	Cerrar
+Save	Guardar
+Delete	Eliminar
+Delete…	Eliminar…
+Remove	Quitar
+Rename…	Renombrar…
+Open	Abrir
+Copy	Copiar
+Refresh	Actualizar
+Search	Buscar
+Done	Listo
+Apply	Aplicar
+Continue	Continuar
+Abort	Abortar
+Commit	Confirmar
+Push	Enviar
+Pull	Traer
+Fetch	Obtener
+Stage	Preparar
+Unstage	Quitar de preparados
+Discard	Descartar
+Merge	Fusionar
+Rebase	Rebasar
+Stash	Guardar cambios
+Branch	Rama
+Branches	Ramas
+Tags	Etiquetas
+Remotes	Remotos
+Stashes	Cambios guardados
+Changes	Cambios
+History	Historial
+Files	Archivos
+Author	Autor
+Date	Fecha
+Message	Mensaje
+Repository	Repositorio
+Loading…	Cargando…
+Yes	Sí
+No	No

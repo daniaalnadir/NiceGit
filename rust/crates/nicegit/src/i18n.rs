@@ -95,18 +95,25 @@ impl Locale {
         LOCALES.get(index as usize).copied().unwrap_or(Locale::English)
     }
 
-    /// The catalog's source text, or nothing for English, which needs none.
-    fn catalog_source(self) -> &'static str {
+    /// The catalog's files, as (name, text) pairs, or none for English, which needs none. Each
+    /// language is a folder of files in `locales`, one per part of the interface; `build.rs`
+    /// lists them.
+    fn catalog_files(self) -> &'static [(&'static str, &'static str)] {
         match self {
-            Locale::English => "",
-            Locale::German => include_str!("../locales/de.tsv"),
-            Locale::French => include_str!("../locales/fr.tsv"),
-            Locale::Spanish => include_str!("../locales/es.tsv"),
-            Locale::PortugueseBrazil => include_str!("../locales/pt-BR.tsv"),
-            Locale::Japanese => include_str!("../locales/ja.tsv"),
-            Locale::ChineseSimplified => include_str!("../locales/zh-Hans.tsv"),
+            Locale::English => &[],
+            Locale::German => catalogs::DE,
+            Locale::French => catalogs::FR,
+            Locale::Spanish => catalogs::ES,
+            Locale::PortugueseBrazil => catalogs::PT_BR,
+            Locale::Japanese => catalogs::JA,
+            Locale::ChineseSimplified => catalogs::ZH_HANS,
         }
     }
+}
+
+/// The embedded catalog files of each language, written by `build.rs`.
+mod catalogs {
+    include!(concat!(env!("OUT_DIR"), "/catalogs.rs"));
 }
 
 /// Translations for one locale. Keys borrow from the embedded file unless an escape needed
@@ -173,7 +180,13 @@ pub fn tr(english: &'static str) -> &'static str {
 }
 
 fn catalog(locale: Locale) -> &'static Catalog {
-    CATALOGS[(locale.index() - 1) as usize].get_or_init(|| parse_catalog(locale.catalog_source()))
+    CATALOGS[(locale.index() - 1) as usize].get_or_init(|| {
+        let mut catalog = Catalog::new();
+        for (_, source) in locale.catalog_files() {
+            catalog.extend(parse_catalog(source));
+        }
+        catalog
+    })
 }
 
 /// Parses a catalog file. Comments and lines without a tab are skipped, and so is a line with
@@ -506,16 +519,27 @@ mod tests {
         // The guard against a scan that finds nothing: the Settings window alone has 15 keys.
         assert!(keys.len() >= 15, "the scan found only {} keys", keys.len());
         for locale in LOCALES.into_iter().filter(|locale| *locale != Locale::English) {
-            let entries = catalog_entries(locale.catalog_source());
-            let translations: HashMap<&str, &str> = entries.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
             let name = locale.code();
+            // A key belongs to one file only, so two parts of the interface never disagree.
+            let mut seen: HashMap<String, &str> = HashMap::new();
+            let mut entries = Vec::new();
+            for (file, source) in locale.catalog_files() {
+                for (key, value) in catalog_entries(source) {
+                    if let Some(other) = seen.insert(key.clone(), file) {
+                        panic!("{name}: {key:?} is in both {other}.tsv and {file}.tsv");
+                    }
+                    entries.push((key, value, *file));
+                }
+            }
+            let translations: HashMap<&str, &str> = entries.iter().map(|(key, value, _)| (key.as_str(), value.as_str())).collect();
             for key in &keys {
                 let translation = translations.get(key.as_str()).unwrap_or_else(|| panic!("{name} has no translation for {key:?}"));
                 assert!(!translation.trim().is_empty(), "{name} has an empty translation for {key:?}");
                 assert_eq!(placeholders(key), placeholders(translation), "{name} placeholders differ for {key:?}");
             }
-            for (key, _) in &entries {
-                assert!(keys.contains(key), "{name} has {key:?}, which the source no longer uses");
+            // common.tsv holds everyday words ready for any part of the interface, used or not.
+            for (key, _, file) in entries.iter().filter(|(_, _, file)| *file != "common") {
+                assert!(keys.contains(key), "{name} {file}.tsv has {key:?}, which the source no longer uses");
             }
         }
     }
