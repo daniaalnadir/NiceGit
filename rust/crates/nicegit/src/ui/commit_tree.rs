@@ -235,6 +235,7 @@ impl NiceGitApp {
                     let menu =
                         ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| self.tree_file_menu(ui, &hash, &path, submodule));
                     crate::tools::widgets::name_icon(&menu.response, tr("More actions for this file"));
+                    crate::tools::widgets::name_icon(&menu.response, "More actions for this file");
                 });
             });
         });

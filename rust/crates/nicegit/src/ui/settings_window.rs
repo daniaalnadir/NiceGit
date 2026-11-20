@@ -30,6 +30,7 @@ struct IssueLinkDraft {
 
 /// Where the draft rule is kept while the Settings window is open.
 /// How much larger tr("Larger text") draws the interface, on top of its zoom.
+/// How much larger "Larger text" draws the interface, on top of its zoom.
 const LARGER_TEXT: f32 = 1.25;
 
 fn issue_link_draft_id() -> egui::Id {
@@ -64,6 +65,7 @@ impl NiceGitApp {
         let max_height = (ctx.content_rect().height() - 190.0).max(200.0);
         let window_id = egui::Id::unique("settings window");
         egui::Window::new(tr("Settings"))
+        egui::Window::new("Settings")
             .id(window_id)
             .open(&mut open)
             .collapsible(false)
@@ -336,6 +338,10 @@ impl NiceGitApp {
                 let mut larger = self.settings.larger_text;
                 let larger_box = widgets::checkbox(ui, true, &mut larger, tr("Larger text"))
                     .on_hover_text(tr("Draws the interface a quarter larger again, on top of the interface size"));
+                widgets::section(ui, "Accessibility");
+                let mut larger = self.settings.larger_text;
+                let larger_box = widgets::checkbox(ui, true, &mut larger, "Larger text")
+                    .on_hover_text("Draws the interface a quarter larger again, on top of the interface size");
                 if larger_box.changed() {
                     self.settings.larger_text = larger;
                     let zoom = ctx.zoom_factor();
@@ -345,6 +351,8 @@ impl NiceGitApp {
                 let mut reduce = self.settings.reduce_motion;
                 let reduce_box = widgets::checkbox(ui, true, &mut reduce, tr("Reduce motion"))
                     .on_hover_text(tr("Switches off the fades and eased movements in the interface"));
+                let reduce_box = widgets::checkbox(ui, true, &mut reduce, "Reduce motion")
+                    .on_hover_text("Switches off the fades and eased movements in the interface");
                 if reduce_box.changed() {
                     self.settings.reduce_motion = reduce;
                     crate::theme::set_reduce_motion(ctx, reduce);
@@ -371,6 +379,7 @@ impl NiceGitApp {
                 });
             });
         widgets::name_window_title(ctx, window_id, tr("Settings"));
+        widgets::name_window_title(ctx, window_id, "Settings");
         if reload_diff {
             self.reload_diff();
         }

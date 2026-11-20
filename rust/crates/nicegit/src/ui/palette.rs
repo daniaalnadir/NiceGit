@@ -643,6 +643,7 @@ impl NiceGitApp {
                         .desired_width(f32::INFINITY),
                 );
                 crate::tools::widgets::name_text_field(&field, tr("Type a command, branch, or repository"));
+                crate::tools::widgets::name_text_field(&field, "Type a command, branch, or repository");
                 if !state.focused {
                     field.request_focus();
                     state.focused = true;

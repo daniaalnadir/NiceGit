@@ -794,12 +794,17 @@ fn line_label(line: &DiffLine) -> String {
         DiffLineKind::Addition => (tr("Added line"), line.new_number),
         DiffLineKind::Deletion => (tr("Removed line"), line.old_number),
         DiffLineKind::Context => (tr("Line"), line.new_number.or(line.old_number)),
+        DiffLineKind::Addition => ("Added line", line.new_number),
+        DiffLineKind::Deletion => ("Removed line", line.old_number),
+        DiffLineKind::Context => ("Line", line.new_number.or(line.old_number)),
     };
     // The text keeps the diff's marker in front of the code: "+", "-" or a space.
     let code = line.text.strip_prefix(['+', '-', ' ']).unwrap_or(&line.text);
     match number {
         Some(number) => tr_fmt!("{kind} {number}: {code}", kind = kind, number = number, code = code),
         None => tr_fmt!("{kind}: {code}", kind = kind, code = code),
+        Some(number) => format!("{kind} {number}: {code}"),
+        None => format!("{kind}: {code}"),
     }
 }
 
@@ -812,6 +817,8 @@ fn hunk_label(header: &str) -> String {
     match start {
         Some(start) if count > 1 => tr_fmt!("Hunk at lines {start} to {end}", start = start, end = start + count - 1),
         Some(start) => tr_fmt!("Hunk at line {start}", start = start),
+        Some(start) if count > 1 => format!("Hunk at lines {start} to {}", start + count - 1),
+        Some(start) => format!("Hunk at line {start}"),
         None => header.to_string(),
     }
 }

@@ -229,6 +229,7 @@ fn file_row(ui: &mut egui::Ui, file: &PatchFile) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(glyph).color(color))
             .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, crate::ui::changes::kind_title(kind)));
+        ui.label(RichText::new(glyph).color(color)).widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, kind.title()));
         ui.add(egui::Label::new(RichText::new(path).monospace().small()).truncate());
         ui.label(RichText::new(counts).small().color(c.muted));
     });

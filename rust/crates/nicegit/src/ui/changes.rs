@@ -427,6 +427,7 @@ impl NiceGitApp {
                             tr_fmt!("Folder {name}, {files}", name = name, files = files_text),
                         )
                     });
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Folder {name}, {files} files")));
                     response.context_menu(|ui| self.folder_menu(ui, child, &path, staged, idle));
                 })
                 .body(|ui| self.folder_rows(ui, child, &path, staged, idle, snapshot, depth + 1));
@@ -519,6 +520,8 @@ impl NiceGitApp {
                 true,
                 tr_fmt!("{name}, {kind}, {place}", name = row_text(entry, label), kind = kind_title(entry.kind), place = place),
             )
+            let place = if staged { "staged" } else { "unstaged" };
+            egui::WidgetInfo::labeled(egui::Role::ListItem, true, format!("{}, {}, {place}", row_text(entry, label), entry.kind.title()))
         });
         widgets::mark_selected(ui.ctx(), response.id, selected);
         if selected {
@@ -535,6 +538,8 @@ impl NiceGitApp {
             .label(RichText::new(glyph).color(color))
             .on_hover_text(kind_title(entry.kind))
             .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, kind_title(entry.kind)));
+            .on_hover_text(entry.kind.title())
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, entry.kind.title()));
         let text = row_text(entry, label);
         let mut stage_clicked = false;
         let mut discard_clicked = false;
