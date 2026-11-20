@@ -358,7 +358,7 @@ impl GitClient {
 
     /// Runs a commit command with Git's automatic housekeeping off (`maintenance.auto=false`), so
     /// the person does not wait for it; `run_due_maintenance` runs it once the commit is shown.
-    fn run_commit(&self, arguments: &[&str], directory: &Path) -> Result<String> {
+    pub(crate) fn run_commit(&self, arguments: &[&str], directory: &Path) -> Result<String> {
         const NO_AUTO_MAINTENANCE: &[(&str, &str)] =
             &[("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "maintenance.auto"), ("GIT_CONFIG_VALUE_0", "false")];
         runner::run(arguments, directory, &RunOptions { env: NO_AUTO_MAINTENANCE, ..self.options() })
@@ -2309,22 +2309,6 @@ impl GitClient {
     }
 
     // MARK: Patches
-
-    /// Applies a patch file to the working files, checking it applies cleanly first. Both
-    /// steps read the same captured bytes, not a file that could change in between.
-    pub fn apply_patch(&self, contents: &[u8], directory: &Path) -> Result<()> {
-        self.require_finished_operation("apply", directory)?;
-        let file = std::env::temp_dir().join(format!(
-            "nicegit-{}-{}.patch",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
-        ));
-        std::fs::write(&file, contents).map_err(|e| GitError::failed("apply", e.to_string()))?;
-        let path = file.to_string_lossy().into_owned();
-        let result = self.run(&["apply", "--check", "--", &path], directory).and_then(|_| self.run(&["apply", "--", &path], directory));
-        let _ = std::fs::remove_file(&file);
-        result.map(drop)
-    }
 
     /// One commit as an email-style patch, as `git format-patch` writes it.
     pub fn export_commit_patch(&self, hash: &str, directory: &Path) -> Result<String> {

@@ -709,20 +709,12 @@ impl NiceGitApp {
         );
     }
 
+    /// Opens the Apply patch window, from the toolbar or the command palette.
     pub fn apply_patch(&mut self) {
-        let Some(snapshot) = self.snapshot().cloned() else { return };
-        if let Some(file) = crate::file_dialog::pick_file("Apply a patch", "Patch", &["patch", "diff"]) {
-            let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            self.confirm(
-                format!("Apply {name}?"),
-                format!(
-                    "Git checks the patch, then applies it to the working files of {}. The changes stay unstaged.",
-                    snapshot.current_branch
-                ),
-                "Apply",
-                crate::ui::dialogs::Pending::ApplyPatch { file, branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
-            );
+        if self.snapshot().is_none() {
+            return;
         }
+        self.open_tool(Box::new(crate::tools::apply_patch::ApplyPatchWindow::new(None)));
     }
 
     /// The Branch menu: switch to another local branch, with a filter.

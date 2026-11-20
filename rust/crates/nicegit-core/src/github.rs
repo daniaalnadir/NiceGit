@@ -261,7 +261,7 @@ pub const OPEN_PULL_REQUEST_LIMIT: usize = 50;
 
 /// The fields one Launchpad read asks `gh pr list` for.
 const OPEN_PULL_REQUEST_FIELDS: &str =
-    "number,title,author,url,headRefName,isDraft,reviewDecision,reviewRequests,updatedAt,statusCheckRollup";
+    "number,title,author,url,headRefName,isDraft,isCrossRepository,reviewDecision,reviewRequests,updatedAt,statusCheckRollup";
 
 /// The longest team name kept, in characters.
 const TEAM_NAME_LIMIT: usize = 100;
@@ -278,6 +278,9 @@ pub struct OpenPullRequest {
     pub author: Option<String>,
     /// The branch the pull request comes from, cleaned as the title is.
     pub head_branch: String,
+    /// Whether the branch is on a fork rather than in this repository. A fork's branch name says
+    /// nothing about this repository's branches, so branch checks skip it.
+    pub is_cross_repository: bool,
     pub is_draft: bool,
     /// GitHub's review decision. `None` when there is none yet, or when GitHub reports a word
     /// this version does not know.
@@ -980,6 +983,7 @@ fn decode_open_pull_request(entry: &Json, repository: &GitHubRepository) -> Resu
         return Err(unexpected());
     }
     let head_branch = entry.get("headRefName").and_then(Json::as_str).ok_or_else(unexpected)?;
+    let is_cross_repository = entry.get("isCrossRepository").and_then(Json::as_bool).ok_or_else(unexpected)?;
     let is_draft = entry.get("isDraft").and_then(Json::as_bool).ok_or_else(unexpected)?;
     let updated_at = entry.get("updatedAt").and_then(Json::as_str).and_then(timestamp_seconds).ok_or_else(unexpected)?;
     let author = match entry.get("author") {
@@ -999,6 +1003,7 @@ fn decode_open_pull_request(entry: &Json, repository: &GitHubRepository) -> Resu
         url: url.to_string(),
         author,
         head_branch: clean_text(head_branch, PULL_REQUEST_TITLE_LIMIT),
+        is_cross_repository,
         is_draft,
         review_decision,
         review_requests,
@@ -2409,7 +2414,7 @@ mod tests {
     /// request with mixed checks, and a deleted author.
     const OPEN_LIST: &str = r#"[
         {"number": 41, "title": "Add the status bar", "author": {"is_bot": false, "login": "alice", "name": "Alice"},
-         "url": "https://github.com/acme/app/pull/41", "headRefName": "status-bar", "isDraft": false,
+         "url": "https://github.com/acme/app/pull/41", "headRefName": "status-bar", "isCrossRepository": false, "isDraft": false,
          "reviewDecision": "REVIEW_REQUIRED",
          "reviewRequests": [{"__typename": "User", "login": "daniaal"}],
          "updatedAt": "2026-11-09T10:30:00Z",
@@ -2419,13 +2424,13 @@ mod tests {
             {"__typename": "CheckRun", "name": "lint", "status": "IN_PROGRESS", "conclusion": null}
          ]},
         {"number": 42, "title": "Draft: rework the sidebar", "author": {"is_bot": false, "login": "daniaal", "name": ""},
-         "url": "https://github.com/acme/app/pull/42", "headRefName": "sidebar", "isDraft": true,
+         "url": "https://github.com/acme/app/pull/42", "headRefName": "sidebar", "isCrossRepository": true, "isDraft": true,
          "reviewDecision": "",
          "reviewRequests": [{"__typename": "Team", "name": "Core", "slug": "core"}],
          "updatedAt": "2026-11-01T00:00:00Z",
          "statusCheckRollup": []},
         {"number": 43, "title": "Speed up the graph", "author": null,
-         "url": "https://github.com/acme/app/pull/43", "headRefName": "graph-speed", "isDraft": false,
+         "url": "https://github.com/acme/app/pull/43", "headRefName": "graph-speed", "isCrossRepository": false, "isDraft": false,
          "reviewDecision": "CHANGES_REQUESTED",
          "reviewRequests": [{"__typename": "User", "login": "bob"}, {"__typename": "Team", "name": "Core", "slug": "core"}],
          "updatedAt": "2026-10-20T12:00:00Z",
@@ -2445,6 +2450,7 @@ mod tests {
         assert_eq!(list.len(), 3);
 
         let first = &list[0];
+        assert!(!first.is_cross_repository, "a branch in this repository is not a fork's");
         assert_eq!(first.number, 41);
         assert_eq!(first.title, "Add the status bar");
         assert_eq!(first.url, "https://github.com/acme/app/pull/41");
@@ -2457,6 +2463,7 @@ mod tests {
         assert_eq!(first.checks, Checks { passed: 1, failed: 1, pending: 1 });
 
         let draft = &list[1];
+        assert!(draft.is_cross_repository, "a branch on a fork is marked as one");
         assert!(draft.is_draft);
         assert_eq!(draft.review_decision, None, "an empty review decision is none");
         assert_eq!(draft.review_requests, [ReviewRequest::Team("Core".into())], "a team request is a team, not a user");
@@ -2475,7 +2482,7 @@ mod tests {
 
     #[test]
     fn open_pull_requests_read_a_review_request_by_slug_when_there_is_no_name() {
-        let json = r#"[{"number": 3, "title": "T", "author": null, "url": "https://github.com/acme/app/pull/3", "headRefName": "x",
+        let json = r#"[{"number": 3, "title": "T", "author": null, "url": "https://github.com/acme/app/pull/3", "headRefName": "x", "isCrossRepository": false,
             "isDraft": false, "reviewDecision": "APPROVED", "reviewRequests": [{"__typename": "Team", "slug": "docs"}],
             "updatedAt": "2026-01-02T03:04:05Z", "statusCheckRollup": []}]"#;
         let list = decode_open_pull_requests(json, &open_repository()).unwrap();
@@ -2493,6 +2500,7 @@ mod tests {
                 ("author", r#"{"login": "alice"}"#.to_string()),
                 ("url", format!(r#""{url}""#)),
                 ("headRefName", r#""x""#.to_string()),
+                ("isCrossRepository", "false".to_string()),
                 ("isDraft", "false".to_string()),
                 ("reviewDecision", r#""APPROVED""#.to_string()),
                 ("reviewRequests", "[]".to_string()),
@@ -2505,7 +2513,9 @@ mod tests {
         };
         let complete = entry("");
         assert!(decode_open_pull_requests(&complete, &open_repository()).is_ok(), "the complete entry decodes");
-        for field in ["number", "title", "url", "headRefName", "isDraft", "reviewRequests", "updatedAt", "statusCheckRollup"] {
+        for field in
+            ["number", "title", "url", "headRefName", "isCrossRepository", "isDraft", "reviewRequests", "updatedAt", "statusCheckRollup"]
+        {
             let json = entry(field);
             assert!(decode_open_pull_requests(&json, &open_repository()).is_err(), "without {field} the list is refused");
         }
@@ -2521,7 +2531,7 @@ mod tests {
         let repository = open_repository();
         let base = |url: &str, requests: &str, rollup: &str, updated: &str| {
             format!(
-                r#"[{{"number": 3, "title": "T", "author": null, "url": "{url}", "headRefName": "x", "isDraft": false,
+                r#"[{{"number": 3, "title": "T", "author": null, "url": "{url}", "headRefName": "x", "isCrossRepository": false, "isDraft": false,
                 "reviewDecision": "", "reviewRequests": {requests}, "updatedAt": "{updated}", "statusCheckRollup": {rollup}}}]"#
             )
         };
@@ -2548,7 +2558,7 @@ mod tests {
     #[test]
     fn open_pull_requests_clean_a_hostile_title_and_branch() {
         let json = r#"[{"number": 9, "title": "Fix\u0007 the\nbar\u001b[0m", "author": null,
-            "url": "https://github.com/acme/app/pull/9", "headRefName": "feat\u0000ure\tx", "isDraft": false,
+            "url": "https://github.com/acme/app/pull/9", "headRefName": "feat\u0000ure\tx", "isCrossRepository": false, "isDraft": false,
             "reviewDecision": "", "reviewRequests": [{"login": ""}], "updatedAt": "2026-01-02T03:04:05Z", "statusCheckRollup": []}]"#;
         // An empty login is refused, as it cannot name a person.
         assert!(decode_open_pull_requests(json, &open_repository()).is_err());

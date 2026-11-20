@@ -447,6 +447,11 @@ pub struct Repo {
     pub pr_status: Option<(String, crate::ui::pull_request::PrStatusRead)>,
     /// When the pull request status was last asked for. `None` asks again at the next snapshot.
     pub pr_checked_at: Option<Instant>,
+    /// The open pull or merge requests of this repository's remote, read through gh or glab, for the
+    /// branch checks on the graph and sidebar. The read keeps its previous answer while it runs.
+    pub open_requests: Option<crate::ui::branch_checks::OpenRequestsRead>,
+    /// When the open requests were last asked for. `None` asks again at the next frame when quiet.
+    pub open_requests_at: Option<Instant>,
     /// The tips that `branch_tracking` was read for. While a refresh leaves them unchanged, the
     /// read is not repeated.
     pub branch_tracking_key: Option<TrackingKey>,
@@ -602,6 +607,8 @@ impl Repo {
             tag_details: std::collections::HashMap::new(),
             pr_status: None,
             pr_checked_at: None,
+            open_requests: None,
+            open_requests_at: None,
             branch_tracking_key: None,
             #[cfg(test)]
             branch_tracking_reads: 0,
@@ -663,7 +670,7 @@ pub struct NiceGitApp {
     /// It carries the tool's exit status, or nothing if the tool never started.
     pub merge_tool_exit: Option<(String, Receiver<std::io::Result<ExitStatus>>)>,
     generation: u64,
-    was_focused: bool,
+    pub was_focused: bool,
     /// Returning to the app asks for a refresh, made once nothing is being reviewed or run.
     pub(crate) activation_refresh: bool,
     /// How wide the diff panel was when last shown, so Settings can say whether side by side
@@ -717,6 +724,16 @@ pub struct NiceGitApp {
     pub install: Option<crate::install::Install>,
     /// A newer NiceGit that is installed and waits for a restart: its version and what it replaced.
     pub installed_update: Option<(String, crate::install::Installed)>,
+    /// The function that drafts commit messages. Tests replace it with a stand-in.
+    pub drafter: crate::claude::Drafter,
+    /// The file that holds the saved Anthropic API key, when there is a settings folder.
+    pub key_file: Option<PathBuf>,
+    /// A commit message being drafted in the background, if any.
+    pub draft_run: Option<crate::ui::ai_draft::DraftRun>,
+    /// A finished draft waiting for the person to say whether it replaces the current message.
+    pub draft_ready: Option<crate::ui::ai_draft::ReadyDraft>,
+    /// What the last draft reported, shown under the commit box.
+    pub draft_status: Option<crate::ui::ai_draft::DraftStatus>,
 }
 
 /// A read of the tags one remote lacks. The repository and the remote's push addresses are
@@ -802,6 +819,11 @@ impl NiceGitApp {
             update_status: None,
             install: None,
             installed_update: None,
+            drafter: crate::claude::draft_with_claude,
+            key_file: crate::claude::key_file(),
+            draft_run: None,
+            draft_ready: None,
+            draft_status: None,
             timings: crate::timing::Timings::default(),
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
@@ -887,8 +909,11 @@ impl NiceGitApp {
             painter.rect_filled(screen, 0.0, c.accent.gamma_multiply(0.12));
             painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
             // On a solid label, so the words stay readable over whatever is beneath.
-            let text =
-                painter.layout_no_wrap("Drop a folder to open it as a repository".into(), egui::FontId::proportional(18.0), c.accent_text);
+            let text = painter.layout_no_wrap(
+                "Drop a folder to open it, or a patch to apply it".into(),
+                egui::FontId::proportional(18.0),
+                c.accent_text,
+            );
             let label = egui::Rect::from_center_size(screen.center(), text.size() + egui::vec2(36.0, 22.0));
             painter.rect_filled(label, 10.0, c.accent);
             painter.galley(label.center() - text.size() / 2.0, text, c.accent_text);
@@ -907,9 +932,24 @@ impl NiceGitApp {
         if let Some(folder) = others.into_iter().next() {
             self.dialog = Some(crate::ui::dialogs::Dialog::FindOffer { folder });
         }
-        if !files.is_empty() {
-            self.notify("Drop a folder, not a file, to open it as a repository.", true);
+        let (patches, files): (Vec<PathBuf>, Vec<PathBuf>) =
+            files.into_iter().partition(|path| crate::tools::apply_patch::is_patch_file(path));
+        if let Some(patch) = patches.into_iter().next() {
+            self.open_dropped_patch(patch);
         }
+        if !files.is_empty() {
+            self.notify("Drop a folder to open it as a repository, or a .patch or .diff file to apply it.", true);
+        }
+    }
+
+    /// Opens a patch file dropped onto the window in the Apply patch window. It needs an open
+    /// repository, since the patch applies to its checkout.
+    fn open_dropped_patch(&mut self, patch: PathBuf) {
+        if self.snapshot().is_none() {
+            self.notify("Open a repository before applying a patch.", true);
+            return;
+        }
+        self.open_tool(Box::new(crate::tools::apply_patch::ApplyPatchWindow::new(Some(patch))));
     }
 
     pub fn switch_to(&mut self, index: usize) {
@@ -1096,6 +1136,7 @@ impl NiceGitApp {
         // A deliberate load reads the pull request status again, once the snapshot arrives.
         if deliberate {
             repo.pr_checked_at = None;
+            repo.open_requests_at = None;
         }
         let limit = repo.history_limit;
         let scope = nicegit_core::HistoryScope::from(self.settings.history_scope);
@@ -1431,6 +1472,7 @@ impl NiceGitApp {
                     let remote_fetch = matches!(&action, Some((label, _)) if label.starts_with(REMOTE_FETCH_PREFIX));
                     if changes_pull_request || remote_fetch {
                         self.repos[index].pr_checked_at = None;
+                        self.repos[index].open_requests_at = None;
                     }
                     let fetched = matches!(&action, Some((label, Ok(_))) if label == "Fetch");
                     let fetch_failed = matches!(&action, Some((label, Err(_))) if label == "Fetch");
@@ -2858,6 +2900,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let editor_unsaved = self.has_unsaved_editor();
         let external = self.active_external_tools();
         let request = self.diff_request();
         let mut requests = Vec::new();
@@ -2892,6 +2935,7 @@ impl NiceGitApp {
                     cx.ignore_whitespace = request.ignore_whitespace;
                     cx.diff_context = request.context;
                     cx.external = external.clone();
+                    cx.editor_unsaved = editor_unsaved;
                     tool.ui(ui, &mut cx);
                 });
             if tool.wants_close() || (!open && !tool.has_unsaved_changes()) {
@@ -3228,6 +3272,7 @@ impl eframe::App for NiceGitApp {
         self.receive_message_copies(&ctx);
         self.finish_clone();
         self.finish_update_check();
+        self.finish_draft();
         self.finish_install(&ctx);
         self.finish_tag_scan();
         self.finish_cherry_pick_review();
@@ -3237,6 +3282,7 @@ impl eframe::App for NiceGitApp {
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
         self.auto_pr_status(&ctx);
+        self.auto_open_requests(&ctx);
         self.debug_open(&ctx);
         if first {
             crate::timing::report("first frame: before layout", crate::timing::since_start());

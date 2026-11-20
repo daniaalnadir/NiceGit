@@ -117,6 +117,12 @@ impl PullRequestDetailWindow {
         }
     }
 
+    /// The same window, opened on its Checks tab, as a branch's check dot opens it.
+    pub fn on_checks(mut self) -> Self {
+        self.tab = Tab::Checks;
+        self
+    }
+
     /// A window that already shows `detail`, for tests that do not reach GitHub.
     #[cfg(test)]
     pub(crate) fn loaded(repository: GitHubRepository, number: u64, detail: PullRequestDetail) -> Self {

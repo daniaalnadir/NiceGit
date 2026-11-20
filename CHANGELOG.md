@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
+- A dot on each branch with an open pull or merge request shows whether its checks passed, failed, or are pending, on the graph and in the sidebar; click it to see the checks. Turn it off in Settings.
+- Optional Draft button in the commit box writes a commit message from the staged changes with Claude, using your own Anthropic API key. Off by default; set it up under Settings, in Claude.
+- Compare versions of a branch after a rebase, amend, or force push, to see which commits changed, were added, or were removed, with each change's diff. Use it from a branch's menu, from Force push's "Compare with remote", or from "Compare branch versions" in the command palette.
+- Apply patch opens a preview window: paste a patch or drop a .patch, .diff or .mbox file onto NiceGit, see the files it changes, then apply it unstaged, staged, or as commits from a mailbox patch.
+- Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
 - Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
 
 ## 2.2.0 - Reshape your history

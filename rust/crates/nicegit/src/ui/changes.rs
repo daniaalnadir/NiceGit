@@ -298,6 +298,9 @@ impl NiceGitApp {
         let gap_top = ui.cursor().top();
         ui.add_space(8.0);
         ui.separator();
+        // Absorbing needs a branch, no unfinished operation, and no unsaved editor text.
+        let absorb_ready =
+            idle && !all_staged.is_empty() && snapshot.is_on_branch() && snapshot.operation.is_none() && !self.has_unsaved_editor();
         egui::Frame::new().inner_margin(section).show(ui, |ui| {
             egui::containers::Sides::new().shrink_left().truncate().show(
                 ui,
@@ -331,6 +334,10 @@ impl NiceGitApp {
                         if widgets::icon_button(ui, icon::FLOPPY_DISK, save_tip, idle && !all_staged.is_empty()).clicked() {
                             let name = self.section_patch_name(true);
                             self.save_working_patch(true, None, false, &name);
+                        }
+                        let absorb_tip = "Absorb staged changes into the earlier commits that last changed their lines";
+                        if widgets::icon_button(ui, icon::GIT_MERGE, absorb_tip, absorb_ready).clicked() {
+                            self.open_tool(Box::new(tools::absorb::AbsorbWindow::new(&snapshot)));
                         }
                     });
                 },
@@ -815,6 +822,15 @@ impl NiceGitApp {
             crate::conventional::ConventionalCommits::Always => true,
         };
         let convention_hint = convention == crate::conventional::ConventionalCommits::Automatic && convention_detected;
+        // The Draft button shows with the setting on and something staged. Drafting reads only, so
+        // it is not blocked by a busy app; a running draft can always be stopped from its button.
+        let draft_shown = self.settings.draft_with_claude && staged > 0;
+        let drafting = self.draft_run.is_some();
+        let draft_enabled = drafting || self.idle();
+        let active_path = self.repos[self.active].path.clone();
+        let draft_status = self.draft_status.clone().filter(|status| status.repo == active_path);
+        let draft_question = self.draft_ready.as_ref().is_some_and(|ready| ready.repo == active_path);
+        let mut draft_click = false;
         let repo = &mut self.repos[self.active];
         let path = repo.path.clone();
         egui::Frame::new()
@@ -828,13 +844,17 @@ impl NiceGitApp {
                     ui.add_space(4.0);
                 }
                 ui.horizontal(|ui| {
+                    let reserved = if draft_shown { 124.0 + 110.0 } else { 124.0 };
                     ui.add(
                         egui::TextEdit::singleline(&mut repo.draft.summary)
                             .hint_text("Commit summary")
                             .frame(egui::Frame::NONE)
-                            .desired_width((ui.available_width() - 124.0).max(40.0)),
+                            .desired_width((ui.available_width() - reserved).max(40.0)),
                     )
                     .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Commit summary"));
+                    if draft_shown {
+                        draft_click = crate::ui::ai_draft::draft_button(ui, drafting, draft_enabled);
+                    }
                     // Recent summaries from this branch's history, to reuse one.
                     let mut recent: Vec<&str> = Vec::new();
                     for commit in snapshot.commits.iter().filter(|commit| commit.parents.len() <= 1) {
@@ -932,6 +952,10 @@ impl NiceGitApp {
                 }
             });
         ui.add_space(6.0);
+        if let Some(status) = &draft_status {
+            crate::ui::ai_draft::draft_messages(ui, status);
+        }
+        let draft_answer = if draft_question { crate::ui::ai_draft::replace_question(ui) } else { None };
         let mut amend = repo.amend;
         let amend_changed = crate::tools::widgets::checkbox(ui, can_amend, &mut amend, "Amend last commit").changed();
         if amend && head_published {
@@ -956,6 +980,18 @@ impl NiceGitApp {
             }
         }
         ui.add_space(6.0);
+        // Changes to the draft are made here, once the borrows of the repository above have ended.
+        if draft_click {
+            if drafting {
+                self.cancel_draft();
+            } else {
+                let ctx = ui.ctx().clone();
+                self.start_draft(&ctx);
+            }
+        }
+        if let Some(replace) = draft_answer {
+            self.answer_draft(replace);
+        }
         let repo = &self.repos[self.active];
         let label = if repo.draft.summary.trim().is_empty() {
             format!("{}  Write a summary to commit", icon::CHECK_CIRCLE)

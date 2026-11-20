@@ -37,7 +37,8 @@ Built with Rust, and released under the [MIT License](LICENSE).
   through every changed file without leaving the diff.
 - Interactive rebase: drag to reorder, and pick, reword, edit, squash, fix up, or drop
   commits. Edit the message of any commit on the branch, or fold staged changes into an
-  older commit with Fix up.
+  older commit with Fix up, or absorb staged changes into the unpushed commits that last
+  changed their lines.
 - Merge, rebase, cherry-pick one or many commits, revert, amend, reset, and resolve
   conflicts, with a preview of which files will conflict before you start.
 - Find the commit that introduced a bug with bisect, guided from the graph.
@@ -72,7 +73,7 @@ Built with Rust, and released under the [MIT License](LICENSE).
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
 - Pull requests and issues, creating pull requests, Open on GitHub, and cloning from your
   repository list, for github.com and GitHub Enterprise hosts, through your existing GitHub CLI
-  login.
+  login. A dot on each branch with an open pull request shows its checks.
 
 The [feature guide](docs/FEATURES.md) describes each feature's behaviour and safeguards.
 
