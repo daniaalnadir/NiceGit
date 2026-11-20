@@ -1,9 +1,20 @@
 use egui::RichText;
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_fmt};
 use crate::issue_links::{check_rule, IssueLinkRule};
+use crate::settings::Language;
 use crate::theme::{self, Appearance, GraphPalette};
 use crate::tools::widgets;
+
+/// The name a Language choice shows in the menu. Native names are never translated; the System
+/// choice names the language it resolves to.
+fn language_name(language: Language) -> String {
+    match language {
+        Language::System => tr_fmt!("System ({language})", language = language.resolve().native_name()),
+        other => other.resolve().native_name().to_string(),
+    }
+}
 
 /// A custom rule being added or edited in the Issue links section.
 #[derive(Clone, Debug, Default)]
@@ -52,7 +63,7 @@ impl NiceGitApp {
         // on screen and the settings scroll beneath it.
         let max_height = (ctx.content_rect().height() - 190.0).max(200.0);
         let window_id = egui::Id::unique("settings window");
-        egui::Window::new("Settings")
+        egui::Window::new(tr("Settings"))
             .id(window_id)
             .open(&mut open)
             .collapsible(false)
@@ -64,22 +75,41 @@ impl NiceGitApp {
             .show(ctx, |ui| {
               egui::ScrollArea::vertical().id_salt("settings-scroll").max_height(max_height).auto_shrink([false, true]).show(ui, |ui| {
                 let c = theme::of(ui);
-                widgets::section(ui, "General");
-                crate::tools::widgets::checkbox(ui, true, &mut self.settings.check_for_updates, "Check for new versions");
+                widgets::section(ui, tr("General"));
+                ui.horizontal(|ui| {
+                    ui.label(tr("Language"));
+                    let current = self.settings.language;
+                    let mut chosen = None;
+                    egui::ComboBox::from_id_salt("language").selected_text(language_name(current)).show_ui(ui, |ui| {
+                        for choice in Language::ALL {
+                            if ui.selectable_label(choice == current, language_name(choice)).clicked() && choice != current {
+                                chosen = Some(choice);
+                            }
+                        }
+                    });
+                    if let Some(choice) = chosen {
+                        self.set_language(ctx, choice);
+                    }
+                });
+                ui.label(RichText::new(tr("Translations may be incomplete. Corrections are welcome on GitHub.")).small().color(c.muted));
+                ui.add_space(6.0);
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.check_for_updates, tr("Check for new versions"));
                 ui.label(
-                    RichText::new("Asks GitHub once a day for the latest version number. Nothing else is sent.").small().color(c.muted),
+                    RichText::new(tr("Asks GitHub once a day for the latest version number. Nothing else is sent.")).small().color(c.muted),
                 );
                 ui.add_space(4.0);
                 self.update_check_controls(ui);
                 ui.add_space(10.0);
-                crate::tools::widgets::checkbox(ui, true, &mut self.settings.notify_when_finished, "Notify me when work finishes in the background");
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.notify_when_finished, tr("Notify me when work finishes in the background"));
                 ui.label(
-                    RichText::new("Shows a desktop notification when an action you started finishes while NiceGit is not in focus.").small().color(c.muted),
+                    RichText::new(tr("Shows a desktop notification when an action you started finishes while NiceGit is not in focus."))
+                        .small()
+                        .color(c.muted),
                 );
                 ui.add_space(10.0);
-                widgets::section(ui, "Appearance");
+                widgets::section(ui, tr("Appearance"));
                 ui.horizontal(|ui| {
-                    for (value, label) in [(Appearance::System, "System"), (Appearance::Light, "Light"), (Appearance::Dark, "Dark")] {
+                    for (value, label) in [(Appearance::System, tr("System")), (Appearance::Light, tr("Light")), (Appearance::Dark, tr("Dark"))] {
                         ui.selectable_value(&mut self.settings.appearance, value, label);
                     }
                 });

@@ -1,0 +1,16 @@
+# zh-Hans translations. Format: English source, a tab, then the translation.
+Settings	设置
+General	通用
+Language	语言
+Translations may be incomplete. Corrections are welcome on GitHub.	译文可能不完整。欢迎在 GitHub 上提出更正。
+Check for new versions	检查新版本
+Asks GitHub once a day for the latest version number. Nothing else is sent.	每天向 GitHub 查询一次最新版本号，不会发送其他任何信息。
+Notify me when work finishes in the background	后台工作完成时通知我
+Shows a desktop notification when an action you started finishes while NiceGit is not in focus.	当你发起的操作在 NiceGit 不在焦点时完成，显示桌面通知。
+Appearance	外观
+System	系统
+Light	浅色
+Dark	深色
+System ({language})	系统 ({language})
+No Japanese font was found; some text may not display.	未找到日语字体，部分文字可能无法显示。
+No Chinese font was found; some text may not display.	未找到中文字体，部分文字可能无法显示。

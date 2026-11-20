@@ -72,6 +72,7 @@ Built with Rust, and released under the [MIT License](LICENSE).
   from a menu.
 - Light and dark appearance, and a colour-blind safe graph palette (Command-comma).
 - Works with VoiceOver, Narrator, NVDA and Orca: every control and row has a spoken label.
+- Available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese.
 - Pull requests and issues, creating pull requests, Open on GitHub, and cloning from your
   repository list, for github.com and GitHub Enterprise hosts, through your existing GitHub CLI
   login. A dot on each branch with an open pull request shows its checks.

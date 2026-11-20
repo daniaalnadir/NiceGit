@@ -1,0 +1,16 @@
+# pt-BR translations. Format: English source, a tab, then the translation.
+Settings	Configurações
+General	Geral
+Language	Idioma
+Translations may be incomplete. Corrections are welcome on GitHub.	As traduções podem estar incompletas. Correções são bem-vindas no GitHub.
+Check for new versions	Verificar novas versões
+Asks GitHub once a day for the latest version number. Nothing else is sent.	Consulta o GitHub uma vez por dia pelo número da versão mais recente. Nada mais é enviado.
+Notify me when work finishes in the background	Avisar quando um trabalho terminar em segundo plano
+Shows a desktop notification when an action you started finishes while NiceGit is not in focus.	Mostra uma notificação na área de trabalho quando uma ação iniciada termina enquanto o NiceGit não está em foco.
+Appearance	Aparência
+System	Sistema
+Light	Claro
+Dark	Escuro
+System ({language})	Sistema ({language})
+No Japanese font was found; some text may not display.	Nenhuma fonte japonesa foi encontrada; alguns textos podem não aparecer.
+No Chinese font was found; some text may not display.	Nenhuma fonte chinesa foi encontrada; alguns textos podem não aparecer.

@@ -9,6 +9,7 @@ mod diff_view;
 mod file_dialog;
 mod git_ext;
 mod graph_view;
+mod i18n;
 mod install;
 mod issue_links;
 mod notifications;
@@ -57,6 +58,8 @@ mod ui_tests_insights;
 mod ui_tests_install;
 #[cfg(test)]
 mod ui_tests_issue_links;
+#[cfg(test)]
+mod ui_tests_language;
 #[cfg(test)]
 mod ui_tests_more;
 #[cfg(test)]

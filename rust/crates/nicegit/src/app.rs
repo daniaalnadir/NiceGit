@@ -13,6 +13,7 @@ use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
 use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
+use crate::i18n::Locale;
 use crate::notifications::FinishedWork;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
 use crate::theme;
@@ -658,6 +659,10 @@ pub struct NiceGitApp {
     /// The Go to file finder over the active repository's tracked files, while it is open.
     pub go_to_file: Option<crate::ui::go_to_file::GoToFile>,
     pub show_settings: bool,
+    /// A system font for the active language's characters, being read in the background.
+    pub font_load: Option<Receiver<(Locale, Option<Vec<u8>>)>>,
+    /// Whether the notice about a missing font has been shown this session.
+    pub font_notice_shown: bool,
     pub show_shortcuts: bool,
     /// The Manage workspaces window, while it is open.
     pub show_workspaces: bool,
@@ -771,6 +776,9 @@ impl NiceGitApp {
         crate::timing::report("settings read", crate::timing::since_start());
         theme::install_fonts(&creation.egui_ctx);
         crate::timing::report("fonts installed", crate::timing::since_start());
+        let locale = settings.language.resolve();
+        crate::i18n::set_locale(locale);
+        let font_load = start_font_load(locale);
         let mut app = Self {
             worker: Worker::new(creation.egui_ctx.clone()),
             repos: Vec::new(),
@@ -784,6 +792,8 @@ impl NiceGitApp {
             palette: None,
             go_to_file: None,
             show_settings: false,
+            font_load,
+            font_notice_shown: false,
             show_shortcuts: false,
             show_workspaces: false,
             workspace_rename: None,
@@ -3261,6 +3271,52 @@ fn next_id() -> u64 {
     NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Starts reading a system font for the locale's characters on a background thread, when the
+/// locale needs one. Tests never read fonts from the machine.
+fn start_font_load(locale: Locale) -> Option<Receiver<(Locale, Option<Vec<u8>>)>> {
+    if !locale.needs_cjk_font() || cfg!(test) {
+        return None;
+    }
+    let (sender, receiver) = channel();
+    std::thread::spawn(move || {
+        // The app may have closed by the time the font is read; then nobody needs it.
+        let _ = sender.send((locale, crate::i18n::load_cjk_font(locale)));
+    });
+    Some(receiver)
+}
+
+impl NiceGitApp {
+    /// Changes the interface language at once, and starts reading a font if the new language
+    /// needs one.
+    pub fn set_language(&mut self, ctx: &egui::Context, language: crate::settings::Language) {
+        self.settings.language = language;
+        let locale = language.resolve();
+        crate::i18n::set_locale(locale);
+        self.font_load = start_font_load(locale);
+        ctx.request_repaint();
+    }
+
+    /// Adds the font for the language's characters once it has been read, and says so when the
+    /// machine has none.
+    fn receive_language_font(&mut self, ctx: &egui::Context) {
+        let Some(receiver) = &self.font_load else { return };
+        let Ok((locale, bytes)) = receiver.try_recv() else { return };
+        self.font_load = None;
+        match bytes {
+            Some(bytes) => crate::i18n::install_cjk_font(ctx, locale, bytes),
+            None if !self.font_notice_shown => {
+                self.font_notice_shown = true;
+                let text = match locale {
+                    Locale::Japanese => crate::i18n::tr("No Japanese font was found; some text may not display."),
+                    _ => crate::i18n::tr("No Chinese font was found; some text may not display."),
+                };
+                self.notice = Some(Notice { text: text.into(), is_error: false, action: None, detail: None });
+            }
+            None => {}
+        }
+    }
+}
+
 impl eframe::App for NiceGitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
@@ -3272,6 +3328,7 @@ impl eframe::App for NiceGitApp {
         self.keep_zoom(&ctx);
         self.fit_to_monitor(&ctx);
         self.receive();
+        self.receive_language_font(&ctx);
         self.read_other_tabs();
         self.poll_merge_tool();
         self.receive_templates();
