@@ -2,6 +2,7 @@
 //! Compares two commits, or a commit with the working files: the changed files on the left, and
 //! the selected file's change on the right. Changed PNG images show both versions side by side.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::Path;
 
 use egui::{Color32, ColorImage, RichText, TextureHandle, TextureOptions, Ui};
@@ -84,18 +85,18 @@ impl ImagePair {
         ui.columns(2, |columns| {
             image_pane(
                 &mut columns[0],
-                "Before",
+                tr("Before"),
                 self.before.as_ref(),
                 textures.and_then(|t| t.before.as_ref()),
-                "Added in this change",
+                tr("Added in this change"),
                 muted,
             );
             image_pane(
                 &mut columns[1],
-                "After",
+                tr("After"),
                 self.after.as_ref(),
                 textures.and_then(|t| t.after.as_ref()),
-                "Deleted in this change",
+                tr("Deleted in this change"),
                 muted,
             );
         });
@@ -133,7 +134,7 @@ impl ToolWindow for CompareWindow {
     }
 
     fn title(&self) -> String {
-        "Compare".to_string()
+        tr("Compare").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -186,10 +187,10 @@ impl ToolWindow for CompareWindow {
         self.header(ui, cx.snapshot);
         ui.separator();
         match self.files.value(&()) {
-            None => widgets::loading(ui, "Comparing files"),
+            None => widgets::loading(ui, tr("Comparing files")),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(files)) if files.is_empty() => {
-                widgets::empty_state(ui, icon::CHECK_CIRCLE, "No differences in tracked files");
+                widgets::empty_state(ui, icon::CHECK_CIRCLE, tr("No differences in tracked files"));
             }
             Some(Ok(_)) => {
                 let mut clicked: Option<String> = None;
@@ -215,7 +216,7 @@ impl CompareWindow {
         let c = theme::of(ui);
         let to_label = match &self.to {
             Some(to) => Self::label_for(snapshot, to),
-            None => "working files".to_string(),
+            None => tr("working files").to_string(),
         };
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::SCALES).size(16.0).color(c.muted));
@@ -230,9 +231,9 @@ impl CompareWindow {
                     .strong(),
                 );
                 let count = match self.files.value(&()) {
-                    Some(Ok(files)) => format!("{} changed {}", files.len(), if files.len() == 1 { "file" } else { "files" }),
-                    Some(Err(_)) => "Comparison unavailable".to_string(),
-                    None => "Comparing…".to_string(),
+                    Some(Ok(files)) => tr_count("{count} changed file", "{count} changed files", files.len()),
+                    Some(Err(_)) => tr("Comparison unavailable").to_string(),
+                    None => tr("Comparing…").to_string(),
                 };
                 ui.label(RichText::new(count).small().color(c.muted));
             });
@@ -241,7 +242,7 @@ impl CompareWindow {
 
     fn detail_pane(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         let Some(path) = self.selected.clone() else {
-            widgets::empty_state(ui, icon::GIT_DIFF, "Select a file to see how it changed");
+            widgets::empty_state(ui, icon::GIT_DIFF, tr("Select a file to see how it changed"));
             return;
         };
         ui.horizontal(|ui| {
@@ -249,7 +250,7 @@ impl CompareWindow {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Only text diffs can be shown side by side; images always use the two panes.
                 if !is_image(&path) {
-                    crate::tools::widgets::checkbox(ui, true, &mut self.split, "Side by side");
+                    crate::tools::widgets::checkbox(ui, true, &mut self.split, tr("Side by side"));
                 }
             });
         });
@@ -260,7 +261,7 @@ impl CompareWindow {
             }
         }
         match self.detail.value(&path) {
-            None => widgets::loading(ui, "Loading the change"),
+            None => widgets::loading(ui, tr("Loading the change")),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(Detail::Diff(content))) => diff_view::show(ui, content, self.split),
             Some(Ok(Detail::Images(pair))) => pair.show(ui, self.textures.as_ref()),
@@ -305,11 +306,11 @@ fn image_pane(ui: &mut Ui, title: &str, side: Option<&ImageSide>, texture: Optio
             (Some(side), Some(texture)) if side.image.is_some() => {
                 let available = ui.available_size();
                 let image = egui::Image::from_texture(texture).max_size(egui::vec2(available.x.max(40.0), (available.y - 8.0).max(40.0)));
-                ui.add(image).on_hover_text(format!("{title} image"));
+                ui.add(image).on_hover_text(tr_fmt!("{title} image", title = title));
             }
             (Some(_), _) => {
                 ui.add_space(24.0);
-                ui.label(RichText::new("This format cannot be previewed").color(muted));
+                ui.label(RichText::new(tr("This format cannot be previewed")).color(muted));
             }
         }
     });
@@ -416,7 +417,7 @@ fn largest_icns_png(bytes: &[u8]) -> Option<image::DynamicImage> {
 pub(crate) fn human_size(bytes: usize) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
-        return format!("{bytes} bytes");
+        return tr_fmt!("{bytes} bytes", bytes = bytes);
     }
     // After the first division the value is in kilobytes, the first unit.
     let mut value = bytes as f64 / 1000.0;

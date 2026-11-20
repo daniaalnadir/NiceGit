@@ -4,6 +4,7 @@ use nicegit_core::settings::IdentityProfile;
 use nicegit_core::PullStrategy;
 
 use crate::app::{HistoryEntry, NiceGitApp};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::settings::SyncAction;
 use crate::theme;
 use crate::tools::repository_settings::{StoredProfile, PROFILES_KEY};
@@ -110,11 +111,12 @@ fn history_line(step: &HistoryEntry) -> String {
 }
 
 /// The hover text of Undo or Redo: the newest step's name, and how many steps there are.
-fn history_tip(verb: &str, stack: &[HistoryEntry]) -> String {
+fn history_tip(redo: bool, stack: &[HistoryEntry]) -> String {
+    let (verb, nothing) = if redo { (tr("Redo"), tr("Nothing to redo")) } else { (tr("Undo"), tr("Nothing to undo")) };
     match stack.last() {
-        None => format!("Nothing to {}", verb.to_lowercase()),
-        Some(step) if stack.len() == 1 => format!("{verb} {}", step_name(step)),
-        Some(step) => format!("{verb} {} ({} steps)", step_name(step), stack.len()),
+        None => nothing.to_string(),
+        Some(step) if stack.len() == 1 => tr_fmt!("{verb} {step}", verb = verb, step = step_name(step)),
+        Some(step) => tr_fmt!("{verb} {step} ({count} steps)", verb = verb, step = step_name(step), count = stack.len()),
     }
 }
 
@@ -124,16 +126,16 @@ fn history_list(ui: &mut Ui, titles: &[String]) {
     let c = theme::of(ui);
     ui.set_min_width(220.0);
     if titles.is_empty() {
-        ui.label(RichText::new("Nothing to undo").small().color(c.muted));
+        ui.label(RichText::new(tr("Nothing to undo")).small().color(c.muted));
         return;
     }
-    ui.label(RichText::new("Undo steps, newest first").small().color(c.muted));
+    ui.label(RichText::new(tr("Undo steps, newest first")).small().color(c.muted));
     ui.add_space(4.0);
     for title in titles.iter().take(SHOWN) {
         ui.label(title);
     }
     if titles.len() > SHOWN {
-        ui.label(RichText::new(format!("and {} more", titles.len() - SHOWN)).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("and {count} more", count = titles.len() - SHOWN)).small().color(c.muted));
     }
 }
 
@@ -154,7 +156,7 @@ fn badge(ui: &Ui, rect: egui::Rect, count: usize, style: ToolStyle) {
 fn menu_caret(ui: &mut Ui, label: &str, hover: &str) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(CARET_WIDTH, 44.0), egui::Sense::click());
     let response = response.on_hover_text(hover);
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{label} options")));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr_fmt!("{label} options", label = label)));
     if ui.is_rect_visible(rect) {
         if response.hovered() {
             ui.painter().rect_filled(rect, 6.0, ui.visuals().widgets.hovered.weak_bg_fill);
@@ -170,8 +172,11 @@ fn tool(ui: &mut Ui, glyph: &str, label: &str, tooltip: &str, enabled: bool, sty
     let c = theme::of(ui);
     let size = egui::vec2(tool_width(ui, label, style), 44.0);
     let (rect, response) = ui.allocate_exact_size(size, if enabled { egui::Sense::click() } else { egui::Sense::hover() });
-    let response =
-        if style == ToolStyle::Compact { response.on_hover_text(format!("{label}: {tooltip}")) } else { response.on_hover_text(tooltip) };
+    let response = if style == ToolStyle::Compact {
+        response.on_hover_text(tr_fmt!("{label}: {tooltip}", label = label, tooltip = tooltip))
+    } else {
+        response.on_hover_text(tooltip)
+    };
     // Screen readers and UI tests find the button by its label.
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, label));
     if ui.is_rect_visible(rect) {
@@ -242,13 +247,13 @@ fn picker(ui: &mut Ui, caption: &str, value: &str, add: impl FnOnce(&mut Ui)) {
 fn sync_menu(ui: &mut Ui, action: &mut SyncAction, pull_ready: bool) -> Option<PullStrategy> {
     let c = theme::of(ui);
     ui.set_min_width(250.0);
-    ui.label(RichText::new("Toolbar button").small().color(c.muted));
+    ui.label(RichText::new(tr("Toolbar button")).small().color(c.muted));
     ui.add_space(4.0);
     // Each description lines up under its choice's name.
     let indent = ui.spacing().icon_width + ui.spacing().icon_spacing;
     for (choice, name, detail) in [
-        (SyncAction::Fetch, "Fetch", "Download from all remotes"),
-        (SyncAction::Pull, "Pull", "Fetch, then pull the current branch as Settings chooses"),
+        (SyncAction::Fetch, tr("Fetch"), tr("Download from all remotes")),
+        (SyncAction::Pull, tr("Pull"), tr("Fetch, then pull the current branch as Settings chooses")),
     ] {
         ui.scope(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -266,8 +271,8 @@ fn sync_menu(ui: &mut Ui, action: &mut SyncAction, pull_ready: bool) -> Option<P
     ui.separator();
     let mut chosen = None;
     for (strategy, name, detail) in [
-        (PullStrategy::Merge, "Pull (merge)", "Fetch, then merge the upstream's commits into the current branch"),
-        (PullStrategy::Rebase, "Pull (rebase)", "Fetch, then replay the current branch's commits onto the upstream"),
+        (PullStrategy::Merge, tr("Pull (merge)"), tr("Fetch, then merge the upstream's commits into the current branch")),
+        (PullStrategy::Rebase, tr("Pull (rebase)"), tr("Fetch, then replay the current branch's commits onto the upstream")),
     ] {
         if ui.add_enabled(pull_ready, egui::Button::new(name)).on_hover_text(detail).clicked() {
             chosen = Some(strategy);
@@ -285,8 +290,8 @@ impl NiceGitApp {
         let has_remote = !snapshot.remotes.is_empty();
         let undo_steps = self.repo().map(|r| r.undo.as_slice()).unwrap_or_default();
         let redo_steps = self.repo().map(|r| r.redo.as_slice()).unwrap_or_default();
-        let undo_tip = history_tip("Undo", undo_steps);
-        let redo_tip = history_tip("Redo", redo_steps);
+        let undo_tip = history_tip(false, undo_steps);
+        let redo_tip = history_tip(true, redo_steps);
         let undo_lines: Vec<String> = undo_steps.iter().rev().map(history_line).collect();
         let can_undo = idle && undo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
         let can_redo = idle && redo_steps.last().is_some_and(|s| s.applies_to(&snapshot.current_branch));
@@ -294,19 +299,20 @@ impl NiceGitApp {
         let pull_ready = idle && clean && snapshot.upstream.is_some();
         let behind = snapshot.behind.unwrap_or(0);
         let ahead = snapshot.ahead.unwrap_or(0);
-        let pull_label = if behind > 0 { format!("Pull {behind}") } else { "Pull".into() };
+        let pull_label = if behind > 0 { tr_fmt!("Pull {count}", count = behind) } else { tr("Pull").into() };
         let push_label = if snapshot.upstream.is_none() {
-            "Publish".to_string()
+            tr("Publish").to_string()
         } else if ahead > 0 {
-            format!("Push {ahead}")
+            tr_fmt!("Push {count}", count = ahead)
         } else {
-            "Push".into()
+            tr("Push").into()
         };
         // Groups of buttons, in order; a gap separates groups.
         let groups: Vec<Vec<ToolItem>> = vec![
             vec![
-                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, "Undo", undo_tip.clone(), can_undo, ToolAction::Undo).with_history(undo_lines),
-                ToolItem::new(icon::ARROW_CLOCKWISE, "Redo", redo_tip.clone(), can_redo, ToolAction::Redo),
+                ToolItem::new(icon::ARROW_COUNTER_CLOCKWISE, tr("Undo"), undo_tip.clone(), can_undo, ToolAction::Undo)
+                    .with_history(undo_lines),
+                ToolItem::new(icon::ARROW_CLOCKWISE, tr("Redo"), redo_tip.clone(), can_redo, ToolAction::Redo),
             ],
             vec![
                 // Fetch and Pull share one button; its arrow chooses which one it does.
@@ -315,11 +321,15 @@ impl NiceGitApp {
                     // counted on the button.
                     SyncAction::Fetch => ToolItem::new(
                         icon::CLOUD_ARROW_DOWN,
-                        "Fetch",
+                        tr("Fetch"),
                         if behind > 0 {
-                            format!("Download from all remotes · {behind} commit{} to pull", if behind == 1 { "" } else { "s" })
+                            tr_count(
+                                "Download from all remotes · {count} commit to pull",
+                                "Download from all remotes · {count} commits to pull",
+                                behind,
+                            )
                         } else {
-                            "Download from all remotes".into()
+                            tr("Download from all remotes").into()
                         },
                         idle && has_remote,
                         ToolAction::Fetch,
@@ -328,7 +338,7 @@ impl NiceGitApp {
                     SyncAction::Pull => ToolItem::new(
                         icon::ARROW_LINE_DOWN,
                         &pull_label,
-                        "Fetch, then pull the current branch as Settings chooses".into(),
+                        tr("Fetch, then pull the current branch as Settings chooses").into(),
                         pull_ready,
                         ToolAction::Pull,
                     ),
@@ -337,7 +347,7 @@ impl NiceGitApp {
                 ToolItem::new(
                     icon::ARROW_LINE_UP,
                     &push_label,
-                    "Send the current branch to its upstream".into(),
+                    tr("Send the current branch to its upstream").into(),
                     idle && snapshot.is_on_branch() && has_remote,
                     ToolAction::Push,
                 ),
@@ -345,36 +355,36 @@ impl NiceGitApp {
             vec![
                 ToolItem::new(
                     icon::GIT_BRANCH,
-                    "Branch",
-                    "Create a branch at HEAD and switch to it".into(),
+                    tr("Branch"),
+                    tr("Create a branch at HEAD and switch to it").into(),
                     idle && clean && snapshot.head_hash.is_some(),
                     ToolAction::Branch,
                 ),
                 ToolItem::new(
                     icon::ARCHIVE,
-                    "Stash",
-                    "Save all changes in a stash".into(),
+                    tr("Stash"),
+                    tr("Save all changes in a stash").into(),
                     idle && clean && !snapshot.status.is_empty(),
                     ToolAction::Stash,
                 ),
                 ToolItem::new(
                     icon::TRAY_ARROW_UP,
-                    "Pop",
-                    "Apply the latest stash and delete it".into(),
+                    tr("Pop"),
+                    tr("Apply the latest stash and delete it").into(),
                     idle && clean && !snapshot.stashes.is_empty(),
                     ToolAction::Pop,
                 ),
             ],
             vec![
-                ToolItem::new(icon::TERMINAL_WINDOW, "Terminal", "Show the terminal (Ctrl-`)".into(), true, ToolAction::Terminal),
+                ToolItem::new(icon::TERMINAL_WINDOW, tr("Terminal"), tr("Show the terminal (Ctrl-`)").into(), true, ToolAction::Terminal),
                 ToolItem::new(
                     icon::ARROWS_CLOCKWISE,
-                    "Refresh",
-                    "Reload the repository (Ctrl/Cmd-R)".into(),
+                    tr("Refresh"),
+                    tr("Reload the repository (Ctrl/Cmd-R)").into(),
                     self.busy.is_none(),
                     ToolAction::Refresh,
                 ),
-                ToolItem::new(icon::COMMAND, "Commands", "Command palette (Shift-Ctrl/Cmd-P)".into(), true, ToolAction::Commands),
+                ToolItem::new(icon::COMMAND, tr("Commands"), tr("Command palette (Shift-Ctrl/Cmd-P)").into(), true, ToolAction::Commands),
             ],
         ];
 
@@ -382,9 +392,9 @@ impl NiceGitApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let name = self.repo().map(|r| r.name()).unwrap_or_default();
-            picker(ui, "Repository", &name, |ui| self.repository_menu(ui));
+            picker(ui, tr("Repository"), &name, |ui| self.repository_menu(ui));
             ui.add_space(8.0);
-            picker(ui, "Branch", &snapshot.current_branch, |ui| self.branch_menu_list(ui));
+            picker(ui, tr("Branch"), &snapshot.current_branch, |ui| self.branch_menu_list(ui));
             ui.add_space(10.0);
 
             // Labelled buttons when they all fit, icons alone when not, and a More menu for
@@ -439,7 +449,7 @@ impl NiceGitApp {
                             chosen = Some(item.action);
                         }
                         if item.menu {
-                            let caret = menu_caret(ui, "Fetch and Pull", "Choose what Fetch and Pull does");
+                            let caret = menu_caret(ui, tr("Fetch and Pull"), tr("Choose what Fetch and Pull does"));
                             egui::Popup::menu(&caret).show(|ui| {
                                 if let Some(strategy) = sync_menu(ui, &mut sync_action, pull_ready) {
                                     chosen = Some(ToolAction::PullWith(strategy));
@@ -448,7 +458,7 @@ impl NiceGitApp {
                         }
                         // Only when there is something for Undo to step back through.
                         if let Some(titles) = item.history.as_ref().filter(|titles| !titles.is_empty()) {
-                            let caret = menu_caret(ui, "Undo history", "Show the steps Undo will step back through");
+                            let caret = menu_caret(ui, tr("Undo history"), tr("Show the steps Undo will step back through"));
                             egui::Popup::menu(&caret).show(|ui| history_list(ui, titles));
                         }
                     } else {
@@ -479,7 +489,9 @@ impl NiceGitApp {
                         }
                     }
                 });
-                more.response.on_hover_text("More actions").widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "More"));
+                more.response
+                    .on_hover_text(tr("More actions"))
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("More")));
             }
         });
 
@@ -493,22 +505,24 @@ impl NiceGitApp {
             Some(ToolAction::Push) => self.push(),
             Some(ToolAction::Branch) => {
                 self.dialog = Some(Dialog::input(
-                    "New branch",
-                    "Create a branch at HEAD and switch to it",
+                    tr("New branch"),
+                    tr("Create a branch at HEAD and switch to it"),
                     "",
                     InputKind::CreateBranch { branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
                 ))
             }
-            Some(ToolAction::Stash) => self.dialog = Some(Dialog::input("Stash changes", "Message (optional)", "", InputKind::SaveStash)),
+            Some(ToolAction::Stash) => {
+                self.dialog = Some(Dialog::input(tr("Stash changes"), tr("Message (optional)"), "", InputKind::SaveStash))
+            }
             Some(ToolAction::Pop) => {
                 if let Some(stash) = snapshot.stashes.first().cloned() {
                     self.confirm(
-                        format!("Pop {}?", stash.reference),
-                        format!(
-                            "“{}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
-                            stash.message
+                        tr_fmt!("Pop {stash}?", stash = stash.reference),
+                        tr_fmt!(
+                            "“{message}” is applied to your working files and then deleted. If applying fails, the stash is kept.",
+                            message = stash.message
                         ),
-                        "Pop",
+                        tr("Pop"),
                         crate::ui::dialogs::Pending::PopStash(stash),
                     );
                 }
@@ -524,20 +538,20 @@ impl NiceGitApp {
     pub fn repository_menu(&mut self, ui: &mut Ui) {
         ui.set_min_width(240.0);
         let has_repo = self.snapshot().is_some();
-        if ui.button(format!("{}  Open repository…", icon::FOLDER_OPEN)).clicked() {
+        if ui.button(format!("{}  {}", icon::FOLDER_OPEN, tr("Open repository…"))).clicked() {
             ui.close();
             self.choose_folder();
         }
-        if ui.button(format!("{}  Find repositories in a folder…", icon::MAGNIFYING_GLASS)).clicked() {
+        if ui.button(format!("{}  {}", icon::MAGNIFYING_GLASS, tr("Find repositories in a folder…"))).clicked() {
             ui.close();
             let ctx = ui.ctx().clone();
             self.choose_folder_to_find(&ctx);
         }
-        if ui.button(format!("{}  Clone repository…", icon::DOWNLOAD_SIMPLE)).clicked() {
+        if ui.button(format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr("Clone repository…"))).clicked() {
             ui.close();
             self.dialog = Some(Dialog::clone_repository());
         }
-        if ui.button(format!("{}  New repository…", icon::PLUS)).clicked() {
+        if ui.button(format!("{}  {}", icon::PLUS, tr("New repository…"))).clicked() {
             ui.close();
             self.create_repository();
         }
@@ -545,7 +559,7 @@ impl NiceGitApp {
         let tabs: Vec<_> = self.repos.iter().map(|repo| repo.path.clone()).collect();
         let recent: Vec<_> = self.settings.recent.iter().filter(|path| !tabs.contains(path) && path.is_dir()).take(12).cloned().collect();
         ui.add_enabled_ui(!recent.is_empty(), |ui| {
-            ui.menu_button(format!("{}  Recent repositories", icon::CLOCK_COUNTER_CLOCKWISE), |ui| {
+            ui.menu_button(format!("{}  {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("Recent repositories")), |ui| {
                 ui.set_min_width(220.0);
                 for path in recent {
                     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -555,7 +569,7 @@ impl NiceGitApp {
                     }
                 }
                 ui.separator();
-                if ui.button(format!("{}  Show all in the sidebar", icon::SIDEBAR_SIMPLE)).clicked() {
+                if ui.button(format!("{}  {}", icon::SIDEBAR_SIMPLE, tr("Show all in the sidebar"))).clicked() {
                     ui.close();
                     self.settings.show_repositories = true;
                     self.settings.recent_repositories_open = true;
@@ -563,7 +577,7 @@ impl NiceGitApp {
                 }
             })
             .response
-            .on_disabled_hover_text("Repositories you open appear here");
+            .on_disabled_hover_text(tr("Repositories you open appear here"));
         });
         ui.separator();
         let open =
@@ -577,26 +591,28 @@ impl NiceGitApp {
             self.identity_menu(ui);
             ui.separator();
         }
-        open(ui, self, icon::GEAR_SIX, "Repository settings…", &|_| Box::new(tools::repository_settings::RepositorySettingsWindow::new()));
-        open(ui, self, icon::SLIDERS_HORIZONTAL, "Git settings…", &|_| Box::new(tools::git_settings::GitSettingsWindow::new()));
-        open(ui, self, icon::ARCHIVE, "Stashes…", &|_| Box::new(tools::stash::StashWindow::new()));
-        open(ui, self, icon::MAGNIFYING_GLASS, "Search history…", &|_| Box::new(tools::commit_search::CommitSearchWindow::new()));
-        open(ui, self, icon::FILE_MAGNIFYING_GLASS, "Search file contents…", &|_| {
+        open(ui, self, icon::GEAR_SIX, tr("Repository settings…"), &|_| {
+            Box::new(tools::repository_settings::RepositorySettingsWindow::new())
+        });
+        open(ui, self, icon::SLIDERS_HORIZONTAL, tr("Git settings…"), &|_| Box::new(tools::git_settings::GitSettingsWindow::new()));
+        open(ui, self, icon::ARCHIVE, tr("Stashes…"), &|_| Box::new(tools::stash::StashWindow::new()));
+        open(ui, self, icon::MAGNIFYING_GLASS, tr("Search history…"), &|_| Box::new(tools::commit_search::CommitSearchWindow::new()));
+        open(ui, self, icon::FILE_MAGNIFYING_GLASS, tr("Search file contents…"), &|_| {
             Box::new(tools::content_search::ContentSearchWindow::new(None))
         });
-        open(ui, self, icon::CLOCK_COUNTER_CLOCKWISE, "Recover lost work…", &|_| Box::new(tools::reflog::ReflogWindow::new()));
-        open(ui, self, icon::CHART_BAR, "Insights…", &|_| Box::new(tools::insights::InsightsWindow::new()));
-        open(ui, self, icon::BROOM, "Clean up branches…", &|_| Box::new(tools::branch_cleanup::BranchCleanupWindow::new()));
-        open(ui, self, icon::BUG, "Bisect…", &|_| Box::new(tools::bisect::BisectWindow::new()));
+        open(ui, self, icon::CLOCK_COUNTER_CLOCKWISE, tr("Recover lost work…"), &|_| Box::new(tools::reflog::ReflogWindow::new()));
+        open(ui, self, icon::CHART_BAR, tr("Insights…"), &|_| Box::new(tools::insights::InsightsWindow::new()));
+        open(ui, self, icon::BROOM, tr("Clean up branches…"), &|_| Box::new(tools::branch_cleanup::BranchCleanupWindow::new()));
+        open(ui, self, icon::BUG, tr("Bisect…"), &|_| Box::new(tools::bisect::BisectWindow::new()));
         ui.separator();
-        open(ui, self, icon::FOLDERS, "Worktrees…", &|_| Box::new(tools::worktrees::WorktreesWindow::new()));
-        open(ui, self, icon::PACKAGE, "Submodules…", &|_| Box::new(tools::submodules::SubmodulesWindow::new()));
+        open(ui, self, icon::FOLDERS, tr("Worktrees…"), &|_| Box::new(tools::worktrees::WorktreesWindow::new()));
+        open(ui, self, icon::PACKAGE, tr("Submodules…"), &|_| Box::new(tools::submodules::SubmodulesWindow::new()));
         open(ui, self, icon::FLOW_ARROW, "GitFlow…", &|_| Box::new(tools::gitflow::GitFlowWindow::new()));
         open(ui, self, icon::DATABASE, "Git LFS…", &|_| Box::new(tools::lfs::LfsWindow::new()));
         let remote = self.snapshot().and_then(|s| s.remotes.iter().find(|r| *r == "origin").or(s.remotes.first()).cloned());
         if let Some(remote) = remote {
             let hosts = self.settings.github_enterprise_hosts.clone();
-            open(ui, self, icon::GITHUB_LOGO, "Pull requests and issues…", &move |_| {
+            open(ui, self, icon::GITHUB_LOGO, tr("Pull requests and issues…"), &move |_| {
                 Box::new(tools::github::GitHubWindow::new(remote.clone(), hosts.clone()))
             });
         }
@@ -608,15 +624,15 @@ impl NiceGitApp {
         ui.separator();
         let values = self.repository_values();
         self.custom_actions_submenu(ui, crate::settings::ActionScope::Repository, &values, has_repo && self.idle());
-        if ui.button(format!("{}  Manage custom actions…", icon::PENCIL_SIMPLE)).clicked() {
+        if ui.button(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Manage custom actions…"))).clicked() {
             ui.close();
             self.show_settings = true;
         }
         ui.separator();
         let can_publish = self.snapshot().is_some_and(|s| s.upstream.is_none() && s.is_on_branch() && !s.remotes.is_empty()) && self.idle();
         if ui
-            .add_enabled(can_publish, egui::Button::new(format!("{}  Publish branch…", icon::UPLOAD_SIMPLE)))
-            .on_disabled_hover_text("The branch already has an upstream, or there is no remote")
+            .add_enabled(can_publish, egui::Button::new(format!("{}  {}", icon::UPLOAD_SIMPLE, tr("Publish branch…"))))
+            .on_disabled_hover_text(tr("The branch already has an upstream, or there is no remote"))
             .clicked()
         {
             ui.close();
@@ -627,30 +643,30 @@ impl NiceGitApp {
         let idle = self.idle();
         if shape.shallow
             && ui
-                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  Fetch full history", icon::DOWNLOAD_SIMPLE)))
-                .on_disabled_hover_text("Wait for the current action to finish")
+                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr("Fetch full history"))))
+                .on_disabled_hover_text(tr("Wait for the current action to finish"))
                 .clicked()
         {
             ui.close();
-            self.act("Fetch full history", |client, path| {
-                client.fetch_full_history(path).map(|_| Some("Fetched the full history.".into()))
+            self.act(tr("Fetch full history"), |client, path| {
+                client.fetch_full_history(path).map(|_| Some(tr("Fetched the full history.").into()))
             });
         }
         if shape.sparse
             && ui
-                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  Show all folders…", icon::FOLDERS)))
-                .on_disabled_hover_text("Wait for the current action to finish")
+                .add_enabled(has_repo && idle, egui::Button::new(format!("{}  {}", icon::FOLDERS, tr("Show all folders…"))))
+                .on_disabled_hover_text(tr("Wait for the current action to finish"))
                 .clicked()
         {
             ui.close();
             self.confirm(
-                "Show all folders?",
-                "Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change.",
-                "Show all folders",
+                tr("Show all folders?"),
+                tr("Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change."),
+                tr("Show all folders"),
                 crate::ui::dialogs::Pending::ShowAllFolders,
             );
         }
-        if ui.add_enabled(has_repo, egui::Button::new(format!("{}  Apply patch…", icon::FILE_PLUS))).clicked() {
+        if ui.add_enabled(has_repo, egui::Button::new(format!("{}  {}", icon::FILE_PLUS, tr("Apply patch…")))).clicked() {
             ui.close();
             self.apply_patch();
         }
@@ -663,10 +679,10 @@ impl NiceGitApp {
         let current = self.repo().and_then(|repo| repo.identity.clone());
         let idle = self.idle();
         let profiles: Vec<StoredProfile> = ui.ctx().data_mut(|data| data.get_persisted(egui::Id::unique(PROFILES_KEY))).unwrap_or_default();
-        ui.menu_button(format!("{}  Identity", icon::USER_CIRCLE), |ui| {
+        ui.menu_button(format!("{}  {}", icon::USER_CIRCLE, tr("Identity")), |ui| {
             ui.set_min_width(240.0);
             if profiles.is_empty() {
-                ui.add_enabled(false, egui::Button::new("No saved profiles"));
+                ui.add_enabled(false, egui::Button::new(tr("No saved profiles")));
             }
             for profile in profiles {
                 let core = IdentityProfile::new(&profile.name, &profile.email, profile.signing_key.as_deref());
@@ -680,7 +696,7 @@ impl NiceGitApp {
                 }
             }
             ui.separator();
-            if ui.button(format!("{}  Manage identities…", icon::GEAR_SIX)).clicked() {
+            if ui.button(format!("{}  {}", icon::GEAR_SIX, tr("Manage identities…"))).clicked() {
                 ui.close();
                 self.open_tool(Box::new(tools::repository_settings::RepositorySettingsWindow::on_profiles()));
             }
@@ -691,9 +707,9 @@ impl NiceGitApp {
     pub fn confirm_undo(&mut self) {
         let Some(title) = self.repo().and_then(|r| r.undo.last()).map(step_name) else { return };
         self.confirm(
-            format!("Undo {title}?"),
-            "NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.",
-            "Undo",
+            tr_fmt!("Undo {step}?", step = title),
+            tr("NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost."),
+            tr("Undo"),
             crate::ui::dialogs::Pending::Undo,
         );
     }
@@ -702,9 +718,9 @@ impl NiceGitApp {
     pub fn confirm_redo(&mut self) {
         let Some(title) = self.repo().and_then(|r| r.redo.last()).map(step_name) else { return };
         self.confirm(
-            format!("Redo {title}?"),
-            "NiceGit puts back what the undo reversed. It refuses if the branch has moved since.",
-            "Redo",
+            tr_fmt!("Redo {step}?", step = title),
+            tr("NiceGit puts back what the undo reversed. It refuses if the branch has moved since."),
+            tr("Redo"),
             crate::ui::dialogs::Pending::Redo,
         );
     }
@@ -736,12 +752,14 @@ impl NiceGitApp {
             }
         });
         ui.separator();
-        if ui.add_enabled(self.idle() && snapshot.head_hash.is_some(), egui::Button::new(format!("{}  New branch…", icon::PLUS))).clicked()
+        if ui
+            .add_enabled(self.idle() && snapshot.head_hash.is_some(), egui::Button::new(format!("{}  {}", icon::PLUS, tr("New branch…"))))
+            .clicked()
         {
             ui.close();
             self.dialog = Some(Dialog::input(
-                "New branch",
-                "Create a branch at HEAD and switch to it",
+                tr("New branch"),
+                tr("Create a branch at HEAD and switch to it"),
                 "",
                 InputKind::CreateBranch { branch: snapshot.current_branch.clone(), head: snapshot.head_hash.clone() },
             ));

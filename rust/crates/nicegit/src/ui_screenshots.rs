@@ -651,3 +651,31 @@ fn settings_scroll_shots(folder: &Path) {
     settle(&mut harness);
     save(&mut harness, folder, "settings-clone-into-dark");
 }
+
+/// The main window and Settings in each translated language, to check that labels fit.
+#[test]
+#[ignore = "renders design-review screenshots; run on request"]
+fn language_screenshots() {
+    use crate::settings::Language;
+    let Some(folder) = review_folder() else { return };
+    let made = repository();
+    std::fs::write(made.path().join("notes.txt"), "a change\n").unwrap();
+    for (code, language) in
+        [("de", Language::German), ("fr", Language::French), ("ja", Language::Japanese), ("zh", Language::ChineseSimplified)]
+    {
+        let mut harness = open_rendering(made.path(), Appearance::Light);
+        let ctx = harness.ctx.clone();
+        // As in the app: a character drawn before its font arrives shows as a box, not a panic.
+        ctx.set_missing_glyph_policy(egui::MissingGlyphPolicy::Tofu);
+        harness.state_mut().set_language(&ctx, language);
+        // Test builds skip the app's background font read, so the font is added here.
+        let locale = language.resolve();
+        if let Some(bytes) = crate::i18n::load_cjk_font(locale) {
+            crate::i18n::install_cjk_font(&ctx, locale, bytes);
+        }
+        save(&mut harness, &folder, &format!("language-{code}-main"));
+        harness.state_mut().show_settings = true;
+        save(&mut harness, &folder, &format!("language-{code}-settings"));
+        harness.state_mut().set_language(&ctx, Language::English);
+    }
+}

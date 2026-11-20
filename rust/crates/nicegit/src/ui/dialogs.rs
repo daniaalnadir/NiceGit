@@ -8,6 +8,7 @@ use nicegit_core::models::short;
 use nicegit_core::{Branch, GitError, MergeStyle, Operation, Snapshot, Stash, StashOptions, StatusEntry};
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 use crate::tools::{widgets, Task};
 use crate::ui::clone_picker::{ClonePicker, Picked};
@@ -279,7 +280,7 @@ impl CloneChoices {
         let depth = if self.latest_only {
             match self.depth.trim().parse::<u32>() {
                 Ok(depth) if (1..=100_000).contains(&depth) => Some(depth),
-                _ => return Err("Enter a number of commits from 1 to 100000.".into()),
+                _ => return Err(tr("Enter a number of commits from 1 to 100000.").into()),
             }
         } else {
             None
@@ -287,7 +288,7 @@ impl CloneChoices {
         let sparse_folders = if self.only_folders {
             let folders: Vec<String> = self.folders.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_string).collect();
             if folders.is_empty() {
-                return Err("Type at least one folder, one per line.".into());
+                return Err(tr("Type at least one folder, one per line.").into());
             }
             if let Some(problem) = folders.iter().find_map(|folder| nicegit_core::client::sparse_folder_problem(folder)) {
                 return Err(problem.into());
@@ -306,57 +307,57 @@ fn clone_options(ui: &mut egui::Ui, choices: &mut CloneChoices) -> bool {
     let muted = theme::of(ui).muted;
     let warning = theme::of(ui).warning;
     let valid = choices.options().is_ok();
-    egui::CollapsingHeader::new("Options").id_salt("clone-options").default_open(false).show(ui, |ui| {
-        ui.label(RichText::new("History").color(muted));
+    egui::CollapsingHeader::new(tr("Options")).id_salt("clone-options").default_open(false).show(ui, |ui| {
+        ui.label(RichText::new(tr("History")).color(muted));
         ui.horizontal(|ui| {
-            if widgets::radio(ui, !choices.latest_only, "Full history").clicked() {
+            if widgets::radio(ui, !choices.latest_only, tr("Full history")).clicked() {
                 choices.latest_only = false;
             }
         });
         ui.horizontal(|ui| {
-            if widgets::radio(ui, choices.latest_only, "Only the latest N commits").clicked() {
+            if widgets::radio(ui, choices.latest_only, tr("Only the latest N commits")).clicked() {
                 choices.latest_only = true;
             }
         });
         if choices.latest_only {
             ui.horizontal(|ui| {
                 ui.add_space(24.0);
-                ui.label("Number of commits");
+                ui.label(tr("Number of commits"));
                 ui.add(egui::TextEdit::singleline(&mut choices.depth).desired_width(90.0))
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Number of commits"));
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Number of commits")));
             });
         }
-        ui.label(RichText::new("Faster for large projects. You can fetch the full history later.").small().color(muted));
+        ui.label(RichText::new(tr("Faster for large projects. You can fetch the full history later.")).small().color(muted));
         ui.add_space(8.0);
 
-        ui.label(RichText::new("File contents").color(muted));
+        ui.label(RichText::new(tr("File contents")).color(muted));
         ui.horizontal(|ui| {
-            if widgets::radio(ui, !choices.on_demand, "Download all files now").clicked() {
+            if widgets::radio(ui, !choices.on_demand, tr("Download all files now")).clicked() {
                 choices.on_demand = false;
             }
         });
         ui.horizontal(|ui| {
-            if widgets::radio(ui, choices.on_demand, "Download file contents when needed").clicked() {
+            if widgets::radio(ui, choices.on_demand, tr("Download file contents when needed")).clicked() {
                 choices.on_demand = true;
             }
         });
         ui.label(
-            RichText::new(
+            RichText::new(tr(
                 "Smaller and faster; Git downloads older file versions when you look at them. Needs a server that supports partial clone.",
-            )
+            ))
             .small()
             .color(muted),
         );
         ui.add_space(8.0);
 
-        ui.label(RichText::new("Folders").color(muted));
+        ui.label(RichText::new(tr("Folders")).color(muted));
         ui.horizontal(|ui| {
-            if widgets::radio(ui, !choices.only_folders, "All folders").clicked() {
+            if widgets::radio(ui, !choices.only_folders, tr("All folders")).clicked() {
                 choices.only_folders = false;
             }
         });
         ui.horizontal(|ui| {
-            if widgets::radio(ui, choices.only_folders, "Only these folders").clicked() {
+            if widgets::radio(ui, choices.only_folders, tr("Only these folders")).clicked() {
                 choices.only_folders = true;
             }
         });
@@ -369,9 +370,9 @@ fn clone_options(ui: &mut egui::Ui, choices: &mut CloneChoices) -> bool {
                         .desired_width(f32::INFINITY)
                         .hint_text("src\ndocs/guide"),
                 )
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Folders, one per line"));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Folders, one per line")));
             });
-            ui.label(RichText::new("One folder per line, relative to the repository.").small().color(muted));
+            ui.label(RichText::new(tr("One folder per line, relative to the repository.")).small().color(muted));
         }
         if let Err(problem) = choices.options() {
             ui.label(RichText::new(problem).small().color(warning));
@@ -384,7 +385,7 @@ fn clone_options(ui: &mut egui::Ui, choices: &mut CloneChoices) -> bool {
 fn commits_detail(commits: &[String]) -> String {
     match commits {
         [one] => short(one).to_string(),
-        _ => format!("{} commits", commits.len()),
+        _ => tr_count("1 commit", "{count} commits", commits.len()),
     }
 }
 
@@ -511,9 +512,9 @@ impl Dialog {
 
     pub fn clone_repository() -> Self {
         Self::with_second(
-            "Clone repository",
-            "Repository URL or local path",
-            "Destination folder",
+            tr("Clone repository"),
+            tr("Repository URL or local path"),
+            tr("Destination folder"),
             InputKind::Clone(CloneDestination::default(), CloneChoices::default()),
         )
     }
@@ -568,9 +569,9 @@ impl Dialog {
         let remotes = snapshot.remotes.clone();
         let default_remote = default_push_remote(&remotes, snapshot.upstream.as_deref());
         Self::with_second(
-            "New tag",
-            "Tag name",
-            "Tag message",
+            tr("New tag"),
+            tr("Tag name"),
+            tr("Tag message"),
             InputKind::CreateTag {
                 target,
                 annotated: false,
@@ -620,25 +621,24 @@ impl Pending {
 /// Remembered in Settings, so backporting several fixes keeps the same choice. Shown for a
 /// cherry-pick, single or of a merge; a revert does not name the commit it came from.
 fn record_origin_checkbox(ui: &mut egui::Ui, record_origin: &mut bool) {
-    widgets::checkbox(ui, true, record_origin, "Note the original commit in each message").on_hover_text(
-        "Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. \
-         Useful when backporting a fix to another branch.",
-    );
+    widgets::checkbox(ui, true, record_origin, tr("Note the original commit in each message")).on_hover_text(tr(
+        "Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. Useful when backporting a fix to another branch.",
+    ));
 }
 
 /// The three ways a merge can combine the branch, with a note under the chosen one.
 fn merge_style_choices(ui: &mut egui::Ui, style: &mut MergeStyle) {
     let choices = [
-        (MergeStyle::Default, "Merge (fast-forward when possible)", "Git follows this repository's merge.ff setting."),
+        (MergeStyle::Default, tr("Merge (fast-forward when possible)"), tr("Git follows this repository's merge.ff setting.")),
         (
             MergeStyle::NoFastForward,
-            "Always create a merge commit",
-            "Records the merge with a merge commit even when the branch could move forward.",
+            tr("Always create a merge commit"),
+            tr("Records the merge with a merge commit even when the branch could move forward."),
         ),
         (
             MergeStyle::Squash,
-            "Squash into staged changes",
-            "Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged.",
+            tr("Squash into staged changes"),
+            tr("Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged."),
         ),
     ];
     for (choice, title, note) in choices {
@@ -658,19 +658,20 @@ const LISTED_CONFLICTS: usize = 15;
 
 /// The confirmation for taking one side of every conflicted file in `paths`.
 pub fn resolve_conflicts_confirmation(paths: &[String], side: &str) -> (String, String, String) {
-    let title = format!("Take the {side} version for all conflicts?");
+    let title = tr_fmt!("Take the {side} version for all conflicts?", side = side);
     // A side that deleted a file takes the deletion, so the file is removed rather than replaced.
-    let mut message = format!(
-        "Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead."
+    let mut message = tr_fmt!(
+        "Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead.",
+        side = side
     );
     for path in paths.iter().take(LISTED_CONFLICTS) {
         message.push_str("\n• ");
         message.push_str(path);
     }
     if paths.len() > LISTED_CONFLICTS {
-        message.push_str(&format!("\n…and {} more", paths.len() - LISTED_CONFLICTS));
+        message.push_str(&format!("\n{}", tr_fmt!("…and {count} more", count = paths.len() - LISTED_CONFLICTS)));
     }
-    (title, message, format!("Take {side} versions"))
+    (title, message, tr_fmt!("Take {side} versions", side = side))
 }
 
 /// The most tag names the push confirmation lists by name, for each of its two lists.
@@ -680,23 +681,27 @@ const LISTED_TAGS: usize = 20;
 /// remote already has at another object are named as skipped, never pushed.
 pub fn push_tags_confirmation(remote: &str, missing: &[(String, String)], conflicting: &[String]) -> (String, String) {
     let count = missing.len();
-    let title = if count == 1 { format!("Push 1 tag to {remote}?") } else { format!("Push {count} tags to {remote}?") };
-    let mut message = format!("These local tags are not on {remote} yet. Tags already on {remote} are never replaced.");
+    let title = if count == 1 {
+        tr_fmt!("Push 1 tag to {remote}?", remote = remote)
+    } else {
+        tr_fmt!("Push {count} tags to {remote}?", count = count, remote = remote)
+    };
+    let mut message = tr_fmt!("These local tags are not on {remote} yet. Tags already on {remote} are never replaced.", remote = remote);
     for (name, _) in missing.iter().take(LISTED_TAGS) {
         message.push_str("\n• ");
         message.push_str(name);
     }
     if count > LISTED_TAGS {
-        message.push_str(&format!("\n…and {} more", count - LISTED_TAGS));
+        message.push_str(&format!("\n{}", tr_fmt!("…and {count} more", count = count - LISTED_TAGS)));
     }
     if !conflicting.is_empty() {
         let names: Vec<&str> = conflicting.iter().take(LISTED_TAGS).map(String::as_str).collect();
         let more = conflicting.len().saturating_sub(LISTED_TAGS);
-        message.push_str(&format!("\n\nSkipped, because {remote} has a different tag with the same name: {}", names.join(", ")));
-        if more > 0 {
-            message.push_str(&format!(", and {more} more"));
-        }
-        message.push('.');
+        let listed = if more > 0 { tr_fmt!("{names}, and {count} more", names = names.join(", "), count = more) } else { names.join(", ") };
+        message.push_str(&format!(
+            "\n\n{}",
+            tr_fmt!("Skipped, because {remote} has a different tag with the same name: {names}.", remote = remote, names = listed)
+        ));
     }
     (title, message)
 }
@@ -705,9 +710,14 @@ pub fn push_tags_confirmation(remote: &str, missing: &[(String, String)], confli
 /// the branch of the same name, with its short tip. Tags are not pushed.
 pub fn push_branches_confirmation(remote: &str, branches: &[(String, String)]) -> (String, String) {
     let count = branches.len();
-    let title = if count == 1 { format!("Push 1 branch to {remote}?") } else { format!("Push {count} branches to {remote}?") };
-    let mut message = format!(
-        "Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed."
+    let title = if count == 1 {
+        tr_fmt!("Push 1 branch to {remote}?", remote = remote)
+    } else {
+        tr_fmt!("Push {count} branches to {remote}?", count = count, remote = remote)
+    };
+    let mut message = tr_fmt!(
+        "Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed.",
+        remote = remote
     );
     for (name, tip) in branches {
         message.push_str(&format!("\n• {name} ({})", short(tip)));
@@ -717,19 +727,20 @@ pub fn push_branches_confirmation(remote: &str, branches: &[(String, String)]) -
 
 /// The notice after a branch push: what went up, what was already there, and what the remote refused.
 fn branch_push_notice(remote: &str, report: &nicegit_core::settings::BranchPushReport) -> String {
-    let count = |n: usize| if n == 1 { "1 branch".to_string() } else { format!("{n} branches") };
+    let count = |n: usize| tr_count("1 branch", "{count} branches", n);
     let mut parts = Vec::new();
     if !report.pushed.is_empty() {
-        parts.push(format!("Pushed {} to {remote}.", count(report.pushed.len())));
+        parts.push(tr_fmt!("Pushed {branches} to {remote}.", branches = count(report.pushed.len()), remote = remote));
     }
     if !report.up_to_date.is_empty() {
-        parts.push(format!("{} already up to date on {remote}.", count(report.up_to_date.len())));
+        parts.push(tr_fmt!("{branches} already up to date on {remote}.", branches = count(report.up_to_date.len()), remote = remote));
     }
     if !report.rejected.is_empty() {
-        parts.push(format!(
-            "{remote} refused {}: {}. Nothing was forced, so fetch and review them.",
-            count(report.rejected.len()),
-            report.rejected.join(", ")
+        parts.push(tr_fmt!(
+            "{remote} refused {branches}: {names}. Nothing was forced, so fetch and review them.",
+            remote = remote,
+            branches = count(report.rejected.len()),
+            names = report.rejected.join(", ")
         ));
     }
     parts.join(" ")
@@ -739,10 +750,16 @@ fn branch_push_notice(remote: &str, report: &nicegit_core::settings::BranchPushR
 /// resolved, so the person can open them in the conflict editor.
 fn resolve_conflicts_notice(report: &nicegit_core::conflict::ResolveReport, side: &str) -> String {
     let resolved = report.resolved.len();
-    let mut text = format!("Resolved {resolved} {} with the {side} version.", if resolved == 1 { "file" } else { "files" });
+    let mut text = tr_count("Resolved 1 file with the {side} version.", "Resolved {count} files with the {side} version.", resolved)
+        .replace("{side}", side);
     if !report.failed.is_empty() {
         let names: Vec<&str> = report.failed.iter().map(|(path, _)| path.as_str()).collect();
-        text.push_str(&format!(" {} could not be resolved: {} (open them in the conflict editor).", report.failed.len(), names.join(", ")));
+        let problem = tr_fmt!(
+            "{count} could not be resolved: {names} (open them in the conflict editor).",
+            count = report.failed.len(),
+            names = names.join(", ")
+        );
+        text.push_str(&format!(" {problem}"));
     }
     text
 }
@@ -781,7 +798,7 @@ impl NiceGitApp {
                     ui.label(message.as_str());
                     // A force push can be compared with the remote tip it would replace.
                     if let Pending::ForcePush { expected_remote_tip, head, .. } = pending {
-                        if ui.link("Compare with remote").on_hover_text("Shows which commits the remote would lose").clicked() {
+                        if ui.link(tr("Compare with remote")).on_hover_text(tr("Shows which commits the remote would lose")).clicked() {
                             compare_remote = Some((expected_remote_tip.clone(), head.clone()));
                         }
                     }
@@ -801,7 +818,7 @@ impl NiceGitApp {
                     if let Pending::Merge { style, .. } = pending {
                         ui.add_space(12.0);
                         merge_style_choices(ui, style);
-                        *button = if *style == MergeStyle::Squash { "Squash" } else { "Merge" }.to_string();
+                        *button = if *style == MergeStyle::Squash { tr("Squash") } else { tr("Merge") }.to_string();
                     }
                     if matches!(pending, Pending::CherryPick { .. }) {
                         ui.add_space(12.0);
@@ -817,7 +834,7 @@ impl NiceGitApp {
                         if confirm.clicked() {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
@@ -831,9 +848,9 @@ impl NiceGitApp {
                         ui.horizontal(|ui| {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let pick = ui
-                                    .button(format!("{}  From GitHub…", icon::GITHUB_LOGO))
-                                    .on_hover_text("Choose one of your GitHub repositories");
-                                pick.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Choose a GitHub repository"));
+                                    .button(format!("{}  {}", icon::GITHUB_LOGO, tr("From GitHub…")))
+                                    .on_hover_text(tr("Choose one of your GitHub repositories"));
+                                pick.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Choose a GitHub repository")));
                                 if pick.clicked() {
                                     open_picker = true;
                                 }
@@ -867,14 +884,14 @@ impl NiceGitApp {
                     // Saving under a saved workspace's name asks first, so the note says what happens.
                     if matches!(kind, InputKind::SaveWorkspace { .. }) && self.settings.workspaces.iter().any(|w| w.name == value.trim()) {
                         ui.add_space(4.0);
-                        ui.label(RichText::new("A workspace with this name exists. You will be asked to replace it.").small().color(c.muted));
+                        ui.label(RichText::new(tr("A workspace with this name exists. You will be asked to replace it.")).small().color(c.muted));
                     }
                     if matches!(kind, InputKind::BranchFromStash { .. }) {
                         ui.add_space(4.0);
                         ui.label(
-                            RichText::new(
+                            RichText::new(tr(
                                 "Creates the branch at the commit this stash was made on, switches to it, applies the stash, and removes the stash once it applies.",
-                            )
+                            ))
                             .small()
                             .color(c.muted),
                         );
@@ -882,7 +899,7 @@ impl NiceGitApp {
                     if matches!(kind, InputKind::RenameStash(_)) {
                         ui.add_space(4.0);
                         ui.label(
-                            RichText::new("The stash keeps its changes. Once renamed, it moves to the top of the list.")
+                            RichText::new(tr("The stash keeps its changes. Once renamed, it moves to the top of the list."))
                                 .small()
                                 .color(c.muted),
                         );
@@ -892,26 +909,24 @@ impl NiceGitApp {
                     if matches!(kind, InputKind::SaveStash) {
                         ui.add_space(6.0);
                         let staged_only = self.settings.stash_staged_only;
-                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_include_untracked, "Include untracked files").on_hover_text(
-                            "New files that Git does not track yet are saved in the stash and removed from the folder.",
+                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_include_untracked, tr("Include untracked files")).on_hover_text(
+                            tr("New files that Git does not track yet are saved in the stash and removed from the folder."),
                         );
-                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_keep_index, "Keep staged changes").on_hover_text(
-                            "Staged changes stay staged and in your files, and only unstaged changes leave your files. \
-                             The stash still holds a copy of the staged changes, as Git's --keep-index does.",
-                        );
-                        widgets::checkbox(ui, true, &mut self.settings.stash_staged_only, "Stash only staged changes").on_hover_text(
-                            "Saves the staged changes only. Unstaged and untracked changes stay in your files. \
-                             A file with both staged and unstaged changes must be staged or unstaged in full first.",
-                        );
+                        widgets::checkbox(ui, !staged_only, &mut self.settings.stash_keep_index, tr("Keep staged changes")).on_hover_text(tr(
+                            "Staged changes stay staged and in your files, and only unstaged changes leave your files. The stash still holds a copy of the staged changes, as Git's --keep-index does.",
+                        ));
+                        widgets::checkbox(ui, true, &mut self.settings.stash_staged_only, tr("Stash only staged changes")).on_hover_text(tr(
+                            "Saves the staged changes only. Unstaged and untracked changes stay in your files. A file with both staged and unstaged changes must be staged or unstaged in full first.",
+                        ));
                     }
                     let mut show_second = second_label.is_some();
                     if let InputKind::CreateTag { annotated, sign, push, remotes, default_remote, .. } = kind {
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
-                            if widgets::radio(ui, !*annotated, "Lightweight").clicked() {
+                            if widgets::radio(ui, !*annotated, tr("Lightweight")).clicked() {
                                 *annotated = false;
                             }
-                            if widgets::radio(ui, *annotated, "Annotated, with a message").clicked() {
+                            if widgets::radio(ui, *annotated, tr("Annotated, with a message")).clicked() {
                                 *annotated = true;
                             }
                         });
@@ -919,10 +934,10 @@ impl NiceGitApp {
                         // Only an annotated tag can be signed. A lightweight tag shows the box unticked, and
                         // the choice is kept for when the tag is annotated again.
                         let mut signing = *annotated && *sign;
-                        let signing_changed = widgets::checkbox(ui, *annotated, &mut signing, "Sign with your signing key")
-                            .on_hover_text(
+                        let signing_changed = widgets::checkbox(ui, *annotated, &mut signing, tr("Sign with your signing key"))
+                            .on_hover_text(tr(
                                 "Git signs the tag with your configured signing key (user.signingKey and gpg.format), as `git tag --sign` does.",
-                            )
+                            ))
                             .changed();
                         if signing_changed {
                             *sign = signing;
@@ -931,8 +946,8 @@ impl NiceGitApp {
                             ui.add_space(6.0);
                             ui.horizontal(|ui| {
                                 let mut ticked = push.is_some();
-                                widgets::checkbox(ui, true, &mut ticked, "Push to")
-                                    .widget_info(move || egui::WidgetInfo::selected(egui::Role::CheckBox, true, ticked, "Push to remote"));
+                                widgets::checkbox(ui, true, &mut ticked, tr("Push to"))
+                                    .widget_info(move || egui::WidgetInfo::selected(egui::Role::CheckBox, true, ticked, tr("Push to remote")));
                                 // Ticking the box chooses the default remote; the picker only changes it while ticked.
                                 let mut chosen = push.clone().or_else(|| default_remote.clone()).unwrap_or_default();
                                 if let [only] = remotes.as_slice() {
@@ -967,15 +982,15 @@ impl NiceGitApp {
                             let width = ui.available_width() - if browse { 90.0 } else { 0.0 };
                             if matches!(kind, InputKind::CreateTag { .. }) {
                                 ui.add(egui::TextEdit::multiline(second).desired_rows(3).desired_width(width))
-                                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Tag message"));
+                                    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Tag message")));
                             } else {
                                 let second_name = second_label.clone();
                                 let response = ui.add(egui::TextEdit::singleline(second).desired_width(width));
                                 response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, &second_name));
                                 edited_destination = response.changed();
                             }
-                            if browse && ui.button("Choose…").clicked() {
-                                if let Some(folder) = crate::file_dialog::pick_folder("Clone into") {
+                            if browse && ui.button(tr("Choose…")).clicked() {
+                                if let Some(folder) = crate::file_dialog::pick_folder(tr("Clone into")) {
                                     *second = folder.join(repository_folder_name(value.as_str())).display().to_string();
                                     chose_destination = true;
                                 }
@@ -989,7 +1004,7 @@ impl NiceGitApp {
                         if let InputKind::Clone(destination, _) = &*kind {
                             let path = std::path::PathBuf::from(second.trim());
                             if !destination.by_hand && !second.trim().is_empty() && is_taken(&path) {
-                                ui.label(RichText::new(format!("{} already exists; choose another folder.", path.display())).color(c.muted));
+                                ui.label(RichText::new(tr_fmt!("{path} already exists; choose another folder.", path = path.display())).color(c.muted));
                             }
                         }
                     }
@@ -1007,41 +1022,41 @@ impl NiceGitApp {
                         let optional = matches!(kind, InputKind::SaveStash | InputKind::StashLines { .. });
                         let ready = (optional || !value.trim().is_empty()) && !tag_needs_message && name_problem.is_none() && options_valid;
                         let ok_label = match kind {
-                            InputKind::CreateTag { push: Some(_), .. } => "Create and push",
-                            InputKind::BranchFromStash { .. } => "Create branch",
-                            InputKind::StashLines { .. } => "Stash",
-                            _ => "OK",
+                            InputKind::CreateTag { push: Some(_), .. } => tr("Create and push"),
+                            InputKind::BranchFromStash { .. } => tr("Create branch"),
+                            InputKind::StashLines { .. } => tr("Stash"),
+                            _ => tr("OK"),
                         };
                         if widgets::primary_button(ui, ok_label, ready).clicked() || (enter && ready) {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::Integrate { source } => {
                     let current = self.snapshot().map(|s| s.current_branch.clone()).unwrap_or_default();
-                    ui.heading(format!("Integrate {}", source.display_name()));
+                    ui.heading(tr_fmt!("Integrate {branch}", branch = source.display_name()));
                     ui.add_space(8.0);
-                    ui.label(format!("Merge {} into {current}, or replay {current}'s commits on top of it?", source.display_name()));
+                    ui.label(tr_fmt!("Merge {source} into {current}, or replay {current}'s commits on top of it?", source = source.display_name(), current = current));
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, &format!("{}  Merge…", icon::GIT_MERGE), true).clicked() {
+                        if widgets::primary_button(ui, &format!("{}  {}", icon::GIT_MERGE, tr("Merge…")), true).clicked() {
                             integrate = Some(false);
                         }
-                        if ui.button(format!("{}  Rebase…", icon::GIT_PULL_REQUEST)).clicked() {
+                        if ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("Rebase…"))).clicked() {
                             integrate = Some(true);
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::ChooseParent { subject, parents, selected, revert, .. } => {
-                    ui.heading(if *revert { "Revert a merge" } else { "Cherry-pick a merge" });
+                    ui.heading(if *revert { tr("Revert a merge") } else { tr("Cherry-pick a merge") });
                     ui.add_space(8.0);
-                    ui.label(format!("“{subject}” has {} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.", parents.len()));
+                    ui.label(tr_fmt!("“{subject}” has {count} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.", subject = subject, count = parents.len()));
                     ui.add_space(6.0);
                     for (index, (hash, parent_subject)) in parents.iter().enumerate() {
                         let subject = if parent_subject.is_empty() {
@@ -1049,7 +1064,7 @@ impl NiceGitApp {
                         } else {
                             parent_subject.clone()
                         };
-                        let label = format!("Parent {} · {} {subject}", index + 1, nicegit_core::models::short(hash));
+                        let label = tr_fmt!("Parent {number} · {commit} {subject}", number = index + 1, commit = nicegit_core::models::short(hash), subject = subject);
                         if widgets::radio(ui, *selected == index, label).clicked() {
                             *selected = index;
                         }
@@ -1060,22 +1075,22 @@ impl NiceGitApp {
                     }
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, if *revert { "Revert" } else { "Cherry-pick" }, true).clicked() {
+                        if widgets::primary_button(ui, if *revert { tr("Revert") } else { tr("Cherry-pick") }, true).clicked() {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::EditMessage { message, .. } => {
-                    ui.heading("Edit commit message");
+                    ui.heading(tr("Edit commit message"));
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.").color(c.muted));
+                    ui.label(RichText::new(tr("Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.")).color(c.muted));
                     if published {
                         widgets::callout(
                             ui,
-                            "This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile.",
+                            tr("This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile."),
                             true,
                         );
                     }
@@ -1083,102 +1098,102 @@ impl NiceGitApp {
                     ui.add(egui::TextEdit::multiline(message).desired_rows(6).desired_width(f32::INFINITY));
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "Save message", !message.trim().is_empty()).clicked() {
+                        if widgets::primary_button(ui, tr("Save message"), !message.trim().is_empty()).clicked() {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::Publish { remote } => {
-                    ui.heading("Publish branch");
+                    ui.heading(tr("Publish branch"));
                     ui.add_space(8.0);
                     let branch = self.snapshot().map(|s| s.current_branch.clone()).unwrap_or_default();
-                    ui.label(format!("Push {branch} to a remote and track it there."));
+                    ui.label(tr_fmt!("Push {branch} to a remote and track it there.", branch = branch));
                     ui.add_space(6.0);
                     let remotes = self.snapshot().map(|s| s.remotes.clone()).unwrap_or_default();
-                    egui::ComboBox::from_label("Remote").selected_text(remote.as_str()).show_ui(ui, |ui| {
+                    egui::ComboBox::from_label(tr("Remote")).selected_text(remote.as_str()).show_ui(ui, |ui| {
                         for name in remotes {
                             ui.selectable_value(remote, name.clone(), name);
                         }
                     });
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "Publish", true).clicked() {
+                        if widgets::primary_button(ui, tr("Publish"), true).clicked() {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::NewRepository { folder, branch, readme, first_commit } => {
-                    ui.heading("New repository");
+                    ui.heading(tr("New repository"));
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Folder").color(c.muted));
+                    ui.label(RichText::new(tr("Folder")).color(c.muted));
                     let folder_field = ui
                         .horizontal(|ui| {
                             let width = ui.available_width() - 90.0;
                             let field = ui.add(egui::TextEdit::singleline(folder).desired_width(width));
-                            if ui.button("Choose…").clicked() {
-                                if let Some(picked) = crate::file_dialog::pick_folder("Choose a folder for the new repository") {
+                            if ui.button(tr("Choose…")).clicked() {
+                                if let Some(picked) = crate::file_dialog::pick_folder(tr("Choose a folder for the new repository")) {
                                     *folder = picked.display().to_string();
                                 }
                             }
                             field
                         })
                         .inner;
-                    folder_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Folder"));
+                    folder_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Folder")));
                     if ui.memory(|m| m.focused().is_none()) {
                         folder_field.request_focus();
                     }
-                    ui.label(RichText::new("The folder is created if it does not exist.").small().color(c.muted));
+                    ui.label(RichText::new(tr("The folder is created if it does not exist.")).small().color(c.muted));
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Initial branch").color(c.muted));
+                    ui.label(RichText::new(tr("Initial branch")).color(c.muted));
                     let branch_field = widgets::text_field(ui, branch, "");
-                    branch_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Initial branch"));
+                    branch_field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Initial branch")));
                     // The name is checked as it is typed, as the branch dialogs check theirs.
                     let problem = crate::git_ext::ref_name_problem(branch.trim());
                     if let Some(problem) = problem {
                         ui.label(RichText::new(problem).small().color(c.warning));
                     }
                     ui.add_space(8.0);
-                    widgets::checkbox(ui, true, readme, "Add a README").on_hover_text(
+                    widgets::checkbox(ui, true, readme, tr("Add a README")).on_hover_text(tr(
                         "A README.md with the folder's name as its heading. An existing README is kept as it is.",
-                    );
-                    widgets::checkbox(ui, true, first_commit, "Make a first commit").on_hover_text(
+                    ));
+                    widgets::checkbox(ui, true, first_commit, tr("Make a first commit")).on_hover_text(tr(
                         "Commits the README as “Initial commit”, or an empty commit when there is no README.",
-                    );
+                    ));
                     // The dialog's Create waits for the built-in editor's unsaved text, as the
                     // other actions that change the repository do.
                     let editing = self.has_unsaved_editor();
                     if editing {
                         ui.add_space(4.0);
-                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                        ui.label(RichText::new(tr("Save or close the file you are editing first.")).small().color(c.warning));
                     }
                     ui.add_space(16.0);
                     let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     let ready = !folder.trim().is_empty() && !branch.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none();
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "Create", ready).clicked() || (enter && ready) {
+                        if widgets::primary_button(ui, tr("Create"), ready).clicked() || (enter && ready) {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::CheckOutPullRequest { remote, number, title, author, local, .. } => {
-                    ui.heading(format!("Check out pull request #{number}"));
+                    ui.heading(tr_fmt!("Check out pull request #{number}", number = number));
                     ui.add_space(8.0);
                     ui.add(egui::Label::new(RichText::new(title.as_str()).strong()).wrap());
-                    let by = if author.is_empty() { "by an unknown author".to_string() } else { format!("by {author}") };
+                    let by = if author.is_empty() { tr("by an unknown author").to_string() } else { tr_fmt!("by {author}", author = author) };
                     ui.label(RichText::new(by).small().color(c.muted));
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Local branch").color(c.muted));
+                    ui.label(RichText::new(tr("Local branch")).color(c.muted));
                     let field = widgets::text_field(ui, local, "");
-                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Local branch"));
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Local branch")));
                     // The name is checked as it is typed, as the branch dialogs check theirs.
                     let problem = crate::git_ext::ref_name_problem(local.trim());
                     if let Some(problem) = problem {
@@ -1186,10 +1201,10 @@ impl NiceGitApp {
                     }
                     ui.add_space(6.0);
                     ui.label(
-                        RichText::new(format!(
-                            "Fetches pull request #{number} from {remote} into this new branch, then switches to it. \
-                             The branch gets no upstream, because the pull request may come from a fork. \
-                             An existing branch with this name is used only if it already points at the pull request."
+                        RichText::new(tr_fmt!(
+                            "Fetches pull request #{number} from {remote} into this new branch, then switches to it. The branch gets no upstream, because the pull request may come from a fork. An existing branch with this name is used only if it already points at the pull request.",
+                            number = number,
+                            remote = remote
                         ))
                         .small()
                         .color(c.muted),
@@ -1199,60 +1214,59 @@ impl NiceGitApp {
                     let editing = self.has_unsaved_editor();
                     if editing {
                         ui.add_space(4.0);
-                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                        ui.label(RichText::new(tr("Save or close the file you are editing first.")).small().color(c.warning));
                     }
                     ui.add_space(16.0);
                     let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     let ready = !local.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none();
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "Check out", ready).clicked() || (enter && ready) {
+                        if widgets::primary_button(ui, tr("Check out"), ready).clicked() || (enter && ready) {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
                 }
                 Dialog::StartIssueWork { remote, number, title, local, from_default, default, .. } => {
-                    ui.heading(format!("Start work on issue #{number}"));
+                    ui.heading(tr_fmt!("Start work on issue #{number}", number = number));
                     ui.add_space(8.0);
                     ui.add(egui::Label::new(RichText::new(title.as_str()).strong()).wrap());
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Branch").color(c.muted));
+                    ui.label(RichText::new(tr("Branch")).color(c.muted));
                     let field = widgets::text_field(ui, local, "");
-                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Branch"));
+                    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Branch")));
                     // The name is checked as it is typed, as the branch dialogs check theirs.
                     let problem = crate::git_ext::ref_name_problem(local.trim());
                     if let Some(problem) = problem {
                         ui.label(RichText::new(problem).small().color(c.warning));
                     }
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Start from").color(c.muted));
+                    ui.label(RichText::new(tr("Start from")).color(c.muted));
                     // The remote's default branch is read in the background, so its choice waits for it.
                     let default_state = default.get().cloned();
-                    if ui.radio(!*from_default, "Current HEAD").clicked() {
+                    if ui.radio(!*from_default, tr("Current HEAD")).clicked() {
                         *from_default = false;
                     }
                     match &default_state {
                         None => {
-                            ui.add_enabled(false, egui::RadioButton::new(false, "Default branch (loading…)"));
+                            ui.add_enabled(false, egui::RadioButton::new(false, tr("Default branch (loading…)")));
                         }
                         Some(Ok(start)) => {
-                            if ui.radio(*from_default, format!("{}/{} (the default branch)", remote, start.branch)).clicked() {
+                            if ui.radio(*from_default, tr_fmt!("{remote}/{branch} (the default branch)", remote = remote, branch = start.branch)).clicked() {
                                 *from_default = true;
                             }
                         }
                         Some(Err(message)) => {
-                            ui.add_enabled(false, egui::RadioButton::new(false, format!("{remote}'s default branch")));
+                            ui.add_enabled(false, egui::RadioButton::new(false, tr_fmt!("{remote}'s default branch", remote = remote)));
                             ui.add(egui::Label::new(RichText::new(message).small().color(c.danger)).wrap());
                         }
                     }
                     ui.add_space(6.0);
                     ui.label(
-                        RichText::new(
-                            "Creates the branch and switches to it, carrying your changes across as Create branch does. \
-                             The branch gets no upstream. A branch that already exists is not replaced.",
-                        )
+                        RichText::new(tr(
+                            "Creates the branch and switches to it, carrying your changes across as Create branch does. The branch gets no upstream. A branch that already exists is not replaced.",
+                        ))
                         .small()
                         .color(c.muted),
                     );
@@ -1261,17 +1275,17 @@ impl NiceGitApp {
                     let editing = self.has_unsaved_editor();
                     if editing {
                         ui.add_space(4.0);
-                        ui.label(RichText::new("Save or close the file you are editing first.").small().color(c.warning));
+                        ui.label(RichText::new(tr("Save or close the file you are editing first.")).small().color(c.warning));
                     }
                     ui.add_space(16.0);
                     let enter = ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
                     let start_ready = !*from_default || matches!(default_state, Some(Ok(_)));
                     let ready = !local.trim().is_empty() && problem.is_none() && !editing && self.busy.is_none() && start_ready;
                     ui.horizontal(|ui| {
-                        if widgets::primary_button(ui, "Start work", ready).clicked() || (enter && ready) {
+                        if widgets::primary_button(ui, tr("Start work"), ready).clicked() || (enter && ready) {
                             run = true;
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr("Cancel")).clicked() {
                             close = true;
                         }
                     });
@@ -1347,7 +1361,7 @@ impl NiceGitApp {
                 }
                 Dialog::EditMessage { message, branch, head } => {
                     self.act_recording_detail("Edit message", "Edit message", crate::app::summary_of(&message), move |client, path| {
-                        client.amend_message(&message, &branch, &head, path).map(|_| Some("Updated the commit message.".into()))
+                        client.amend_message(&message, &branch, &head, path).map(|_| Some(tr("Updated the commit message.").into()))
                     });
                 }
                 Dialog::NewRepository { folder, branch, readme, first_commit } => {
@@ -1355,7 +1369,7 @@ impl NiceGitApp {
                 }
                 Dialog::CheckOutPullRequest { remote, number, local, fetch_addresses, branch, head, .. } => {
                     let local = local.trim().to_string();
-                    let notice = format!("Checked out pull request #{number} as {local}.");
+                    let notice = tr_fmt!("Checked out pull request #{number} as {local}.", number = number, local = local);
                     self.act(&format!("Check out pull request #{number}"), move |client, path| {
                         client
                             .checkout_pull_request(&remote, number, &local, &fetch_addresses, &branch, head.as_deref(), path)
@@ -1366,10 +1380,10 @@ impl NiceGitApp {
                     // The default branch is used only with its tip as it was read, which the core checks again.
                     let source = if from_default { default.get().and_then(|result| result.as_ref().ok()).cloned() } else { None };
                     if from_default && source.is_none() {
-                        self.notify("The remote's default branch is not ready yet. Try again in a moment.", true);
+                        self.notify(tr("The remote's default branch is not ready yet. Try again in a moment."), true);
                     } else {
                         let local = local.trim().to_string();
-                        let notice = format!("Started work on issue #{number} on {local}.");
+                        let notice = tr_fmt!("Started work on issue #{number} on {local}.", number = number, local = local);
                         self.act(&format!("Start work on issue #{number}"), move |client, path| {
                             client.start_issue_branch(&local, source.as_ref(), &branch, head.as_deref(), path).map(|_| Some(notice))
                         });
@@ -1378,9 +1392,9 @@ impl NiceGitApp {
                 Dialog::Publish { remote } => {
                     if let Some(snapshot) = self.snapshot().cloned() {
                         self.act("Publish", move |client, path| {
-                            client
-                                .publish(&remote, &snapshot, path)
-                                .map(|_| Some(format!("Published {} to {remote}.", snapshot.current_branch)))
+                            client.publish(&remote, &snapshot, path).map(|_| {
+                                Some(tr_fmt!("Published {branch} to {remote}.", branch = snapshot.current_branch, remote = remote))
+                            })
                         });
                     }
                 }
@@ -1397,7 +1411,7 @@ impl NiceGitApp {
                 let name = entry.path.clone();
                 self.act_with_record("Discard", move |client, path| {
                     let undo = client.discard_keeping_undo(&entry, path)?;
-                    Ok((Some(format!("Discarded changes to {name}.")), undo.map(crate::app::Recorded::Discard)))
+                    Ok((Some(tr_fmt!("Discarded changes to {name}.", name = name)), undo.map(crate::app::Recorded::Discard)))
                 })
             }
             Pending::DiscardLines { lines, review } => {
@@ -1405,7 +1419,8 @@ impl NiceGitApp {
                 let count = lines.len();
                 self.act_with_record("Discard lines", move |client, path| {
                     let undo = client.discard_lines_keeping_undo(&lines, &review, path)?;
-                    let message = format!("Discarded {count} changed line{} in {name}.", if count == 1 { "" } else { "s" });
+                    let message = tr_count("Discarded 1 changed line in {name}.", "Discarded {count} changed lines in {name}.", count)
+                        .replace("{name}", &name);
                     Ok((Some(message), undo.map(crate::app::Recorded::Discard)))
                 })
             }
@@ -1413,7 +1428,7 @@ impl NiceGitApp {
                 for entry in &entries {
                     client.discard(entry, path)?;
                 }
-                Ok(Some(format!("Discarded {} changed files.", entries.len())))
+                Ok(Some(tr_count("Discarded 1 changed file.", "Discarded {count} changed files.", entries.len())))
             }),
             Pending::DeleteBranch { branch, force } => {
                 let name = branch.name.clone();
@@ -1421,7 +1436,7 @@ impl NiceGitApp {
                     let deletion = client.delete_branch_keeping_undo(&branch, force, path)?;
                     let step = nicegit_core::undo::UndoStep::BranchDeletions(vec![deletion]);
                     let entry = crate::app::HistoryEntry { title: "Delete branch".into(), detail: Some(name.clone()), step };
-                    Ok((Some(format!("Deleted branch {name}.")), Some(crate::app::Recorded::Step(entry))))
+                    Ok((Some(tr_fmt!("Deleted branch {name}.", name = name)), Some(crate::app::Recorded::Step(entry))))
                 })
             }
             Pending::DeleteBranches { branches } => {
@@ -1437,27 +1452,39 @@ impl NiceGitApp {
                         let step = nicegit_core::undo::UndoStep::BranchDeletions(report.deleted.clone());
                         crate::app::Recorded::Step(crate::app::HistoryEntry { title: "Delete branches".into(), detail: Some(detail), step })
                     });
-                    let noun = if count == 1 { "branch" } else { "branches" };
                     let result = match report.failure {
-                        None => Ok(Some(format!("Deleted {deleted} {noun}. Undo restores them."))),
-                        Some(error) if deleted == 0 => Err(GitError::failed("delete branches", format!("Nothing was deleted. {error}"))),
+                        None => Ok(Some(tr_count(
+                            "Deleted 1 branch. Undo restores them.",
+                            "Deleted {count} branches. Undo restores them.",
+                            deleted,
+                        ))),
+                        Some(error) if deleted == 0 => {
+                            Err(GitError::failed("delete branches", tr_fmt!("Nothing was deleted. {error}", error = error)))
+                        }
                         Some(error) => Err(GitError::failed(
                             "delete branches",
-                            format!("Deleted {deleted} of {count} {noun} before stopping. Undo restores those. {error}"),
+                            tr_count(
+                                "Deleted {deleted} of {count} branch before stopping. Undo restores those. {error}",
+                                "Deleted {deleted} of {count} branches before stopping. Undo restores those. {error}",
+                                count,
+                            )
+                            .replace("{deleted}", &deleted.to_string())
+                            .replace("{error}", &error.to_string()),
                         )),
                     };
                     (result, record)
                 });
             }
-            Pending::DeleteTag { name, tip } => self
-                .act("Delete tag", move |client, path| client.delete_tag(&name, &tip, path).map(|_| Some(format!("Deleted tag {name}.")))),
+            Pending::DeleteTag { name, tip } => self.act("Delete tag", move |client, path| {
+                client.delete_tag(&name, &tip, path).map(|_| Some(tr_fmt!("Deleted tag {name}.", name = name)))
+            }),
             Pending::DropStash(stash) => {
                 let name = stash.message.clone();
                 self.act_with_record("Delete stash", move |client, path| {
                     let deletion = client.drop_stash_keeping_undo(&stash, path)?;
                     let step = nicegit_core::undo::UndoStep::StashDeletion(deletion);
                     let entry = crate::app::HistoryEntry { title: "Delete stash".into(), detail: Some(name), step };
-                    Ok((Some("Deleted the stash.".into()), Some(crate::app::Recorded::Step(entry))))
+                    Ok((Some(tr("Deleted the stash.").into()), Some(crate::app::Recorded::Step(entry))))
                 })
             }
             Pending::Merge { source, branch, head, style } => {
@@ -1467,11 +1494,13 @@ impl NiceGitApp {
                     MergeStyle::Squash => self.act_squash(name.clone(), move |client, path| {
                         client
                             .merge(&source, &branch, head.as_deref(), MergeStyle::Squash, path)
-                            .map(|_| Some(format!("Staged {name}'s changes as a squash. Review and commit them.")))
+                            .map(|_| Some(tr_fmt!("Staged {name}'s changes as a squash. Review and commit them.", name = name)))
                     }),
                     MergeStyle::Default | MergeStyle::NoFastForward => {
                         self.act_recording_detail("Merge", "Merge", Some(name.clone()), move |client, path| {
-                            client.merge(&source, &branch, head.as_deref(), style, path).map(|_| Some(format!("Merged {name}.")))
+                            client
+                                .merge(&source, &branch, head.as_deref(), style, path)
+                                .map(|_| Some(tr_fmt!("Merged {name}.", name = name)))
                         })
                     }
                 }
@@ -1480,7 +1509,7 @@ impl NiceGitApp {
                 let name = onto.display_name();
                 self.act_recording_detail("Rebase", "Rebase", Some(format!("onto {name}")), move |client, path| {
                     crate::git_ext::rebase_onto(client, &onto, &branch, head.as_deref(), path)
-                        .map(|_| Some(format!("Rebased onto {name}.")))
+                        .map(|_| Some(tr_fmt!("Rebased onto {name}.", name = name)))
                 })
             }
             Pending::CheckOutAndCherryPick { branch, commits } => {
@@ -1497,19 +1526,25 @@ impl NiceGitApp {
                 let record_origin = self.settings.cherry_pick_record_origin;
                 self.act_recording_detail("Cherry-pick", "Cherry-pick", Some(commits_detail(&commits)), move |client, path| {
                     client.cherry_pick(&commits, head.as_deref(), &branch, record_origin, path).map(|_| {
-                        Some(if count == 1 { "Cherry-picked the commit.".to_string() } else { format!("Cherry-picked {count} commits.") })
+                        Some(if count == 1 {
+                            tr("Cherry-picked the commit.").to_string()
+                        } else {
+                            tr_fmt!("Cherry-picked {count} commits.", count = count)
+                        })
                     })
                 })
             }
             Pending::Revert { commit, branch, head } => {
                 self.act_recording_detail("Revert", "Revert", Some(short(&commit).to_string()), move |client, path| {
-                    crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some("Reverted the commit.".into()))
+                    crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some(tr("Reverted the commit.").into()))
                 })
             }
             Pending::RevertMany { commits, branch, head } => {
                 let count = commits.len();
                 self.act_recording_detail("Revert", "Revert", Some(commits_detail(&commits)), move |client, path| {
-                    client.revert_commits(&commits, head.as_deref(), &branch, path).map(|_| Some(format!("Reverted {count} commits.")))
+                    client
+                        .revert_commits(&commits, head.as_deref(), &branch, path)
+                        .map(|_| Some(tr_fmt!("Reverted {count} commits.", count = count)))
                 })
             }
             Pending::FixupInto { target, subject, branch, head } => {
@@ -1524,12 +1559,12 @@ impl NiceGitApp {
                     nicegit_core::undo::UndoMode::Soft,
                     move |client, path| {
                         client.fixup_into(&target, &branch, &head, path)?;
-                        Ok(Some(format!("Folded the staged changes into “{subject}”.")))
+                        Ok(Some(tr_fmt!("Folded the staged changes into “{subject}”.", subject = subject)))
                     },
                 )
             }
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
-                client.abort_operation(operation, path).map(|_| Some(format!("Aborted the {}.", operation.name())))
+                client.abort_operation(operation, path).map(|_| Some(tr_fmt!("Aborted the {operation}.", operation = operation.name())))
             }),
             Pending::ResolveConflictsSide { paths, incoming, side_name } => self.act("Resolve conflicts", move |client, repo| {
                 let report = client.resolve_conflicts_side(&paths, incoming, repo)?;
@@ -1544,14 +1579,18 @@ impl NiceGitApp {
             Pending::PushBranch { branch, remote, addresses } => {
                 let name = branch.name.clone();
                 self.act("Push branch", move |client, path| {
-                    client.push_branch(&branch, &remote, &addresses, path).map(|_| Some(format!("Pushed {name} to {remote}.")))
+                    client
+                        .push_branch(&branch, &remote, &addresses, path)
+                        .map(|_| Some(tr_fmt!("Pushed {name} to {remote}.", name = name, remote = remote)))
                 })
             }
             Pending::PushTags { remote, tags, addresses } => {
-                let summary = if tags.len() == 1 { "1 tag".to_string() } else { format!("{} tags", tags.len()) };
+                let summary = tr_count("1 tag", "{count} tags", tags.len());
                 self.act("Push tags", move |client, path| {
                     let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
-                    client.push_tags(&remote, &tags, expected, path).map(|_| Some(format!("Pushed {summary} to {remote}.")))
+                    client
+                        .push_tags(&remote, &tags, expected, path)
+                        .map(|_| Some(tr_fmt!("Pushed {summary} to {remote}.", summary = summary, remote = remote)))
                 })
             }
             Pending::PushBranches { remote, branches, addresses } => self.act("Push branches", move |client, path| {
@@ -1574,40 +1613,44 @@ impl NiceGitApp {
                         remote_push_addresses: addresses,
                         ..Default::default()
                     };
-                    client.force_push(&snapshot, &expected_remote_tip, path).map(|_| Some(format!("Force pushed {branch} to {upstream}.")))
+                    client
+                        .force_push(&snapshot, &expected_remote_tip, path)
+                        .map(|_| Some(tr_fmt!("Force pushed {branch} to {upstream}.", branch = branch, upstream = upstream)))
                 })
             }
             Pending::RestoreFile { path, source, branch, head } => self.act("Restore file", move |client, repo| {
                 client
                     .restore(&path, &source, &branch, head.as_deref(), repo)
-                    .map(|_| Some(format!("Restored {path}. Review and commit the staged change.")))
+                    .map(|_| Some(tr_fmt!("Restored {path}. Review and commit the staged change.", path = path)))
             }),
             Pending::RestoreFromStash { path, stash, untracked, branch, head } => {
                 let reference = stash.reference.clone();
                 self.act("Restore file", move |client, repo| {
                     client
                         .restore_from_stash(&path, &stash, untracked, &branch, head.as_deref(), repo)
-                        .map(|_| Some(format!("Restored {path} from {reference}.")))
+                        .map(|_| Some(tr_fmt!("Restored {path} from {reference}.", path = path, reference = reference)))
                 })
             }
             Pending::DeleteRemoteTag { tag, tip, remote, addresses } => self.act("Delete remote tag", move |client, path| {
                 let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
-                client.delete_remote_tag(&tag, &remote, &tip, expected, path).map(|_| Some(format!("Deleted {tag} from {remote}.")))
+                client
+                    .delete_remote_tag(&tag, &remote, &tip, expected, path)
+                    .map(|_| Some(tr_fmt!("Deleted {tag} from {remote}.", tag = tag, remote = remote)))
             }),
             Pending::DeleteRemoteBranch { remote, branch, tip, addresses } => self.act("Delete remote branch", move |client, path| {
                 let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
                 client
                     .delete_remote_branch(&remote, &branch, &tip, expected, path)
-                    .map(|_| Some(format!("Deleted {branch} from {remote}.")))
+                    .map(|_| Some(tr_fmt!("Deleted {branch} from {remote}.", branch = branch, remote = remote)))
             }),
             Pending::RunCustomAction { name, program, arguments, show_output, branch, head } => {
                 self.run_custom_action(name, program, arguments, show_output, branch, head)
             }
-            Pending::ShowAllFolders => {
-                self.act("Show all folders", |client, path| client.show_all_folders(path).map(|_| Some("Checked out every folder.".into())))
-            }
+            Pending::ShowAllFolders => self.act("Show all folders", |client, path| {
+                client.show_all_folders(path).map(|_| Some(tr("Checked out every folder.").into()))
+            }),
             Pending::PopStash(stash) => self.act(&format!("Pop {}", stash.reference), move |client, path| {
-                client.pop_stash(&stash, path).map(|_| Some("Applied and deleted the stash.".into()))
+                client.pop_stash(&stash, path).map(|_| Some(tr("Applied and deleted the stash.").into()))
             }),
             Pending::ReplaceWorkspace { name, repositories } => self.store_workspace(name, repositories),
             Pending::DeleteWorkspace { name } => self.delete_workspace(&name),
@@ -1616,7 +1659,7 @@ impl NiceGitApp {
             Pending::Redo => self.redo(),
             Pending::UndoCommit { branch, head } => {
                 self.act_recording_detail("Undo commit", "Undo commit", Some(short(&head).to_string()), move |client, path| {
-                    client.undo_last_commit(&branch, &head, path).map(|_| Some("Undid the last commit. Its changes are staged.".into()))
+                    client.undo_last_commit(&branch, &head, path).map(|_| Some(tr("Undid the last commit. Its changes are staged.").into()))
                 })
             }
         }
@@ -1635,12 +1678,12 @@ impl NiceGitApp {
             Ok(()) => {
                 let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
                 self.open(path);
-                self.notify(format!("Created repository {name}."), false);
+                self.notify(tr_fmt!("Created repository {name}.", name = name), false);
             }
             Err(error) if crate::app::needs_identity(&error.to_string()) => {
                 self.open(path);
                 self.notice = Some(crate::app::Notice {
-                    text: "The repository was created, but Git needs your name and email before it can make the first commit.".into(),
+                    text: tr("The repository was created, but Git needs your name and email before it can make the first commit.").into(),
                     is_error: true,
                     action: Some(crate::app::NoticeAction::SetIdentity),
                     detail: Some(error.to_string()),
@@ -1655,15 +1698,15 @@ impl NiceGitApp {
             InputKind::CreateBranch { branch, head } => self.act("Create branch", move |client, path| {
                 client
                     .create_branch(&value, &branch, head.as_deref(), path)
-                    .map(|_| Some(format!("Created and switched to {}.", value.trim())))
+                    .map(|_| Some(tr_fmt!("Created and switched to {branch}.", branch = value.trim())))
             }),
             InputKind::CreateBranchFrom(source) => self.act("Create branch", move |client, path| {
-                client.create_branch_from(&value, &source, path).map(|_| Some(format!("Created branch {}.", value.trim())))
+                client.create_branch_from(&value, &source, path).map(|_| Some(tr_fmt!("Created branch {branch}.", branch = value.trim())))
             }),
             InputKind::BranchFromStash { stash, branch, head } => self.act("Create branch from stash", move |client, path| {
                 client
                     .branch_from_stash(&value, &stash, &branch, head.as_deref(), path)
-                    .map(|_| Some(format!("Created {} from the stash and switched to it.", value.trim())))
+                    .map(|_| Some(tr_fmt!("Created {branch} from the stash and switched to it.", branch = value.trim())))
             }),
             InputKind::RenameBranch(branch) => {
                 self.act("Rename branch", move |client, path| client.rename_branch(&branch, &value, path).map(|_| None))
@@ -1673,15 +1716,20 @@ impl NiceGitApp {
                 let message = annotated.then_some(second.as_str());
                 let signed = annotated && sign;
                 client.create_tag(&value, &target, message, signed, path)?;
-                let created = if signed { "signed tag" } else { "tag" };
+                let created = if signed { tr("signed tag") } else { tr("tag") };
                 let Some(remote) = push else {
-                    return Ok(Some(format!("Created {created} {name}.")));
+                    return Ok(Some(tr_fmt!("Created {created} {name}.", created = created, name = name)));
                 };
                 // The tag exists now, so a failed push leaves it in place and says so.
                 let addresses = push_addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
                 let pushed = client.tag_tip(&name, path).and_then(|tip| client.push_tag(&name, &remote, &tip, addresses, path));
                 match pushed {
-                    Ok(()) => Ok(Some(format!("Created {created} {name} and pushed it to {remote}."))),
+                    Ok(()) => Ok(Some(tr_fmt!(
+                        "Created {created} {name} and pushed it to {remote}.",
+                        created = created,
+                        name = name,
+                        remote = remote
+                    ))),
                     Err(error) => {
                         let reason = match error {
                             GitError::CommandFailed { message, .. } => message,
@@ -1689,7 +1737,13 @@ impl NiceGitApp {
                         };
                         Err(GitError::failed(
                             "create tag",
-                            format!("Created {created} {name}, but could not push it to {remote}: {reason}"),
+                            tr_fmt!(
+                                "Created {created} {name}, but could not push it to {remote}: {reason}",
+                                created = created,
+                                name = name,
+                                remote = remote,
+                                reason = reason
+                            ),
                         ))
                     }
                 }
@@ -1706,23 +1760,25 @@ impl NiceGitApp {
                     }
                 };
                 self.act("Stash", move |client, path| {
-                    client.save_stash(&value, options, path).map(|_| Some("Saved your changes in a stash.".into()))
+                    client.save_stash(&value, options, path).map(|_| Some(tr("Saved your changes in a stash.").into()))
                 })
             }
             InputKind::StashLines { lines, review } => {
                 let name = review.path.clone();
                 self.act("Stash lines", move |client, path| {
-                    client.stash_lines(&value, &lines, &review, path).map(|_| Some(format!("Stashed the selected lines of {name}.")))
+                    client
+                        .stash_lines(&value, &lines, &review, path)
+                        .map(|_| Some(tr_fmt!("Stashed the selected lines of {name}.", name = name)))
                 })
             }
             InputKind::RenameStash(stash) => self.act("Rename stash", move |client, path| {
-                client.rename_stash(&stash, &value, path).map(|()| Some("Renamed the stash. It is at the top of the list.".into()))
+                client.rename_stash(&stash, &value, path).map(|()| Some(tr("Renamed the stash. It is at the top of the list.").into()))
             }),
             InputKind::Clone(_, choices) => {
                 let destination = std::path::PathBuf::from(second.trim());
                 let source = value.trim().to_string();
                 if destination.as_os_str().is_empty() {
-                    self.notify("Choose a destination folder.", true);
+                    self.notify(tr("Choose a destination folder."), true);
                     return;
                 }
                 let options = match choices.options() {

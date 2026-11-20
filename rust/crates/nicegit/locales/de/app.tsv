@@ -1,0 +1,222 @@
+# de: notices, dialogs, the command palette, shortcuts, updates, and Claude drafting.
+That name cannot be used. Names cannot contain spaces, "..", "~", "^", ":", "?", "*", or "[", or end with ".lock" or "/".	Dieser Name kann nicht verwendet werden. Namen dürfen keine Leerzeichen, "..", "~", "^", ":", "?", "*" oder "[" enthalten und nicht mit ".lock" oder "/" enden.
+A branch with that name already exists. Choose another name, or check out the existing branch.	Es gibt schon einen Branch mit diesem Namen. Wähle einen anderen Namen oder wechsle zum vorhandenen Branch.
+A tag with that name already exists. Choose another name, or delete the old tag first.	Es gibt schon ein Tag mit diesem Namen. Wähle einen anderen Namen oder lösche zuerst das alte Tag.
+That folder already has files in it. Choose a new or empty folder.	Dieser Ordner enthält schon Dateien. Wähle einen neuen oder leeren Ordner.
+A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.	Ein Tag auf dem Remote zeigt anders als dein gleichnamiges Tag, daher würde Git deins nicht ersetzen.
+The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.	Das Remote hat deinen SSH-Schlüssel nicht akzeptiert. Prüfe, ob dein Schlüssel in deinem Konto hinterlegt und im ssh-agent geladen ist.
+The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.	Das Remote hat deine Anmeldung nicht akzeptiert. Melde dich bei HTTPS über einen Credential-Helper an (gh auth login richtet einen für GitHub ein); bei SSH prüfe deinen Schlüssel.
+The remote could not be reached. Check your internet connection, and that the remote's address is right.	Das Remote ist nicht erreichbar. Prüfe deine Internetverbindung und ob die Adresse des Remotes stimmt.
+The remote repository was not found, or your account cannot see it. Check its address and your access.	Das Remote-Repository wurde nicht gefunden, oder dein Konto kann es nicht sehen. Prüfe seine Adresse und deine Zugriffsrechte.
+your files	deine Dateien
+Save or close the file you are editing before opening another repository.	Sichere oder schließe die Datei, die du bearbeitest, bevor du ein anderes Repository öffnest.
+Drop a folder to open it, or a patch to apply it	Ordner ablegen, um ihn zu öffnen, oder Patch, um ihn anzuwenden
+Drop a folder to open it as a repository, or a .patch or .diff file to apply it.	Ziehe einen Ordner hierher, um ihn als Repository zu öffnen, oder eine .patch- oder .diff-Datei, um sie anzuwenden.
+Open a repository before applying a patch.	Öffne ein Repository, bevor du einen Patch anwendest.
+Save or close the file you are editing before switching repositories.	Sichere oder schließe die Datei, die du bearbeitest, bevor du das Repository wechselst.
+Open a Git repository	Git-Repository öffnen
+A Git hook stopped the commit.	Ein Git-Hook hat den Commit gestoppt.
+The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.	Der Remote-Branch hat sich seit deinem letzten Abrufen geändert, daher wurde nichts gepusht. Rufe die Änderungen ab, prüfe sie und versuche es erneut.
+Your commit was made, but the push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	Dein Commit wurde erstellt, aber das Push wurde abgelehnt, weil das Remote Commits hat, die dieser Branch nicht hat. Führe sie zusammen oder rebase darauf und push dann erneut.
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	Das Push wurde abgelehnt, weil das Remote Commits hat, die dieser Branch nicht hat. Führe sie zusammen oder rebase darauf und push dann erneut.
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again. If you rewrote commits that were already pushed, use Force push… instead.	Das Push wurde abgelehnt, weil das Remote Commits hat, die dieser Branch nicht hat. Führe sie zusammen oder rebase darauf und push dann erneut. Wenn du bereits gepushte Commits umgeschrieben hast, verwende stattdessen Force Push…
+its upstream	dem Upstream
+Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them.	Dein Branch und {upstream} haben sich beide geändert, daher kann Pull deinen Branch nicht einfach vorwärtsbewegen. Führe die Commits von {upstream} zusammen oder rebase darauf.
+Stage or discard your unstaged changes before continuing.	Stelle deine nicht bereitgestellten Änderungen bereit oder verwirf sie, bevor du fortfährst.
+Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead.	Git würde deine Änderungen an {files} überschreiben. NiceGit kann stattdessen den Stash darüber anwenden.
+Git would overwrite your changes to {files}. Commit or stash them, then try again.	Git würde deine Änderungen an {files} überschreiben. Committe oder stashe sie, und versuche es dann erneut.
+{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again.	{label} würde nicht committete Änderungen an denselben Dateien überschreiben, daher hat Git gestoppt. Stashe oder committe sie und versuche es dann erneut.
+Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.	Git braucht deinen Namen und deine E-Mail-Adresse, bevor es committen kann. Lege sie in den Repository-Einstellungen fest, für dieses Repository oder als Profil.
+The {operation} stopped at conflicts in {files}. Resolve them from the banner above the history, then continue, or abort to go back.	Der Vorgang {operation} wurde bei Konflikten in {files} angehalten. Löse sie über das Banner über dem Verlauf, und fahre dann fort oder brich ab, um zurückzukehren.
+1 file	1 Datei
+Git reused 1 recorded resolution. Check it before continuing.	Git hat 1 gespeicherte Konfliktlösung wiederverwendet. Prüfe sie, bevor du fortfährst.
+Git reused {count} recorded resolutions. Check them before continuing.	Git hat {count} gespeicherte Konfliktlösungen wiederverwendet. Prüfe sie, bevor du fortfährst.
+Could not read the commit message: {error}	Die Commit-Nachricht konnte nicht gelesen werden: {error}
+Commit {hash}	Commit {hash}
+That file is not listed for this commit. Select the commit again.	Diese Datei ist für diesen Commit nicht aufgeführt. Wähle den Commit erneut aus.
+Save a copy	Kopie speichern
+That file is not listed for this stash. Select the stash again.	Diese Datei ist für diesen Stash nicht aufgeführt. Wähle den Stash erneut aus.
+Switch to {name}	Zu {name} wechseln
+Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.	Zu {name} gewechselt. Deine nicht committeten Änderungen wurden in einem Stash gesichert; wende ihn bei Bedarf unter Stashes an.
+Switched to {name}.	Zu {name} gewechselt.
+Amended the last commit.	Letzter Commit geändert.
+Fixup commit	Fixup-Commit
+Committed a fixup for {short}. An interactive rebase can fold it in.	Fixup-Commit für {short} erstellt. Ein interaktiver Rebase kann ihn einfügen.
+The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again.	Der Branch hat sich geändert, nachdem der Commit gestoppt wurde, daher wurde nichts committet. Prüfe den Commit und committe erneut.
+Committed and pushed.	Committet und gepusht.
+Pulled the latest changes.	Neueste Änderungen geholt.
+Add a remote in Repository Settings before pushing.	Füge vor dem Push in den Repository-Einstellungen ein Remote hinzu.
+Pushed.	Gepusht.
+Fetched from all remotes.	Von allen Remotes abgerufen.
+Fetched {remote}.	Von {remote} abgerufen.
+Restored your changes to {name}.	Deine Änderungen an {name} wurden wiederhergestellt.
+{verb} {title}	{verb} {title}
+Save or close the file you are editing before opening the merge tool.	Sichere oder schließe die Datei, die du bearbeitest, bevor du das Mergetool öffnest.
+A merge tool is already open. Close it first.	Ein Mergetool ist bereits geöffnet. Schließe es zuerst.
+Opened the merge tool for {path}.	Mergetool für {path} geöffnet.
+Resolve {path} in merge tool	{path} im Mergetool auflösen
+Closed the merge tool for {path}.	Mergetool für {path} geschlossen.
+The merge tool for {path} exited without resolving it.	Das Mergetool für {path} wurde beendet, ohne den Konflikt zu lösen.
+Could not wait for the merge tool: {error}	Auf das Mergetool konnte nicht gewartet werden: {error}
+Save or discard your edits before closing the editor.	Sichere oder verwirf deine Änderungen, bevor du den Editor schließt.
+Cloned into {path}.	Nach {path} geklont.
+Clone failed: {error}	Klonen fehlgeschlagen: {error}
+Read tags	Tags werden gelesen
+Could not read the tags on {remote}: {error}	Die Tags auf {remote} konnten nicht gelesen werden: {error}
+Every local tag is already on {remote}.	Alle lokalen Tags sind bereits auf {remote}.
+No local tags are missing from {remote}. {count} differ there and were not pushed.	Auf {remote} fehlt kein lokaler Tag. {count} unterscheiden sich dort und wurden nicht gepusht.
+Push tags	Tags pushen
+There are no local branches to push.	Es gibt keine lokalen Branches zum Pushen.
+Push branches	Branches pushen
+Mark bisect	Bisect markieren
+Forgot missing worktrees.	Fehlende Worktrees vergessen.
+Forget missing worktrees	Fehlende Worktrees vergessen
+This repository now commits as {name} <{email}>.	Dieses Repository committet jetzt als {name} <{email}>.
+Older undo steps were cleared because the repository changed.	Ältere Rückgängig-Schritte wurden gelöscht, weil sich das Repository geändert hat.
+Older redo steps were cleared because the repository changed.	Ältere Wiederholen-Schritte wurden gelöscht, weil sich das Repository geändert hat.
+{done}Refreshing the repository failed: {error}	{done}Aktualisieren des Repositorys fehlgeschlagen: {error}
+Force push…	Force Push…
+Replace the remote branch with yours, if no one pushed since you last fetched	Den Remote-Branch durch deinen ersetzen, wenn seit deinem letzten Abrufen niemand gepusht hat
+Stage all changes	Alle Änderungen bereitstellen
+Unstage all changes	Alle Änderungen nicht bereitstellen
+Show terminal	Terminal anzeigen
+Appearance, graph colours, and diffs	Darstellung, Graphfarben und Diffs
+Show a tip	Tipp anzeigen
+The next tip about NiceGit, as a notice	Der nächste Tipp zu NiceGit als Hinweis
+Open a GitHub issue with NiceGit's version and your platform filled in	GitHub-Issue mit NiceGit-Version und deiner Plattform öffnen
+Open a GitHub feature request	GitHub-Funktionsanfrage öffnen
+Add every repository inside a folder	Jedes Repository in einem Ordner hinzufügen
+Repository settings	Repository-Einstellungen
+Identity, profiles, and remotes	Identität, Profile und Remotes
+Git settings	Git-Einstellungen
+This repository's Git configuration	Git-Konfiguration dieses Repositorys
+Remember conflict resolutions: turn on	Konfliktlösungen merken: einschalten
+Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase	Wie du einen Konflikt gelöst hast, wiederverwenden, wenn derselbe Konflikt erneut auftritt, etwa bei einem späteren Rebase
+Remember conflict resolutions: turn off	Konfliktlösungen merken: ausschalten
+Stop recording how you resolve conflicts in this repository	Nicht mehr festhalten, wie du Konflikte in diesem Repository löst
+Save selected files, preview, apply, or delete stashes	Ausgewählte Dateien sichern, Stashes ansehen, anwenden oder löschen
+Shift-Ctrl/Cmd-F · every branch	Shift-Ctrl/Cmd-F · jeder Branch
+Search file contents	Dateiinhalte durchsuchen
+Go to file…	Zu Datei wechseln…
+Find a tracked file by name	Eine versionierte Datei nach Name finden
+Go to HEAD	Zu HEAD wechseln
+Select the checked-out commit in the history	Den ausgecheckten Commit im Verlauf auswählen
+Go to upstream	Zum Upstream wechseln
+Select {upstream}'s latest commit	Letzten Commit von {upstream} auswählen
+Select the upstream's latest commit	Letzten Commit des Upstreams auswählen
+Recover lost work	Verlorene Arbeit wiederherstellen
+Commits from resets, rebases, and deleted branches	Commits aus Resets, Rebases und gelöschten Branches
+Commits over time, authors, and the files and folders that change most	Commits über die Zeit, Autoren sowie die Dateien und Ordner, die sich am meisten ändern
+Compare branch versions…	Branch-Versionen vergleichen…
+Which commits changed after a rebase, amend, or force push	Welche Commits sich nach einem Rebase, Amend oder Force Push geändert haben
+Clean up branches	Branches aufräumen
+Delete merged, inactive, or gone local branches	Zusammengeführte, inaktive oder verschwundene lokale Branches löschen
+Bisect	Bisect
+Find the commit that introduced a bug	Den Commit finden, der einen Fehler eingeführt hat
+Worktrees	Worktrees
+Linked worktrees	Verknüpfte Worktrees
+Submodules	Submodule
+Feature, release, and hotfix branches	Feature-, Release- und Hotfix-Branches
+Tracked patterns and large files	Versionierte Muster und große Dateien
+Pull requests and issues	Pull Requests und Issues
+GitHub remotes, through the GitHub CLI	GitHub-Remotes über die GitHub-CLI
+Open pull requests across your open repositories and workspaces	Offene Pull Requests in allen geöffneten Repositories und Workspaces
+Absorb staged changes…	Gestagte Änderungen einarbeiten…
+Fold staged changes into the unpushed commits that last changed their lines	Gestagte Änderungen in die nicht gepushten Commits einfügen, die diese Zeilen zuletzt geändert haben
+For the current branch, through the {cli}	Für den aktuellen Branch über {cli}
+Open repository on {host}	Repository auf {host} öffnen
+Open {kind} on {host}	{kind} auf {host} öffnen
+Open Actions on {host}	Actions auf {host} öffnen
+Push it to a remote and track it	Zu einem Remote pushen und verfolgen
+Continue {operation}	{operation} fortsetzen
+After resolving conflicts	Nach dem Lösen der Konflikte
+Abort {operation}	{operation} abbrechen
+Return to the state before it started	Zum Zustand vor dem Start zurückkehren
+Worktree folders deleted outside Git	Worktree-Ordner, die außerhalb von Git gelöscht wurden
+Bisect: mark good	Bisect: als gut markieren
+This commit does not have the problem	Dieser Commit hat das Problem nicht
+Bisect: mark bad	Bisect: als schlecht markieren
+This commit has the problem	Dieser Commit hat das Problem
+Bisect: skip	Bisect: überspringen
+This commit cannot be tested	Dieser Commit kann nicht getestet werden
+Return to the original checkout	Zum ursprünglichen Checkout zurückkehren
+Undo {name}	{name} rückgängig machen
+Redo {name}	{name} wiederholen
+Remote branch	Remote-Branch
+Fetch {remote}	{remote} abrufen
+Download from this remote only	Nur von diesem Remote herunterladen
+{email} · signs commits	{email} · signiert Commits
+Use identity {name}	Identität {name} verwenden
+Run {name}	{name} ausführen
+Custom action	Benutzerdefinierte Aktion
+Open {name}	{name} öffnen
+Open workspace {name}	Workspace {name} öffnen
+Type a command, branch, or repository	Befehl, Branch oder Repository eingeben
+No matching commands	Keine passenden Befehle
+Anywhere	Überall
+Diff	Diff
+Command palette	Befehlspalette
+Go to a file	Zu einer Datei wechseln
+Open a repository	Ein Repository öffnen
+Go to a repository tab; Cmd-9 for the last	Zu einem Repository-Tab wechseln; Cmd-9 für den letzten
+Close the open window, or else the repository tab	Das offene Fenster schließen, sonst den Repository-Tab
+Refresh the repository	Repository aktualisieren
+Search the history of every branch	Verlauf aller Branches durchsuchen
+Filter the changed files	Geänderte Dateien filtern
+Go to the checked-out commit	Zum ausgecheckten Commit wechseln
+Show or hide the terminal	Terminal ein- oder ausblenden
+Make everything larger or smaller	Alles größer oder kleiner machen
+These shortcuts	Diese Tastenkürzel
+Select the previous or next commit	Vorherigen oder nächsten Commit auswählen
+Jump to the top or bottom of the loaded history	Zum Anfang oder Ende des geladenen Verlaufs springen
+Mark several commits to cherry-pick	Mehrere Commits zum Cherry-Pick markieren
+Clear the selection	Auswahl aufheben
+Open the previous or next changed file	Vorherige oder nächste geänderte Datei öffnen
+Stage or unstage the open file	Die geöffnete Datei bereitstellen oder nicht bereitstellen
+Find in the diff	Im Diff suchen
+Next or previous match	Nächster oder vorheriger Treffer
+Back to the history	Zurück zum Verlauf
+Commit the staged changes	Bereitgestellte Änderungen committen
+Save in the built-in editor	Im integrierten Editor sichern
+Restart NiceGit	NiceGit neu starten
+Download	Herunterladen
+Download and install	Herunterladen und installieren
+NiceGit {version}: {stage}	NiceGit {version}: {stage}
+NiceGit {version} is installed.	NiceGit {version} ist installiert.
+NiceGit {version} is available. {hint}	NiceGit {version} ist verfügbar. {hint}
+NiceGit {version} is available	NiceGit {version} ist verfügbar
+Check now	Jetzt prüfen
+Checking…	Wird geprüft…
+NiceGit is up to date.	NiceGit ist auf dem neuesten Stand.
+NiceGit {version} is available.	NiceGit {version} ist verfügbar.
+Could not check: {reason}	Prüfung nicht möglich: {reason}
+Drafting…	Entwurf wird erstellt…
+Draft	Entwerfen
+Drafting. Click to stop.	Entwurf wird erstellt. Klicke zum Stoppen.
+Draft a message from the staged changes with Claude	Mit Claude eine Nachricht aus den bereitgestellten Änderungen entwerfen
+Draft a message with Claude	Nachricht mit Claude entwerfen
+Replace the current message?	Die aktuelle Nachricht ersetzen?
+Replace	Ersetzen
+Keep mine	Meine behalten
+Draft commit messages with Claude	Commit-Nachrichten mit Claude entwerfen
+When you click Draft, the staged diff and recent commit subjects are sent to Anthropic's API using your key. Nothing is sent otherwise.	Wenn du auf Entwerfen klickst, werden das bereitgestellte Diff und die letzten Commit-Betreffe mit deinem Schlüssel an die API von Anthropic gesendet. Sonst wird nichts gesendet.
+Model	Modell
+Using {variable} from the environment.	Verwendet {variable} aus der Umgebung.
+A key is saved.	Ein Schlüssel ist gespeichert.
+No API key is saved.	Kein API-Schlüssel gespeichert.
+Paste your key	Schlüssel einfügen
+Anthropic API key	Anthropic-API-Schlüssel
+Delete the saved key	Gespeicherten Schlüssel löschen
+That does not look like an API key. It must have no spaces.	Das sieht nicht nach einem API-Schlüssel aus. Er darf keine Leerzeichen enthalten.
+That does not look like an API key.	Das sieht nicht nach einem API-Schlüssel aus.
+No settings folder is available, so the key cannot be saved here.	Kein Einstellungsordner verfügbar, daher kann der Schlüssel hier nicht gespeichert werden.
+The key could not be saved: {error}	Der Schlüssel konnte nicht gespeichert werden: {error}
+The key could not be removed: {error}	Der Schlüssel konnte nicht entfernt werden: {error}
+{passed} passed	{passed} bestanden
+{passed} passed, {failed} failed	{passed} bestanden, {failed} fehlgeschlagen
+Checks: {count} failed	Prüfungen: {count} fehlgeschlagen
+Checks: {count} pending	Prüfungen: {count} ausstehend
+Checks: {count} passed	Prüfungen: {count} bestanden
+{marker}{number} {title} — {counts}\nClick to open checks	{marker}{number} {title} — {counts}\nZum Öffnen der Prüfungen klicken
+Staged and committed 1 file.	1 Datei bereitgestellt und committet.
+Staged and committed {count} files.	{count} Dateien bereitgestellt und committet.

@@ -1,0 +1,281 @@
+# fr : la barre d'outils, la barre latérale et les menus principaux.
+Nothing to undo	Rien à annuler
+Nothing to redo	Rien à rétablir
+Redo	Rétablir
+{verb} {step}	{verb} {step}
+{verb} {step} ({count} steps)	{verb} {step} ({count} étapes)
+Undo steps, newest first	Étapes à annuler, les plus récentes d'abord
+and {count} more	et {count} de plus
+Toolbar button	Bouton de la barre d'outils
+Download from all remotes	Télécharger depuis tous les dépôts distants
+Download from all remotes · {count} commit to pull	Télécharger depuis tous les dépôts distants · {count} commit à tirer
+Download from all remotes · {count} commits to pull	Télécharger depuis tous les dépôts distants · {count} commits à tirer
+Fetch, then pull the current branch as Settings chooses	Récupérer, puis tirer la branche courante selon les réglages
+Pull {count}	Tirer {count}
+Push {count}	Pousser {count}
+Publish	Publier
+Send the current branch to its upstream	Envoyer la branche courante vers son amont
+Create a branch at HEAD and switch to it	Créer une branche sur HEAD et basculer dessus
+Save all changes in a stash	Enregistrer toutes les modifications dans une remise
+Apply the latest stash and delete it	Appliquer la dernière remise et la supprimer
+Terminal	Terminal
+Show the terminal (Ctrl-`)	Afficher le terminal (Ctrl-`)
+Reload the repository (Ctrl/Cmd-R)	Recharger le dépôt (Ctrl/Cmd-R)
+Commands	Commandes
+Command palette (Shift-Ctrl/Cmd-P)	Palette de commandes (Maj-Ctrl/Cmd-P)
+Pop	Dépiler
+Stash changes	Remiser les modifications
+Message (optional)	Message (facultatif)
+New branch	Nouvelle branche
+New branch…	Nouvelle branche…
+Pop {stash}?	Dépiler {stash} ?
+“{message}” is applied to your working files and then deleted. If applying fails, the stash is kept.	« {message} » est appliqué à vos fichiers de travail, puis supprimé. Si l'application échoue, la remise est conservée.
+More actions	Autres actions
+More	Plus
+Open repository…	Ouvrir un dépôt…
+Find repositories in a folder…	Trouver des dépôts dans un dossier…
+Clone repository…	Cloner un dépôt…
+New repository…	Nouveau dépôt…
+Recent repositories	Dépôts récents
+Repositories you open appear here	Les dépôts que vous ouvrez apparaissent ici
+Show all in the sidebar	Tout afficher dans la barre latérale
+Repository settings…	Paramètres du dépôt…
+Git settings…	Réglages de Git…
+Stashes…	Remises…
+Search history…	Rechercher dans l'historique…
+Search file contents…	Rechercher dans le contenu des fichiers…
+Recover lost work…	Récupérer un travail perdu…
+Insights…	Statistiques…
+Clean up branches…	Nettoyer les branches…
+Bisect…	Bisect…
+Worktrees…	Worktrees…
+Submodules…	Sous-modules…
+Pull requests and issues…	Demandes de tirage et tickets…
+Manage custom actions…	Gérer les actions personnalisées…
+Publish branch…	Publier la branche…
+The branch already has an upstream, or there is no remote	La branche a déjà un amont, ou il n'y a pas de dépôt distant
+Fetch full history	Récupérer tout l'historique
+Wait for the current action to finish	Attendre la fin de l'action en cours
+Fetched the full history.	Historique complet récupéré.
+Show all folders…	Afficher tous les dossiers…
+Show all folders?	Afficher tous les dossiers ?
+Git checks out every folder in this repository, so every file is written to your folder. In a partial clone, the files are downloaded first, which can take a while for a large project. Your commits and branches do not change.	Git extrait chaque dossier de ce dépôt, si bien que chaque fichier est écrit dans votre dossier. Dans un clone partiel, les fichiers sont d'abord téléchargés, ce qui peut prendre du temps pour un gros projet. Vos commits et branches ne changent pas.
+Show all folders	Afficher tous les dossiers
+Apply patch…	Appliquer un correctif…
+No saved profiles	Aucun profil enregistré
+Manage identities…	Gérer les identités…
+Undo {step}?	Annuler {step} ?
+Redo {step}?	Rétablir {step} ?
+NiceGit moves things back to where they were before. It refuses if the branch has moved since, so newer work is never lost.	NiceGit remet les choses là où elles étaient auparavant. L'opération est refusée si la branche a bougé depuis, afin qu'un travail plus récent ne soit jamais perdu.
+NiceGit puts back what the undo reversed. It refuses if the branch has moved since.	NiceGit rétablit ce que l'annulation a défait. L'opération est refusée si la branche a bougé depuis.
+Undo history	Historique d'annulation
+Show the steps Undo will step back through	Afficher les étapes que l'annulation va parcourir
+Fetch and Pull	Récupérer et tirer
+Choose what Fetch and Pull does	Choisir l'action de Récupérer et tirer
+{label} options	Options de {label}
+Pull (merge)	Tirer (fusion)
+Pull (rebase)	Tirer (rebase)
+Fetch, then merge the upstream's commits into the current branch	Récupérer, puis fusionner les commits de l'amont dans la branche courante
+Fetch, then replay the current branch's commits onto the upstream	Récupérer, puis rejouer les commits de la branche courante sur l'amont
+{label}: {tooltip}	{label} : {tooltip}
+Save or close the file you are editing first.	Enregistrez ou fermez d'abord le fichier que vous modifiez.
+Hide the terminal (Ctrl-`); its shells keep running	Masquer le terminal (Ctrl-`) ; ses shells continuent de tourner
+Welcome to NiceGit	Bienvenue dans NiceGit
+A fast Git client that keeps your work safe.	Un client Git rapide qui protège votre travail.
+Create repository…	Créer un dépôt…
+Or drag a folder onto this window.	Ou faites glisser un dossier sur cette fenêtre.
+Next tip	Astuce suivante
+Git was not found. Install Git, then restart NiceGit.	Git est introuvable. Installez Git, puis redémarrez NiceGit.
+Opening repository…	Ouverture du dépôt…
+A fast Git client for macOS, Windows, and Linux.	Un client Git rapide pour macOS, Windows et Linux.
+Clone…	Cloner…
+Recent	Récents
+Ctrl/Cmd-O to open · Shift-Ctrl/Cmd-P for commands	Ctrl/Cmd-O pour ouvrir · Maj-Ctrl/Cmd-P pour les commandes
+Dismiss	Ignorer
+Stash changes…	Remiser les modifications…
+Set your identity…	Définir votre identité…
+Merge or rebase…	Fusionner ou rebaser…
+Fetch, then choose whether to merge the remote's commits or rebase onto them	Récupérer, puis choisir de fusionner les commits du dépôt distant ou de rebaser dessus
+Apply into my changes	Appliquer à mes modifications
+Apply the stash's changes on top of your changes, and keep your changes	Appliquer les modifications de la remise par-dessus les vôtres, et garder vos modifications
+Commit without hooks	Commit sans hooks
+Make the same commit again with Git hooks skipped	Refaire le même commit en ignorant les hooks Git
+Git said:	Git a répondu :
+Apply into changes	Appliquer aux modifications
+Applied the stash on top of your changes and removed it.	Remise appliquée par-dessus vos modifications, puis supprimée.
+Applied the stash on top of your changes.	Remise appliquée par-dessus vos modifications.
+Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept.	Les modifications non indexées de la remise ont été appliquées par-dessus les vôtres. Les modifications indexées, non appliquées, ont aussi été sauvegardées : la remise est conservée.
+Current checkout: {branch}	Extraction actuelle : {branch}
+Couldn't fetch	Échec de la récupération
+The last automatic fetch failed. {plain}{said}	La dernière récupération automatique a échoué. {plain}{said}
+Remotes are fetched automatically; change how often in Settings.	Les dépôts distants sont récupérés automatiquement ; changez la fréquence dans les réglages.
+Rebase stopped to edit a commit: stage your changes, then Continue.	Rebase arrêté pour modifier un commit : indexez vos modifications, puis continuez.
+A {operation} is in progress. Continue when ready, or abort to return to where you started.	{operation} est en cours. Continuez quand vous êtes prêt, ou abandonnez pour revenir au point de départ.
+A {operation} stopped with {count} conflicted file(s). Resolve each one, then continue.	{operation} s'est arrêté avec {count} fichier(s) en conflit. Résolvez chacun, puis continuez.
+Open the conflict editor	Ouvrir l'éditeur de conflits
+Abort…	Abandonner…
+Abort the {operation}?	Abandonner {operation} ?
+Git returns the branch and files to the state before it started. Resolutions you made are lost.	Git ramène la branche et les fichiers à leur état d'avant le lancement. Les résolutions faites sont perdues.
+Resolve all…	Tout résoudre…
+Take {side} for all	Prendre {side} pour tous
+Take one side of every conflicted file	Prendre un côté de chaque fichier en conflit
+First bad commit: {hash} {subject}	Premier commit défectueux : {hash} {subject}
+ · about {count} step left	 · environ {count} étape restante
+ · about {count} steps left	 · environ {count} étapes restantes
+Bisecting: test {hash} and mark it{steps}	Bisect : tester {hash} et le marquer{steps}
+Good	Bon
+Bad	Mauvais
+Skip	Passer
+Mark good	Marquer comme bon
+Mark bad	Marquer comme mauvais
+Mark skip	Marquer comme à passer
+Bisecting: mark a good and a bad commit to begin.	Bisect : marquez un commit bon et un commit mauvais pour commencer.
+End bisect, return to {branch}	Terminer le bisect, revenir à {branch}
+End bisect	Terminer le bisect
+Ended the bisect.	Bisect terminé.
+Back to the commit history (Esc)	Retour à l'historique des commits (Échap)
+Previous file ({shortcut}-Up)	Fichier précédent ({shortcut}-Haut)
+Next file ({shortcut}-Down)	Fichier suivant ({shortcut}-Bas)
+{position} of {count}	{position} sur {count}
+{count} line selected	{count} ligne sélectionnée
+{count} lines selected	{count} lignes sélectionnées
+Unstage selected lines	Désindexer les lignes sélectionnées
+Stage selected lines	Indexer les lignes sélectionnées
+Discard selected lines	Abandonner les lignes sélectionnées
+Stash selected lines	Remiser les lignes sélectionnées
+Press − beside a line to unstage it, or click and drag over lines to choose several.	Appuyez sur − à côté d'une ligne pour la désindexer, ou cliquez et glissez sur des lignes pour en choisir plusieurs.
+Press + beside a line to stage it, or click and drag over lines to choose several.	Appuyez sur + à côté d'une ligne pour l'indexer, ou cliquez et glissez sur des lignes pour en choisir plusieurs.
+stage	indexer
+unstage	désindexer
+Switch to Unified to {verb} single lines.	Passez à Unifié pour {verb} des lignes individuelles.
+A new or deleted file has only one side, so it is shown in one column	Un fichier nouveau ou supprimé n'a qu'un côté : il est donc affiché dans une seule colonne
+Widen the diff panel to show changes side by side	Élargissez le panneau des diffs pour afficher les modifications côte à côte
+Split	Scindé
+Unified	Unifié
+Words	Mots
+Show changed words merged into each line	Afficher les mots modifiés fusionnés dans chaque ligne
+Hide whitespace	Masquer les espaces
+How many unchanged lines to show around each change	Nombre de lignes inchangées affichées autour de chaque modification
+Context lines	Lignes de contexte
+Edit this file in NiceGit	Modifier ce fichier dans NiceGit
+Unstage file	Désindexer le fichier
+Stage file	Indexer le fichier
+Discard this file's changes…	Abandonner les modifications de ce fichier…
+Open in {editor}	Ouvrir dans {editor}
+Copy this diff	Copier ce diff
+Copied the diff.	Diff copié.
+Fetched just now	Récupéré à l'instant
+Fetched {minutes} min ago	Récupéré il y a {minutes} min
+Fetched {hours} h ago	Récupéré il y a {hours} h
+Staged	Indexé
+Unstaged	Non indexé
+Stage lines	Indexer les lignes
+Unstage lines	Désindexer les lignes
+{done} {lines} in {name}.	{done} : {lines} dans {name}.
+{count} line	{count} ligne
+{count} new line	{count} nouvelle ligne
+{count} new lines	{count} nouvelles lignes
+{lines} are removed from {path}.	{lines} sont supprimées de {path}.
+{count} changed line	{count} ligne modifiée
+{count} changed lines	{count} lignes modifiées
+{lines} in {path} go back to their staged version.	{lines} dans {path} reviennent à leur version indexée.
+{what} You can undo this from the Changes panel until the file changes again.	{what} Vous pouvez annuler cela depuis le panneau Modifications, tant que le fichier ne change pas à nouveau.
+Discard this change?	Abandonner cette modification ?
+Save or close the file you are editing before changing the repository.	Enregistrez ou fermez le fichier que vous modifiez avant de modifier le dépôt.
+Selected lines from {path}	Lignes sélectionnées dans {path}
+Stash lines	Remiser des lignes
+Show repositories	Afficher les dépôts
+Filter references	Filtrer les références
+New branch at HEAD	Nouvelle branche sur HEAD
+Local	Locales
+   No local branches	   Aucune branche locale
+gone	disparue
+Its upstream branch no longer exists on the remote	Sa branche amont n'existe plus sur le dépôt distant
+{commits} to push, {behind} to pull	{commits} à pousser, {behind} à tirer
+Checked out in another worktree	Extrait dans un autre worktree
+Hidden from the graph	Masquée dans le graphe
+Add a remote…	Ajouter un dépôt distant…
+missing	manquant
+Manage worktrees…	Gérer les worktrees…
+   No tags	   Aucune étiquette
+Push tags to {remote}…	Envoyer les étiquettes vers {remote}…
+   No stashes	   Aucune remise
+Manage stashes…	Gérer les remises…
+Applied the stash.	Remise appliquée.
+Apply {stash}	Appliquer {stash}
+Pop (apply and delete)	Dépiler (appliquer et supprimer)
+Create branch from stash…	Créer une branche depuis la remise…
+Branch from stash	Branche depuis la remise
+Rename {stash}	Renommer {stash}
+Delete {stash}?	Supprimer {stash} ?
+“{message}” will be deleted.	« {message} » sera supprimé.
+not checked out	non extrait
+at recorded commit	au commit enregistré
+on {commit}	sur {commit}
+{state} · changed	{state} · modifié
+Recorded commit {commit}	Commit enregistré {commit}
+Update submodule	Mettre à jour le sous-module
+Checked out {path} at its recorded commit.	{path} extrait à son commit enregistré.
+Copy name	Copier le nom
+Push to {remote}	Envoyer vers {remote}
+Push tag	Envoyer l'étiquette
+Pushed {tag} to {remote}.	{tag} envoyé vers {remote}.
+Delete from {remote}…	Supprimer de {remote}…
+The tag is removed from {remote} for everyone who uses it, while it still matches your local tag. Your local tag is kept.	Le tag est supprimé de {remote} pour tous ceux qui l'utilisent, tant qu'il correspond encore à votre tag local. Votre tag local est conservé.
+Delete from remote	Supprimer du dépôt distant
+Delete {tag} from {remote}?	Supprimer {tag} de {remote} ?
+The tag is removed from this repository only, not from remotes.	Le tag est supprimé de ce dépôt uniquement, pas des dépôts distants.
+Delete tag {tag}?	Supprimer le tag {tag} ?
+Push all branches to {remote}…	Envoyer toutes les branches vers {remote}…
+Copy fetch URL	Copier l'URL de récupération
+Open on {host}	Ouvrir sur {host}
+Actions	Actions
+Edit in Repository Settings…	Modifier dans les paramètres du dépôt…
+The current branch cannot be selected for deletion.	La branche courante ne peut pas être sélectionnée pour la suppression.
+Deletes {names}.	Supprime {names}.
+{shown}, and {more} more	{shown} et {more} de plus
+Delete {count} branches?	Supprimer {count} branches ?
+ Not merged into {branch}: {names}. Those hold commits found on no other branch, so they are deleted only while each still points to the tip shown.	 Non fusionnées dans {branch} : {names}. Elles contiennent des commits absents de toute autre branche ; elles ne sont donc supprimées que si chacune pointe encore vers la pointe affichée.
+ Undo restores them at their tips until you take another undoable action.	 Annuler les restaure à leur pointe jusqu'à ce que vous fassiez une autre action annulable.
+Create the {noun} through the {tool}	Créer la {noun} avec {tool}
+Open branch on {host}	Ouvrir la branche sur {host}
+Replaces the remote branch with yours, if no one else has pushed since you last fetched	Remplace la branche distante par la vôtre, si personne d'autre n'a envoyé de commits depuis votre dernière récupération.
+Push to {remote}/{name}…	Envoyer vers {remote}/{name}…
+Updates {remote}/{name} to {tip} ({subject}). Only this branch is pushed; tags are not.	Met à jour {remote}/{name} vers {tip} ({subject}). Seule cette branche est envoyée ; les tags ne le sont pas.
+Push {branch} to {remote}?	Envoyer {branch} vers {remote} ?
+Merge into {current}…	Fusionner dans {current}…
+Rebase {current} onto this…	Rebaser {current} sur celle-ci…
+Reset {current} to here…	Réinitialiser {current} ici…
+Compare with {current}…	Comparer avec {current}…
+Compare with previous version…	Comparer avec la version précédente…
+Tip history…	Historique de la pointe…
+Create a branch at {branch}	Créer une branche sur {branch}
+Delete {display}…	Supprimer {display}…
+The branch is removed from {remote} for everyone who uses it, while it still points to {tip}. Local branches are not changed.	La branche est supprimée de {remote} pour tous ceux qui l'utilisent, tant qu'elle pointe encore vers {tip}. Les branches locales ne changent pas.
+ {branch} tracks it; its upstream will be gone.	 {branch} le suit ; son amont sera supprimé.
+ {branches} track it; their upstreams will be gone.	 {branches} le suivent ; leurs amonts seront supprimés.
+Delete {display}?	Supprimer {display} ?
+Create worktree…	Créer un worktree…
+Upstream	Amont
+{branch} now tracks {name}.	{branch} suit désormais {name}.
+Set upstream	Définir l'amont
+Stop tracking	Arrêter le suivi
+Unset upstream	Retirer l'amont
+Rename {branch}	Renommer {branch}
+This branch is merged into the current branch, so no commits are lost.	Cette branche est fusionnée dans la branche courante : aucun commit n'est perdu.
+This branch has commits that are not in the current branch, so Git will refuse to delete it. Merge it first, or use Clean Up Branches to delete unmerged branches. Its tip is {tip}.	Cette branche contient des commits absents de la branche courante : Git refusera donc de la supprimer. Fusionnez-la d'abord, ou utilisez Nettoyer les branches pour supprimer les branches non fusionnées. Sa pointe est {tip}.
+Delete branch {branch}?	Supprimer la branche {branch} ?
+Hide in graph	Masquer dans le graphe
+The current branch is always shown.	La branche courante est toujours affichée.
+Stop showing only this branch	Ne plus afficher seulement cette branche
+Show only this branch	Afficher seulement cette branche
+Merge {source} into {branch}?	Fusionner {source} dans {branch} ?
+Rebase {branch} onto {onto}?	Rebaser {branch} sur {onto} ?
+Set an upstream branch before force pushing.	Définissez une branche amont avant de forcer l'envoi.
+Force push {branch}?	Forcer l'envoi de {branch} ?
+Force push	Forcer l'envoi
+Your branch's commits are replayed on top of the other branch. Conflicts stop the rebase for you to resolve or abort.	Les commits de votre branche sont rejoués par-dessus l'autre branche. Les conflits arrêtent le rebase pour que vous les résolviez ou l'abandonniez.
+Git merges the branch's commits into your current branch. Conflicts stop the merge for you to resolve or abort.	Git fusionne les commits de la branche dans la branche courante. Les conflits arrêtent la fusion pour que vous les résolviez ou l'abandonniez.
+Delete local tag…	Supprimer le tag local…
+Lightweight tag at {commit}	Étiquette légère sur {commit}
+Could not read this tag: {error}	Impossible de lire ce tag : {error}

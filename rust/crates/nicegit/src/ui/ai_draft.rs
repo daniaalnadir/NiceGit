@@ -12,6 +12,7 @@ use nicegit_core::ai_message::{Cancel, Drafted};
 
 use crate::app::NiceGitApp;
 use crate::claude::{self, ClaudeModel, Job};
+use crate::i18n::{tr, tr_fmt};
 use crate::settings::Draft;
 use crate::theme;
 use crate::tools::widgets;
@@ -61,11 +62,11 @@ pub fn draft_button(ui: &mut egui::Ui, drafting: bool, enabled: bool) -> bool {
     if drafting {
         ui.spinner();
     }
-    let text = if drafting { "Drafting…" } else { "Draft" };
-    let hover = if drafting { "Drafting. Click to stop." } else { "Draft a message from the staged changes with Claude" };
+    let text = if drafting { tr("Drafting…") } else { tr("Draft") };
+    let hover = if drafting { tr("Drafting. Click to stop.") } else { tr("Draft a message from the staged changes with Claude") };
     let button = egui::Button::new(RichText::new(format!("{}  {text}", icon::SPARKLE)).color(c.accent)).small();
     let response = ui.add_enabled(enabled, button).on_hover_text(hover);
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Draft a message with Claude"));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Draft a message with Claude")));
     response.clicked()
 }
 
@@ -85,11 +86,11 @@ pub fn draft_messages(ui: &mut egui::Ui, status: &DraftStatus) {
 pub fn replace_question(ui: &mut egui::Ui) -> Option<bool> {
     let mut answer = None;
     ui.horizontal_wrapped(|ui| {
-        ui.label("Replace the current message?");
-        if ui.button("Replace").clicked() {
+        ui.label(tr("Replace the current message?"));
+        if ui.button(tr("Replace")).clicked() {
             answer = Some(true);
         }
-        if ui.button("Keep mine").clicked() {
+        if ui.button(tr("Keep mine")).clicked() {
             answer = Some(false);
         }
     });
@@ -181,17 +182,17 @@ impl NiceGitApp {
     pub fn claude_section(&mut self, ui: &mut egui::Ui) {
         let c = theme::of(ui);
         widgets::section(ui, "Claude");
-        widgets::checkbox(ui, true, &mut self.settings.draft_with_claude, "Draft commit messages with Claude");
+        widgets::checkbox(ui, true, &mut self.settings.draft_with_claude, tr("Draft commit messages with Claude"));
         ui.label(
             RichText::new(
-                "When you click Draft, the staged diff and recent commit subjects are sent to Anthropic's API using your key. Nothing is sent otherwise.",
+                tr("When you click Draft, the staged diff and recent commit subjects are sent to Anthropic's API using your key. Nothing is sent otherwise."),
             )
             .small()
             .color(c.muted),
         );
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label("Model");
+            ui.label(tr("Model"));
             egui::ComboBox::from_id_salt("claude_model").selected_text(self.settings.claude_model.title()).show_ui(ui, |ui| {
                 for model in ClaudeModel::ALL {
                     ui.selectable_value(&mut self.settings.claude_model, model, model.title());
@@ -201,26 +202,27 @@ impl NiceGitApp {
         ui.add_space(4.0);
         let saved = self.key_file.as_deref().is_some_and(|path| path.exists());
         let status = if claude::environment_key().is_some() {
-            format!("Using {} from the environment.", claude::KEY_ENVIRONMENT)
+            tr_fmt!("Using {variable} from the environment.", variable = claude::KEY_ENVIRONMENT)
         } else if saved {
-            "A key is saved.".to_string()
+            tr("A key is saved.").to_string()
         } else {
-            "No API key is saved.".to_string()
+            tr("No API key is saved.").to_string()
         };
         ui.label(RichText::new(status).small().color(c.muted));
 
         let mut draft: KeyDraft = ui.ctx().data(|data| data.get_temp(key_draft_id())).unwrap_or_default();
         let (mut save, mut remove) = (false, false);
         ui.horizontal(|ui| {
-            let field = ui.add(egui::TextEdit::singleline(&mut draft.text).password(true).hint_text("Paste your key").desired_width(200.0));
-            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Anthropic API key"));
-            save = ui.add_enabled(!draft.text.trim().is_empty(), egui::Button::new("Save")).clicked();
+            let field =
+                ui.add(egui::TextEdit::singleline(&mut draft.text).password(true).hint_text(tr("Paste your key")).desired_width(200.0));
+            field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Anthropic API key")));
+            save = ui.add_enabled(!draft.text.trim().is_empty(), egui::Button::new(tr("Save"))).clicked();
             if saved {
-                remove = ui.button("Remove").on_hover_text("Delete the saved key").clicked();
+                remove = ui.button(tr("Remove")).on_hover_text(tr("Delete the saved key")).clicked();
             }
         });
         if !draft.text.trim().is_empty() && !claude::is_plausible_key(draft.text.trim()) {
-            ui.label(RichText::new("That does not look like an API key. It must have no spaces.").small().color(c.warning));
+            ui.label(RichText::new(tr("That does not look like an API key. It must have no spaces.")).small().color(c.warning));
         }
         if save {
             draft.problem = self.save_key(draft.text.trim());
@@ -240,16 +242,16 @@ impl NiceGitApp {
     /// Saves the key to the key file. Returns why it could not be saved, if it could not.
     fn save_key(&mut self, key: &str) -> Option<String> {
         if !claude::is_plausible_key(key) {
-            return Some("That does not look like an API key.".to_string());
+            return Some(tr("That does not look like an API key.").to_string());
         }
         let Some(path) = self.key_file.clone() else {
-            return Some("No settings folder is available, so the key cannot be saved here.".to_string());
+            return Some(tr("No settings folder is available, so the key cannot be saved here.").to_string());
         };
-        claude::save_key(&path, key).err().map(|error| format!("The key could not be saved: {error}"))
+        claude::save_key(&path, key).err().map(|error| tr_fmt!("The key could not be saved: {error}", error = error))
     }
 
     fn remove_saved_key(&mut self) -> Option<String> {
         let path = self.key_file.clone()?;
-        claude::remove_key(&path).err().map(|error| format!("The key could not be removed: {error}"))
+        claude::remove_key(&path).err().map(|error| tr_fmt!("The key could not be removed: {error}", error = error))
     }
 }

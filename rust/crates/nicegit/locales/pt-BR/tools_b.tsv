@@ -1,0 +1,463 @@
+# pt-BR: tools and the repository pickers.
+Save as ZIP	Salvar como ZIP
+Writing {name}…	Gravando {name}…
+Saved {name} ({size}).	{name} salvo ({size}).
+{name} output	Saída de {name}
+The program printed nothing.	O programa não imprimiu nada.
+Error output	Saída de erro
+This file is not UTF-8 text, so it cannot be edited here.	Este arquivo não é texto UTF-8, então não pode ser editado aqui.
+The file changed on disk since you opened it. Reload it, then reapply your edits.	O arquivo foi alterado desde que você o abriu. Recarregue-o e aplique suas edições novamente.
+{name} — edited	{name} — editado
+Saved {path}.	{path} salvo.
+Revert	Reverter
+Discard your edits and reload the file	Descartar suas edições e recarregar o arquivo
+File contents	Conteúdo do arquivo
+Clean Up Branches	Limpar branches
+Clean up {count} branch	Limpar {count} branch
+Clean up {count} branches	Limpar {count} branches
+Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.	Branches locais mescladas em {current}, cuja branch remota foi excluída ou que estão sem commits há algum tempo.
+Also list unmerged branches with no commit for	Listar também as branches não mescladas sem commits há
+ days	 dias
+Deleted {count} branch.	{count} branch excluída.
+Deleted {count} branches.	{count} branches excluídas.
+Undo	Desfazer
+Restore {count} branch	Restaurar {count} branch
+Restore {count} branches	Restaurar {count} branches
+Finding branches…	Procurando branches…
+No branches to clean up.	Nenhuma branch para limpar.
+{count} to review	{count} para revisar
+Select merged	Selecionar mescladas
+Main branch	Branch principal
+The main line is never selected automatically. Tick it only if you mean to delete it.	A linha principal nunca é selecionada automaticamente. Marque-a somente se pretende excluí-la.
+Merged	Mesclada
+Not merged	Não mesclada
+Upstream gone	Upstream excluído
+Its branch on the remote was deleted, as usually happens once a pull request is merged	Sua branch no remoto foi excluída, como costuma acontecer quando um pull request é mesclado
+{count} selected branch is the main line. Deleting it removes that line of work locally.	{count} branch selecionada é a linha principal. Excluí-la remove essa linha de trabalho localmente.
+{count} selected branches are the main line. Deleting it removes that line of work locally.	{count} branches selecionadas são a linha principal. Excluí-la remove essa linha de trabalho localmente.
+{count} selected branch has commits on no other branch. Undo can restore it until another deletion.	{count} branch selecionada tem commits que não estão em nenhuma outra branch. Desfazer pode restaurá-la até a próxima exclusão.
+{count} selected branches have commits on no other branch. Undo can restore them until another deletion.	{count} branches selecionadas têm commits que não estão em nenhuma outra branch. Desfazer pode restaurá-las até a próxima exclusão.
+Delete {count} branch…	Excluir {count} branch…
+Delete {count} branches…	Excluir {count} branches…
+{count} selected	{count} selecionadas
+Delete {count} local branch?	Excluir {count} branch local?
+Delete {count} local branches?	Excluir {count} branches locais?
+Remote branches are not changed.	As branches remotas não são alteradas.
+Unmerged branches hold commits found on no other branch.	As branches não mescladas contêm commits que não estão em nenhuma outra branch.
+Undo restores them until you take another undoable action.	Desfazer as restaura até que você realize outra ação que possa ser desfeita.
+Delete, including unmerged	Excluir, incluindo as não mescladas
+Delete branches	Excluir branches
+Delete {count} branch	Excluir {count} branch
+Delete {count} branches	Excluir {count} branches
+Deleted {count} branch. Undo restores them.	{count} branch excluída. Desfazer a restaura.
+Deleted {count} branches. Undo restores them.	{count} branches excluídas. Desfazer as restaura.
+Deleted {deleted} of {total} before stopping. Undo restores those. {error}	{deleted} de {total} excluídas antes de parar. Desfazer restaura essas. {error}
+Restored {restored} of {total} before stopping. {error}	{restored} de {total} restauradas antes de parar. {error}
+Restored {count} branch.	{count} branch restaurada.
+Restored {count} branches.	{count} branches restauradas.
+{count}+ commits	{count}+ commits
+{count} commit	{count} commit
+{count} commits	{count} commits
+{first} on {other} that {current} does not have · {second} on {current} that {other} does not have	{first} em {other} que {current} não tem · {second} em {current} que {other} não tem
+These branches share no history.	Estas branches não compartilham histórico.
+Changed files…	Arquivos alterados…
+The files that merging {branch} would change	Os arquivos que a mesclagem de {branch} alteraria
+No commits.	Nenhum commit.
+Only the newest {count} are listed.	Somente os {count} mais recentes são listados.
+{other} and {current}	{other} e {current}
+Comparing the branches…	Comparando as branches…
+On {other} but not on {current}	Em {other}, mas não em {current}
+On {current} but not on {other}	Em {current}, mas não em {other}
+Search commit messages	Pesquisar nas mensagens de commit
+Search author names and emails	Pesquisar nomes e e-mails dos autores
+Text added or removed in a file	Texto adicionado ou removido em um arquivo
+Full or abbreviated commit ID	ID de commit completo ou abreviado
+Code change	Alteração de código
+Commit ID	ID do commit
+Search commits	Pesquisar commits
+Press Return to search every branch, including history not yet loaded in the graph.	Pressione Return para pesquisar em todas as branches, inclusive o histórico ainda não carregado no grafo.
+Searching	Pesquisando…
+No commits found	Nenhum commit encontrado
+Showing the newest {limit} matches	Mostrando as {limit} correspondências mais recentes
+Open {hash} in the inspector	Abrir {hash} no inspetor
+Before	Antes
+After	Depois
+Added in this change	Adicionado nesta alteração
+Deleted in this change	Excluído nesta alteração
+Compare	Comparar
+Comparing files	Comparando arquivos…
+No differences in tracked files	Nenhuma diferença nos arquivos rastreados
+working files	arquivos de trabalho
+{count} changed file	{count} arquivo alterado
+{count} changed files	{count} arquivos alterados
+Comparison unavailable	Comparação indisponível
+Comparing…	Comparando…
+Select a file to see how it changed	Selecione um arquivo para ver como ele mudou
+Side by side	Lado a lado
+Loading the change	Carregando a alteração…
+{title} image	Imagem {title}
+This format cannot be previewed	Este formato não pode ser visualizado
+{bytes} bytes	{bytes} bytes
+commit {revision}	Commit {revision}
+Find in {label}	Pesquisar em {label}
+Text in files	Texto nos arquivos
+Match case	Diferenciar maiúsculas
+Searching {label}	Pesquisando em {label}…
+Press Return to search every tracked text file.	Pressione Return para pesquisar em todos os arquivos de texto rastreados.
+No matches	Nenhuma correspondência
+First {limit} matches	As primeiras {limit} correspondências
+{matches} in {files}	{matches} em {files}
+{count} match	{count} correspondência
+{count} matches	{count} correspondências
+{count} file	{count} arquivo
+Blame	Culpa
+Show who last changed this line	Mostrar quem alterou por último esta linha
+File history: {name}	Histórico do arquivo: {name}
+Latest {limit} commits	Últimos {limit} commits
+Select a commit to see how it changed this file.	Selecione um commit para ver como ele alterou este arquivo.
+in commit {revision}	no commit {revision}
+Reading history	Lendo o histórico…
+No commits in this checkout changed this file.	Nenhum commit deste checkout alterou este arquivo.
+As {path}	Como {path}
+Delete file to this version…	Excluir o arquivo para esta versão…
+Restore file to this version…	Restaurar o arquivo para esta versão…
+Blame at this commit	Culpa neste commit
+Copy commit hash	Copiar hash do commit
+Delete file	Excluir arquivo
+Restore this version	Restaurar esta versão
+Restore file	Restaurar arquivo
+Finish the current Git operation first.	Conclua primeiro a operação do Git em andamento.
+Git restores by path. This commit holds the file under another name.	O Git restaura por caminho. Este commit contém o arquivo com outro nome.
+Replace this file with its version in the selected commit.	Substitui este arquivo pela sua versão no commit selecionado.
+Loading change	Carregando a alteração…
+Delete {path}?	Excluir {path}?
+Restore {path}?	Restaurar {path}?
+This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.	Este arquivo não existe {description}. Ele será excluído dos seus arquivos de trabalho e a exclusão será preparada. Quaisquer alterações não confirmadas nele serão perdidas. Seus commits e outros arquivos não são alterados.
+Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.	A cópia de trabalho deste arquivo será substituída pela sua versão {description}, e a alteração será preparada. Quaisquer alterações preparadas ou não preparadas nele serão perdidas. Seus commits e outros arquivos não são alterados.
+Deleted	Excluído
+Restored	Restaurado
+{verb} {path} {description}.	{verb} {path} {description}.
+Restore {path}	Restaurar {path}
+Soft: keep changes staged	Soft: manter as alterações preparadas
+Mixed: keep changes unstaged	Mixed: manter as alterações não preparadas
+Hard: discard local changes	Hard: descartar as alterações locais
+Moves the branch without changing the index or working files. Changes from the removed commits remain staged.	Move a branch sem alterar o índice nem os arquivos de trabalho. As alterações dos commits removidos continuam preparadas.
+Moves the branch and resets the index. Working files are kept, and the changes become unstaged.	Move a branch e redefine o índice. Os arquivos de trabalho são mantidos, e as alterações ficam não preparadas.
+Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.	Move a branch e substitui o índice e os arquivos rastreados. As alterações não confirmadas em arquivos rastreados serão perdidas. Arquivos não rastreados que bloqueiam os caminhos restaurados também podem ser excluídos.
+Reset to {target}	Redefinir para {target}
+Moves {branch} to this commit.	Move {branch} para este commit.
+Mode	Modo
+Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.	Um reset hard descarta as alterações não confirmadas em arquivos rastreados. Isso não pode ser desfeito pelo painel de alterações do NiceGit.
+The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.	A branch passará a apontar para o commit selecionado. Commits fora do histórico dela deixarão de estar nesta branch. As branches remotas não são alteradas.
+Reset and discard changes	Redefinir e descartar alterações
+Reset branch	Redefinir branch
+Waiting for the current action	Aguardando a ação atual
+Reset {branch}	Redefinir {branch}
+Reset {branch} to {target}.	{branch} redefinida para {target}.
+Reset	Redefinir
+line {start}	linha {start}
+lines {start}–{end}	linhas {start}–{end}
+History of {file} {lines}	Histórico de {file}, {lines}
+Select a commit to see how it changed these lines.	Selecione um commit para ver como ele alterou estas linhas.
+Uncommitted changes are not included.	As alterações não confirmadas não estão incluídas.
+No commits changed these lines.	Nenhum commit alterou estas linhas.
+GitFlow	GitFlow
+Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.	Branches para versões, desenvolvimento contínuo e trabalhos de curta duração, compatíveis com a ferramenta git-flow.
+Reading GitFlow settings…	Lendo as configurações do GitFlow…
+Production branch	Branch de produção
+Development branch	Branch de desenvolvimento
+Feature prefix	Prefixo de funcionalidades
+Release prefix	Prefixo de versões
+Hotfix prefix	Prefixo de hotfixes
+Version tag prefix	Prefixo de tags de versão
+The production and development branches need different names.	As branches de produção e de desenvolvimento precisam de nomes diferentes.
+Set up GitFlow	Configurar o GitFlow
+GitFlow is set up.	O GitFlow está configurado.
+Production  {branch}	Produção  {branch}
+Development  {branch}	Desenvolvimento  {branch}
+Start	Iniciar
+Finish	Finalizar
+Feature name	Nome da funcionalidade
+Version, such as 1.2.0	Versão, por exemplo 1.2.0
+Creates {name} from {base} and checks it out.	Cria {name} a partir de {base} e o alterna.
+Feature	Funcionalidade
+Release	Versão
+Hotfix	Hotfix
+feature	funcionalidade
+release	versão
+hotfix	hotfix
+Start {kind}	Iniciar {kind}
+Start {kind} {name}	Iniciar {kind} {name}
+Started {branch}.	{branch} iniciado.
+Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.	Alterne para uma branch {feature}…, {release}… ou {hotfix}… para finalizá-la.
+Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Mescla {branch} em {develop} sem avanço rápido e depois exclui {branch}. Se houver conflitos, o NiceGit para para você resolvê-los e finalizar de novo.
+Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Mescla {branch} em {main} e {develop} sem avanço rápido, marca {tag_prefix}{version} em {main} e depois exclui {branch}. Se houver conflitos, o NiceGit para para você resolvê-los e finalizar de novo.
+Tag message (optional)	Mensagem do tag (opcional)
+Commit or stash your changes before finishing.	Faça commit ou guarde suas alterações antes de finalizar.
+Finish {branch}	Finalizar {branch}
+Git Settings	Configurações do Git
+Settings saved in this repository's own Git configuration.	Configurações salvas na própria configuração Git deste repositório.
+Filter settings	Filtrar configurações
+Read the settings again	Ler as configurações novamente
+Reading the settings…	Lendo as configurações…
+No settings are saved in this repository yet. Add one below.	Nenhuma configuração foi salva neste repositório ainda. Adicione uma abaixo.
+No setting matches the filter.	Nenhuma configuração corresponde ao filtro.
+Remove {key}	Remover {key}
+Edit {key}	Editar {key}
+Setting value	Valor da configuração
+Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.	Remover {key}? O Git exclui esta configuração deste repositório. As outras configurações permanecem como estão.
+Has several values; edit in a terminal	Tem vários valores; edite em um terminal
+Global settings, read only	Configurações globais, somente leitura
+From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.	Da sua configuração global do Git, que vale para todos os repositórios. Altere-os em um terminal com git config --global.
+Reading global settings…	Lendo as configurações globais…
+Add a setting	Adicionar uma configuração
+section.name	section.name
+Setting name	Nome da configuração
+Value	Valor
+Add	Adicionar
+{key} is already set. Edit its row instead.	{key} já está definido. Edite a linha dele.
+Set {key}	Definir {key}
+Set {key}.	{key} definido.
+Removed {key}.	{key} removido.
+Jan	jan
+Feb	fev
+Mar	mar
+Apr	abr
+May	mai
+Jun	jun
+Jul	jul
+Aug	ago
+Sep	set
+Oct	out
+Nov	nov
+Dec	dez
+{day} {month} {year}	{day} de {month} de {year}
+Period	Período
+30 days	30 dias
+90 days	90 dias
+1 year	1 ano
+All time	Todo o período
+This branch	Esta branch
+All branches	Todas as branches
+Reading history… {count} commits so far	Lendo o histórico… {count} commits até agora
+Insights	Estatísticas
+Reading the history was cancelled.	A leitura do histórico foi cancelada.
+Read again	Ler novamente
+No commits in this period.	Nenhum commit neste período.
+Showing the newest 20,000 commits.	Mostrando os 20.000 commits mais recentes.
+{first} – {last}	{first} – {last}
+Commits	Commits
+Authors	Autores
+Active days	Dias ativos
+First to last commit	Do primeiro ao último commit
+Commits over time	Commits ao longo do tempo
+Week of {date}: {commits}	Semana de {date}: {commits}
+{date}: {commits}	{date}: {commits}
+Lines	Linhas
+Last active	Última atividade
+Most changed files	Arquivos mais alterados
+No files changed in this period.	Nenhum arquivo alterado neste período.
+Open its history	Abrir o histórico
+{count} lines	{count} linhas
+Folders	Pastas
+just now	agora mesmo
+{count} minute ago	há {count} minuto
+{count} minutes ago	há {count} minutos
+{count} hour ago	há {count} hora
+{count} hours ago	há {count} horas
+{count} day ago	há {count} dia
+{count} days ago	há {count} dias
+{count} month ago	há {count} mês
+{count} months ago	há {count} meses
+{count} year ago	há {count} ano
+{count} years ago	há {count} anos
+Tip history of {branch}	Histórico de pontas de {branch}
+Recover Lost Work	Recuperar trabalho perdido
+Every commit {branch} has pointed to, including ones it no longer points to.	Cada commit para o qual {branch} já apontou, inclusive os que ela não aponta mais.
+Every position HEAD has had, including commits that no branch points to any more.	Cada posição que o HEAD já teve, inclusive os commits que nenhuma branch aponta mais.
+Read the reflog again	Ler o reflog novamente
+Reading the reflog…	Lendo o reflog…
+No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.	Sem histórico de pontas. O Git não mantém reflog para esta branch, então suas pontas anteriores não são registradas.
+No history yet.	Ainda não há histórico.
+Not on any branch	Em nenhuma branch
+Only the reflog keeps this commit. Git may delete it after the reflog expires.	Só o reflog mantém este commit. O Git pode excluí-lo depois que o reflog expirar.
+Create branch here…	Criar branch aqui…
+Reset {name} to here…	Redefinir {name} aqui…
+Select an entry to see its commit.	Selecione uma entrada para ver o commit.
+Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.	Só o reflog mantém este commit. O Git pode excluí-lo quando o reflog expirar. Crie uma branch para mantê-lo.
+Show in graph	Mostrar no grafo
+Copy hash	Copiar hash
+Create branch at {hash}	Criar branch em {hash}
+The branch keeps this commit and its history. Your current checkout does not change.	A branch mantém este commit e o histórico dele. Sua cópia de trabalho atual não muda.
+Branch name	Nome da branch
+Create branch	Criar branch
+Create branch {name}	Criar a branch {name}
+Created branch {name}.	Branch {name} criada.
+{count} change	{count} alteração
+{count} changes	{count} alterações
+(some changes)	(algumas alterações)
+moves as a whole	move-se por inteiro
+Hide the changes	Ocultar as alterações
+Show the changes	Mostrar as alterações
+Change {number}	Alteração {number}
+{count} more lines	{count} linhas a mais
+Split commit	Dividir commit
+Rewrites {branch} as two commits. The commits after it are replayed.	Reescreve {branch} como dois commits. Os commits seguintes são reaplicados.
+Reading the commit's changes	Lendo as alterações do commit…
+This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.	Este commit já está em um remoto. Dividi-lo o reescreve, então você precisará fazer force-push, e quem o tiver deve reconciliar sua cópia.
+Changes in the first commit	Alterações no primeiro commit
+This commit has no changes to split.	Este commit não tem alterações para dividir.
+{first} in the first commit, {second} in the second.	{first} no primeiro commit, {second} no segundo.
+First commit	Primeiro commit
+Second commit	Segundo commit
+First commit message	Mensagem do primeiro commit
+Second commit message	Mensagem do segundo commit
+Wait for the current Git action to finish	Aguarde a conclusão da ação do Git atual
+Check out a branch first	Alterne primeiro para uma branch
+Check at least one change for the first commit	Marque pelo menos uma alteração para o primeiro commit
+Leave at least one change for the second commit	Deixe pelo menos uma alteração para o segundo commit
+Both commits need a message	Os dois commits precisam de uma mensagem
+Rewrites the commit as two commits	Reescreve o commit como dois commits
+Split {hash}	Dividir {hash}
+Split {hash} into two commits.	{hash} dividido em dois commits.
+No worktrees were listed for this repository.	Nenhum worktree foi listado para este repositório.
+Remove worktree {path}	Remover o worktree {path}
+Removed the worktree. Its branch was kept.	O worktree foi removido. Sua branch foi mantida.
+A worktree folder no longer exists on disk. Forget it to remove it from Git's list.	Uma pasta de worktree não existe mais no disco. Esqueça-a para removê-la da lista do Git.
+{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.	{count} pastas de worktree não existem mais no disco. Esqueça-as para removê-las da lista do Git.
+Forgot the missing worktrees.	Os worktrees ausentes foram esquecidos.
+Create a worktree	Criar um worktree
+Check a local branch out in its own folder, so you can work on it without switching this checkout.	Alterne uma branch local na própria pasta para trabalhar nela sem trocar esta cópia de trabalho.
+Every local branch is already checked out. Create a branch first.	Todas as branches locais já estão alternadas. Crie primeiro uma branch.
+Choose a branch	Escolher uma branch
+Parent folder	Pasta pai
+Choose folder	Escolher pasta
+Choose where the new worktree folder goes	Escolha onde fica a nova pasta do worktree
+Type a path or choose a folder	Digite um caminho ou escolha uma pasta
+Folder name	Nome da pasta
+feature-branch	feature-branch
+Creates {path}	Cria {path}
+Checking the branch	Verificando a branch…
+Create worktree	Criar worktree
+Create worktree for {name}	Criar worktree para {name}
+Created a worktree for {name} at {path}.	Worktree para {name} criado em {path}.
+{name} moved after it was selected. Choose it again and review it.	{name} mudou depois de ser selecionada. Escolha-a novamente e revise-a.
+Could not read {name}: {error}	Não foi possível ler {name}: {error}
+A linked worktree checks out another branch in its own folder and shares this repository's history.	Um worktree vinculado alterna outra branch na própria pasta e compartilha o histórico deste repositório.
+Main	Principal
+Open here	Aberto aqui
+Locked	Bloqueado
+Missing	Ausente
+Bare repository	Repositório nu
+Detached HEAD	HEAD destacado
+A locked worktree must be unlocked in a terminal before it can be removed	Um worktree bloqueado precisa ser desbloqueado em um terminal antes de ser removido
+The main worktree and the checkout open here cannot be removed	O worktree principal e a cópia aberta aqui não podem ser removidos
+Remove this worktree and its folder	Remover este worktree e sua pasta
+Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.	Remover este worktree e sua pasta? O Git recusa se a pasta tiver arquivos não confirmados ou não rastreados. A branch é mantida.
+Remove worktree	Remover worktree
+Choose a remote to see its GitHub pull requests and issues.	Escolha um remoto para ver os pull requests e issues dele no GitHub.
+Checking the GitHub CLI	Verificando a CLI do GitHub…
+Read GitHub again	Ler o GitHub novamente
+Pull requests	Pull requests
+Issues	Issues
+pull requests	pull requests
+issues	issues
+Closed	Fechadas
+all	todas
+Filter loaded items by title, author, or number	Filtrar os itens carregados por título, autor ou número
+No {state} {kind}	Nenhum {kind} {state}
+No matches in the loaded items	Nenhuma correspondência nos itens carregados
+Load more	Carregar mais
+Showing the first 1,000 items	Mostrando os primeiros 1.000 itens
+Back to the newer blame	Voltar ao blame mais recente
+at {revision}	em {revision}
+at {revision} ({summary})	em {revision} ({summary})
+Ignore whitespace	Ignorar espaços
+Attribute lines past whitespace-only changes to the commit that changed their content	Atribui as linhas após alterações apenas de espaços ao commit que mudou o conteúdo delas
+Skip commits in .git-blame-ignore-revs	Ignorar commits em .git-blame-ignore-revs
+Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does.	As linhas alteradas apenas pelos commits que este repositório lista em .git-blame-ignore-revs, como reformatações, são atribuídas à alteração anterior, como faz o blame do GitHub.
+Blame: {name}	Blame: {name}
+Reading blame	Lendo o blame…
+The ignore list could not be used, so every commit is shown: {reason}	A lista de exclusão não pôde ser usada, então todos os commits são exibidos: {reason}
+Uncommitted	Não commitado
+Your working changes	Suas alterações de trabalho
+Blame at HEAD	Blame no HEAD
+Show commit in history	Mostrar o commit no histórico
+Copy commit ID	Copiar ID do commit
+History of {lines}…	Histórico de {lines}…
+This commit has no earlier version of the file	Este commit não tem uma versão anterior do arquivo
+Blame before this change	Blame antes desta alteração
+Close this change	Fechar esta alteração
+Shell	Shell
+{title} (exited)	{title} (encerrado)
+[Process exited with status {code}]	[Processo encerrado com o status {code}]
+[Process exited]	[Processo encerrado]
+Restart	Reiniciar
+Could not start a shell: {error}	Não foi possível iniciar um shell: {error}
+New shell tab	Nova aba de shell
+End this shell…	Encerrar este shell…
+End this shell? Programs running in it stop.	Encerrar este shell? Os programas em execução nele serão interrompidos.
+End shell	Encerrar shell
+No shell open	Nenhum shell aberto
+Give the workspace a name.	Dê um nome ao workspace.
+Another workspace already has this name.	Outro workspace já usa este nome.
+{count} repository	{count} repositório
+{count} repositories	{count} repositórios
+Save open tabs as workspace…	Salvar as abas abertas como workspace…
+Open workspace	Abrir workspace
+Manage workspaces…	Gerenciar workspaces…
+Workspaces	Workspaces
+Save workspace	Salvar workspace
+Workspace name	Nome do workspace
+Replace workspace {name}?	Substituir o workspace {name}?
+It will hold the {count} open now instead of the folders it holds. Folders on disk are not changed.	Ele passará a conter os {count} abertos agora, em vez das pastas que contém. As pastas no disco não são alteradas.
+Saved workspace {name} with {count}.	Workspace {name} salvo com {count}.
+Workspace {name} has {missing}, which did not open: {list}.	O workspace {name} tem {missing} que não foram abertos: {list}.
+{count} missing folder	{count} pasta ausente
+{count} missing folders	{count} pastas ausentes
+Every repository in workspace {name} is already open.	Todos os repositórios do workspace {name} já estão abertos.
+Opened workspace {name}.	Workspace {name} aberto.
+Deleted workspace {name}. Its folders are unchanged.	Workspace {name} excluído. Suas pastas não foram alteradas.
+Name of {name}	Nome de {name}
+Renamed workspace {from} to {to}.	Workspace {from} renomeado para {to}.
+Delete workspace {name}?	Excluir o workspace {name}?
+The saved list is removed. Its folders stay on disk, and any tabs open from it stay open.	A lista salva é removida. As pastas permanecem no disco, e as abas abertas a partir dela continuam abertas.
+Find repositories	Localizar repositórios
+Looking for repositories…	Procurando repositórios…
+No repositories found	Nenhum repositório encontrado
+No repositories found in {folder}.	Nenhum repositório encontrado em {folder}.
+Found {repositories} in {folder}	{repositories} encontrados em {folder}
+Showing the first {count}. Choose a folder inside this one to find the rest.	Mostrando os primeiros {count}. Escolha uma pasta dentro desta para encontrar o restante.
+Select all	Selecionar tudo
+Select none	Desmarcar tudo
+Also open them as tabs	Abri-los também em abas
+Opening many tabs reads each repository in the background.	Abrir muitas abas lê cada repositório em segundo plano.
+Add {count} to Recent	Adicionar {count} aos Recentes
+Not a repository	Não é um repositório
+This folder isn't a repository. Look for repositories inside it?	Esta pasta não é um repositório. Procurar repositórios dentro dela?
+Find	Localizar
+Find repositories in a folder	Localizar repositórios em uma pasta
+Added {count} to Recent.	{count} adicionado(s) aos Recentes.
+Added {added} of {total} to Recent. Recent keeps only the {limit} newest.	{added} de {total} adicionados aos Recentes. Os Recentes mantêm apenas os {limit} mais recentes.
+The repositories were not opened as tabs, because an action is running.	Os repositórios não foram abertos em abas, porque uma ação está em andamento.
+The repositories were not opened as tabs, because a file is being edited.	Os repositórios não foram abertos em abas, porque um arquivo está sendo editado.
+Opened {count} as tabs.	{count} aberto(s) em abas.
+Host	Host
+Use SSH	Usar SSH
+Filter repositories	Filtrar repositórios
+Loading your repositories from GitHub	Carregando seus repositórios do GitHub…
+GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.	A CLI do GitHub não está conectada a {host}. Execute {command} em um terminal e verifique novamente.
+No repositories on this host	Nenhum repositório neste host
+Showing the first {count} repositories. Filter to narrow them.	Mostrando os primeiros {count} repositórios. Filtre para restringi-los.
+No repositories match the filter	Nenhum repositório corresponde ao filtro
+Private	Privado
+Fork	Fork
+Type a file name	Digite um nome de arquivo
+Loading files…	Carregando arquivos…
+Type to find a file	Digite para encontrar um arquivo
+Enter history · {command}-Enter blame · {alt}-Enter edit	Enter para o histórico · {command}-Enter para blame · {alt}-Enter para editar
+Delete {name}	Excluir {name}
+Rename {name}	Renomear {name}
+No saved workspaces. Save the open tabs as one from the Workspaces menu in the repositories column.	Nenhum workspace salvo. Salve as abas abertas como um workspace pelo menu Workspaces na coluna de repositórios.
+Reading history…	Lendo o histórico…
+working file	arquivo de trabalho

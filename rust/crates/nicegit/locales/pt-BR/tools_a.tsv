@@ -1,0 +1,440 @@
+# pt-BR: tools and pull request windows (group A). Format: English source, a tab, then the translation.
+Stores large files outside Git's history. Git keeps a small pointer in their place.	Armazena arquivos grandes fora do histórico do Git. O Git mantém um pequeno ponteiro no lugar deles.
+Read Git LFS again	Ler o Git LFS novamente
+Reading Git LFS status…	Lendo o status do Git LFS…
+Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once.	O Git LFS não está instalado, então novos arquivos não podem ser armazenados com ele. Instale-o em https://git-lfs.com e depois execute `git lfs install` uma vez.
+Installed, {version}	Instalado, {version}
+Tracked patterns	Padrões rastreados
+No patterns yet. Files that match a pattern are stored with Git LFS.	Ainda não há padrões. Arquivos que correspondem a um padrão são armazenados com o Git LFS.
+Untrack	Parar de rastrear
+Store new versions of matching files in Git itself. Files already committed are unchanged.	Armazenar novas versões dos arquivos correspondentes no próprio Git. Arquivos já confirmados não mudam.
+Track a pattern	Rastrear um padrão
+Track	Rastrear
+LFS pattern	Padrão LFS
+Tracking changes .gitattributes. Commit that file so everyone stores these files the same way.	Rastrear altera o .gitattributes. Faça commit desse arquivo para que todos armazenem esses arquivos da mesma forma.
+Files in Git LFS ({count})	Arquivos no Git LFS ({count})
+No tracked files use Git LFS yet.	Nenhum arquivo rastreado usa o Git LFS ainda.
+Not downloaded	Não baixado
+Only the LFS pointer is here. Install Git LFS and pull to download the content.	Aqui há apenas o ponteiro do LFS. Instale o Git LFS e faça um pull para baixar o conteúdo.
+Locks	Bloqueios
+Read the locks from the remote again	Ler os bloqueios do remoto novamente
+Reading file locks…	Lendo os bloqueios de arquivos…
+No user.name is set, so no lock is shown as yours.	user.name não está definido, então nenhum bloqueio é mostrado como seu.
+The server could not confirm ownership, so locks are yours when their owner is {name}.	O servidor não pôde confirmar a propriedade, então os bloqueios são seus quando o dono é {name}.
+No files are locked.	Nenhum arquivo está bloqueado.
+Unlock	Desbloquear
+Force unlock…	Forçar desbloqueio…
+Release a lock another person holds	Liberar um bloqueio que outra pessoa mantém
+Ownership was compared with your user.name, "{name}".	A propriedade foi comparada com seu user.name, «{name}».
+The server confirmed the owner.	O servidor confirmou o dono.
+Force unlock	Forçar desbloqueio
+Track {pattern}	Rastrear {pattern}
+Untrack {pattern}	Parar de rastrear {pattern}
+{action} {path}	{action} {path}
+Tracking {pattern}.	Rastreando {pattern}.
+No longer tracking {pattern}.	{pattern} não é mais rastreado.
+Unlocked {path}.	{path} desbloqueado.
+Force unlock {path}? It is locked by {owner}. They may lose unsaved work they meant to upload. {note}	Forçar o desbloqueio de {path}? Ele está bloqueado por {owner}. A pessoa pode perder trabalho não salvo que pretendia enviar. {note}
+No files changed.	Nenhum arquivo alterado.
+Choose a file to see its changes and review comments.	Escolha um arquivo para ver suas alterações e comentários de revisão.
+Loading the diff	Carregando o diff
+The diff has no lines to show for this file.	O diff não tem linhas para mostrar neste arquivo.
+Loading review comments	Carregando os comentários de revisão
+Outdated comments	Comentários desatualizados
+Comments on lines not in the diff	Comentários em linhas que não estão no diff
+Showing the first {count} lines of this file.	Mostrando as primeiras {count} linhas deste arquivo.
+Comment on line {number}	Comentar na linha {number}
+Comment on this line	Comentar nesta linha
+Resolved thread by {author}	Conversa resolvida por {author}
+Show	Mostrar
+Hide	Ocultar
+Resolved	Resolvido
+Reply	Responder
+Unresolve	Reabrir
+Resolve	Resolver
+Reply text	Texto da resposta
+Write a reply	Escreva uma resposta
+Post reply	Publicar resposta
+Comment text	Texto do comentário
+Write a comment	Escreva um comentário
+Comment	Comentar
+Unknown author	Autor desconhecido
+someone	alguém
+Reply to this thread.	Responder a esta conversa.
+Reply to review thread	Responder à conversa de revisão
+Comment on line	Comentar na linha
+Resolve review thread	Resolver a conversa de revisão
+Reopen review thread	Reabrir a conversa de revisão
+Post comment	Publicar comentário
+Loading from GitHub	Carregando do GitHub
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.	A CLI do GitHub (gh) não está instalada. Instale-a em cli.github.com, entre com gh auth login e verifique novamente.
+Check again	Verificar novamente
+GitHub CLI is not signed in. Run {command} in a terminal, then check again.	A CLI do GitHub não está conectada. Execute {command} em um terminal e verifique novamente.
+Replied on #{number}.	Respondido em #{number}.
+Commented on #{number}.	Comentado em #{number}.
+Resolved a thread on #{number}.	Uma conversa em #{number} foi resolvida.
+Reopened a thread on #{number}.	Uma conversa em #{number} foi reaberta.
+Approved #{number}.	#{number} aprovado.
+Requested changes on #{number}.	Alterações solicitadas em #{number}.
+Merged #{number}.	#{number} mesclado.
+Pull request #{number}	Pull request #{number}
+by {author}	por {author}
+{count} files	{count} arquivos
+opened {when}	aberta {when}
+updated {when}	atualizada {when}
+Description	Descrição
+Checks ({count})	Verificações ({count})
+Conversation ({count})	Conversa ({count})
+Files ({count})	Arquivos ({count})
+{files} files changed, +{added} −{removed}	{files} arquivos alterados, +{added} −{removed}
+Showing the first {count} files.	Mostrando os primeiros {count} arquivos.
+No description.	Sem descrição.
+{passed} passed, {failed} failed, {pending} pending	{passed} aprovadas, {failed} com falha, {pending} pendentes
+No checks reported.	Nenhuma verificação informada.
+Open check	Abrir verificação
+No reviews or comments yet.	Ainda não há revisões nem comentários.
+{count} review threads ({unresolved} unresolved)	{count} conversas de revisão ({unresolved} não resolvidas)
+commented	comentou
+approved	aprovado
+changes requested	alterações solicitadas
+review required	revisão necessária
+dismissed	descartado
+pending	pendente
+reviewed	revisado
+open	aberta
+draft	rascunho
+merged	mesclada
+closed	fechada
+no author	sem autor
+Open in browser	Abrir no navegador
+Merge…	Mesclar…
+Review…	Revisar…
+The pull request is still loading.	A pull request ainda está carregando.
+Wait for the current action to finish.	Aguarde a conclusão da ação atual.
+A merged or closed pull request cannot be reviewed.	Uma pull request mesclada ou fechada não pode ser revisada.
+Approve, request changes on, or comment on this pull request.	Aprovar, pedir alterações ou comentar nesta pull request.
+Merge this pull request into its base branch.	Mesclar esta pull request em sua branch base.
+A draft cannot be merged. Mark it ready for review first.	Um rascunho não pode ser mesclado. Marque-o como pronto para revisão primeiro.
+This pull request is already merged.	Esta pull request já está mesclada.
+A closed pull request cannot be merged.	Uma pull request fechada não pode ser mesclada.
+GitHub does not report this pull request as mergeable. Refresh to check again.	O GitHub não indica que esta pull request pode ser mesclada. Atualize para verificar novamente.
+A merged or closed pull request cannot take review comments.	Uma pull request mesclada ou fechada não aceita comentários de revisão.
+Your GitHub login could not be read, so the author cannot be checked. Refresh to try again.	Não foi possível ler seu login do GitHub, então o autor não pode ser verificado. Atualize para tentar novamente.
+You wrote this pull request, so you cannot approve or request changes on it. You can still comment.	Você escreveu esta pull request, então não pode aprová-la nem pedir alterações. Você ainda pode comentar.
+Review pull request	Revisar a pull request
+Merge pull request	Mesclar a pull request
+Review	Revisão
+Approve	Aprovar
+Request changes	Pedir alterações
+Optional comment	Comentário opcional
+Approving tells the author the pull request is ready.	Aprovar informa ao autor que a pull request está pronta.
+Say what needs to change	Diga o que precisa mudar
+Asks the author to make changes. A comment is required.	Pede ao autor que faça alterações. É preciso um comentário.
+Posts your comment without approving or requesting changes. A comment is required.	Publica seu comentário sem aprovar nem pedir alterações. É preciso um comentário.
+Submit review	Enviar revisão
+Method	Método
+Create a merge commit	Criar um commit de mesclagem
+Squash and merge	Squash e mesclar
+Rebase and merge	Rebase e mesclar
+From {head} into {base}	De {head} para {base}
+Head commit {oid}	Commit de topo {oid}
+The merge goes ahead only if the head commit is still this one.	A mesclagem só acontece se o commit de topo ainda for este.
+Sending to GitHub	Enviando ao GitHub
+Identity	Identidade
+Profiles	Perfis
+Commit identity	Identidade do commit
+Commits made in this repository use this name and email. Other repositories keep their own.	Os commits feitos neste repositório usam este nome e e-mail. Outros repositórios mantêm os seus.
+Reading the identity	Lendo a identidade
+Name	Nome
+Email	E-mail
+Saved the commit identity for this repository.	A identidade de commit deste repositório foi salva.
+Saved profiles	Perfis salvos
+A profile stores a name, email, and optional signing key. Applying one sets this repository's identity. A profile with a key also turns on commit signing.	Um perfil armazena um nome, e-mail e uma chave de assinatura opcional. Aplicá-lo define a identidade deste repositório. Um perfil com chave também ativa a assinatura de commits.
+Signing key	Chave de assinatura
+Optional: GPG key ID or SSH public key path	Opcional: ID da chave GPG ou caminho da chave pública SSH
+When set, applying this profile signs commits with this key.	Se definido, aplicar este perfil assina os commits com esta chave.
+Saves {identity} from the Identity tab.	Salva {identity} da aba Identidade.
+Save as profile	Salvar como perfil
+No saved profiles yet	Ainda não há perfis salvos
+Signs commits	Assina commits
+Forget this profile on this computer	Esquecer este perfil neste computador
+No remotes yet. Add one below.	Ainda não há remotos. Adicione um abaixo.
+Add a remote	Adicionar um remoto
+Remote name	Nome do remoto
+URL	URL
+Remote URL	URL do remoto
+Edit remote name	Editar o nome do remoto
+Fetch URL	URL de fetch
+Edit fetch URL	Editar a URL de fetch
+Push URL	URL de push
+Same as fetch URL	Igual à URL de fetch
+Edit push URL	Editar a URL de push
+This remote pushes to several URLs; NiceGit leaves them as they are.	Este remoto envia para várias URLs; o NiceGit as mantém como estão.
+Save remote	Salvar remoto
+No fetch URL	Sem URL de fetch
+NiceGit forgets this remote and deletes its remote-tracking branches from this repository. Local branches that track it lose their upstream. Nothing on the server changes.	O NiceGit esquece este remoto e exclui suas branches de rastreamento remoto deste repositório. Branches locais que o acompanham perdem seu upstream. Nada muda no servidor.
+Repository Settings	Configurações do repositório
+An action is running. Controls return when it finishes.	Uma ação está em andamento. Os controles voltam quando ela terminar.
+the name and email	o nome e o e-mail
+Save identity	Salvar identidade
+Apply identity	Aplicar identidade
+Applied {label} to this repository.	{label} foi aplicado a este repositório.
+A remote named {name} already exists.	Já existe um remoto chamado {name}.
+Add remote {name}	Adicionar o remoto {name}
+Added remote {name}.	Remoto {name} adicionado.
+Remove remote {name}	Remover o remoto {name}
+Save remote {name}	Salvar o remoto {name}
+Saved remote {name}.	Remoto {name} salvo.
+Removed remote {name}.	Remoto {name} removido.
+Push: {address}	Push: {address}
+Pick	Escolher
+Reword	Reformular
+Squash	Combinar
+Fixup	Fixup
+Drop	Descartar
+Keep this commit as it is	Manter este commit como está
+Keep this commit with a new message	Manter este commit com uma nova mensagem
+Stop after this commit so you can change its files	Parar após este commit para alterar seus arquivos
+Combine into the nearest kept commit below, keeping both messages	Combinar com o commit mantido mais próximo abaixo, mantendo as duas mensagens
+Combine into the nearest kept commit below, discarding this message	Combinar com o commit mantido mais próximo abaixo, descartando esta mensagem
+Remove this commit and its changes	Remover este commit e suas alterações
+The selected commits must be in the loaded history, and none can be a merge.	Os commits selecionados devem estar no histórico carregado, e nenhum pode ser uma mesclagem.
+The oldest kept commit has no earlier commit to combine into. Pick or reword it instead.	O commit mantido mais antigo não tem um commit anterior para combinar. Escolha-o ou reformule-o.
+A reworded commit needs a message.	Um commit reformulado precisa de uma mensagem.
+Result: {kept} {commits}, {dropped} dropped	Resultado: {kept} {commits}, {dropped} descartado(s)
+Result: {kept} {commits}	Resultado: {kept} {commits}
+commit	commit
+commits	commits
+commit is	commit está
+commits are	commits estão
+fixup or squash commit	commit fixup ou squash
+fixup or squash commits	commits fixup ou squash
+Rewrite {count} {commits} on {branch}. Listed newest first; drag a row by its grip or use the arrows to reorder. Squash and fixup combine a commit into the nearest kept commit below it.	Reescrever {count} {commits} em {branch}. Listados do mais recente para o mais antigo; arraste uma linha pela alça ou use as setas para reordenar. Squash e fixup combinam um commit com o mantido mais próximo abaixo.
+Selected commits were moved next to each other; moving commits can cause conflicts.	Os commits selecionados foram movidos um ao lado do outro; mover commits pode causar conflitos.
+{published} of these {commits} already on a remote. Rewriting them means you will need to force-push, and anyone who has them must reconcile their copies.	{published} destes {commits} já estão em um remoto. Reescrevê-los significa que você precisará fazer force-push, e quem os tiver deve reconciliar suas cópias.
+Reading commits...	Lendo commits...
+Rewrite commits	Reescrever commits
+Reset edits	Redefinir alterações
+Apply fixups	Aplicar fixups
+Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash	Mover cada commit fixup! ou squash! logo após o commit que ele cita e defini-lo como Fixup ou Squash
+Wait for the plan to load and for the current Git action to finish	Aguarde o carregamento do plano e a conclusão da ação atual do Git
+No fixup! or squash! commit names an earlier commit in this list.	Nenhum commit fixup! ou squash! cita um commit anterior nesta lista.
+Applied {count} {noun}; each sits directly after the commit it names.	{count} {noun} aplicado(s); cada um fica logo após o commit que cita.
+{placed} Moving commits can cause conflicts.	{placed} Mover commits pode causar conflitos.
+Rewrite commits on {branch}	Reescrever commits em {branch}
+Interactive rebase	Rebase interativo
+Rewrote {count} commits on {branch}.	{count} commits reescritos em {branch}.
+Stopped at “{subject}”	Parado em «{subject}»
+Stopped	Parado
+{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase.	{stopped_at} para que você possa alterá-lo. Edite e prepare arquivos e clique em Continuar para incluí-los; Abortar desfaz todo o rebase.
+Some selected commits are not part of {branch}'s history.	Alguns commits selecionados não fazem parte do histórico de {branch}.
+This commit is not part of {branch}'s history.	Este commit não faz parte do histórico de {branch}.
+Action for {subject}	Ação para {subject}
+Message for {subject}	Mensagem para {subject}
+Drag to reorder	Arraste para reordenar
+Move up	Mover para cima
+Move down	Mover para baixo
+Combined into the commit below	Combinado com o commit abaixo
+Already on a remote	Já está em um remoto
+New commit message	Nova mensagem de commit
+Edit commit message	Editar mensagem do commit
+Squash commits	Combinar commits
+Drop commits	Descartar commits
+Finish or abort the {operation} in progress before stashing.	Conclua ou aborte o {operation} em andamento antes de guardar no stash.
+Wait for the current Git action to finish.	Aguarde a conclusão da ação atual do Git.
+There are no changes to stash.	Não há alterações para guardar no stash.
+Select files to stash.	Selecione arquivos para guardar no stash.
+WIP on {branch}	WIP em {branch}
+Stash message	Mensagem do stash
+Include untracked files	Incluir arquivos não rastreados
+None	Nenhum
+All	Todos
+No changed files.	Nenhum arquivo alterado.
+(untracked)	(não rastreado)
+Stash {count} file	Guardar {count} arquivo no stash
+Stash {count} files	Guardar {count} arquivos no stash
+Stash {count} selected files	Guardar {count} arquivos selecionados no stash
+Saved your changes in a stash.	Suas alterações foram guardadas no stash.
+Saved {count} selected files in a stash.	{count} arquivos selecionados foram guardados no stash.
+No stashes	Nenhum stash
+Delete stash	Excluir stash
+Restore the changes, then remove the stash if they apply	Restaurar as alterações e remover o stash se elas forem aplicadas
+Restore the changes and keep the stash	Restaurar as alterações e manter o stash
+Rename	Renomear
+Give the stash a new name. It moves to the top of the list	Dar um novo nome ao stash. Ele vai para o topo da lista
+Rename {reference}	Renomear {reference}
+New name	Novo nome
+Apply {reference}	Aplicar {reference}
+Applied {reference}.	{reference} aplicado.
+Apply {reference} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.	Aplicar {reference} e removê-lo? O stash só é removido depois que as alterações forem aplicadas. Se a aplicação falhar ou gerar conflitos, ele é mantido.
+Pop stash	Aplicar e remover stash
+Pop {reference}	Aplicar e remover {reference}
+Popped {reference}.	{reference} aplicado e removido.
+Delete {reference}? Undo can bring it back while NiceGit is open.	Excluir {reference}? Desfazer pode trazê-lo de volta enquanto o NiceGit estiver aberto.
+Delete {reference}	Excluir {reference}
+Deleted {reference}.	{reference} excluído.
+Select a stash to see its changes.	Selecione um stash para ver suas alterações.
+Reading the stash...	Lendo o stash...
+Set changes aside to switch work or clean up, and restore them later.	Guarde as alterações de lado para trocar de trabalho ou limpar, e restaure-as depois.
+Saved stashes	Stashes salvos
+Destination	Destino
+Replayed commit	Commit reaplicado
+Current	Atual
+Incoming	Recebida
+Git will remember how you resolve conflicts and reuse it when the same conflict happens again.	O Git vai lembrar como você resolve conflitos e reutilizar isso quando o mesmo conflito acontecer de novo.
+Git will no longer remember how you resolve conflicts.	O Git não vai mais lembrar como você resolve conflitos.
+Remember how I resolve conflicts	Lembrar como resolvo conflitos
+Git will reuse your resolution if the same conflict happens again, for example in a later rebase.	O Git vai reutilizar sua resolução se o mesmo conflito acontecer de novo, por exemplo em um rebase posterior.
+Remember conflict resolutions	Lembrar resoluções de conflitos
+Resolve conflict: {path}	Resolver conflito: {path}
+Save or discard the result first.	Salve ou descarte primeiro o resultado.
+Wait for the current action.	Aguarde a conclusão da ação atual.
+Resolve in {tool}	Resolver em {tool}
+Resolve in merge tool	Resolver na ferramenta de mesclagem
+Reading the conflicted file...	Lendo o arquivo em conflito...
+Result	Resultado
+The result still has conflict markers. Remove them before saving.	O resultado ainda tem marcadores de conflito. Remova-os antes de salvar.
+Git reused a resolution you recorded earlier. Check it, then mark the file resolved.	O Git reutilizou uma resolução que você registrou antes. Confira-a e depois marque o arquivo como resolvido.
+base	base
+Replace the result with the {name} version? Edits in the result are lost.	Substituir o resultado pela versão {name}? As edições no resultado serão perdidas.
+Use version	Usar esta versão
+Take the {name} version of the whole file? This replaces the working file and discards editor changes.	Usar a versão {name} de todo o arquivo? Isso substitui o arquivo de trabalho e descarta as alterações do editor.
+Take version	Usar versão
+Delete this file? This removes the working file and discards editor changes.	Excluir este arquivo? Isso remove o arquivo de trabalho e descarta as alterações do editor.
+Close the editor and discard its changes?	Fechar o editor e descartar as alterações?
+Discard changes	Descartar alterações
+Whole file	Arquivo inteiro
+Take {side}	Usar {side}
+Save and mark resolved	Salvar e marcar como resolvido
+Remove the conflict markers first.	Remova primeiro os marcadores de conflito.
+Resolve {path}	Resolver {path}
+Resolved {path}	{path} resolvido.
+Not available for this file.	Não disponível para este arquivo.
+Copy into result	Copiar para o resultado
+Take current version of {path}	Usar a versão atual de {path}
+Take incoming version of {path}	Usar a versão recebida de {path}
+Delete {path}	Excluir {path}
+Not checked out	Não extraído
+At recorded commit	No commit registrado
+Different commit	Commit diferente
+Local changes	Alterações locais
+Recorded  {commit}	Registrado  {commit}
+Checked out  {commit}	Extraído  {commit}
+This submodule has uncommitted changes. Checking out the recorded commit keeps them when Git can, and Git refuses when they would be overwritten.	Este submódulo tem alterações não confirmadas. Extrair o commit registrado as mantém quando o Git consegue, e o Git recusa se elas seriam sobrescritas.
+Check out recorded commit	Extrair o commit registrado
+Initialise and check out	Inicializar e extrair
+Already at the recorded commit	Já está no commit registrado
+Remove…	Remover…
+Commit or discard its changes before removing it	Confirme ou descarte as alterações antes de removê-lo
+Removing deletes this submodule's checkout and stages the removal of its .gitmodules entry and its gitlink, so the change takes effect when you commit. The module's Git data in .git/modules is kept. Removal is refused while the checkout has uncommitted or ignored files.	Remover exclui a cópia de trabalho deste submódulo e prepara a remoção da sua entrada em .gitmodules e do seu gitlink, para que a mudança valha ao fazer commit. Os dados Git do módulo em .git/modules são mantidos. A remoção é recusada enquanto a cópia tiver arquivos não confirmados ou ignorados.
+Remove submodule	Remover submódulo
+Remove submodule {path}	Remover o submódulo {path}
+Removed {path}. Its .gitmodules entry and gitlink are staged for commit.	{path} removido. Sua entrada em .gitmodules e seu gitlink estão preparados para commit.
+Add a submodule	Adicionar um submódulo
+Clones the repository at this URL into the path, then stages the new .gitmodules entry and gitlink for commit.	Clona o repositório desta URL no caminho e depois prepara a nova entrada de .gitmodules e o gitlink para commit.
+Repository URL	URL do repositório
+https://… or a local path	https://… ou um caminho local
+Optional, the remote's default	Opcional, o padrão do remoto
+Add submodule	Adicionar submódulo
+Add submodule {path}	Adicionar o submódulo {path}
+Added {path}. Its .gitmodules entry and gitlink are staged for commit.	{path} adicionado. Sua entrada em .gitmodules e seu gitlink estão preparados para commit.
+Submodules are repositories nested in this one. Each is checked out at the commit this repository records.	Submódulos são repositórios aninhados neste. Cada um é extraído no commit que este repositório registra.
+Update all	Atualizar tudo
+Update all submodules	Atualizar todos os submódulos
+Checked out every submodule at its recorded commit.	Cada submódulo foi extraído no commit registrado.
+Sync URLs	Sincronizar URLs
+Sync submodule URLs	Sincronizar URLs dos submódulos
+Copied the submodule URLs from .gitmodules into their checkouts.	As URLs dos submódulos foram copiadas de .gitmodules para suas cópias de trabalho.
+Add submodule…	Adicionar submódulo…
+Reading submodules	Lendo os submódulos
+This repository has no submodules.	Este repositório não tem submódulos.
+Check out {path}	Extrair {path}
+Checked out the recorded commit in {path}.	O commit registrado foi extraído em {path}.
+Reading the bisect status	Lendo o status do bisect
+Bisect finds the commit that introduced a problem. Give a commit that is known to be good; NiceGit then tests the commits between it and the current commit.	O bisect encontra o commit que introduziu um problema. Informe um commit que se sabe que funciona; o NiceGit então testa os commits entre ele e o commit atual.
+current commit	commit atual
+This repository has no commits yet.	Este repositório ainda não tem commits.
+Commit, branch, or tag known to work	Commit, branch ou tag que se sabe que funciona
+Finish the current Git operation before starting a bisect.	Conclua a operação atual do Git antes de iniciar um bisect.
+Start bisect	Iniciar bisect
+Bisect started. Mark the checked-out commit as good or bad.	Bisect iniciado. Marque o commit extraído como bom ou ruim.
+Checkouts happen during a bisect, so commit or stash changes first.	Extrações acontecem durante um bisect, então faça commit ou guarde as alterações no stash primeiro.
+First bad commit	Primeiro commit com problema
+Subject unavailable	Assunto indisponível
+Git narrowed the search to this commit. Select it in the graph to inspect it.	O Git reduziu a busca a este commit. Selecione-o no gráfico para inspecioná-lo.
+Select commit	Selecionar commit
+Bisect ended. Returned to the starting checkout.	Bisect encerrado. Voltou à extração inicial.
+Testing	Teste
+No commit is checked out for testing.	Nenhum commit está extraído para teste.
+{good} good, {bad} bad, {skipped} skipped so far. Returns to {checkout} when ended.	Até agora {good} bons, {bad} ruins, {skipped} ignorados. Volta para {checkout} ao encerrar.
+Return to {checkout}	Voltar para {checkout}
+Mark {label}	Marcar como {label}
+One more mark should find the first bad commit.	Mais uma marcação deve encontrar o primeiro commit com problema.
+About 1 more mark after this one.	Cerca de mais 1 marcação depois desta.
+About {count} more marks after this one.	Cerca de mais {count} marcações depois desta.
+Mark this commit good or bad.	Marque este commit como bom ou ruim.
+the starting checkout	a extração inicial
+Wait for the current Git action to finish before checking out a pull request.	Aguarde a conclusão da ação atual do Git antes de extrair uma pull request.
+Finish or abort the current Git operation before checking out a pull request.	Conclua ou aborte a operação atual do Git antes de extrair uma pull request.
+Wait for the current Git action to finish before starting work on an issue.	Aguarde a conclusão da ação atual do Git antes de começar a trabalhar em um issue.
+Finish or abort the current Git operation before starting work on an issue.	Conclua ou aborte a operação atual do Git antes de começar a trabalhar em um issue.
+Make a first commit before starting work on an issue, so there is a HEAD to start from.	Faça um primeiro commit antes de começar a trabalhar em um issue, para que exista um HEAD de onde partir.
+Add a GitHub remote to load these	Adicione um remoto do GitHub para carregá-los
+Open with filters and closed items	Abrir com filtros e itens fechados
+Open GitHub window	Abrir janela do GitHub
+Load from GitHub	Carregar do GitHub
+No open {kind}	Nenhum {kind} aberto
+Copy link	Copiar link
+View details…	Ver detalhes…
+Check out locally…	Extrair localmente…
+Start work…	Começar a trabalhar…
+Load {count} more	Carregar mais {count}
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.	A CLI do GitHub (gh) não está instalada. Instale-a em cli.github.com e depois entre com gh auth login.
+The branch's {remote} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.	O remoto {remote} do branch mudou depois que este diálogo foi aberto, então nada foi criado. Feche o diálogo e abra-o novamente.
+pull request	pull request
+merge request	merge request
+Create {noun}	Criar {noun}
+Creating the {noun} on {forge}	Criando {noun} no {forge}
+{repo} on {host}	{repo} em {host}
+Your branch has {count} commit that is not pushed. Push first, or the pull request will not include it.	Seu branch tem {count} commit que não foi enviado. Envie primeiro, ou a pull request não o incluirá.
+Your branch has {count} commits that are not pushed. Push first, or the pull request will not include them.	Seu branch tem {count} commits que não foram enviados. Envie primeiro, ou a pull request não os incluirá.
+Base branch	Branch base
+{tool} is not signed in to {host}. Run {command} in a terminal, then open this dialog again.	{tool} não está conectado a {host}. Execute {command} em um terminal e depois abra este diálogo novamente.
+Title	Título
+Body	Descrição
+Create as a draft	Criar como rascunho
+Open in browser instead	Abrir no navegador em vez disso
+Created {noun} {marker}{number}.	{noun} {marker}{number} criada.
+Needs your review	Precisa da sua revisão
+Yours	Suas
+Other open	Outras abertas
+The read stopped before it finished. Refresh to try again.	A leitura parou antes de terminar. Atualize para tentar novamente.
+Include workspace	Incluir workspace
+Open a repository, or choose a workspace, to see its pull and merge requests.	Abra um repositório ou escolha um workspace para ver suas pull requests e merge requests.
+Loading {count} repository	Carregando {count} repositório
+Loading {count} repositories	Carregando {count} repositórios
+Showing the first {limit} open pull requests of each repository.	Mostrando as primeiras {limit} pull requests abertas de cada repositório.
+Not available	Não disponível
+by a deleted account	por uma conta excluída
+Check out is available for GitHub pull requests only.	Extrair só está disponível para pull requests do GitHub.
+This repository has no {remote} remote, so its pull requests cannot be read.	Este repositório não tem um remoto {remote}, então suas pull requests não podem ser lidas.
+Bitbucket pull requests are not listed here.	As pull requests do Bitbucket não são listadas aqui.
+Azure DevOps pull requests are not listed here.	As pull requests do Azure DevOps não são listadas aqui.
+{count} passing	{count} aprovadas
+{count} failing	{count} com falha
+{count} pending	{count} pendentes
+No checks	Nenhuma verificação
+team {name}	equipe {name}
+Review requested from {names}	Revisão solicitada de {names}
+updated {count} minute ago	atualizado há {count} minuto
+updated {count} minutes ago	atualizado há {count} minutos
+updated {count} hour ago	atualizado há {count} hora
+updated {count} hours ago	atualizado há {count} horas
+updated {count} day ago	atualizado há {count} dia
+updated {count} days ago	atualizado há {count} dias
+updated just now	atualizado agora mesmo
+updated over a month ago	atualizado há mais de um mês
+Add remote	Adicionar remoto
+Comment on {location}	Comentar em {location}
+Base	Base
+Start a bisect	Iniciar um bisect

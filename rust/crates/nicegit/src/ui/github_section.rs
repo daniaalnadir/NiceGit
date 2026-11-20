@@ -9,6 +9,7 @@ use nicegit_core::{GitClient, Snapshot};
 use std::path::PathBuf;
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{self, widgets, CheckOutRequest, Task};
 
@@ -92,11 +93,11 @@ impl NiceGitApp {
     /// changed.
     fn open_check_out_pull_request(&mut self, snapshot: &Snapshot, remote: String, number: u64, title: String, author: String) {
         if self.busy.is_some() {
-            self.notify("Wait for the current Git action to finish before checking out a pull request.", true);
+            self.notify(tr("Wait for the current Git action to finish before checking out a pull request."), true);
             return;
         }
         if snapshot.operation.is_some() {
-            self.notify("Finish or abort the current Git operation before checking out a pull request.", true);
+            self.notify(tr("Finish or abort the current Git operation before checking out a pull request."), true);
             return;
         }
         self.dialog = Some(crate::ui::dialogs::Dialog::check_out_pull_request(remote, number, title, author, snapshot));
@@ -107,7 +108,7 @@ impl NiceGitApp {
     /// dialog waits for it in [`Self::finish_pending_check_out`].
     pub fn check_out_from_launchpad(&mut self, request: CheckOutRequest) {
         if self.busy.is_some() {
-            self.notify("Wait for the current Git action to finish before checking out a pull request.", true);
+            self.notify(tr("Wait for the current Git action to finish before checking out a pull request."), true);
             return;
         }
         // The path is compared as `open` stores it, so a folder named by a workspace matches its tab.
@@ -144,15 +145,15 @@ impl NiceGitApp {
     /// in the background as the dialog opens; nothing changes until the dialog's button is pressed.
     fn open_start_issue_work(&mut self, snapshot: &Snapshot, remote: String, item: GitHubItem) {
         if self.busy.is_some() {
-            self.notify("Wait for the current Git action to finish before starting work on an issue.", true);
+            self.notify(tr("Wait for the current Git action to finish before starting work on an issue."), true);
             return;
         }
         if snapshot.operation.is_some() {
-            self.notify("Finish or abort the current Git operation before starting work on an issue.", true);
+            self.notify(tr("Finish or abort the current Git operation before starting work on an issue."), true);
             return;
         }
         if snapshot.head_hash.is_none() {
-            self.notify("Make a first commit before starting work on an issue, so there is a HEAD to start from.", true);
+            self.notify(tr("Make a first commit before starting work on an issue, so there is a HEAD to start from."), true);
             return;
         }
         let Some(path) = self.repo().map(|repo| repo.path.clone()) else { return };
@@ -185,8 +186,8 @@ impl NiceGitApp {
     pub fn github_section(&mut self, ui: &mut Ui, snapshot: &Snapshot, kind: ItemKind) {
         let c = theme::of(ui);
         let (id, glyph, title) = match kind {
-            ItemKind::PullRequest => ("pulls", icon::GIT_PULL_REQUEST, "Pull requests"),
-            ItemKind::Issue => ("issues", icon::CIRCLE_DASHED, "Issues"),
+            ItemKind::PullRequest => ("pulls", icon::GIT_PULL_REQUEST, tr("Pull requests")),
+            ItemKind::Issue => ("issues", icon::CIRCLE_DASHED, tr("Issues")),
         };
         if let Some(list) = self.repos.get_mut(self.active).and_then(|r| r.github[slot(kind)].as_mut()) {
             list.receive();
@@ -204,14 +205,14 @@ impl NiceGitApp {
         let hosts = self.settings.github_enterprise_hosts.clone();
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
-                ui.label(RichText::new("   Add a GitHub remote to load these").small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr(tr("Add a GitHub remote to load these")))).small().color(c.muted));
                 return;
             }
             let repo = &mut self.repos[self.active];
             let Some(list) = repo.github[slot(kind)].as_mut() else {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    ui.menu_button(format!("{}  Load from GitHub {}", icon::GITHUB_LOGO, icon::CARET_DOWN), |ui| {
+                    ui.menu_button(format!("{}  {} {}", icon::GITHUB_LOGO, tr("Load from GitHub"), icon::CARET_DOWN), |ui| {
                         for remote in &snapshot.remotes {
                             if ui.button(remote).clicked() {
                                 ui.close();
@@ -234,17 +235,17 @@ impl NiceGitApp {
                 };
                 ui.label(RichText::new(header).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, "Open with filters and closed items", true);
-                    open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Open GitHub window"));
+                    let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, tr("Open with filters and closed items"), true);
+                    open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Open GitHub window")));
                     if open_window.clicked() {
                         window = Some(list.remote.clone());
                     }
                     if loading {
-                        if ui.small_button("Cancel").clicked() {
+                        if ui.small_button(tr("Cancel")).clicked() {
                             cancel = true;
                         }
                         ui.spinner();
-                    } else if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, "Refresh", true).clicked() {
+                    } else if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, tr("Refresh"), true).clicked() {
                         load = Some((list.remote.clone(), list.limit));
                     }
                 });
@@ -256,7 +257,7 @@ impl NiceGitApp {
                 });
             }
             if list.items.is_empty() && !loading && list.error.is_none() {
-                ui.label(RichText::new(format!("   No open {}", title.to_lowercase())).small().color(c.muted));
+                ui.label(RichText::new(format!("   {}", tr_fmt!("No open {kind}", kind = title.to_lowercase()))).small().color(c.muted));
             }
             for item in &list.items {
                 let text = format!("#{}  {}", item.number, item.title);
@@ -271,23 +272,25 @@ impl NiceGitApp {
                     ui.ctx().open_url(egui::OpenUrl::new_tab(&item.url));
                 }
                 response.context_menu(|ui| {
-                    if ui.button(format!("{}  Open in browser", icon::ARROW_SQUARE_OUT)).clicked() {
+                    if ui.button(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open in browser"))).clicked() {
                         ui.close();
                         ui.ctx().open_url(egui::OpenUrl::new_tab(&item.url));
                     }
-                    if ui.button(format!("{}  Copy link", icon::COPY)).clicked() {
+                    if ui.button(format!("{}  {}", icon::COPY, tr("Copy link"))).clicked() {
                         ui.close();
                         ui.ctx().copy_text(item.url.clone());
                     }
-                    if kind == ItemKind::PullRequest && ui.button(format!("{}  View details…", icon::GIT_PULL_REQUEST)).clicked() {
+                    if kind == ItemKind::PullRequest && ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("View details…"))).clicked()
+                    {
                         ui.close();
                         details = Some((list.remote.clone(), item.number));
                     }
-                    if kind == ItemKind::PullRequest && ui.button(format!("{}  Check out locally…", icon::GIT_BRANCH)).clicked() {
+                    if kind == ItemKind::PullRequest && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Check out locally…"))).clicked()
+                    {
                         ui.close();
                         check_out = Some((list.remote.clone(), item.clone()));
                     }
-                    if kind == ItemKind::Issue && ui.button(format!("{}  Start work…", icon::GIT_BRANCH)).clicked() {
+                    if kind == ItemKind::Issue && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Start work…"))).clicked() {
                         ui.close();
                         start_work = Some((list.remote.clone(), item.clone()));
                     }
@@ -296,7 +299,7 @@ impl NiceGitApp {
             if !loading && list.items.len() >= list.limit && list.limit < MAXIMUM {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    if ui.small_button(format!("Load {} more", PAGE)).clicked() {
+                    if ui.small_button(tr_fmt!("Load {count} more", count = PAGE)).clicked() {
                         load = Some((list.remote.clone(), (list.limit + PAGE).min(MAXIMUM)));
                     }
                 });

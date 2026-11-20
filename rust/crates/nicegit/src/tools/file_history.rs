@@ -2,6 +2,7 @@
 //! File history: the commits that changed one file, beside the selected commit's change to it.
 //! A version can be restored from here, after confirming it against the current checkout.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::Path;
 
 use egui::{pos2, vec2, Align, Align2, Color32, CursorIcon, FontId, Id, Layout, Rect, RichText, Sense, Ui};
@@ -72,7 +73,7 @@ impl ToolWindow for FileHistoryWindow {
     }
 
     fn title(&self) -> String {
-        format!("File history: {}", file_name(&self.path))
+        tr_fmt!("File history: {name}", name = file_name(&self.path))
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -109,9 +110,8 @@ impl ToolWindow for FileHistoryWindow {
             ui.vertical(|ui| {
                 ui.label(RichText::new(path.as_str()).monospace());
                 let summary = match outcome {
-                    Some(Ok(list)) if list.len() == LIMIT => format!("Latest {LIMIT} commits"),
-                    Some(Ok(list)) if list.len() == 1 => "1 commit".to_string(),
-                    Some(Ok(list)) => format!("{} commits", list.len()),
+                    Some(Ok(list)) if list.len() == LIMIT => tr_fmt!("Latest {limit} commits", limit = LIMIT),
+                    Some(Ok(list)) => tr_count("{count} commit", "{count} commits", list.len()),
                     _ => String::new(),
                 };
                 ui.label(RichText::new(summary).small().color(c.muted));
@@ -129,7 +129,7 @@ impl ToolWindow for FileHistoryWindow {
             ui.separator();
             ui.allocate_ui_with_layout(vec2(ui.available_width(), height), Layout::top_down(Align::Min), |ui| match selected.as_mut() {
                 Some(selection) => diff_pane(ui, cx, file, selection, split, restore),
-                None => widgets::empty_state(ui, icon::GIT_DIFF, "Select a commit to see how it changed this file."),
+                None => widgets::empty_state(ui, icon::GIT_DIFF, tr("Select a commit to see how it changed this file.")),
             });
         });
 
@@ -169,7 +169,7 @@ fn pending_restore(cx: &Ctx, path: &str, hash: &str, removes_file: bool) -> Pend
     PendingRestore {
         path: path.to_string(),
         source: hash.to_string(),
-        description: format!("in commit {}", short_revision(hash)),
+        description: tr_fmt!("in commit {revision}", revision = short_revision(hash)),
         removes_file,
         branch: cx.snapshot.current_branch.clone(),
         head: cx.snapshot.head_hash.clone(),
@@ -186,17 +186,17 @@ fn list(
     restore: &mut Option<PendingRestore>,
 ) {
     match outcome {
-        None => widgets::loading(ui, "Reading history"),
+        None => widgets::loading(ui, tr("Reading history")),
         Some(Err(error)) => widgets::error(ui, &error.to_string()),
         Some(Ok(entries)) if entries.is_empty() => {
-            widgets::empty_state(ui, icon::FILE_TEXT, "No commits in this checkout changed this file.")
+            widgets::empty_state(ui, icon::FILE_TEXT, tr("No commits in this checkout changed this file."))
         }
         Some(Ok(entries)) => {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 for entry in entries {
                     let is_selected = selected.as_ref().is_some_and(|current| current.hash == entry.commit.hash);
                     let detail = format!("{} · {} · {}", entry.commit.author_name, entry.commit.relative_date, entry.commit.short_hash);
-                    let moved = (entry.path != path).then(|| format!("As {}", entry.path));
+                    let moved = (entry.path != path).then(|| tr_fmt!("As {path}", path = entry.path));
                     let letter = entry.status.as_str();
                     let badge = Some((letter, widgets::change_letter_color(ui, letter)));
                     let response = result_row(ui, &entry.commit.subject, &detail, badge, moved.as_deref(), is_selected);
@@ -205,17 +205,18 @@ fn list(
                     }
                     response.context_menu(|ui| {
                         let restorable = can_restore(cx) && entry.path == path;
-                        let label = if entry.deletes_file() { "Delete file to this version…" } else { "Restore file to this version…" };
+                        let label =
+                            if entry.deletes_file() { tr("Delete file to this version…") } else { tr("Restore file to this version…") };
                         if ui.add_enabled(restorable, egui::Button::new(label)).clicked() {
                             *restore = Some(pending_restore(cx, path, &entry.commit.hash, entry.deletes_file()));
                             ui.close();
                         }
-                        if ui.add_enabled(!entry.deletes_file(), egui::Button::new("Blame at this commit")).clicked() {
+                        if ui.add_enabled(!entry.deletes_file(), egui::Button::new(tr("Blame at this commit"))).clicked() {
                             cx.open(Box::new(BlameWindow::new(entry.path.clone(), Some(entry.commit.hash.clone()))));
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("Copy commit hash").clicked() {
+                        if ui.button(tr("Copy commit hash")).clicked() {
                             ui.ctx().copy_text(entry.commit.hash.clone());
                             ui.close();
                         }
@@ -235,31 +236,31 @@ fn diff_pane(ui: &mut Ui, cx: &mut Ctx, path: &str, selection: &mut Selected, sp
     ui.horizontal(|ui| {
         let same_file = selection.path == path;
         let enabled = can_restore(cx) && same_file;
-        let label = if selection.deletes_file { "Delete file" } else { "Restore this version" };
+        let label = if selection.deletes_file { tr("Delete file") } else { tr("Restore this version") };
         let hint = if !cx.idle {
-            "Wait for the current action to finish."
+            tr("Wait for the current action to finish.")
         } else if cx.snapshot.operation.is_some() {
-            "Finish the current Git operation first."
+            tr("Finish the current Git operation first.")
         } else if !same_file {
-            "Git restores by path. This commit holds the file under another name."
+            tr("Git restores by path. This commit holds the file under another name.")
         } else {
-            "Replace this file with its version in the selected commit."
+            tr("Replace this file with its version in the selected commit.")
         };
         if widgets::labeled_button(ui, icon::ARROW_COUNTER_CLOCKWISE, label, enabled).on_hover_text(hint).clicked() {
             *restore = Some(pending_restore(cx, path, &selection.hash, selection.deletes_file));
         }
         let blame_enabled = !selection.deletes_file;
-        if widgets::labeled_button(ui, icon::ROWS, "Blame at this commit", blame_enabled).clicked() {
+        if widgets::labeled_button(ui, icon::ROWS, tr("Blame at this commit"), blame_enabled).clicked() {
             cx.open(Box::new(BlameWindow::new(path.to_string(), Some(selection.hash.clone()))));
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            crate::tools::widgets::checkbox(ui, true, split, "Side by side");
+            crate::tools::widgets::checkbox(ui, true, split, tr("Side by side"));
         });
     });
     ui.add_space(2.0);
     ui.separator();
     match selection.diff.get() {
-        None => widgets::loading(ui, "Loading change"),
+        None => widgets::loading(ui, tr("Loading change")),
         Some(Err(error)) => widgets::error(ui, &error.to_string()),
         Some(Ok(content)) => diff_view::show(ui, content, *split),
     }
@@ -273,28 +274,28 @@ fn confirm_restore(ui: &mut Ui, cx: &mut Ctx, restore: &mut Option<PendingRestor
     let mut decision = None;
     let response = egui::Modal::new(Id::unique(("file-history-restore", pending.path.as_str()))).show(ui.ctx(), |ui| {
         ui.set_width(440.0);
-        let title = if pending.removes_file { format!("Delete {}?", pending.path) } else { format!("Restore {}?", pending.path) };
+        let title = if pending.removes_file { tr_fmt!("Delete {path}?", path = pending.path) } else { tr_fmt!("Restore {path}?", path = pending.path) };
         ui.label(RichText::new(title).strong().size(16.0));
         ui.add_space(6.0);
         let message = if pending.removes_file {
-            format!(
-                "This file does not exist {}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.",
-                pending.description
+            tr_fmt!(
+                "This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.",
+                description = pending.description
             )
         } else {
-            format!(
-                "Your working copy of this file will be replaced with its version {}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.",
-                pending.description
+            tr_fmt!(
+                "Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.",
+                description = pending.description
             )
         };
         ui.label(message);
         ui.add_space(14.0);
         ui.horizontal(|ui| {
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 decision = Some(false);
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let action = if pending.removes_file { "Delete file" } else { "Restore file" };
+                let action = if pending.removes_file { tr("Delete file") } else { tr("Restore file") };
                 if widgets::danger_button(ui, action, idle).clicked() {
                     decision = Some(true);
                 }
@@ -307,11 +308,11 @@ fn confirm_restore(ui: &mut Ui, cx: &mut Ctx, restore: &mut Option<PendingRestor
     match decision {
         Some(true) => {
             if let Some(pending) = restore.take() {
-                let verb = if pending.removes_file { "Deleted" } else { "Restored" };
-                let label = format!("Restore {}", pending.path);
+                let verb = if pending.removes_file { tr("Deleted") } else { tr("Restored") };
+                let label = tr_fmt!("Restore {path}", path = pending.path);
                 cx.act(label, move |git, directory| {
                     git.restore(&pending.path, &pending.source, &pending.branch, pending.head.as_deref(), directory)?;
-                    Ok(Some(format!("{verb} {} {}.", pending.path, pending.description)))
+                    Ok(Some(tr_fmt!("{verb} {path} {description}.", verb = verb, path = pending.path, description = pending.description)))
                 });
                 *close = true;
             }

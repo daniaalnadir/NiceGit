@@ -1,0 +1,463 @@
+# es: tools and the repository pickers.
+Save as ZIP	Guardar como ZIP
+Writing {name}…	Escribiendo {name}…
+Saved {name} ({size}).	Se guardó {name} ({size}).
+{name} output	Salida de {name}
+The program printed nothing.	El programa no imprimió nada.
+Error output	Salida de error
+This file is not UTF-8 text, so it cannot be edited here.	Este archivo no es texto UTF-8, así que no se puede editar aquí.
+The file changed on disk since you opened it. Reload it, then reapply your edits.	El archivo cambió desde que lo abriste. Vuelve a cargarlo y aplica de nuevo tus cambios.
+{name} — edited	{name} — editado
+Saved {path}.	Se guardó {path}.
+Revert	Revertir
+Discard your edits and reload the file	Descartar tus cambios y volver a cargar el archivo
+File contents	Contenido del archivo
+Clean Up Branches	Limpiar ramas
+Clean up {count} branch	Limpiar {count} rama
+Clean up {count} branches	Limpiar {count} ramas
+Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.	Ramas locales fusionadas en {current}, cuya rama remota se eliminó o que llevan un tiempo sin confirmaciones.
+Also list unmerged branches with no commit for	Mostrar también las ramas no fusionadas sin confirmaciones desde hace
+ days	 días
+Deleted {count} branch.	{count} rama eliminada.
+Deleted {count} branches.	{count} ramas eliminadas.
+Undo	Deshacer
+Restore {count} branch	Restaurar {count} rama
+Restore {count} branches	Restaurar {count} ramas
+Finding branches…	Buscando ramas…
+No branches to clean up.	No hay ramas que limpiar.
+{count} to review	{count} por revisar
+Select merged	Seleccionar fusionadas
+Main branch	Rama principal
+The main line is never selected automatically. Tick it only if you mean to delete it.	La línea principal nunca se selecciona automáticamente. Márcala solo si de verdad quieres eliminarla.
+Merged	Fusionada
+Not merged	No fusionada
+Upstream gone	Upstream eliminado
+Its branch on the remote was deleted, as usually happens once a pull request is merged	Su rama en el remoto se eliminó, como suele pasar cuando se fusiona una pull request
+{count} selected branch is the main line. Deleting it removes that line of work locally.	{count} rama seleccionada es la línea principal. Eliminarla quita esa línea de trabajo en local.
+{count} selected branches are the main line. Deleting it removes that line of work locally.	{count} ramas seleccionadas son la línea principal. Eliminarla quita esa línea de trabajo en local.
+{count} selected branch has commits on no other branch. Undo can restore it until another deletion.	{count} rama seleccionada tiene confirmaciones que no están en ninguna otra rama. Deshacer puede restaurarla hasta la siguiente eliminación.
+{count} selected branches have commits on no other branch. Undo can restore them until another deletion.	{count} ramas seleccionadas tienen confirmaciones que no están en ninguna otra rama. Deshacer puede restaurarlas hasta la siguiente eliminación.
+Delete {count} branch…	Eliminar {count} rama…
+Delete {count} branches…	Eliminar {count} ramas…
+{count} selected	{count} seleccionadas
+Delete {count} local branch?	¿Eliminar {count} rama local?
+Delete {count} local branches?	¿Eliminar {count} ramas locales?
+Remote branches are not changed.	Las ramas remotas no cambian.
+Unmerged branches hold commits found on no other branch.	Las ramas no fusionadas contienen confirmaciones que no están en ninguna otra rama.
+Undo restores them until you take another undoable action.	Deshacer las restaura hasta que realices otra acción que se pueda deshacer.
+Delete, including unmerged	Eliminar, incluidas las no fusionadas
+Delete branches	Eliminar ramas
+Delete {count} branch	Eliminar {count} rama
+Delete {count} branches	Eliminar {count} ramas
+Deleted {count} branch. Undo restores them.	{count} rama eliminada. Deshacer la restaura.
+Deleted {count} branches. Undo restores them.	{count} ramas eliminadas. Deshacer las restaura.
+Deleted {deleted} of {total} before stopping. Undo restores those. {error}	{deleted} de {total} eliminadas antes de detenerse. Deshacer restaura esas. {error}
+Restored {restored} of {total} before stopping. {error}	{restored} de {total} restauradas antes de detenerse. {error}
+Restored {count} branch.	{count} rama restaurada.
+Restored {count} branches.	{count} ramas restauradas.
+{count}+ commits	{count}+ confirmaciones
+{count} commit	{count} confirmación
+{count} commits	{count} confirmaciones
+{first} on {other} that {current} does not have · {second} on {current} that {other} does not have	{first} en {other} que {current} no tiene · {second} en {current} que {other} no tiene
+These branches share no history.	Estas ramas no comparten historial.
+Changed files…	Archivos modificados…
+The files that merging {branch} would change	Los archivos que cambiaría fusionar {branch}
+No commits.	Sin confirmaciones.
+Only the newest {count} are listed.	Solo se muestran las {count} más recientes.
+{other} and {current}	{other} y {current}
+Comparing the branches…	Comparando las ramas…
+On {other} but not on {current}	En {other}, pero no en {current}
+On {current} but not on {other}	En {current}, pero no en {other}
+Search commit messages	Buscar en los mensajes de confirmación
+Search author names and emails	Buscar nombres y correos de autores
+Text added or removed in a file	Texto añadido o eliminado en un archivo
+Full or abbreviated commit ID	ID de confirmación completo o abreviado
+Code change	Cambio de código
+Commit ID	ID de confirmación
+Search commits	Buscar confirmaciones
+Press Return to search every branch, including history not yet loaded in the graph.	Pulsa Return para buscar en todas las ramas, incluido el historial que aún no se ha cargado en el gráfico.
+Searching	Buscando…
+No commits found	No se encontraron confirmaciones
+Showing the newest {limit} matches	Mostrando las {limit} coincidencias más recientes
+Open {hash} in the inspector	Abrir {hash} en el inspector
+Before	Antes
+After	Después
+Added in this change	Añadido en este cambio
+Deleted in this change	Eliminado en este cambio
+Compare	Comparar
+Comparing files	Comparando archivos…
+No differences in tracked files	No hay diferencias en los archivos rastreados
+working files	archivos de trabajo
+{count} changed file	{count} archivo modificado
+{count} changed files	{count} archivos modificados
+Comparison unavailable	Comparación no disponible
+Comparing…	Comparando…
+Select a file to see how it changed	Selecciona un archivo para ver cómo cambió
+Side by side	Lado a lado
+Loading the change	Cargando el cambio…
+{title} image	Imagen {title}
+This format cannot be previewed	Este formato no se puede previsualizar
+{bytes} bytes	{bytes} bytes
+commit {revision}	Confirmación {revision}
+Find in {label}	Buscar en {label}
+Text in files	Texto en los archivos
+Match case	Distinguir mayúsculas
+Searching {label}	Buscando en {label}…
+Press Return to search every tracked text file.	Pulsa Return para buscar en todos los archivos de texto rastreados.
+No matches	Sin coincidencias
+First {limit} matches	Las primeras {limit} coincidencias
+{matches} in {files}	{matches} en {files}
+{count} match	{count} coincidencia
+{count} matches	{count} coincidencias
+{count} file	{count} archivo
+Blame	Culpa
+Show who last changed this line	Mostrar quién modificó por última vez esta línea
+File history: {name}	Historial de archivo: {name}
+Latest {limit} commits	Últimas {limit} confirmaciones
+Select a commit to see how it changed this file.	Selecciona una confirmación para ver cómo cambió este archivo.
+in commit {revision}	en la confirmación {revision}
+Reading history	Leyendo el historial…
+No commits in this checkout changed this file.	Ninguna confirmación de esta copia de trabajo cambió este archivo.
+As {path}	Como {path}
+Delete file to this version…	Eliminar el archivo en esta versión…
+Restore file to this version…	Restaurar el archivo a esta versión…
+Blame at this commit	Culpa en esta confirmación
+Copy commit hash	Copiar hash de la confirmación
+Delete file	Eliminar archivo
+Restore this version	Restaurar esta versión
+Restore file	Restaurar archivo
+Finish the current Git operation first.	Termina primero la operación de Git en curso.
+Git restores by path. This commit holds the file under another name.	Git restaura por ruta. Esta confirmación tiene el archivo con otro nombre.
+Replace this file with its version in the selected commit.	Reemplaza este archivo por su versión en la confirmación seleccionada.
+Loading change	Cargando el cambio…
+Delete {path}?	¿Eliminar {path}?
+Restore {path}?	¿Restaurar {path}?
+This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.	Este archivo no existe {description}. Se eliminará de tus archivos de trabajo y la eliminación quedará preparada. Se perderán los cambios sin confirmar en él. Tus confirmaciones y demás archivos no cambian.
+Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.	La copia de trabajo de este archivo se reemplazará por su versión {description}, y el cambio quedará preparado. Se perderán los cambios preparados o sin preparar en él. Tus confirmaciones y demás archivos no cambian.
+Deleted	Eliminado
+Restored	Restaurado
+{verb} {path} {description}.	{verb} {path} {description}.
+Restore {path}	Restaurar {path}
+Soft: keep changes staged	Soft: mantener los cambios preparados
+Mixed: keep changes unstaged	Mixto: mantener los cambios sin preparar
+Hard: discard local changes	Hard: descartar los cambios locales
+Moves the branch without changing the index or working files. Changes from the removed commits remain staged.	Mueve la rama sin cambiar el índice ni los archivos de trabajo. Los cambios de las confirmaciones eliminadas siguen preparados.
+Moves the branch and resets the index. Working files are kept, and the changes become unstaged.	Mueve la rama y restablece el índice. Los archivos de trabajo se conservan, y los cambios pasan a estar sin preparar.
+Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.	Mueve la rama y reemplaza el índice y los archivos rastreados. Se perderán los cambios sin confirmar en archivos rastreados. Los archivos no rastreados que bloquean las rutas restauradas también pueden eliminarse.
+Reset to {target}	Restablecer a {target}
+Moves {branch} to this commit.	Mueve {branch} a esta confirmación.
+Mode	Modo
+Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.	Un reset hard descarta los cambios sin confirmar en los archivos rastreados. No se puede deshacer desde el panel de cambios de NiceGit.
+The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.	La rama apuntará a la confirmación seleccionada. Las confirmaciones fuera de su historial ya no estarán en esta rama. Las ramas remotas no cambian.
+Reset and discard changes	Restablecer y descartar cambios
+Reset branch	Restablecer rama
+Waiting for the current action	Esperando la acción actual
+Reset {branch}	Restablecer {branch}
+Reset {branch} to {target}.	{branch} restablecida a {target}.
+Reset	Restablecer
+line {start}	línea {start}
+lines {start}–{end}	líneas {start}–{end}
+History of {file} {lines}	Historial de {file}, {lines}
+Select a commit to see how it changed these lines.	Selecciona una confirmación para ver cómo cambió estas líneas.
+Uncommitted changes are not included.	Los cambios sin confirmar no están incluidos.
+No commits changed these lines.	Ninguna confirmación cambió estas líneas.
+GitFlow	GitFlow
+Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.	Ramas para versiones, desarrollo continuo y trabajo de corta duración, compatibles con la herramienta git-flow.
+Reading GitFlow settings…	Leyendo la configuración de GitFlow…
+Production branch	Rama de producción
+Development branch	Rama de desarrollo
+Feature prefix	Prefijo de funciones
+Release prefix	Prefijo de versiones
+Hotfix prefix	Prefijo de hotfixes
+Version tag prefix	Prefijo de etiquetas de versión
+The production and development branches need different names.	Las ramas de producción y de desarrollo necesitan nombres distintos.
+Set up GitFlow	Configurar GitFlow
+GitFlow is set up.	GitFlow está configurado.
+Production  {branch}	Producción  {branch}
+Development  {branch}	Desarrollo  {branch}
+Start	Iniciar
+Finish	Finalizar
+Feature name	Nombre de la función
+Version, such as 1.2.0	Versión, por ejemplo 1.2.0
+Creates {name} from {base} and checks it out.	Crea {name} desde {base} y lo activa.
+Feature	Funcionalidad
+Release	Versión
+Hotfix	Hotfix
+feature	funcionalidad
+release	versión
+hotfix	hotfix
+Start {kind}	Iniciar {kind}
+Start {kind} {name}	Iniciar {kind} {name}
+Started {branch}.	{branch} iniciada.
+Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.	Activa una rama {feature}…, {release}… o {hotfix}… para finalizarla.
+Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Fusiona {branch} en {develop} sin avance rápido y luego elimina {branch}. Si hay conflictos, NiceGit se detiene para que los resuelvas y vuelvas a finalizar.
+Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	Fusiona {branch} en {main} y {develop} sin avance rápido, pone la etiqueta {tag_prefix}{version} en {main} y luego elimina {branch}. Si hay conflictos, NiceGit se detiene para que los resuelvas y vuelvas a finalizar.
+Tag message (optional)	Mensaje de la etiqueta (opcional)
+Commit or stash your changes before finishing.	Confirma o guarda en stash tus cambios antes de finalizar.
+Finish {branch}	Finalizar {branch}
+Git Settings	Ajustes de Git
+Settings saved in this repository's own Git configuration.	Ajustes guardados en la configuración de Git de este repositorio.
+Filter settings	Filtrar ajustes
+Read the settings again	Volver a leer los ajustes
+Reading the settings…	Leyendo los ajustes…
+No settings are saved in this repository yet. Add one below.	Este repositorio aún no tiene ajustes guardados. Añade uno abajo.
+No setting matches the filter.	Ningún ajuste coincide con el filtro.
+Remove {key}	Quitar {key}
+Edit {key}	Editar {key}
+Setting value	Valor del ajuste
+Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.	¿Quitar {key}? Git elimina este ajuste de este repositorio. Los demás ajustes no cambian.
+Has several values; edit in a terminal	Tiene varios valores; edítalo en una terminal
+Global settings, read only	Ajustes globales, solo lectura
+From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.	De tu configuración global de Git, que se aplica a todos los repositorios. Cámbialos en una terminal con git config --global.
+Reading global settings…	Leyendo los ajustes globales…
+Add a setting	Añadir un ajuste
+section.name	section.name
+Setting name	Nombre del ajuste
+Value	Valor
+Add	Añadir
+{key} is already set. Edit its row instead.	{key} ya está definido. Edita su fila en su lugar.
+Set {key}	Establecer {key}
+Set {key}.	{key} establecido.
+Removed {key}.	{key} eliminado.
+Jan	ene
+Feb	feb
+Mar	mar
+Apr	abr
+May	may
+Jun	jun
+Jul	jul
+Aug	ago
+Sep	sept
+Oct	oct
+Nov	nov
+Dec	dic
+{day} {month} {year}	{day} de {month} de {year}
+Period	Período
+30 days	30 días
+90 days	90 días
+1 year	1 año
+All time	Todo el tiempo
+This branch	Esta rama
+All branches	Todas las ramas
+Reading history… {count} commits so far	Leyendo el historial… {count} confirmaciones hasta ahora
+Insights	Estadísticas
+Reading the history was cancelled.	La lectura del historial se canceló.
+Read again	Volver a leer
+No commits in this period.	No hay confirmaciones en este período.
+Showing the newest 20,000 commits.	Se muestran las 20.000 confirmaciones más recientes.
+{first} – {last}	{first} – {last}
+Commits	Confirmaciones
+Authors	Autores
+Active days	Días activos
+First to last commit	Del primer a la última confirmación
+Commits over time	Confirmaciones a lo largo del tiempo
+Week of {date}: {commits}	Semana del {date}: {commits}
+{date}: {commits}	{date}: {commits}
+Lines	Líneas
+Last active	Última actividad
+Most changed files	Archivos más modificados
+No files changed in this period.	No se modificaron archivos en este período.
+Open its history	Abrir su historial
+{count} lines	{count} líneas
+Folders	Carpetas
+just now	justo ahora
+{count} minute ago	hace {count} minuto
+{count} minutes ago	hace {count} minutos
+{count} hour ago	hace {count} hora
+{count} hours ago	hace {count} horas
+{count} day ago	hace {count} día
+{count} days ago	hace {count} días
+{count} month ago	hace {count} mes
+{count} months ago	hace {count} meses
+{count} year ago	hace {count} año
+{count} years ago	hace {count} años
+Tip history of {branch}	Historial de puntas de {branch}
+Recover Lost Work	Recuperar trabajo perdido
+Every commit {branch} has pointed to, including ones it no longer points to.	Cada confirmación a la que ha apuntado {branch}, incluidas las que ya no señala.
+Every position HEAD has had, including commits that no branch points to any more.	Cada posición que ha tenido HEAD, incluidas las confirmaciones que ya no señala ninguna rama.
+Read the reflog again	Volver a leer el reflog
+Reading the reflog…	Leyendo el reflog…
+No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.	Sin historial de puntas. Git no guarda reflog para esta rama, así que sus puntas anteriores no se registran.
+No history yet.	Todavía no hay historial.
+Not on any branch	En ninguna rama
+Only the reflog keeps this commit. Git may delete it after the reflog expires.	Solo el reflog conserva esta confirmación. Git podría eliminarla cuando el reflog caduque.
+Create branch here…	Crear rama aquí…
+Reset {name} to here…	Restablecer {name} aquí…
+Select an entry to see its commit.	Selecciona una entrada para ver su confirmación.
+Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.	Solo el reflog conserva esta confirmación. Git podría eliminarla cuando el reflog caduque. Crea una rama para conservarla.
+Show in graph	Mostrar en el gráfico
+Copy hash	Copiar hash
+Create branch at {hash}	Crear rama en {hash}
+The branch keeps this commit and its history. Your current checkout does not change.	La rama conserva esta confirmación y su historial. Tu copia de trabajo actual no cambia.
+Branch name	Nombre de la rama
+Create branch	Crear rama
+Create branch {name}	Crear la rama {name}
+Created branch {name}.	Rama {name} creada.
+{count} change	{count} cambio
+{count} changes	{count} cambios
+(some changes)	(algunos cambios)
+moves as a whole	se mueve como un todo
+Hide the changes	Ocultar los cambios
+Show the changes	Mostrar los cambios
+Change {number}	Cambio {number}
+{count} more lines	{count} líneas más
+Split commit	Dividir confirmación
+Rewrites {branch} as two commits. The commits after it are replayed.	Reescribe {branch} como dos confirmaciones. Las confirmaciones posteriores se reproducen.
+Reading the commit's changes	Leyendo los cambios de la confirmación…
+This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.	Esta confirmación ya está en un remoto. Dividirla la reescribe, así que tendrás que hacer force-push y quienes la tengan deben reconciliar su copia.
+Changes in the first commit	Cambios en la primera confirmación
+This commit has no changes to split.	Esta confirmación no tiene cambios que dividir.
+{first} in the first commit, {second} in the second.	{first} en la primera confirmación, {second} en la segunda.
+First commit	Primera confirmación
+Second commit	Segunda confirmación
+First commit message	Mensaje de la primera confirmación
+Second commit message	Mensaje de la segunda confirmación
+Wait for the current Git action to finish	Espera a que termine la acción de Git actual
+Check out a branch first	Activa primero una rama
+Check at least one change for the first commit	Marca al menos un cambio para la primera confirmación
+Leave at least one change for the second commit	Deja al menos un cambio para la segunda confirmación
+Both commits need a message	Ambas confirmaciones necesitan un mensaje
+Rewrites the commit as two commits	Reescribe la confirmación como dos confirmaciones
+Split {hash}	Dividir {hash}
+Split {hash} into two commits.	{hash} dividida en dos confirmaciones.
+No worktrees were listed for this repository.	No se listó ningún worktree para este repositorio.
+Remove worktree {path}	Eliminar el worktree {path}
+Removed the worktree. Its branch was kept.	Se eliminó el worktree. Su rama se conservó.
+A worktree folder no longer exists on disk. Forget it to remove it from Git's list.	Una carpeta de worktree ya no existe en el disco. Olvídala para quitarla de la lista de Git.
+{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.	{count} carpetas de worktree ya no existen en el disco. Olvídalas para quitarlas de la lista de Git.
+Forgot the missing worktrees.	Se olvidaron los worktrees ausentes.
+Create a worktree	Crear un worktree
+Check a local branch out in its own folder, so you can work on it without switching this checkout.	Activa una rama local en su propia carpeta para trabajar en ella sin cambiar esta copia de trabajo.
+Every local branch is already checked out. Create a branch first.	Todas las ramas locales ya están activas. Crea primero una rama.
+Choose a branch	Elegir una rama
+Parent folder	Carpeta superior
+Choose folder	Elegir carpeta
+Choose where the new worktree folder goes	Elige dónde va la nueva carpeta del worktree
+Type a path or choose a folder	Escribe una ruta o elige una carpeta
+Folder name	Nombre de la carpeta
+feature-branch	feature-branch
+Creates {path}	Crea {path}
+Checking the branch	Comprobando la rama…
+Create worktree	Crear worktree
+Create worktree for {name}	Crear worktree para {name}
+Created a worktree for {name} at {path}.	Worktree para {name} creado en {path}.
+{name} moved after it was selected. Choose it again and review it.	{name} cambió después de seleccionarla. Elígela de nuevo y revísala.
+Could not read {name}: {error}	No se pudo leer {name}: {error}
+A linked worktree checks out another branch in its own folder and shares this repository's history.	Un worktree vinculado activa otra rama en su propia carpeta y comparte el historial de este repositorio.
+Main	Principal
+Open here	Abierto aquí
+Locked	Bloqueado
+Missing	Ausente
+Bare repository	Repositorio desnudo
+Detached HEAD	HEAD separado
+A locked worktree must be unlocked in a terminal before it can be removed	Un worktree bloqueado debe desbloquearse en una terminal antes de eliminarlo
+The main worktree and the checkout open here cannot be removed	El worktree principal y la copia abierta aquí no se pueden eliminar
+Remove this worktree and its folder	Eliminar este worktree y su carpeta
+Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.	¿Eliminar este worktree y su carpeta? Git lo rechaza si la carpeta tiene archivos sin confirmar o sin rastrear. La rama se conserva.
+Remove worktree	Eliminar worktree
+Choose a remote to see its GitHub pull requests and issues.	Elige un remoto para ver sus pull requests e issues de GitHub.
+Checking the GitHub CLI	Comprobando la CLI de GitHub…
+Read GitHub again	Volver a leer GitHub
+Pull requests	Pull requests
+Issues	Issues
+pull requests	pull requests
+issues	issues
+Closed	Cerradas
+all	todas
+Filter loaded items by title, author, or number	Filtrar los elementos cargados por título, autor o número
+No {state} {kind}	No hay {kind} {state}
+No matches in the loaded items	Ninguna coincidencia en los elementos cargados
+Load more	Cargar más
+Showing the first 1,000 items	Se muestran los primeros 1.000 elementos
+Back to the newer blame	Volver al blame más reciente
+at {revision}	en {revision}
+at {revision} ({summary})	en {revision} ({summary})
+Ignore whitespace	Ignorar espacios
+Attribute lines past whitespace-only changes to the commit that changed their content	Atribuye las líneas tras cambios solo de espacios al commit que cambió su contenido
+Skip commits in .git-blame-ignore-revs	Omitir commits en .git-blame-ignore-revs
+Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does.	Las líneas cambiadas solo por los commits que este repositorio lista en .git-blame-ignore-revs, como reformateos, se atribuyen al cambio anterior, igual que hace el blame de GitHub.
+Blame: {name}	Blame: {name}
+Reading blame	Leyendo el blame…
+The ignore list could not be used, so every commit is shown: {reason}	La lista de exclusión no se pudo usar, así que se muestran todos los commits: {reason}
+Uncommitted	Sin confirmar
+Your working changes	Tus cambios de trabajo
+Blame at HEAD	Blame en HEAD
+Show commit in history	Mostrar la confirmación en el historial
+Copy commit ID	Copiar ID de la confirmación
+History of {lines}…	Historial de {lines}…
+This commit has no earlier version of the file	Esta confirmación no tiene una versión anterior del archivo
+Blame before this change	Blame antes de este cambio
+Close this change	Cerrar este cambio
+Shell	Shell
+{title} (exited)	{title} (finalizado)
+[Process exited with status {code}]	[Proceso terminado con el estado {code}]
+[Process exited]	[Proceso terminado]
+Restart	Reiniciar
+Could not start a shell: {error}	No se pudo iniciar una shell: {error}
+New shell tab	Nueva pestaña de shell
+End this shell…	Finalizar este shell…
+End this shell? Programs running in it stop.	¿Finalizar este shell? Los programas que se ejecutan en él se detendrán.
+End shell	Finalizar shell
+No shell open	No hay ninguna shell abierta
+Give the workspace a name.	Dale un nombre al espacio de trabajo.
+Another workspace already has this name.	Otro espacio de trabajo ya tiene este nombre.
+{count} repository	{count} repositorio
+{count} repositories	{count} repositorios
+Save open tabs as workspace…	Guardar las pestañas abiertas como espacio de trabajo…
+Open workspace	Abrir espacio de trabajo
+Manage workspaces…	Administrar espacios de trabajo…
+Workspaces	Espacios de trabajo
+Save workspace	Guardar espacio de trabajo
+Workspace name	Nombre del espacio de trabajo
+Replace workspace {name}?	¿Reemplazar el espacio de trabajo {name}?
+It will hold the {count} open now instead of the folders it holds. Folders on disk are not changed.	Contendrá los {count} abiertos ahora en lugar de las carpetas que contiene. Las carpetas del disco no cambian.
+Saved workspace {name} with {count}.	Espacio de trabajo {name} guardado con {count}.
+Workspace {name} has {missing}, which did not open: {list}.	El espacio de trabajo {name} tiene {missing} que no se pudieron abrir: {list}.
+{count} missing folder	{count} carpeta ausente
+{count} missing folders	{count} carpetas ausentes
+Every repository in workspace {name} is already open.	Todos los repositorios del espacio de trabajo {name} ya están abiertos.
+Opened workspace {name}.	Espacio de trabajo {name} abierto.
+Deleted workspace {name}. Its folders are unchanged.	Espacio de trabajo {name} eliminado. Sus carpetas no cambian.
+Name of {name}	Nombre de {name}
+Renamed workspace {from} to {to}.	Espacio de trabajo {from} renombrado a {to}.
+Delete workspace {name}?	¿Eliminar el espacio de trabajo {name}?
+The saved list is removed. Its folders stay on disk, and any tabs open from it stay open.	Se elimina la lista guardada. Sus carpetas permanecen en el disco y las pestañas abiertas desde él siguen abiertas.
+Find repositories	Buscar repositorios
+Looking for repositories…	Buscando repositorios…
+No repositories found	No se encontraron repositorios
+No repositories found in {folder}.	No se encontraron repositorios en {folder}.
+Found {repositories} in {folder}	{repositories} encontrados en {folder}
+Showing the first {count}. Choose a folder inside this one to find the rest.	Se muestran los primeros {count}. Elige una carpeta dentro de esta para encontrar el resto.
+Select all	Seleccionar todo
+Select none	No seleccionar ninguno
+Also open them as tabs	Abrirlos también como pestañas
+Opening many tabs reads each repository in the background.	Abrir muchas pestañas lee cada repositorio en segundo plano.
+Add {count} to Recent	Añadir {count} a Recientes
+Not a repository	No es un repositorio
+This folder isn't a repository. Look for repositories inside it?	Esta carpeta no es un repositorio. ¿Buscar repositorios dentro?
+Find	Buscar
+Find repositories in a folder	Buscar repositorios en una carpeta
+Added {count} to Recent.	{count} añadido(s) a Recientes.
+Added {added} of {total} to Recent. Recent keeps only the {limit} newest.	{added} de {total} añadidos a Recientes. Recientes solo conserva los {limit} más recientes.
+The repositories were not opened as tabs, because an action is running.	Los repositorios no se abrieron como pestañas porque hay una acción en curso.
+The repositories were not opened as tabs, because a file is being edited.	Los repositorios no se abrieron como pestañas porque se está editando un archivo.
+Opened {count} as tabs.	{count} abierto(s) como pestañas.
+Host	Host
+Use SSH	Usar SSH
+Filter repositories	Filtrar repositorios
+Loading your repositories from GitHub	Cargando tus repositorios de GitHub…
+GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.	La CLI de GitHub no tiene sesión iniciada en {host}. Ejecuta {command} en una terminal y vuelve a comprobarlo.
+No repositories on this host	No hay repositorios en este host
+Showing the first {count} repositories. Filter to narrow them.	Se muestran los primeros {count} repositorios. Filtra para acotarlos.
+No repositories match the filter	Ningún repositorio coincide con el filtro
+Private	Privado
+Fork	Fork
+Type a file name	Escribe un nombre de archivo
+Loading files…	Cargando archivos…
+Type to find a file	Escribe para buscar un archivo
+Enter history · {command}-Enter blame · {alt}-Enter edit	Intro para el historial · {command}-Intro para blame · {alt}-Intro para editar
+Delete {name}	Eliminar {name}
+Rename {name}	Renombrar {name}
+No saved workspaces. Save the open tabs as one from the Workspaces menu in the repositories column.	No hay espacios de trabajo guardados. Guarda las pestañas abiertas como uno desde el menú Espacios de trabajo de la columna de repositorios.
+Reading history…	Leyendo el historial…
+working file	archivo de trabajo

@@ -10,6 +10,7 @@
 //! shells, and opening the terminal again for the same repository reattaches to them. Closing
 //! a tab other than the last one ends its shell.
 
+use crate::i18n::{tr, tr_fmt};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io;
@@ -167,9 +168,9 @@ impl TerminalSession {
 
     /// The window title the shell set, or "Shell", with " (exited)" once the shell has ended.
     pub fn title(&self) -> String {
-        let title = lock(&self.shared.title).clone().unwrap_or_else(|| "Shell".to_string());
+        let title = lock(&self.shared.title).clone().unwrap_or_else(|| tr("Shell").to_string());
         if self.is_exited() {
-            format!("{title} (exited)")
+            tr_fmt!("{title} (exited)", title = title)
         } else {
             title
         }
@@ -199,11 +200,11 @@ impl TerminalSession {
             ui.horizontal(|ui| {
                 if exited {
                     let status = match self.exit_code() {
-                        Some(code) => format!("[Process exited with status {code}]"),
-                        None => "[Process exited]".to_string(),
+                        Some(code) => tr_fmt!("[Process exited with status {code}]", code = code),
+                        None => tr("[Process exited]").to_string(),
                     };
                     ui.label(RichText::new(status).color(theme::of(ui).muted));
-                    restart = ui.button("Restart").clicked();
+                    restart = ui.button(tr("Restart")).clicked();
                 }
                 if let Some(error) = &self.restart_error {
                     widgets::error(ui, error);
@@ -213,7 +214,7 @@ impl TerminalSession {
         if restart {
             match TerminalSession::new(ui.ctx(), &self.cwd) {
                 Ok(session) => *self = session,
-                Err(err) => self.restart_error = Some(format!("Could not start a shell: {err}")),
+                Err(err) => self.restart_error = Some(tr_fmt!("Could not start a shell: {error}", error = err)),
             }
         }
 
@@ -879,7 +880,7 @@ fn add_tab(group: &mut Group, ctx: &egui::Context) {
             group.active = group.tabs.len() - 1;
             group.error = None;
         }
-        Err(err) => group.error = Some(format!("Could not start a shell: {err}")),
+        Err(err) => group.error = Some(tr_fmt!("Could not start a shell: {error}", error = err)),
     }
 }
 
@@ -943,7 +944,7 @@ impl ToolWindow for TerminalWindow {
     }
 
     fn title(&self) -> String {
-        "Terminal".to_string()
+        tr("Terminal").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -968,24 +969,24 @@ impl ToolWindow for TerminalWindow {
                 if ui.selectable_label(index == group.active, session.title()).clicked() {
                     actions.push(TabAction::Select(index));
                 }
-                if widgets::icon_button(ui, icon::X, "Close tab", true).clicked() {
+                if widgets::icon_button(ui, icon::X, tr("Close tab"), true).clicked() {
                     actions.push(TabAction::Close(index));
                 }
             }
-            if widgets::icon_button(ui, icon::PLUS, "New shell tab", true).clicked() {
+            if widgets::icon_button(ui, icon::PLUS, tr("New shell tab"), true).clicked() {
                 actions.push(TabAction::Add);
             }
             let running = group.tabs.get(group.active).is_some_and(|session| !session.is_exited());
-            if widgets::icon_button(ui, icon::STOP, "End this shell…", running).clicked() {
+            if widgets::icon_button(ui, icon::STOP, tr("End this shell…"), running).clicked() {
                 self.confirm_stop = true;
             }
             if self.confirm_stop {
-                ui.label(RichText::new("End this shell? Programs running in it stop.").color(theme::of(ui).warning));
-                if widgets::danger_button(ui, "End shell", true).clicked() {
+                ui.label(RichText::new(tr("End this shell? Programs running in it stop.")).color(theme::of(ui).warning));
+                if widgets::danger_button(ui, tr("End shell"), true).clicked() {
                     actions.push(TabAction::Stop);
                     self.confirm_stop = false;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     self.confirm_stop = false;
                 }
             }
@@ -1017,7 +1018,7 @@ impl ToolWindow for TerminalWindow {
         }
         match group.tabs.get_mut(group.active) {
             Some(session) => session.ui(ui),
-            None => widgets::empty_state(ui, icon::TERMINAL, "No shell open"),
+            None => widgets::empty_state(ui, icon::TERMINAL, tr("No shell open")),
         }
     }
 

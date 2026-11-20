@@ -1,0 +1,222 @@
+# ja: 通知、ダイアログ、コマンドパレット、ショートカット、更新、Claude による下書き。
+That name cannot be used. Names cannot contain spaces, "..", "~", "^", ":", "?", "*", or "[", or end with ".lock" or "/".	この名前は使えません。名前にスペース、".."、"~"、"^"、":"、"?"、"*"、"[" を含めることはできず、".lock" や "/" で終えることもできません。
+A branch with that name already exists. Choose another name, or check out the existing branch.	同じ名前のブランチが既にあります。別の名前を選ぶか、既存のブランチに切り替えてください。
+A tag with that name already exists. Choose another name, or delete the old tag first.	同じ名前のタグが既にあります。別の名前を選ぶか、先に古いタグを削除してください。
+That folder already has files in it. Choose a new or empty folder.	このフォルダーには既にファイルがあります。新しい空のフォルダーを選んでください。
+A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.	リモートの同名のタグは別のコミットを指しているため、Git はあなたのタグで置き換えません。
+The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.	リモートがあなたの SSH キーを受け付けませんでした。キーがアカウントに登録され、ssh-agent に読み込まれているか確認してください。
+The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.	リモートがサインインを受け付けませんでした。HTTPS の場合は資格情報ヘルパーでサインインしてください（gh auth login で GitHub 用に設定できます）。SSH の場合はキーを確認してください。
+The remote could not be reached. Check your internet connection, and that the remote's address is right.	リモートに接続できませんでした。インターネット接続と、リモートのアドレスが正しいか確認してください。
+The remote repository was not found, or your account cannot see it. Check its address and your access.	リモートのリポジトリが見つからないか、アカウントからは見えません。アドレスとアクセス権を確認してください。
+your files	ファイル
+Save or close the file you are editing before opening another repository.	編集中のファイルを保存するか閉じてから、別のリポジトリを開いてください。
+Drop a folder to open it, or a patch to apply it	フォルダーをドロップして開く、またはパッチをドロップして適用します
+Drop a folder to open it as a repository, or a .patch or .diff file to apply it.	フォルダーをドロップするとリポジトリとして開き、.patch または .diff ファイルをドロップすると適用します。
+Open a repository before applying a patch.	パッチを適用する前にリポジトリを開いてください。
+Save or close the file you are editing before switching repositories.	編集中のファイルを保存するか閉じてから、リポジトリを切り替えてください。
+Open a Git repository	Git リポジトリを開く
+A Git hook stopped the commit.	Git のフックがコミットを止めました。
+The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.	前回のフェッチ以降にリモートのブランチが変わったため、何もプッシュされませんでした。フェッチして内容を確認し、もう一度試してください。
+Your commit was made, but the push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	コミットは作成されましたが、リモートにこのブランチにないコミットがあるためプッシュは拒否されました。それらをマージするかリベースしてから、再度プッシュしてください。
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.	リモートにこのブランチにないコミットがあるため、プッシュは拒否されました。それらをマージするかリベースしてから、再度プッシュしてください。
+The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again. If you rewrote commits that were already pushed, use Force push… instead.	リモートにこのブランチにないコミットがあるため、プッシュは拒否されました。それらをマージするかリベースしてから、再度プッシュしてください。既にプッシュ済みのコミットを書き換えた場合は、代わりに「強制プッシュ…」を使ってください。
+its upstream	上流ブランチ
+Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them.	ブランチと {upstream} の両方が変更されているため、プルではブランチを単純に進められません。{upstream} のコミットをマージするか、その上にリベースしてください。
+Stage or discard your unstaged changes before continuing.	続行する前に、ステージしていない変更をステージするか破棄してください。
+Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead.	Git が {files} への変更を上書きしてしまいます。代わりに NiceGit が stash を上に適用できます。
+Git would overwrite your changes to {files}. Commit or stash them, then try again.	Git が {files} への変更を上書きしてしまいます。コミットまたは stash してから、もう一度試してください。
+{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again.	{label} は同じファイルのコミットされていない変更を上書きするため、Git が停止しました。stash するかコミットしてから、もう一度試してください。
+Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.	コミットするには Git に名前とメールアドレスが必要です。リポジトリの設定で、このリポジトリ用またはプロファイルとして設定してください。
+The {operation} stopped at conflicts in {files}. Resolve them from the banner above the history, then continue, or abort to go back.	{operation} が {files} で競合して停止しました。履歴の上の表示から解決して続行するか、中止して元に戻してください。
+1 file	1 個のファイル
+Git reused 1 recorded resolution. Check it before continuing.	Git は記録された解決を 1 件再利用しました。続行する前に確認してください。
+Git reused {count} recorded resolutions. Check them before continuing.	Git は記録された解決を {count} 件再利用しました。続行する前に確認してください。
+Could not read the commit message: {error}	コミットメッセージを読み取れませんでした: {error}
+Commit {hash}	コミット {hash}
+That file is not listed for this commit. Select the commit again.	このファイルはこのコミットに含まれていません。コミットを選び直してください。
+Save a copy	コピーを保存
+That file is not listed for this stash. Select the stash again.	このファイルはこの stash に含まれていません。stash を選び直してください。
+Switch to {name}	{name} に切り替え
+Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.	{name} に切り替えました。コミットされていない変更は stash に保存されました。必要になったら「Stashes」から適用してください。
+Switched to {name}.	{name} に切り替えました。
+Amended the last commit.	直前のコミットを修正しました。
+Fixup commit	fixup コミット
+Committed a fixup for {short}. An interactive rebase can fold it in.	{short} の fixup コミットを作成しました。インタラクティブリベースで取り込めます。
+The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again.	コミットが止まった後にブランチが変わったため、何もコミットされませんでした。内容を確認して、もう一度コミットしてください。
+Committed and pushed.	コミットしてプッシュしました。
+Pulled the latest changes.	最新の変更をプルしました。
+Add a remote in Repository Settings before pushing.	プッシュする前に、リポジトリの設定でリモートを追加してください。
+Pushed.	プッシュしました。
+Fetched from all remotes.	すべてのリモートからフェッチしました。
+Fetched {remote}.	{remote} からフェッチしました。
+Restored your changes to {name}.	{name} の変更を復元しました。
+{verb} {title}	{verb} {title}
+Save or close the file you are editing before opening the merge tool.	マージツールを開く前に、編集中のファイルを保存するか閉じてください。
+A merge tool is already open. Close it first.	マージツールは既に開いています。先に閉じてください。
+Opened the merge tool for {path}.	{path} のマージツールを開きました。
+Resolve {path} in merge tool	{path} をマージツールで解決
+Closed the merge tool for {path}.	{path} のマージツールを閉じました。
+The merge tool for {path} exited without resolving it.	{path} のマージツールは解決せずに終了しました。
+Could not wait for the merge tool: {error}	マージツールの終了を待てませんでした: {error}
+Save or discard your edits before closing the editor.	エディターを閉じる前に、編集内容を保存するか破棄してください。
+Cloned into {path}.	{path} にクローンしました。
+Clone failed: {error}	クローンに失敗しました: {error}
+Read tags	タグを読み込み中
+Could not read the tags on {remote}: {error}	{remote} のタグを読み取れませんでした: {error}
+Every local tag is already on {remote}.	ローカルのタグはすべて {remote} にあります。
+No local tags are missing from {remote}. {count} differ there and were not pushed.	{remote} に不足しているローカルのタグはありません。{count} 件は内容が異なるため、プッシュしませんでした。
+Push tags	タグをプッシュ
+There are no local branches to push.	プッシュするローカルブランチがありません。
+Push branches	ブランチをプッシュ
+Mark bisect	bisect をマーク
+Forgot missing worktrees.	見つからないワークツリーを削除リストから外しました。
+Forget missing worktrees	見つからないワークツリーを削除リストから外す
+This repository now commits as {name} <{email}>.	このリポジトリは {name} <{email}> としてコミットするようになりました。
+Older undo steps were cleared because the repository changed.	リポジトリが変更されたため、古い元に戻す操作の履歴を消去しました。
+Older redo steps were cleared because the repository changed.	リポジトリが変更されたため、古いやり直しの履歴を消去しました。
+{done}Refreshing the repository failed: {error}	{done}リポジトリの更新に失敗しました: {error}
+Force push…	強制プッシュ…
+Replace the remote branch with yours, if no one pushed since you last fetched	前回のフェッチ以降に誰もプッシュしていない場合、リモートのブランチをあなたのもので置き換えます
+Stage all changes	すべての変更をステージ
+Unstage all changes	すべての変更のステージを解除
+Show terminal	ターミナルを表示
+Appearance, graph colours, and diffs	外観、グラフの色、差分
+Show a tip	ヒントを表示
+The next tip about NiceGit, as a notice	NiceGit の次のヒントを通知で表示
+Open a GitHub issue with NiceGit's version and your platform filled in	NiceGit のバージョンとご利用の環境を入力済みの GitHub issue を開く
+Open a GitHub feature request	GitHub で機能要望を開く
+Add every repository inside a folder	フォルダー内のすべてのリポジトリを追加
+Repository settings	リポジトリの設定
+Identity, profiles, and remotes	ID、プロファイル、リモート
+Git settings	Git の設定
+This repository's Git configuration	このリポジトリの Git 構成
+Remember conflict resolutions: turn on	競合の解決を記憶: オンにする
+Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase	同じ競合が再び起きたとき（後のリベースなど）に、以前の解決方法を再利用します
+Remember conflict resolutions: turn off	競合の解決を記憶: オフにする
+Stop recording how you resolve conflicts in this repository	このリポジトリで競合をどう解決したかの記録を停止します
+Save selected files, preview, apply, or delete stashes	選択したファイルを stash に保存、プレビュー、適用、削除
+Shift-Ctrl/Cmd-F · every branch	Shift-Ctrl/Cmd-F · すべてのブランチ
+Search file contents	ファイルの内容を検索
+Go to file…	ファイルへ移動…
+Find a tracked file by name	追跡中のファイルを名前で検索
+Go to HEAD	HEAD へ移動
+Select the checked-out commit in the history	履歴で現在のチェックアウトのコミットを選択
+Go to upstream	上流ブランチへ移動
+Select {upstream}'s latest commit	{upstream} の最新コミットを選択
+Select the upstream's latest commit	上流ブランチの最新コミットを選択
+Recover lost work	失われた作業を復元
+Commits from resets, rebases, and deleted branches	リセット、リベース、削除されたブランチによるコミット
+Commits over time, authors, and the files and folders that change most	時系列のコミット、作成者、最も変更の多いファイルとフォルダー
+Compare branch versions…	ブランチの版を比較…
+Which commits changed after a rebase, amend, or force push	リベース、修正、強制プッシュの後で変わったコミット
+Clean up branches	ブランチを整理
+Delete merged, inactive, or gone local branches	マージ済み、未使用、リモートで消えたローカルブランチを削除
+Bisect	bisect
+Find the commit that introduced a bug	バグを持ち込んだコミットを探す
+Worktrees	ワークツリー
+Linked worktrees	リンクされたワークツリー
+Submodules	サブモジュール
+Feature, release, and hotfix branches	機能、リリース、ホットフィックスのブランチ
+Tracked patterns and large files	追跡パターンと大きなファイル
+Pull requests and issues	プルリクエストと issue
+GitHub remotes, through the GitHub CLI	GitHub CLI を使う GitHub リモート
+Open pull requests across your open repositories and workspaces	開いているすべてのリポジトリとワークスペースのプルリクエスト
+Absorb staged changes…	ステージした変更を取り込む…
+Fold staged changes into the unpushed commits that last changed their lines	ステージした変更を、その行を最後に変更した未プッシュのコミットに統合します
+For the current branch, through the {cli}	現在のブランチについて、{cli} 経由で
+Open repository on {host}	{host} でリポジトリを開く
+Open {kind} on {host}	{host} で{kind}を開く
+Open Actions on {host}	{host} で Actions を開く
+Push it to a remote and track it	リモートにプッシュして追跡する
+Continue {operation}	{operation}を続行
+After resolving conflicts	競合を解決した後
+Abort {operation}	{operation}を中止
+Return to the state before it started	開始前の状態に戻す
+Worktree folders deleted outside Git	Git の外で削除されたワークツリーのフォルダー
+Bisect: mark good	bisect: 良好をマーク
+This commit does not have the problem	このコミットには問題がありません
+Bisect: mark bad	bisect: 不良をマーク
+This commit has the problem	このコミットには問題があります
+Bisect: skip	bisect: スキップ
+This commit cannot be tested	このコミットはテストできません
+Return to the original checkout	元のチェックアウトに戻す
+Undo {name}	{name}を元に戻す
+Redo {name}	{name}をやり直す
+Remote branch	リモートブランチ
+Fetch {remote}	{remote} からフェッチ
+Download from this remote only	このリモートからのみダウンロード
+{email} · signs commits	{email} · コミットに署名
+Use identity {name}	ID {name} を使う
+Run {name}	{name} を実行
+Custom action	カスタムアクション
+Open {name}	{name} を開く
+Open workspace {name}	ワークスペース {name} を開く
+Type a command, branch, or repository	コマンド、ブランチ、リポジトリを入力
+No matching commands	一致するコマンドはありません
+Anywhere	どこでも
+Diff	差分
+Command palette	コマンドパレット
+Go to a file	ファイルへ移動
+Open a repository	リポジトリを開く
+Go to a repository tab; Cmd-9 for the last	リポジトリのタブへ移動。Cmd-9 は最後のタブ
+Close the open window, or else the repository tab	開いているウインドウを閉じる。なければリポジトリのタブを閉じる
+Refresh the repository	リポジトリを更新
+Search the history of every branch	すべてのブランチの履歴を検索
+Filter the changed files	変更されたファイルを絞り込む
+Go to the checked-out commit	現在のチェックアウトのコミットへ移動
+Show or hide the terminal	ターミナルを表示または非表示
+Make everything larger or smaller	すべてを拡大または縮小
+These shortcuts	このショートカット一覧
+Select the previous or next commit	前または次のコミットを選択
+Jump to the top or bottom of the loaded history	読み込んだ履歴の先頭または末尾へ移動
+Mark several commits to cherry-pick	チェリーピックするコミットを複数マーク
+Clear the selection	選択を解除
+Open the previous or next changed file	前または次の変更ファイルを開く
+Stage or unstage the open file	開いているファイルをステージ／ステージ解除
+Find in the diff	差分内を検索
+Next or previous match	次または前の一致
+Back to the history	履歴に戻る
+Commit the staged changes	ステージした変更をコミット
+Save in the built-in editor	内蔵エディターで保存
+Restart NiceGit	NiceGit を再起動
+Download	ダウンロード
+Download and install	ダウンロードしてインストール
+NiceGit {version}: {stage}	NiceGit {version}: {stage}
+NiceGit {version} is installed.	NiceGit {version} をインストールしました。
+NiceGit {version} is available. {hint}	NiceGit {version} が利用できます。{hint}
+NiceGit {version} is available	NiceGit {version} が利用できます
+Check now	今すぐ確認
+Checking…	確認中…
+NiceGit is up to date.	NiceGit は最新です。
+NiceGit {version} is available.	NiceGit {version} が利用できます。
+Could not check: {reason}	確認できませんでした: {reason}
+Drafting…	下書き中…
+Draft	下書き
+Drafting. Click to stop.	下書き中です。クリックすると停止します。
+Draft a message from the staged changes with Claude	ステージした変更から Claude でメッセージを下書き
+Draft a message with Claude	Claude でメッセージを下書き
+Replace the current message?	現在のメッセージを置き換えますか？
+Replace	置き換え
+Keep mine	自分のものを残す
+Draft commit messages with Claude	コミットメッセージを Claude で下書き
+When you click Draft, the staged diff and recent commit subjects are sent to Anthropic's API using your key. Nothing is sent otherwise.	「下書き」をクリックすると、ステージした差分と最近のコミットの件名が、お使いのキーを使って Anthropic の API に送信されます。それ以外の場合は何も送信されません。
+Model	モデル
+Using {variable} from the environment.	環境変数 {variable} を使用しています。
+A key is saved.	キーが保存されています。
+No API key is saved.	API キーは保存されていません。
+Paste your key	キーを貼り付け
+Anthropic API key	Anthropic API キー
+Delete the saved key	保存されたキーを削除
+That does not look like an API key. It must have no spaces.	API キーの形式ではありません。スペースを含めることはできません。
+That does not look like an API key.	API キーの形式ではありません。
+No settings folder is available, so the key cannot be saved here.	設定フォルダーが利用できないため、ここではキーを保存できません。
+The key could not be saved: {error}	キーを保存できませんでした: {error}
+The key could not be removed: {error}	キーを削除できませんでした: {error}
+{passed} passed	{passed} 件成功
+{passed} passed, {failed} failed	{passed} 件成功、{failed} 件失敗
+Checks: {count} failed	チェック: {count} 件失敗
+Checks: {count} pending	チェック: {count} 件保留中
+Checks: {count} passed	チェック: {count} 件成功
+{marker}{number} {title} — {counts}\nClick to open checks	{marker}{number} {title} — {counts}\nクリックしてチェックを開く
+Staged and committed 1 file.	1 個のファイルをステージしてコミットしました。
+Staged and committed {count} files.	{count} 個のファイルをステージしてコミットしました。

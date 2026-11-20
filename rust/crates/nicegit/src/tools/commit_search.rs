@@ -2,6 +2,7 @@
 //! Commit search: finds commits in every branch's history by message, author, code change, or
 //! commit ID. Choosing a result selects that commit in the graph and inspector.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::Path;
 
 use egui::{Key, RichText, Ui};
@@ -50,10 +51,20 @@ impl Default for CommitSearchWindow {
 
 fn hint(field: CommitSearchField) -> &'static str {
     match field {
-        CommitSearchField::Message => "Search commit messages",
-        CommitSearchField::Author => "Search author names and emails",
-        CommitSearchField::CodeChange => "Text added or removed in a file",
-        CommitSearchField::CommitId => "Full or abbreviated commit ID",
+        CommitSearchField::Message => tr("Search commit messages"),
+        CommitSearchField::Author => tr("Search author names and emails"),
+        CommitSearchField::CodeChange => tr("Text added or removed in a file"),
+        CommitSearchField::CommitId => tr("Full or abbreviated commit ID"),
+    }
+}
+
+/// The field's name in the drop-down list, translated here because the core names are English.
+fn field_title(field: CommitSearchField) -> &'static str {
+    match field {
+        CommitSearchField::Message => tr("Message"),
+        CommitSearchField::Author => tr("Author"),
+        CommitSearchField::CodeChange => tr("Code change"),
+        CommitSearchField::CommitId => tr("Commit ID"),
     }
 }
 
@@ -63,7 +74,7 @@ impl ToolWindow for CommitSearchWindow {
     }
 
     fn title(&self) -> String {
-        "Search commits".to_string()
+        tr("Search commits").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -76,9 +87,9 @@ impl ToolWindow for CommitSearchWindow {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label(RichText::new(icon::MAGNIFYING_GLASS).size(16.0).color(theme::of(ui).muted));
-            egui::ComboBox::from_id_salt("commit-search-field").width(140.0).selected_text(self.field.title()).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("commit-search-field").width(140.0).selected_text(field_title(self.field)).show_ui(ui, |ui| {
                 for field in CommitSearchField::ALL {
-                    ui.selectable_value(&mut self.field, field, field.title());
+                    ui.selectable_value(&mut self.field, field, field_title(field));
                 }
             });
             let response = ui.add(egui::TextEdit::singleline(&mut self.query).hint_text(hint(self.field)).desired_width(f32::INFINITY));
@@ -106,22 +117,22 @@ impl ToolWindow for CommitSearchWindow {
             None => widgets::empty_state(
                 ui,
                 icon::MAGNIFYING_GLASS,
-                "Press Return to search every branch, including history not yet loaded in the graph.",
+                tr("Press Return to search every branch, including history not yet loaded in the graph."),
             ),
             Some(task) => match task.get() {
-                None => widgets::loading(ui, "Searching"),
+                None => widgets::loading(ui, tr("Searching")),
                 Some(Err(error)) => widgets::error(ui, &error.to_string()),
-                Some(Ok(commits)) if commits.is_empty() => widgets::empty_state(ui, icon::MAGNIFYING_GLASS, "No commits found"),
+                Some(Ok(commits)) if commits.is_empty() => widgets::empty_state(ui, icon::MAGNIFYING_GLASS, tr("No commits found")),
                 Some(Ok(commits)) => {
                     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                         if commits.len() == LIMIT {
                             let muted = theme::of(ui).muted;
-                            ui.label(RichText::new(format!("Showing the newest {LIMIT} matches")).small().color(muted));
+                            ui.label(RichText::new(tr_fmt!("Showing the newest {limit} matches", limit = LIMIT)).small().color(muted));
                         }
                         for commit in commits {
                             let detail = format!("{} · {} · {}", commit.author_name, commit.relative_date, commit.short_hash);
                             let response = result_row(ui, &commit.subject, &detail, None, None, false)
-                                .on_hover_text(format!("Open {} in the inspector", commit.short_hash));
+                                .on_hover_text(tr_fmt!("Open {hash} in the inspector", hash = commit.short_hash));
                             if response.clicked() {
                                 cx.select_commit(commit.hash.clone());
                                 *close = true;

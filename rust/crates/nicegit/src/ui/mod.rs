@@ -28,6 +28,7 @@ use egui::{Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::app::{NiceGitApp, Selection};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::settings::DiffContextSetting;
 use crate::theme;
 use crate::tools::widgets;
@@ -96,7 +97,7 @@ impl NiceGitApp {
             if self.show_settings {
                 self.show_settings = false;
             } else if self.tools.last().is_some_and(|tool| tool.has_unsaved_changes()) {
-                self.notify("Save or close the file you are editing first.", true);
+                self.notify(tr("Save or close the file you are editing first."), true);
             } else if !self.tools.is_empty() {
                 self.tools.pop();
             } else if !self.repos.is_empty() {
@@ -235,9 +236,9 @@ impl NiceGitApp {
             .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color).inner_margin(egui::Margin::symmetric(10, 6)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Terminal", icon::TERMINAL_WINDOW)).strong());
+                    ui.label(RichText::new(format!("{}  {}", icon::TERMINAL_WINDOW, tr("Terminal"))).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        hide = widgets::icon_button(ui, icon::CARET_DOWN, "Hide the terminal (Ctrl-`); its shells keep running", true)
+                        hide = widgets::icon_button(ui, icon::CARET_DOWN, tr("Hide the terminal (Ctrl-`); its shells keep running"), true)
                             .clicked();
                     });
                 });
@@ -350,8 +351,8 @@ impl NiceGitApp {
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new(icon::GIT_BRANCH).size(48.0).color(c.accent));
                         ui.add_space(6.0);
-                        ui.label(RichText::new("Welcome to NiceGit").size(26.0).strong());
-                        ui.label(RichText::new("A fast Git client that keeps your work safe.").color(c.muted));
+                        ui.label(RichText::new(tr("Welcome to NiceGit")).size(26.0).strong());
+                        ui.label(RichText::new(tr("A fast Git client that keeps your work safe.")).color(c.muted));
                     });
                     ui.add_space(18.0);
                     let gap = 10.0;
@@ -365,9 +366,9 @@ impl NiceGitApp {
                         ui.add(widget.min_size(egui::vec2(button_width, 44.0))).clicked()
                     };
                     let starts = [
-                        (format!("{}  Open repository…", icon::FOLDER_OPEN), true, WelcomeAction::Open),
-                        (format!("{}  Clone repository…", icon::DOWNLOAD_SIMPLE), false, WelcomeAction::Clone),
-                        (format!("{}  Create repository…", icon::PLUS), false, WelcomeAction::Create),
+                        (format!("{}  {}", icon::FOLDER_OPEN, tr("Open repository…")), true, WelcomeAction::Open),
+                        (format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr("Clone repository…")), false, WelcomeAction::Clone),
+                        (format!("{}  {}", icon::PLUS, tr("Create repository…")), false, WelcomeAction::Create),
                     ];
                     if narrow {
                         // Too narrow for a row: the three buttons stack as a column.
@@ -391,7 +392,7 @@ impl NiceGitApp {
                     }
                     if !recent.is_empty() {
                         ui.add_space(24.0);
-                        widgets::section(ui, "Recent repositories");
+                        widgets::section(ui, tr("Recent repositories"));
                         ui.add_space(4.0);
                         for path in &recent {
                             if repositories::recent_start_row(ui, path, c) {
@@ -401,7 +402,7 @@ impl NiceGitApp {
                     }
                     ui.add_space(18.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("Or drag a folder onto this window.").color(c.muted));
+                        ui.label(RichText::new(tr("Or drag a folder onto this window.")).color(c.muted));
                     });
                     ui.add_space(14.0);
                     egui::Frame::new().fill(c.card_bg).corner_radius(10.0).inner_margin(egui::Margin::symmetric(14, 12)).show(ui, |ui| {
@@ -411,7 +412,7 @@ impl NiceGitApp {
                             ui.vertical(|ui| {
                                 ui.add(egui::Label::new(RichText::new(&tip)).wrap());
                                 ui.add_space(6.0);
-                                if ui.button("Next tip").clicked() {
+                                if ui.button(tr("Next tip")).clicked() {
                                     action = Some(WelcomeAction::NextTip);
                                 }
                             });
@@ -446,37 +447,37 @@ impl NiceGitApp {
             ui.label(RichText::new("NiceGit").size(28.0).strong());
             ui.add_space(2.0);
             if self.git_missing {
-                ui.label(RichText::new("Git was not found. Install Git, then restart NiceGit.").color(c.danger));
+                ui.label(RichText::new(tr("Git was not found. Install Git, then restart NiceGit.")).color(c.danger));
                 return;
             }
             if loading {
-                widgets::loading(ui, "Opening repository…");
+                widgets::loading(ui, tr("Opening repository…"));
                 return;
             }
             if let Some(error) = error {
                 ui.label(RichText::new(error).color(c.danger));
                 ui.add_space(8.0);
             } else {
-                ui.label(RichText::new("A fast Git client for macOS, Windows, and Linux.").color(c.muted));
+                ui.label(RichText::new(tr("A fast Git client for macOS, Windows, and Linux.")).color(c.muted));
                 ui.add_space(14.0);
             }
             ui.horizontal(|ui| {
                 let width = 420.0_f32.min(ui.available_width());
                 ui.add_space((ui.available_width() - width).max(0.0) / 2.0);
-                if widgets::primary_button(ui, &format!("{}  Open repository…", icon::FOLDER_OPEN), true).clicked() {
+                if widgets::primary_button(ui, &format!("{}  {}", icon::FOLDER_OPEN, tr("Open repository…")), true).clicked() {
                     self.choose_folder();
                 }
-                if ui.button(format!("{}  Clone…", icon::DOWNLOAD_SIMPLE)).clicked() {
+                if ui.button(format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr("Clone…"))).clicked() {
                     self.dialog = Some(dialogs::Dialog::clone_repository());
                 }
-                if ui.button(format!("{}  New repository…", icon::PLUS)).clicked() {
+                if ui.button(format!("{}  {}", icon::PLUS, tr("New repository…"))).clicked() {
                     self.create_repository();
                 }
             });
             let recent: Vec<_> = self.settings.recent.iter().filter(|p| p.exists()).take(6).cloned().collect();
             if !recent.is_empty() {
                 ui.add_space(24.0);
-                widgets::section(ui, "Recent");
+                widgets::section(ui, tr("Recent"));
                 for path in recent {
                     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     if ui
@@ -489,7 +490,7 @@ impl NiceGitApp {
                 }
             }
             ui.add_space(18.0);
-            ui.label(RichText::new("Ctrl/Cmd-O to open · Shift-Ctrl/Cmd-P for commands").small().color(c.muted));
+            ui.label(RichText::new(tr("Ctrl/Cmd-O to open · Shift-Ctrl/Cmd-P for commands")).small().color(c.muted));
         });
     }
 
@@ -517,36 +518,36 @@ impl NiceGitApp {
                 let mut retry_commit: Option<crate::app::HookRetry> = None;
                 let mut apply_into: Option<(nicegit_core::Stash, bool)> = None;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text("Dismiss").clicked();
+                    dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text(tr("Dismiss")).clicked();
                     if action == Some(crate::app::NoticeAction::Stash) {
-                        stash = ui.add_enabled(self.idle(), egui::Button::new("Stash changes…")).clicked();
+                        stash = ui.add_enabled(self.idle(), egui::Button::new(tr("Stash changes…"))).clicked();
                     }
                     if action == Some(crate::app::NoticeAction::SetIdentity) {
-                        identity = ui.button("Set your identity…").clicked();
+                        identity = ui.button(tr("Set your identity…")).clicked();
                     }
                     if action == Some(crate::app::NoticeAction::Integrate) {
                         pull = ui
-                            .add_enabled(self.idle(), egui::Button::new("Merge or rebase…"))
-                            .on_hover_text("Fetch, then choose whether to merge the remote's commits or rebase onto them")
+                            .add_enabled(self.idle(), egui::Button::new(tr("Merge or rebase…")))
+                            .on_hover_text(tr("Fetch, then choose whether to merge the remote's commits or rebase onto them"))
                             .clicked();
                     }
                     if let Some(crate::app::NoticeAction::OpenUrl(url)) = &action {
-                        if ui.button("Open").on_hover_text(url.as_str()).clicked() {
+                        if ui.button(tr("Open")).on_hover_text(url.as_str()).clicked() {
                             open_link = Some(url.clone());
                         }
                     }
                     if let Some(crate::app::NoticeAction::ApplyIntoChanges { stash, drop_after }) = &action {
                         let button = ui
-                            .add_enabled(self.idle(), egui::Button::new("Apply into my changes"))
-                            .on_hover_text("Apply the stash's changes on top of your changes, and keep your changes");
+                            .add_enabled(self.idle(), egui::Button::new(tr("Apply into my changes")))
+                            .on_hover_text(tr("Apply the stash's changes on top of your changes, and keep your changes"));
                         if button.clicked() {
                             apply_into = Some((stash.clone(), *drop_after));
                         }
                     }
                     if let Some(crate::app::NoticeAction::CommitWithoutHooks(retry)) = &action {
                         let button = ui
-                            .add_enabled(self.idle(), egui::Button::new("Commit without hooks"))
-                            .on_hover_text("Make the same commit again with Git hooks skipped");
+                            .add_enabled(self.idle(), egui::Button::new(tr("Commit without hooks")))
+                            .on_hover_text(tr("Make the same commit again with Git hooks skipped"));
                         if button.clicked() {
                             retry_commit = Some(retry.clone());
                         }
@@ -554,7 +555,7 @@ impl NiceGitApp {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         // The full message, and Git's own words when the message explains them.
                         let full = match &detail {
-                            Some(detail) => format!("{}\n\nGit said:\n{detail}", text.text()),
+                            Some(detail) => format!("{}\n\n{}\n{detail}", text.text(), tr("Git said:")),
                             None => text.text().to_string(),
                         };
                         ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
@@ -569,8 +570,8 @@ impl NiceGitApp {
                 }
                 if stash {
                     self.dialog = Some(crate::ui::dialogs::Dialog::input(
-                        "Stash changes",
-                        "Message (optional)",
+                        tr("Stash changes"),
+                        tr("Message (optional)"),
                         "",
                         crate::ui::dialogs::InputKind::SaveStash,
                     ));
@@ -587,15 +588,15 @@ impl NiceGitApp {
                 }
                 if let Some((stash, drop_after)) = apply_into {
                     self.notice = None;
-                    self.act("Apply into changes", move |client, path| {
+                    self.act(tr("Apply into changes"), move |client, path| {
                         client.apply_stash_into_changes(&stash, drop_after, path).map(|outcome| {
                             Some(match outcome {
                                 nicegit_core::staging::StashIntoChanges::Removed => {
-                                    "Applied the stash on top of your changes and removed it.".to_string()
+                                    tr("Applied the stash on top of your changes and removed it.").to_string()
                                 }
-                                nicegit_core::staging::StashIntoChanges::Kept => "Applied the stash on top of your changes.".to_string(),
+                                nicegit_core::staging::StashIntoChanges::Kept => tr("Applied the stash on top of your changes.").to_string(),
                                 nicegit_core::staging::StashIntoChanges::KeptForStagedChanges => {
-                                    "Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept."
+                                    tr("Applied the stash's unstaged changes on top of yours. It also saved staged changes, which were not applied, so the stash is kept.")
                                         .to_string()
                                 }
                             })
@@ -614,7 +615,7 @@ impl NiceGitApp {
             let badge = self.pull_request_status().map(|status| crate::ui::pull_request::PrBadge::new(&status, &c));
             let reserved = badge.as_ref().map_or(0.0, |badge| badge.width(ui) + ui.spacing().item_spacing.x);
             let checkout_width = (ui.available_width() - reserved - CHECKOUT_RESERVE).max(0.0);
-            let checkout = format!("Current checkout: {}", snapshot.current_branch);
+            let checkout = tr_fmt!("Current checkout: {branch}", branch = snapshot.current_branch);
             ui.scope(|ui| {
                 ui.set_max_width(checkout_width);
                 ui.add(egui::Label::new(RichText::new(&checkout).monospace().small().color(c.muted)).truncate())
@@ -635,11 +636,11 @@ impl NiceGitApp {
                 if let Some(repo) = self.repo().filter(|_| !snapshot.remotes.is_empty()) {
                     if let Some(problem) = &repo.fetch_problem {
                         let plain = crate::app::remote_problem(problem).map(|plain| format!("{plain}\n\n")).unwrap_or_default();
-                        ui.label(RichText::new(format!("{}  Couldn't fetch", icon::CLOUD_SLASH)).small().color(c.warning))
-                            .on_hover_text(format!("The last automatic fetch failed. {plain}Git said:\n{problem}"));
+                        ui.label(RichText::new(format!("{}  {}", icon::CLOUD_SLASH, tr("Couldn't fetch"))).small().color(c.warning))
+                            .on_hover_text(format!("{}\n{problem}", tr_fmt!("The last automatic fetch failed. {plain}{said}", plain = plain, said = tr("Git said:"))));
                     } else if let Some(when) = repo.last_fetched {
                         ui.label(RichText::new(fetched_ago(when.elapsed())).small().color(c.muted))
-                            .on_hover_text("Remotes are fetched automatically; change how often in Settings.");
+                            .on_hover_text(tr("Remotes are fetched automatically; change how often in Settings."));
                         // The age is in minutes, so it is redrawn once a minute.
                         ui.ctx().request_repaint_after(std::time::Duration::from_secs(60));
                     }
@@ -662,18 +663,25 @@ impl NiceGitApp {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(icon::WARNING).size(16.0).color(c.warning));
                 let text = if snapshot.rebase_stopped_for_edit {
-                    "Rebase stopped to edit a commit: stage your changes, then Continue.".to_string()
+                    tr("Rebase stopped to edit a commit: stage your changes, then Continue.").to_string()
                 } else if conflicts.is_empty() {
-                    format!("A {} is in progress. Continue when ready, or abort to return to where you started.", operation.name())
+                    tr_fmt!(
+                        "A {operation} is in progress. Continue when ready, or abort to return to where you started.",
+                        operation = operation.name()
+                    )
                 } else {
-                    format!("A {} stopped with {} conflicted file(s). Resolve each one, then continue.", operation.name(), conflicts.len())
+                    tr_fmt!(
+                        "A {operation} stopped with {count} conflicted file(s). Resolve each one, then continue.",
+                        operation = operation.name(),
+                        count = conflicts.len()
+                    )
                 };
                 ui.label(RichText::new(text).color(c.warning).strong());
             });
             if !conflicts.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     for path in &conflicts {
-                        if ui.button(format!("{}  {path}", icon::GIT_DIFF)).on_hover_text("Open the conflict editor").clicked() {
+                        if ui.button(format!("{}  {path}", icon::GIT_DIFF)).on_hover_text(tr("Open the conflict editor")).clicked() {
                             self.open_tool(Box::new(crate::tools::conflict::ConflictWindow::new(path.clone())));
                         }
                     }
@@ -681,16 +689,16 @@ impl NiceGitApp {
             }
             ui.horizontal(|ui| {
                 let idle = self.idle();
-                if widgets::primary_button(ui, "Continue", idle && conflicts.is_empty()).clicked() {
-                    self.act_recording("Continue", operation.name(), move |client, path| {
+                if widgets::primary_button(ui, tr("Continue"), idle && conflicts.is_empty()).clicked() {
+                    self.act_recording(tr("Continue"), operation.name(), move |client, path| {
                         client.continue_operation(operation, path).map(|_| None)
                     });
                 }
-                if ui.add_enabled(idle, egui::Button::new("Abort…")).clicked() {
+                if ui.add_enabled(idle, egui::Button::new(tr("Abort…"))).clicked() {
                     self.confirm(
-                        format!("Abort the {}?", operation.name()),
-                        "Git returns the branch and files to the state before it started. Resolutions you made are lost.",
-                        "Abort",
+                        tr_fmt!("Abort the {operation}?", operation = operation.name()),
+                        tr("Git returns the branch and files to the state before it started. Resolutions you made are lost."),
+                        tr("Abort"),
                         dialogs::Pending::Abort(operation),
                     );
                 }
@@ -700,12 +708,12 @@ impl NiceGitApp {
                     let editing = self.tools.iter().any(|tool| tool.id().starts_with("conflict:"));
                     let enabled = idle && !self.has_unsaved_editor() && !editing;
                     ui.add_enabled_ui(enabled, |ui| {
-                        ui.menu_button("Resolve all…", |ui| {
+                        ui.menu_button(tr("Resolve all…"), |ui| {
                             for (side, from_incoming) in [(current, false), (incoming, true)] {
                                 let side = side.to_lowercase();
                                 if ui
-                                    .button(format!("Take {side} for all"))
-                                    .on_hover_text("Take one side of every conflicted file")
+                                    .button(tr_fmt!("Take {side} for all", side = side))
+                                    .on_hover_text(tr("Take one side of every conflicted file"))
                                     .clicked()
                                 {
                                     ui.close();
@@ -748,35 +756,52 @@ impl NiceGitApp {
                             .and_then(|s| s.commits.iter().find(|c| &c.hash == first_bad))
                             .map(|c| c.subject.clone())
                             .unwrap_or_default();
-                        ui.label(RichText::new(format!("First bad commit: {} {subject}", nicegit_core::models::short(first_bad))).strong());
-                        if ui.button("Show").clicked() {
+                        ui.label(
+                            RichText::new(tr_fmt!(
+                                "First bad commit: {hash} {subject}",
+                                hash = nicegit_core::models::short(first_bad),
+                                subject = subject
+                            ))
+                            .strong(),
+                        );
+                        if ui.button(tr("Show")).clicked() {
                             self.select_commit(first_bad.clone());
                         }
                     }
                     (None, Some(testing)) => {
                         let steps = status
                             .remaining_steps
-                            .map(|n| format!(" · about {n} step{} left", if n == 1 { "" } else { "s" }))
+                            .map(|n| tr_count(" · about {count} step left", " · about {count} steps left", n))
                             .unwrap_or_default();
                         ui.label(
-                            RichText::new(format!("Bisecting: test {} and mark it{steps}", nicegit_core::models::short(testing))).strong(),
+                            RichText::new(tr_fmt!(
+                                "Bisecting: test {hash} and mark it{steps}",
+                                hash = nicegit_core::models::short(testing),
+                                steps = steps
+                            ))
+                            .strong(),
                         );
-                        for (mark, label) in [(BisectMark::Good, "Good"), (BisectMark::Bad, "Bad"), (BisectMark::Skip, "Skip")] {
+                        for (mark, label, action) in [
+                            (BisectMark::Good, tr("Good"), tr("Mark good")),
+                            (BisectMark::Bad, tr("Bad"), tr("Mark bad")),
+                            (BisectMark::Skip, tr("Skip"), tr("Mark skip")),
+                        ] {
                             if ui.add_enabled(idle, egui::Button::new(label)).clicked() {
                                 let testing = testing.clone();
-                                self.act(&format!("Mark {}", label.to_lowercase()), move |client, path| {
-                                    client.mark_bisect(mark, &testing, path).map(Some)
-                                });
+                                self.act(action, move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
                             }
                         }
                     }
                     (None, None) => {
-                        ui.label(RichText::new("Bisecting: mark a good and a bad commit to begin.").strong());
+                        ui.label(RichText::new(tr("Bisecting: mark a good and a bad commit to begin.")).strong());
                     }
                 }
                 ui.add_space(12.0);
-                if ui.add_enabled(idle, egui::Button::new(format!("End bisect, return to {}", status.original_checkout))).clicked() {
-                    self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into())));
+                if ui
+                    .add_enabled(idle, egui::Button::new(tr_fmt!("End bisect, return to {branch}", branch = status.original_checkout)))
+                    .clicked()
+                {
+                    self.act(tr("End bisect"), |client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into())));
                 }
             });
         });
@@ -799,7 +824,8 @@ impl NiceGitApp {
         let wide = panel_width >= 960.0;
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
-                let back = ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)");
+                let back =
+                    ui.button(format!("{}  {}", icon::CARET_LEFT, tr("History"))).on_hover_text(tr("Back to the commit history (Esc)"));
                 if back.clicked() {
                     self.close_diff();
                 }
@@ -807,15 +833,17 @@ impl NiceGitApp {
                 // are others.
                 if let Some((position, count)) = self.diff_file_position().filter(|&(_, count)| count > 1) {
                     let shortcut = if cfg!(target_os = "macos") { "Option" } else { "Alt" };
-                    let previous = format!("Previous file ({shortcut}-Up)");
+                    let previous = tr_fmt!("Previous file ({shortcut}-Up)", shortcut = shortcut);
                     if widgets::icon_button(ui, icon::CARET_UP, &previous, position > 0).clicked() {
                         self.step_diff_file(-1);
                     }
-                    let next = format!("Next file ({shortcut}-Down)");
+                    let next = tr_fmt!("Next file ({shortcut}-Down)", shortcut = shortcut);
                     if widgets::icon_button(ui, icon::CARET_DOWN, &next, position + 1 < count).clicked() {
                         self.step_diff_file(1);
                     }
-                    ui.label(RichText::new(format!("{} of {count}", position + 1)).small().color(c.muted));
+                    ui.label(
+                        RichText::new(tr_fmt!("{position} of {count}", position = position + 1, count = count)).small().color(c.muted),
+                    );
                 }
                 ui.add_space(6.0);
                 let file_name = |ui: &mut egui::Ui| {
@@ -898,26 +926,23 @@ impl NiceGitApp {
             egui::Frame::new().fill(c.subtle_bg).inner_margin(egui::Margin::symmetric(14, 6)).show(ui, |ui| {
                 // Wraps in a narrow diff panel, so every button stays on screen.
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(format!("{} line{} selected", selected.len(), if selected.len() == 1 { "" } else { "s" }))
-                            .color(c.muted),
-                    );
+                    ui.label(RichText::new(tr_count("{count} line selected", "{count} lines selected", selected.len())).color(c.muted));
                     let text = if staged {
-                        format!("{}  Unstage selected lines", icon::MINUS_CIRCLE)
+                        format!("{}  {}", icon::MINUS_CIRCLE, tr("Unstage selected lines"))
                     } else {
-                        format!("{}  Stage selected lines", icon::PLUS_CIRCLE)
+                        format!("{}  {}", icon::PLUS_CIRCLE, tr("Stage selected lines"))
                     };
                     if widgets::primary_button(ui, &text, self.busy.is_none()).clicked() {
                         let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
                         if let (Some(review), Some(lines)) = (review.clone(), lines) {
-                            let label = if staged { "Unstage lines" } else { "Stage lines" };
+                            let label = if staged { tr("Unstage lines") } else { tr("Stage lines") };
                             self.act(label, move |client, path| client.stage_lines(&lines, &review, path).map(|_| None));
                         }
                     }
                     // Unstaged lines can also be discarded, as a run's Discard button does.
                     if !staged {
                         let discard = egui::Button::new(
-                            RichText::new(format!("{}  Discard selected lines", icon::ARROW_COUNTER_CLOCKWISE)).color(c.removed),
+                            RichText::new(format!("{}  {}", icon::ARROW_COUNTER_CLOCKWISE, tr("Discard selected lines"))).color(c.removed),
                         );
                         if ui.add_enabled(self.busy.is_none(), discard).clicked() {
                             let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
@@ -926,7 +951,7 @@ impl NiceGitApp {
                             }
                         }
                         if !operation_running {
-                            let stash = egui::Button::new(RichText::new(format!("{}  Stash selected lines", icon::ARCHIVE)));
+                            let stash = egui::Button::new(RichText::new(format!("{}  {}", icon::ARCHIVE, tr("Stash selected lines"))));
                             if ui.add_enabled(self.busy.is_none(), stash).clicked() {
                                 let lines = line_map.as_deref().and_then(|map| in_review(map, &selected));
                                 if let (Some(review), Some(lines)) = (review.clone(), lines) {
@@ -935,7 +960,7 @@ impl NiceGitApp {
                             }
                         }
                     }
-                    if ui.button("Clear").clicked() {
+                    if ui.button(tr("Clear")).clicked() {
                         self.repos[self.active].diff_options.selected.clear();
                     }
                 });
@@ -947,9 +972,9 @@ impl NiceGitApp {
                 ui.add(
                     egui::Label::new(
                         RichText::new(if review.as_ref().is_some_and(|r| r.staged) {
-                            "Press − beside a line to unstage it, or click and drag over lines to choose several."
+                            tr("Press − beside a line to unstage it, or click and drag over lines to choose several.")
                         } else {
-                            "Press + beside a line to stage it, or click and drag over lines to choose several."
+                            tr("Press + beside a line to stage it, or click and drag over lines to choose several.")
                         })
                         .small()
                         .color(c.muted),
@@ -961,8 +986,13 @@ impl NiceGitApp {
             // Said once, so a reader knows why a line cannot be staged here.
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                let verb = if review.as_ref().is_some_and(|r| r.staged) { "unstage" } else { "stage" };
-                ui.add(egui::Label::new(RichText::new(format!("Switch to Unified to {verb} single lines.")).small().color(c.muted)).wrap());
+                let verb = if review.as_ref().is_some_and(|r| r.staged) { tr("unstage") } else { tr("stage") };
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(tr_fmt!("Switch to Unified to {verb} single lines.", verb = verb)).small().color(c.muted),
+                    )
+                    .wrap(),
+                );
             });
         }
         let repo = &mut self.repos[self.active];
@@ -997,9 +1027,9 @@ impl NiceGitApp {
         let one_sided = self.repo().and_then(|r| r.diff.as_ref()).is_some_and(|d| d.is_one_sided());
         let narrow = !crate::diff_view::split_fits(panel_width);
         let reason = if one_sided {
-            "A new or deleted file has only one side, so it is shown in one column"
+            tr("A new or deleted file has only one side, so it is shown in one column")
         } else {
-            "Widen the diff panel to show changes side by side"
+            tr("Widen the diff panel to show changes side by side")
         };
         let available = !one_sided && !narrow;
         // The control shows the layout on screen: Unified whenever Split cannot apply,
@@ -1007,24 +1037,24 @@ impl NiceGitApp {
         // Only Split is disabled, so the active Unified keeps full emphasis. Words replaces
         // both, so neither Split nor Unified is shown as active while it is on.
         let shown = split && available && !words;
-        if ui.add_enabled(available, egui::Button::selectable(shown, "Split")).on_disabled_hover_text(reason).clicked() {
+        if ui.add_enabled(available, egui::Button::selectable(shown, tr("Split"))).on_disabled_hover_text(reason).clicked() {
             split = true;
             words = false;
         }
-        if ui.add(egui::Button::selectable(!shown && !words, "Unified")).clicked() {
+        if ui.add(egui::Button::selectable(!shown && !words, tr("Unified"))).clicked() {
             words = false;
             if available {
                 split = false;
             }
         }
         // Words works in any panel width, as its lines wrap in one column.
-        if ui.add(egui::Button::selectable(words, "Words")).on_hover_text("Show changed words merged into each line").clicked() {
+        if ui.add(egui::Button::selectable(words, tr("Words"))).on_hover_text(tr("Show changed words merged into each line")).clicked() {
             words = true;
         }
         self.settings.split_diff = split;
         self.settings.word_diff = words;
         let mut ignore = self.settings.ignore_whitespace;
-        if crate::tools::widgets::checkbox(ui, true, &mut ignore, "Hide whitespace").changed() {
+        if crate::tools::widgets::checkbox(ui, true, &mut ignore, tr("Hide whitespace")).changed() {
             self.settings.ignore_whitespace = ignore;
             self.reload_diff();
         }
@@ -1039,14 +1069,14 @@ impl NiceGitApp {
                 }
             })
             .response
-            .on_hover_text("How many unchanged lines to show around each change")
-            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, "Context lines"));
+            .on_hover_text(tr("How many unchanged lines to show around each change"))
+            .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, tr("Context lines")));
         if context != self.settings.diff_context {
             self.settings.diff_context = context;
             self.reload_diff();
         }
         if let Some(path) = editable {
-            if ui.button(format!("{}  Edit", icon::PENCIL_SIMPLE)).on_hover_text("Edit this file in NiceGit").clicked() {
+            if ui.button(format!("{}  {}", icon::PENCIL_SIMPLE, tr("Edit"))).on_hover_text(tr("Edit this file in NiceGit")).clicked() {
                 let repo_path = self.repo().map(|r| r.path.clone()).unwrap_or_default();
                 self.open_tool(Box::new(crate::tools::editor::EditorWindow::new(repo_path, path)));
             }
@@ -1054,13 +1084,13 @@ impl NiceGitApp {
         // Stage or unstage the whole open file without going back to the Changes panel.
         if let Some(Selection::Change { entry, staged }) = self.repo().map(|r| r.selection.clone()) {
             if entry.kind != nicegit_core::StatusKind::Conflicted {
-                let (glyph, label) = if staged { (icon::MINUS_CIRCLE, "Unstage file") } else { (icon::PLUS_CIRCLE, "Stage file") };
+                let (glyph, label) = if staged { (icon::MINUS_CIRCLE, tr("Unstage file")) } else { (icon::PLUS_CIRCLE, tr("Stage file")) };
                 let button = ui.add_enabled(self.idle(), egui::Button::new(format!("{glyph}  {label}")));
                 if button.on_hover_text("Shift-Ctrl/Cmd-S").clicked() {
                     self.toggle_stage_open_file();
                 }
                 // Discarding asks first, as from the Changes panel, and can be undone there.
-                if !staged && widgets::icon_button(ui, icon::TRASH, "Discard this file's changes…", self.idle()).clicked() {
+                if !staged && widgets::icon_button(ui, icon::TRASH, tr("Discard this file's changes…"), self.idle()).clicked() {
                     self.confirm_discard(entry.clone());
                 }
             }
@@ -1072,7 +1102,7 @@ impl NiceGitApp {
             _ => None,
         };
         if let (false, Some(file)) = (editor.is_empty(), working_file) {
-            let tip = format!("Open in {}", crate::ui::changes::editor_name(&editor));
+            let tip = tr_fmt!("Open in {editor}", editor = crate::ui::changes::editor_name(&editor));
             if widgets::icon_button(ui, icon::CODE, &tip, true).clicked() {
                 if let Err(error) = crate::ui::changes::open_in_editor(&editor, &file) {
                     self.notify(error, true);
@@ -1085,9 +1115,9 @@ impl NiceGitApp {
             .and_then(|r| r.diff.as_ref())
             .map(|diff| diff.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n"));
         if let Some(patch) = patch.filter(|patch| !patch.trim().is_empty()) {
-            if widgets::icon_button(ui, icon::COPY, "Copy this diff", true).clicked() {
+            if widgets::icon_button(ui, icon::COPY, tr("Copy this diff"), true).clicked() {
                 ui.ctx().copy_text(format!("{}\n", patch.trim_end()));
-                self.notify("Copied the diff.", false);
+                self.notify(tr("Copied the diff."), false);
             }
         }
     }
@@ -1096,9 +1126,9 @@ impl NiceGitApp {
 /// How long ago the remotes were fetched, in words.
 fn fetched_ago(elapsed: std::time::Duration) -> String {
     match elapsed.as_secs() / 60 {
-        0 => "Fetched just now".to_string(),
-        minutes @ 1..=59 => format!("Fetched {minutes} min ago"),
-        minutes => format!("Fetched {} h ago", minutes / 60),
+        0 => tr("Fetched just now").to_string(),
+        minutes @ 1..=59 => tr_fmt!("Fetched {minutes} min ago", minutes = minutes),
+        minutes => tr_fmt!("Fetched {hours} h ago", hours = minutes / 60),
     }
 }
 
@@ -1120,37 +1150,57 @@ impl NiceGitApp {
             return;
         }
         let count = lines.len();
-        let plural = if count == 1 { "" } else { "s" };
         match action {
             BlockAction::Stage | BlockAction::Unstage => {
-                let (label, done) = if action == BlockAction::Stage { ("Stage lines", "Staged") } else { ("Unstage lines", "Unstaged") };
+                let (label, done) =
+                    if action == BlockAction::Stage { (tr("Stage lines"), tr("Staged")) } else { (tr("Unstage lines"), tr("Unstaged")) };
                 let name = review.path.clone();
                 self.act(label, move |client, path| {
-                    client.stage_lines(&lines, &review, path).map(|_| Some(format!("{done} {count} line{plural} in {name}.")))
+                    client.stage_lines(&lines, &review, path).map(|_| {
+                        Some(tr_fmt!(
+                            "{done} {lines} in {name}.",
+                            done = done,
+                            lines = tr_count("{count} line", "{count} lines", count),
+                            name = name
+                        ))
+                    })
                 });
             }
             BlockAction::Discard => {
                 let what = if review.untracked {
-                    format!("{count} new line{plural} are removed from {}.", review.path)
+                    tr_fmt!(
+                        "{lines} are removed from {path}.",
+                        lines = tr_count("{count} new line", "{count} new lines", count),
+                        path = review.path
+                    )
                 } else {
-                    format!("{count} changed line{plural} in {} go back to their staged version.", review.path)
+                    tr_fmt!(
+                        "{lines} in {path} go back to their staged version.",
+                        lines = tr_count("{count} changed line", "{count} changed lines", count),
+                        path = review.path
+                    )
                 };
-                let message = format!("{what} You can undo this from the Changes panel until the file changes again.");
-                self.confirm("Discard this change?", message, "Discard", crate::ui::dialogs::Pending::DiscardLines { lines, review });
+                let message = tr_fmt!("{what} You can undo this from the Changes panel until the file changes again.", what = what);
+                self.confirm(
+                    tr("Discard this change?"),
+                    message,
+                    tr("Discard"),
+                    crate::ui::dialogs::Pending::DiscardLines { lines, review },
+                );
             }
             BlockAction::Stash => {
                 // Checked here as well as by the action, so the dialog does not open for nothing.
                 if self.has_unsaved_editor() {
-                    self.notify("Save or close the file you are editing before changing the repository.", true);
+                    self.notify(tr("Save or close the file you are editing before changing the repository."), true);
                     return;
                 }
                 if self.snapshot().is_some_and(|snapshot| snapshot.operation.is_some()) {
                     return;
                 }
-                let value = format!("Selected lines from {}", review.path);
+                let value = tr_fmt!("Selected lines from {path}", path = review.path);
                 self.dialog = Some(crate::ui::dialogs::Dialog::input(
-                    "Stash lines",
-                    "Message (optional)",
+                    tr("Stash lines"),
+                    tr("Message (optional)"),
                     &value,
                     crate::ui::dialogs::InputKind::StashLines { lines, review },
                 ));

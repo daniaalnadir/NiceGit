@@ -2,6 +2,7 @@
 //! see on github.com or one of the GitHub Enterprise hosts listed in Settings. Choosing one fills in
 //! the dialog's address. Nothing is cloned here; the dialog's OK still does that.
 
+use crate::i18n::{tr, tr_fmt};
 use std::path::{Path, PathBuf};
 
 use egui::RichText;
@@ -99,11 +100,11 @@ impl ClonePicker {
         let modal = egui::Modal::new(egui::Id::unique("clone-picker")).show(ctx, |ui| {
             ui.set_width(440.0);
             let c = theme::of(ui);
-            ui.heading("Choose a GitHub repository");
+            ui.heading(tr("Choose a GitHub repository"));
             ui.add_space(8.0);
             if hosts.len() > 1 {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Host").color(c.muted));
+                    ui.label(RichText::new(tr("Host")).color(c.muted));
                     egui::ComboBox::from_id_salt("clone-picker-host").selected_text(host.as_str()).show_ui(ui, |ui| {
                         for name in &hosts {
                             ui.selectable_value(&mut host, name.clone(), name.as_str());
@@ -113,38 +114,38 @@ impl ClonePicker {
                 ui.add_space(4.0);
             }
             ui.horizontal(|ui| {
-                widgets::checkbox(ui, true, &mut self.use_ssh, "Use SSH");
+                widgets::checkbox(ui, true, &mut self.use_ssh, tr("Use SSH"));
             });
             ui.add_space(4.0);
-            widgets::search_field(ui, &mut self.filter, "Filter repositories")
-                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Filter repositories"));
+            widgets::search_field(ui, &mut self.filter, tr("Filter repositories"))
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Filter repositories")));
             ui.add_space(8.0);
 
             match &self.listing {
-                Listing::Idle | Listing::Loading(_) => widgets::loading(ui, "Loading your repositories from GitHub"),
+                Listing::Idle | Listing::Loading(_) => widgets::loading(ui, tr("Loading your repositories from GitHub")),
                 Listing::Ready(Err(message)) => {
                     widgets::error(ui, message);
                     ui.add_space(6.0);
-                    check_again = ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked();
+                    check_again = ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked();
                 }
                 Listing::Ready(Ok(Loaded::NotInstalled)) => {
                     widgets::callout(
                         ui,
-                        "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.",
+                        tr("The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again."),
                         true,
                     );
                     ui.add_space(6.0);
-                    check_again = ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked();
+                    check_again = ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked();
                 }
                 Listing::Ready(Ok(Loaded::SignedOut(explanation))) => {
                     let command = sign_in_command(&self.host);
-                    widgets::callout(ui, &format!("GitHub CLI is not signed in to {}. Run {command} in a terminal, then check again.", self.host), true);
+                    widgets::callout(ui, &tr_fmt!("GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.", host = self.host, command = command), true);
                     if !explanation.is_empty() {
                         ui.add_space(4.0);
                         ui.label(RichText::new(explanation.as_str()).small().color(c.muted));
                     }
                     ui.add_space(6.0);
-                    check_again = ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked();
+                    check_again = ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked();
                 }
                 Listing::Ready(Ok(Loaded::Repositories(repositories))) => {
                     if let Some(url) = repository_list(ui, repositories, &self.filter, self.use_ssh) {
@@ -154,7 +155,7 @@ impl ClonePicker {
             }
 
             ui.add_space(12.0);
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 picked = Some(Picked::Close);
             }
         });
@@ -176,7 +177,7 @@ impl ClonePicker {
 fn repository_list(ui: &mut egui::Ui, repositories: &[GitHubRepoListing], filter: &str, use_ssh: bool) -> Option<String> {
     let c = theme::of(ui);
     if repositories.is_empty() {
-        widgets::empty_state(ui, icon::CHECK_CIRCLE, "No repositories on this host");
+        widgets::empty_state(ui, icon::CHECK_CIRCLE, tr("No repositories on this host"));
         return None;
     }
     let query = filter.trim().to_lowercase();
@@ -187,10 +188,12 @@ fn repository_list(ui: &mut egui::Ui, repositories: &[GitHubRepoListing], filter
         })
         .collect();
     if repositories.len() >= LIMIT {
-        ui.label(RichText::new(format!("Showing the first {LIMIT} repositories. Filter to narrow them.")).small().color(c.muted));
+        ui.label(
+            RichText::new(tr_fmt!("Showing the first {count} repositories. Filter to narrow them.", count = LIMIT)).small().color(c.muted),
+        );
     }
     if visible.is_empty() {
-        ui.label(RichText::new("No repositories match the filter").color(c.muted));
+        ui.label(RichText::new(tr("No repositories match the filter")).color(c.muted));
         return None;
     }
     let mut picked = None;
@@ -201,8 +204,8 @@ fn repository_list(ui: &mut egui::Ui, repositories: &[GitHubRepoListing], filter
                     let clicked = ui
                         .horizontal(|ui| {
                             // Both icon slots are always reserved, so the names line up on every row.
-                            let lock = repo.is_private.then_some((icon::LOCK_SIMPLE, "Private"));
-                            let fork = repo.is_fork.then_some((icon::GIT_FORK, "Fork"));
+                            let lock = repo.is_private.then_some((icon::LOCK_SIMPLE, tr("Private")));
+                            let fork = repo.is_fork.then_some((icon::GIT_FORK, tr("Fork")));
                             for mark in [lock, fork] {
                                 icon_slot(ui, mark, c.muted);
                             }

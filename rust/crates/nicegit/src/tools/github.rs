@@ -2,6 +2,7 @@
 //! Pull requests and issues for a GitHub remote, read through the GitHub CLI (`gh`). NiceGit
 //! never stores a token; `gh` keeps its own sign-in.
 
+use crate::i18n::{tr, tr_fmt};
 use egui::{Color32, RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::github::{GhStatus, GitHubItem, ItemKind, ItemState};
@@ -125,12 +126,12 @@ impl ToolWindow for GitHubWindow {
         ui.add_space(6.0);
 
         if self.remote.is_empty() {
-            widgets::callout(ui, "Choose a remote to see its GitHub pull requests and issues.", false);
+            widgets::callout(ui, tr("Choose a remote to see its GitHub pull requests and issues."), false);
             return;
         }
         match self.gh.value(&()) {
             None => {
-                widgets::loading(ui, "Checking the GitHub CLI");
+                widgets::loading(ui, tr("Checking the GitHub CLI"));
                 return;
             }
             Some(Err(error)) => {
@@ -159,7 +160,7 @@ impl GitHubWindow {
             ui.label(RichText::new(icon::GITHUB_LOGO).size(16.0).color(c.muted));
             ui.label(RichText::new(heading_for_remote(&self.remote, host)).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let refresh = ui.add(egui::Button::new(icon::ARROW_CLOCKWISE)).on_hover_text("Read GitHub again");
+                let refresh = ui.add(egui::Button::new(icon::ARROW_CLOCKWISE)).on_hover_text(tr("Read GitHub again"));
                 if refresh.clicked() {
                     self.check_gh = true;
                     self.generation += 1;
@@ -171,7 +172,7 @@ impl GitHubWindow {
             for kind in [ItemKind::PullRequest, ItemKind::Issue] {
                 let selected = self.kind == kind;
                 let glyph = if kind == ItemKind::PullRequest { icon::GIT_PULL_REQUEST } else { icon::CIRCLE_DASHED };
-                if ui.selectable_label(selected, format!("{glyph}  {}", kind.title())).clicked() && !selected {
+                if ui.selectable_label(selected, format!("{glyph}  {}", kind_label(kind))).clicked() && !selected {
                     self.kind = kind;
                     if !self.states().contains(&self.state) {
                         self.state = ItemState::Open;
@@ -184,38 +185,42 @@ impl GitHubWindow {
         ui.horizontal(|ui| {
             for state in self.states().to_vec() {
                 let selected = self.state == state;
-                if ui.selectable_label(selected, state.title()).clicked() && !selected {
+                if ui.selectable_label(selected, state_label(state)).clicked() && !selected {
                     self.state = state;
                     self.limit = PAGE;
                 }
             }
         });
         ui.add_space(4.0);
-        widgets::search_field(ui, &mut self.filter, "Filter loaded items by title, author, or number");
+        widgets::search_field(ui, &mut self.filter, tr("Filter loaded items by title, author, or number"));
     }
 
     fn install_guidance(&mut self, ui: &mut Ui) {
         widgets::callout(
             ui,
-            "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.",
+            tr("The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again."),
             true,
         );
         ui.add_space(6.0);
-        if ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked() {
+        if ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked() {
             self.check_gh = true;
         }
     }
 
     fn sign_in_guidance(&mut self, ui: &mut Ui, explanation: &str, host: &str) {
         let command = if host == "github.com" { "gh auth login".to_string() } else { format!("gh auth login --hostname {host}") };
-        widgets::callout(ui, &format!("GitHub CLI is not signed in. Run {command} in a terminal, then check again."), true);
+        widgets::callout(
+            ui,
+            &tr_fmt!("GitHub CLI is not signed in. Run {command} in a terminal, then check again.", command = command),
+            true,
+        );
         if !explanation.is_empty() {
             ui.add_space(4.0);
             let c = theme::of(ui);
             ui.label(RichText::new(explanation).small().color(c.muted));
         }
         ui.add_space(6.0);
-        if ui.button(format!("{}  Check again", icon::ARROW_CLOCKWISE)).clicked() {
+        if ui.button(format!("{}  {}", icon::ARROW_CLOCKWISE, tr("Check again"))).clicked() {
             self.check_gh = true;
         }
     }
@@ -227,27 +232,31 @@ impl GitHubWindow {
         let limit = self.limit;
         let mut load_more = false;
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.items.value(&key) {
-            None => widgets::loading(ui, "Loading from GitHub"),
+            None => widgets::loading(ui, tr("Loading from GitHub")),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(items)) => {
                 if items.is_empty() {
-                    widgets::empty_state(ui, icon::CHECK_CIRCLE, &format!("No {} {}", self.state.as_str(), kind.title().to_lowercase()));
+                    widgets::empty_state(
+                        ui,
+                        icon::CHECK_CIRCLE,
+                        &tr_fmt!("No {state} {kind}", state = state_word(self.state), kind = kind_name(kind)),
+                    );
                     return;
                 }
                 let visible: Vec<&GitHubItem> = items.iter().filter(|item| item.matches(&self.filter)).collect();
                 if visible.is_empty() {
-                    ui.label(RichText::new("No matches in the loaded items").color(c.muted));
+                    ui.label(RichText::new(tr("No matches in the loaded items")).color(c.muted));
                 }
                 for item in visible {
                     item_row(ui, kind, item);
                     ui.add_space(6.0);
                 }
                 if items.len() >= limit && limit < MAX_ITEMS {
-                    if ui.button("Load more").clicked() {
+                    if ui.button(tr("Load more")).clicked() {
                         load_more = true;
                     }
                 } else if items.len() >= MAX_ITEMS {
-                    ui.label(RichText::new("Showing the first 1,000 items").small().color(c.muted));
+                    ui.label(RichText::new(tr("Showing the first 1,000 items")).small().color(c.muted));
                 }
             }
         });
@@ -278,10 +287,10 @@ fn item_row(ui: &mut Ui, kind: ItemKind, item: &GitHubItem) {
                     widgets::pill(ui, &state.to_lowercase(), state_color(state, &c));
                 }
                 if item.is_draft {
-                    widgets::pill(ui, "draft", c.muted);
+                    widgets::pill(ui, tr("draft"), c.muted);
                 }
                 if let Some(author) = &item.author {
-                    ui.label(RichText::new(format!("by {author}")).small().color(c.muted));
+                    ui.label(RichText::new(tr_fmt!("by {author}", author = author)).small().color(c.muted));
                 }
                 for label in &item.labels {
                     label_pill(ui, &label.name, &label.color);
@@ -289,7 +298,7 @@ fn item_row(ui: &mut Ui, kind: ItemKind, item: &GitHubItem) {
             });
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.link(format!("{}  Open in browser", icon::ARROW_SQUARE_OUT)).clicked() {
+                    if ui.link(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open in browser"))).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(&item.url));
                     }
                 });
@@ -327,6 +336,42 @@ fn parse_hex(hex: &str) -> Option<Color32> {
     }
     let value = u32::from_str_radix(hex, 16).ok()?;
     Some(Color32::from_rgb((value >> 16) as u8, (value >> 8) as u8, value as u8))
+}
+
+/// The label of a kind of item in the toolbar, translated here because the core names are English.
+fn kind_label(kind: ItemKind) -> &'static str {
+    match kind {
+        ItemKind::PullRequest => tr("Pull requests"),
+        ItemKind::Issue => tr("Issues"),
+    }
+}
+
+/// The lowercase kind name used in the empty-list message.
+fn kind_name(kind: ItemKind) -> &'static str {
+    match kind {
+        ItemKind::PullRequest => tr("pull requests"),
+        ItemKind::Issue => tr("issues"),
+    }
+}
+
+/// The label of a state filter in the toolbar.
+fn state_label(state: ItemState) -> &'static str {
+    match state {
+        ItemState::Open => tr("Open"),
+        ItemState::Closed => tr("Closed"),
+        ItemState::Merged => tr("Merged"),
+        ItemState::All => tr("All"),
+    }
+}
+
+/// The lowercase state name used in the empty-list message.
+fn state_word(state: ItemState) -> &'static str {
+    match state {
+        ItemState::Open => tr("open"),
+        ItemState::Closed => tr("closed"),
+        ItemState::Merged => tr("merged"),
+        ItemState::All => tr("all"),
+    }
 }
 
 /// The heading for the window, naming the remote whose GitHub repository is shown, and its host

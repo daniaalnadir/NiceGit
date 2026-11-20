@@ -49,10 +49,10 @@ impl PullSetting {
 
     pub fn title(self) -> &'static str {
         match self {
-            PullSetting::FollowGit => "Follow Git's settings",
-            PullSetting::FastForwardOnly => "Fast-forward only",
-            PullSetting::Merge => "Merge",
-            PullSetting::Rebase => "Rebase",
+            PullSetting::FollowGit => crate::i18n::tr("Follow Git's settings"),
+            PullSetting::FastForwardOnly => crate::i18n::tr("Fast-forward only"),
+            PullSetting::Merge => crate::i18n::tr("Merge"),
+            PullSetting::Rebase => crate::i18n::tr("Rebase"),
         }
     }
 
@@ -106,10 +106,10 @@ impl DiffContextSetting {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Three => "3 lines",
-            Self::Ten => "10 lines",
-            Self::TwentyFive => "25 lines",
-            Self::WholeFile => "Whole file",
+            Self::Three => crate::i18n::tr("3 lines"),
+            Self::Ten => crate::i18n::tr("10 lines"),
+            Self::TwentyFive => crate::i18n::tr("25 lines"),
+            Self::WholeFile => crate::i18n::tr("Whole file"),
         }
     }
 
@@ -248,9 +248,9 @@ impl ActionScope {
 
     pub fn title(self) -> &'static str {
         match self {
-            ActionScope::Repository => "Repository",
-            ActionScope::Commit => "Commit",
-            ActionScope::File => "File",
+            ActionScope::Repository => crate::i18n::tr("Repository"),
+            ActionScope::Commit => crate::i18n::tr("Commit"),
+            ActionScope::File => crate::i18n::tr("File"),
         }
     }
 }

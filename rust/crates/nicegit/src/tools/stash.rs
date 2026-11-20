@@ -13,6 +13,7 @@ use nicegit_core::models::{Operation, Stash, StashOptions, StatusEntry, StatusKi
 use nicegit_core::Snapshot;
 
 use crate::diff_view::{self, DiffContent};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 use crate::ui::dialogs::{Dialog, InputKind};
@@ -70,16 +71,16 @@ pub(crate) fn save_plan(files: &[StashFile], selected: &BTreeSet<String>, includ
 /// Why saving is not possible right now, if it is not.
 pub(crate) fn save_blocker(has_changes: bool, has_selection: bool, idle: bool, operation: Option<Operation>) -> Option<String> {
     if let Some(operation) = operation {
-        return Some(format!("Finish or abort the {} in progress before stashing.", operation.name()));
+        return Some(tr_fmt!("Finish or abort the {operation} in progress before stashing.", operation = operation.name()));
     }
     if !idle {
-        return Some("Wait for the current Git action to finish.".to_string());
+        return Some(tr("Wait for the current Git action to finish.").to_string());
     }
     if !has_changes {
-        return Some("There are no changes to stash.".to_string());
+        return Some(tr("There are no changes to stash.").to_string());
     }
     if !has_selection {
-        return Some("Select files to stash.".to_string());
+        return Some(tr("Select files to stash.").to_string());
     }
     None
 }
@@ -204,28 +205,28 @@ impl StashWindow {
 
     fn save_section(&mut self, ui: &mut Ui, cx: &mut Ctx, files: &[StashFile]) {
         let c = theme::of(ui);
-        widgets::section(ui, "Save");
+        widgets::section(ui, tr("Save"));
         ui.add_space(4.0);
-        let hint = format!("WIP on {}", cx.snapshot.current_branch);
+        let hint = tr_fmt!("WIP on {branch}", branch = cx.snapshot.current_branch);
         let field = widgets::text_field(ui, &mut self.message, &hint);
         // Read as the message the stash is saved with, which the hint only suggests.
-        widgets::name_text_field(&field, "Stash message");
+        widgets::name_text_field(&field, tr("Stash message"));
         ui.add_space(4.0);
 
         ui.horizontal(|ui| {
-            crate::tools::widgets::checkbox(ui, true, &mut self.include_untracked, "Include untracked files");
+            crate::tools::widgets::checkbox(ui, true, &mut self.include_untracked, tr("Include untracked files"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add_enabled(!files.is_empty(), egui::Button::new("None")).clicked() {
+                if ui.add_enabled(!files.is_empty(), egui::Button::new(tr("None"))).clicked() {
                     self.selected.clear();
                 }
-                if ui.add_enabled(!files.is_empty(), egui::Button::new("All")).clicked() {
+                if ui.add_enabled(!files.is_empty(), egui::Button::new(tr("All"))).clicked() {
                     self.selected = files.iter().map(|file| file.path.clone()).collect();
                 }
             });
         });
 
         if files.is_empty() {
-            ui.label(RichText::new("No changed files.").small().color(c.muted));
+            ui.label(RichText::new(tr("No changed files.")).small().color(c.muted));
         } else {
             egui::ScrollArea::vertical().id_salt("stash_files").auto_shrink([false, true]).max_height(180.0).show(ui, |ui| {
                 for file in files {
@@ -234,7 +235,7 @@ impl StashWindow {
                     let mut checked = !disabled && self.selected.contains(&file.path);
                     let mut name = file.path.clone();
                     if file.untracked {
-                        name.push_str("  (untracked)");
+                        name.push_str(&format!("  {}", tr("(untracked)")));
                     }
                     let response = crate::tools::widgets::checkbox(ui, !disabled, &mut checked, RichText::new(name).monospace());
                     if response.changed() {
@@ -254,8 +255,8 @@ impl StashWindow {
         let count = stash_paths(files, &self.selected, self.include_untracked).len();
         ui.horizontal(|ui| {
             let label = match &plan {
-                Some(SavePlan::All) | None => "Stash changes".to_string(),
-                Some(SavePlan::Paths(_)) => format!("Stash {count} {}", if count == 1 { "file" } else { "files" }),
+                Some(SavePlan::All) | None => tr("Stash changes").to_string(),
+                Some(SavePlan::Paths(_)) => tr_count("Stash {count} file", "Stash {count} files", count),
             };
             if widgets::primary_button(ui, &label, blocker.is_none()).clicked() {
                 if let Some(plan) = plan {
@@ -272,16 +273,18 @@ impl StashWindow {
         let message = self.message.clone();
         self.awaiting_save = Some(cx.snapshot.stashes.len());
         match plan {
-            SavePlan::All => cx.act("Stash changes", move |client, directory| {
+            SavePlan::All => cx.act(tr("Stash changes"), move |client, directory| {
                 // This window has no options of its own, so it keeps the stash's long-standing choices.
                 let options = StashOptions { keep_index: false, include_untracked: true, staged_only: false };
-                client.save_stash(&message, options, directory).map(|()| Some("Saved your changes in a stash.".to_string()))
+                client.save_stash(&message, options, directory).map(|()| Some(tr("Saved your changes in a stash.").to_string()))
             }),
             SavePlan::Paths(paths) => {
-                let label = format!("Stash {} selected files", paths.len());
+                let label = tr_fmt!("Stash {count} selected files", count = paths.len());
                 let count = paths.len();
                 cx.act(label, move |client, directory| {
-                    client.save_stash_paths(&paths, &message, directory).map(|()| Some(format!("Saved {count} selected files in a stash.")))
+                    client
+                        .save_stash_paths(&paths, &message, directory)
+                        .map(|()| Some(tr_fmt!("Saved {count} selected files in a stash.", count = count)))
                 });
             }
         }
@@ -294,7 +297,7 @@ impl StashWindow {
         let blocked = !idle || snapshot.operation.is_some();
         let stashes = &snapshot.stashes;
         if stashes.is_empty() {
-            widgets::empty_state(ui, icon::ARCHIVE_BOX, "No stashes");
+            widgets::empty_state(ui, icon::ARCHIVE_BOX, tr("No stashes"));
             return;
         }
         egui::ScrollArea::vertical().id_salt("stash_list").auto_shrink([false, false]).max_height(190.0).show(ui, |ui| {
@@ -312,23 +315,29 @@ impl StashWindow {
                             self.select(stash, ui.ctx(), cx.repo);
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if widgets::icon_button(ui, icon::TRASH, "Delete stash", idle).clicked() {
+                            if widgets::icon_button(ui, icon::TRASH, tr("Delete stash"), idle).clicked() {
                                 self.pending = Some((Confirm::Delete, stash.clone()));
                             }
-                            if action_button(ui, "Pop", "Restore the changes, then remove the stash if they apply", !blocked).clicked() {
+                            if action_button(ui, tr("Pop"), tr("Restore the changes, then remove the stash if they apply"), !blocked)
+                                .clicked()
+                            {
                                 self.pending = Some((Confirm::Pop, stash.clone()));
                             }
-                            if action_button(ui, "Apply", "Restore the changes and keep the stash", !blocked).clicked() {
+                            if action_button(ui, tr("Apply"), tr("Restore the changes and keep the stash"), !blocked).clicked() {
                                 let reference = stash.reference.clone();
                                 let stash = stash.clone();
-                                cx.act(format!("Apply {reference}"), move |client, directory| {
-                                    client.apply_stash(&stash, directory).map(|()| Some(format!("Applied {reference}.")))
+                                cx.act(tr_fmt!("Apply {reference}", reference = reference), move |client, directory| {
+                                    client
+                                        .apply_stash(&stash, directory)
+                                        .map(|()| Some(tr_fmt!("Applied {reference}.", reference = reference)))
                                 });
                             }
-                            if action_button(ui, "Rename", "Give the stash a new name. It moves to the top of the list", idle).clicked() {
+                            if action_button(ui, tr("Rename"), tr("Give the stash a new name. It moves to the top of the list"), idle)
+                                .clicked()
+                            {
                                 cx.open_dialog(Dialog::input(
-                                    &format!("Rename {}", stash.reference),
-                                    "New name",
+                                    &tr_fmt!("Rename {reference}", reference = stash.reference),
+                                    tr("New name"),
                                     &stash.message,
                                     InputKind::RenameStash(stash.clone()),
                                 ));
@@ -347,10 +356,10 @@ impl StashWindow {
         let blocked = !cx.idle || cx.snapshot.operation.is_some();
         let (text, button) = match kind {
             Confirm::Pop => (
-                format!("Apply {} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.", stash.reference),
-                "Pop stash",
+                tr_fmt!("Apply {reference} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.", reference = stash.reference),
+                tr("Pop stash"),
             ),
-            Confirm::Delete => (format!("Delete {}? Undo can bring it back while NiceGit is open.", stash.reference), "Delete stash"),
+            Confirm::Delete => (tr_fmt!("Delete {reference}? Undo can bring it back while NiceGit is open.", reference = stash.reference), tr("Delete stash")),
         };
         let mut confirmed = false;
         let mut cancelled = false;
@@ -364,7 +373,7 @@ impl StashWindow {
                 } else {
                     confirmed = widgets::primary_button(ui, button, !blocked).clicked();
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     cancelled = true;
                 }
             });
@@ -376,16 +385,16 @@ impl StashWindow {
             self.pending = None;
             let reference = stash.reference.clone();
             match kind {
-                Confirm::Pop => cx.act(format!("Pop {reference}"), move |client, directory| {
-                    client.pop_stash(&stash, directory).map(|()| Some(format!("Popped {reference}.")))
+                Confirm::Pop => cx.act(tr_fmt!("Pop {reference}", reference = reference), move |client, directory| {
+                    client.pop_stash(&stash, directory).map(|()| Some(tr_fmt!("Popped {reference}.", reference = reference)))
                 }),
                 Confirm::Delete => {
                     let name = stash.message.clone();
-                    cx.act_with_record(format!("Delete {reference}"), move |client, directory| {
+                    cx.act_with_record(tr_fmt!("Delete {reference}", reference = reference), move |client, directory| {
                         let deletion = client.drop_stash_keeping_undo(&stash, directory)?;
                         let step = nicegit_core::undo::UndoStep::StashDeletion(deletion);
-                        let entry = crate::app::HistoryEntry { title: "Delete stash".into(), detail: Some(name), step };
-                        Ok((Some(format!("Deleted {reference}.")), Some(crate::app::Recorded::Step(entry))))
+                        let entry = crate::app::HistoryEntry { title: tr("Delete stash").into(), detail: Some(name), step };
+                        Ok((Some(tr_fmt!("Deleted {reference}.", reference = reference)), Some(crate::app::Recorded::Step(entry))))
                     })
                 }
             }
@@ -396,11 +405,11 @@ impl StashWindow {
     fn preview(&mut self, ui: &mut Ui) {
         let c = theme::of(ui);
         let Some(hash) = self.selected_stash.clone() else {
-            widgets::empty_state(ui, icon::EYE, "Select a stash to see its changes.");
+            widgets::empty_state(ui, icon::EYE, tr("Select a stash to see its changes."));
             return;
         };
         if self.loading.as_ref().is_some_and(|loading| loading.hash == hash) {
-            widgets::loading(ui, "Reading the stash...");
+            widgets::loading(ui, tr("Reading the stash..."));
             return;
         }
         match &self.preview {
@@ -409,7 +418,7 @@ impl StashWindow {
                 Err(error) => widgets::error(ui, error),
             },
             _ => {
-                ui.label(RichText::new("Select a stash to see its changes.").color(c.muted));
+                ui.label(RichText::new(tr("Select a stash to see its changes.")).color(c.muted));
             }
         }
     }
@@ -430,7 +439,7 @@ impl ToolWindow for StashWindow {
     }
 
     fn title(&self) -> String {
-        "Stashes".to_string()
+        tr("Stashes").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -472,7 +481,7 @@ impl ToolWindow for StashWindow {
         let files = stashable_files(&cx.snapshot.status);
 
         ui.add_space(4.0);
-        ui.label(RichText::new("Set changes aside to switch work or clean up, and restore them later.").small().color(c.muted));
+        ui.label(RichText::new(tr("Set changes aside to switch work or clean up, and restore them later.")).small().color(c.muted));
         ui.add_space(8.0);
 
         self.save_section(ui, cx, &files);
@@ -480,7 +489,7 @@ impl ToolWindow for StashWindow {
         ui.separator();
         ui.add_space(6.0);
 
-        widgets::section(ui, "Saved stashes");
+        widgets::section(ui, tr("Saved stashes"));
         ui.add_space(4.0);
         self.stash_list(ui, cx);
         ui.add_space(6.0);
@@ -571,9 +580,9 @@ mod tests {
     #[test]
     fn save_is_blocked_with_a_reason() {
         assert_eq!(save_blocker(true, true, true, None), None);
-        assert_eq!(save_blocker(true, false, true, None), Some("Select files to stash.".to_string()));
-        assert_eq!(save_blocker(false, false, true, None), Some("There are no changes to stash.".to_string()));
-        assert_eq!(save_blocker(true, true, false, None), Some("Wait for the current Git action to finish.".to_string()));
+        assert_eq!(save_blocker(true, false, true, None), Some(tr("Select files to stash.").to_string()));
+        assert_eq!(save_blocker(false, false, true, None), Some(tr("There are no changes to stash.").to_string()));
+        assert_eq!(save_blocker(true, true, false, None), Some(tr("Wait for the current Git action to finish.").to_string()));
         assert_eq!(
             save_blocker(true, true, true, Some(Operation::Merge)),
             Some("Finish or abort the merge in progress before stashing.".to_string())

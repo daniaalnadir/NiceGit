@@ -1,0 +1,300 @@
+# ja: the commit history, changes, and diff views.
+(and {count} earlier)	(ほか {count} 件)
+A binary file has no lines	バイナリファイルには行がありません
+A large file. GitHub warns about files over 50 MB and refuses files over 100 MB; consider Git LFS or ignoring it.	大きなファイルです。GitHub は 50 MB を超えるファイルに警告し、100 MB を超えるファイルは拒否します。Git LFS の利用か無視を検討してください。
+A new commit on {branch} undoes the changes from “{subject}”.	{branch} に新しいコミットを追加して、「{subject}」の変更を取り消します。
+Absorb staged changes into the earlier commits that last changed their lines	ステージした変更を、その行を最後に変更した以前のコミットに取り込む
+Add trailers	トレーラーを追加
+Added line	追加された行
+All .{extension} files in .gitignore	.gitignore 内のすべての .{extension} ファイル
+All {count} commits are already on {branch}.	{count} 件のコミットはすでに {branch} にあります。
+Amend last commit	直前のコミットを修正
+Binary file, {bytes} bytes	バイナリファイル、{bytes} バイト
+Branch / tag	ブランチ / タグ
+Branch label {name}	ブランチのラベル {name}
+Branches shown	表示するブランチ
+Breaking	破壊的変更
+Check out	チェックアウト
+Check out a branch before cherry-picking.	チェリーピックの前にブランチをチェックアウトしてください。
+Check out {branch}	{branch} をチェックアウト
+Check out {name} and cherry-pick {commits}?	{name} をチェックアウトして {commits} をチェリーピックしますか？
+Cherry-pick	チェリーピック
+Cherry-pick this commit?	このコミットをチェリーピックしますか？
+Cherry-pick {count} commit	{count} 件のコミットをチェリーピック
+Cherry-pick {count} commits	{count} 件のコミットをチェリーピック
+Cherry-pick {count} commits?	{count} 件のコミットをチェリーピックしますか？
+Cherry-pick {hash}	チェリーピック {hash}
+Choose a type first	先に種類を選択してください
+Choose the branch and tag labels the graph draws, and whether stashes are shown	グラフに表示するブランチとタグのラベル、およびスタッシュを表示するかを選択します
+Clear filters	フィルターをクリア
+Close this file's conflict editor first	先にこのファイルのコンフリクトエディターを閉じてください
+Columns	列
+Combine the selected commits into one, in the interactive rebase window to review	選択したコミットを 1 つにまとめます。対話的リベースのウィンドウで確認できます
+Commit and push	コミットしてプッシュ
+Commit description	コミットの説明
+Commit history	コミット履歴
+Commit message	コミットメッセージ
+Commit options	コミットのオプション
+Commit or stash your changes before cherry-picking.	チェリーピックの前に変更をコミットまたはスタッシュしてください。
+Commit or stash your changes first	先に変更をコミットまたはスタッシュしてください
+Commit scope	コミットのスコープ
+Commit staged changes as fixup	ステージした変更を fixup としてコミット
+Commit summary	コミットの要約
+Commit type	コミットの種類
+Commit {count} file to {branch}	{count} 個のファイルを {branch} にコミット
+Commit {count} files to {branch}	{count} 個のファイルを {branch} にコミット
+Commit {id}	コミット {id}
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)	コミットして {upstream} にプッシュ (Shift-Ctrl/Cmd-Enter)
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.	コミットして {upstream} にプッシュ (Shift-Ctrl/Cmd-Enter)。コミットとプッシュでは Git フックをスキップします。
+Committing as {name} <{email}>	{name} <{email}> としてコミット
+Compare with marked commit	マークしたコミットと比較
+Compare with working files	作業ツリーのファイルと比較
+Conflicts stop the sequence for you to resolve or abort.	コンフリクトが発生すると処理は止まり、解決または中止できます。
+Copied the commit message.	コミットメッセージをコピーしました。
+Copy folder path	フォルダーのパスをコピー
+Copy path	パスをコピー
+Could not read the commits on {branch}: {error}	{branch} のコミットを読み込めませんでした: {error}
+Create a branch at {hash}	{hash} にブランチを作成
+Create tag here…	ここにタグを作成…
+Discard all	すべて破棄
+Discard all changes?	すべての変更を破棄しますか？
+Discard all changes…	すべての変更を破棄…
+Discard changes in {path}?	{path} の変更を破棄しますか？
+Discard changes?	変更を破棄しますか？
+Discard changes…	変更を破棄…
+Discard folder changes…	フォルダーの変更を破棄…
+Discard this change from the file. You can undo it.	この変更をファイルから破棄します。元に戻せます。
+Discarded changes to {path}{more}	{path} の変更を破棄しました{more}
+Discards changes to all {count} unstaged files, including those hidden by the filter	フィルターで隠れたものを含む、ステージされていない {count} 件のファイルの変更をすべて破棄します
+Divides this commit into two, with a message for each	このコミットを 2 つに分割し、それぞれにメッセージを付けます
+Drag a column's edge to resize it. Right-click to choose columns.	列の端をドラッグして幅を変更します。右クリックで表示する列を選択できます。
+Drop…	削除…
+Each stash as a row above the commit it was made on, when that commit is loaded	各スタッシュは、作成元のコミットが読み込まれている場合にそのコミットの上に行として表示されます
+Edit file	ファイルを編集
+Edit message…	メッセージを編集…
+File history	ファイルの履歴
+File or folder in the repository	リポジトリ内のファイルまたはフォルダー
+File view	ファイル表示
+Files hidden by the filter are included.	フィルターで隠れたファイルも含まれます。
+Fill in the template to commit	テンプレートを入力してコミット
+Filter authors	作成者で絞り込み
+Filter by author	作成者で絞り込み
+Filter by path	パスで絞り込み
+Filter changed files	変更されたファイルを絞り込み
+Filter loaded commits	読み込み済みのコミットを絞り込み
+Filter…	絞り込み…
+Find in diff	差分内を検索
+Finish or abort the current Git operation before cherry-picking.	チェリーピックの前に、進行中の Git 操作を完了または中止してください。
+Finish or abort the current Git operation before switching branches.	ブランチを切り替える前に、進行中の Git 操作を完了または中止してください。
+Finish the current Git operation first	先に進行中の Git 操作を完了してください
+Fix up	フィックスアップ
+Fix up with staged changes…	ステージした変更でフィックスアップ…
+Fix up “{subject}”?	「{subject}」をフィックスアップしますか？
+Folder {name}, {files}	フォルダー {name}、{files}
+Folds the staged changes into this commit and replays the commits after it	ステージした変更をこのコミットに取り込み、後続のコミットを再適用します
+From commit.template	commit.template から
+Git hooks are skipped for this commit	このコミットでは Git フックをスキップします
+Graph	グラフ
+History columns	履歴の列
+Hunk at line {start}	{start} 行目のハンク
+Hunk at lines {start} to {end}	{start} 行から {end} 行までのハンク
+Ignore	無視
+Interactive rebase from here…	ここから対話的リベース…
+It is applied to {branch} as a new commit.	{branch} に新しいコミットとして適用されます。
+Labels such as origin/main. A local branch that tracks one keeps its label.	origin/main などのラベル。それを追跡しているローカルブランチは、自身のラベルを保持します。
+Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when committing and pushing. Resets after each commit.	次のコミットでは pre-commit と commit-msg フックを、コミットとプッシュでは pre-push フックを実行しません。コミットごとにリセットされます。
+Line	行
+Listing files…	ファイルを一覧表示中…
+Load older history	古い履歴を読み込む
+Lock file (LFS)	ファイルをロック (LFS)
+Locked {path} with Git LFS.	{path} を Git LFS でロックしました。
+Mark for comparison	比較用にマーク
+Marked {hash}. Right-click another commit to compare.	{hash} をマークしました。比較するには別のコミットを右クリックしてください。
+Matches each commit's message, author, ID, branches, and tags	各コミットのメッセージ、作成者、ID、ブランチ、タグに一致します
+Merge commits can't be edited here	マージコミットはここでは編集できません
+Merge commits can't be fixed up here	マージコミットはここでは fixup できません
+Merge commits can't be split	マージコミットは分割できません
+More actions for this file	このファイルのその他の操作
+Name or email	名前またはメール
+New commits on {branch} undo the changes from {count} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.	{branch} に新しいコミットを追加して、{count} 件のコミットの変更を新しいものから順に取り消します。元のコミットは履歴に残ります。コンフリクトが発生すると処理は止まり、解決または中止できます。
+Next match (Enter)	次の一致 (Enter)
+NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}.	NiceGit はまず {name} に切り替え、チェックアウトと同様に未コミットの変更をスタッシュへ保存します。その後、{name} でのチェリーピックを確定します。
+No Git identity set. Choose one under Identity in the repository menu.	Git のユーザー情報が設定されていません。リポジトリメニューの「ユーザー情報」から選択してください。
+No authors match	一致する作成者はいません
+No changes to show	表示する変更はありません
+No matching files	一致するファイルはありません
+No other authors in the loaded history	読み込んだ履歴に他の作成者はいません
+No unstaged changes	ステージされていない変更はありません
+Not available right now	現在利用できません
+Not committed yet	まだコミットされていません
+Only files shown by the filter are included.	フィルターで表示されているファイルのみが含まれます。
+Open anyway	それでも開く
+Open file	ファイルを開く
+Open in default app	既定のアプリで開く
+Open in diff tool	差分ツールで開く
+Open in {name}	{name} で開く
+Path	パス
+Previous match (Shift+Enter)	前の一致 (Shift+Enter)
+Reading file…	ファイルを読み込み中…
+Recent commit summaries	最近のコミットの要約
+Records a fixup! commit for this commit. An interactive rebase folds it in later	このコミット用の fixup! コミットを記録します。後で対話的リベースで取り込まれます
+Remote branch labels	リモートブランチのラベル
+Remove the selected commits and their changes, in the interactive rebase window to review	選択したコミットとその変更を削除します。対話的リベースのウィンドウで確認できます
+Removed line	削除された行
+Reorder, edit, squash, or drop the commits after this one	このコミット以降のコミットを並べ替え、編集、統合、削除します
+Reset {branch} to here…	{branch} をここにリセット…
+Resize the {column} column	{column} 列の幅を変更
+Resolve conflict…	コンフリクトを解決…
+Resolve in {name}	{name} で解決
+Resolve the conflicted files first	先にコンフリクトのあるファイルを解決してください
+Resolved from memory	記録から解決済み
+Restore column widths	列の幅を元に戻す
+Revert this commit?	このコミットを取り消しますか？
+Revert {count} commits?	{count} 件のコミットを取り消しますか？
+Revert…	取り消し…
+Rewrites this commit and the ones after it	このコミットとそれ以降のコミットを書き換えます
+Save a copy…	コピーを保存…
+Save as ZIP…	ZIP として保存…
+Save as patch	パッチとして保存
+Save as patch…	パッチとして保存…
+Save staged changes as a patch	ステージした変更をパッチとして保存
+Save staged changes as a patch, including files hidden by the filter	フィルターで隠れたファイルを含め、ステージした変更をパッチとして保存
+Save unstaged changes as a patch, including untracked files	ステージされていない変更を、未追跡ファイルを含めてパッチとして保存
+Save unstaged changes as a patch, including untracked files and those hidden by the filter	フィルターで隠れたファイルと未追跡ファイルを含め、ステージされていない変更をパッチとして保存
+Saved {file}.	{file} を保存しました。
+Saved {name}.	{name} を保存しました。
+Search all history	すべての履歴を検索
+Search all history (Shift-Ctrl/Cmd-F)	すべての履歴を検索 (Shift-Ctrl/Cmd-F)
+Search files in this commit…	このコミット内のファイルを検索…
+Search history	履歴を検索
+Select at least two commits to squash	統合するには 2 件以上のコミットを選択してください
+Set your Git name and email first	先に Git のユーザー名とメールアドレスを設定してください
+Short commit ID	短いコミット ID
+Show all	すべて表示
+Show all branches	すべてのブランチを表示
+Show all branches to choose which the graph includes	グラフに含めるブランチを選ぶには、すべてのブランチを表示してください
+Show in file manager	ファイルマネージャーで表示
+Show in the graph	グラフに表示
+Show only commits by an author, or that touch a path.	作成者のコミット、またはパスに関係するコミットのみを表示します。
+Show only the commits by an author, or that touch a file or folder	作成者のコミット、またはファイルやフォルダーに関係するコミットのみを表示
+Showing commits {filters}.	コミットを表示中: {filters}。
+Showing local branches.	ローカルブランチを表示中です。
+Showing only {branch}.	{branch} のみを表示中です。
+Showing the current branch and its upstream.	現在のブランチとその上流ブランチを表示中です。
+Showing the first {shown} of {total} entries in this commit.	このコミットの {total} 件のうち最初の {shown} 件を表示しています。
+Show…	表示…
+Sign the next commit, amend, or Commit and push with your signing key, or leave it unsigned. Starts from commit.gpgSign and resets after each commit.	次のコミット、修正、またはコミットしてプッシュに署名キーで署名するか、未署名のままにします。commit.gpgSign から始まり、コミットごとにリセットされます。
+Sign this commit	このコミットに署名
+Skip Git hooks	Git フックをスキップ
+Split commit…	コミットを分割…
+Squash…	統合…
+Stage All	すべてステージ
+Stage All Changes	すべての変更をステージ
+Stage all {changes} and commit	{changes} 件をすべてステージしてコミット
+Stage every change, as Stage All Changes does, then commit	「すべての変更をステージ」と同様にすべての変更をステージしてからコミットします
+Stage files to commit	コミットするファイルをステージ
+Stage files to include them in the next commit	次のコミットに含めるファイルをステージしてください
+Stage folder	フォルダーをステージ
+Stage the changes to commit as a fixup first	fixup としてコミットする変更を先にステージしてください
+Stage the changes to fold into this commit first	このコミットに取り込む変更を先にステージしてください
+Stage this change	この変更をステージ
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}	{count} 個のファイルのステージ済みと未ステージの変更は失われ、未追跡ファイルは削除されます。この操作は元に戻せません。{hidden}
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}	{count} 個のファイルのステージ済みと未ステージの変更は失われ、未追跡ファイルは削除されます。この操作は元に戻せません。{scope}
+Staged and unstaged changes to {path} are discarded. {note}	{path} のステージ済みと未ステージの変更を破棄します。{note}
+Staged files	ステージ済みのファイル
+Staged files ({count})	ステージ済みのファイル ({count})
+Staged {files} in {folder}.	{folder} 内の {files} をステージしました。
+Stages all {count} unstaged files, including those hidden by the filter	フィルターで隠れたものを含む、ステージされていない {count} 件のファイルをすべてステージします
+Start bisect: this commit is good	bisect を開始: このコミットは正常
+Stash or discard unstaged changes first	先にステージされていない変更をスタッシュまたは破棄してください
+Stash this change and remove it from the file	この変更をスタッシュしてファイルから取り除く
+Stash this file…	このファイルをスタッシュ…
+Stashed {path}.	{path} をスタッシュしました。
+Subject	件名
+Tag labels	タグのラベル
+Tag {name}	タグ {name}
+Take {side} version	{side} の版を採用
+That commit is already on {branch}.	このコミットはすでに {branch} にあります。
+The last commit is already on a remote. Amending rewrites it, so others who pulled it will need to reconcile.	直前のコミットはすでにリモートにあります。修正するとそのコミットが書き換わるため、取得済みの人は調整が必要になります。
+The selected commits must be in the loaded history, and none can be a merge	選択したコミットは読み込み済みの履歴にある必要があり、マージコミットは含められません
+The staged changes become part of {commit}, and the commits after it on {branch} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.	ステージした変更は {commit} に含まれ、{branch} 上でそれ以降のコミットが書き換わるためハッシュが変わります。既にプッシュ済みの場合は強制プッシュが必要です。
+They are applied to {branch} oldest first.	{branch} に古いものから順に適用されます。
+They are applied to {branch} oldest first. Conflicts stop the sequence for you to resolve or abort.	{branch} に古いものから順に適用されます。コンフリクトが発生すると処理は止まり、解決または中止できます。
+This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy.	この操作は元に戻せません。名前の変更、コンフリクト、フォルダー、サブモジュールは保存されたコピーなしで破棄されます。
+This commit's tree has no files.	このコミットのツリーにはファイルがありません。
+This file in .gitignore	.gitignore 内のこのファイル
+This file is empty.	このファイルは空です。
+This file is {size}. Large files are not shown until you open them.	このファイルのサイズは {size} です。大きなファイルは開くまで表示されません。
+This file on this computer only	このファイルをこのコンピューターだけで
+This is a submodule. It records commit {commit}, but its files are in its own repository, so they are not shown here.	これはサブモジュールです。コミット {commit} を記録していますが、ファイルは独自のリポジトリにあるため、ここには表示されません。
+This repository uses Conventional Commits	このリポジトリは Conventional Commits を使用しています
+Took the {side} version of {path}.	{path} の {side} の版を採用しました。
+Tree	ツリー
+Try again	再試行
+Type	種類
+Undo commit	コミットを取り消す
+Undo discard	破棄を元に戻す
+Undo the last commit?	直前のコミットを取り消しますか？
+Undo the selected commits with new commits, newest first	選択したコミットを新しいコミットで取り消します。新しいものから順に
+Undo this commit…	このコミットを取り消す…
+Unlock file (LFS)	ファイルのロックを解除 (LFS)
+Unstage All	すべてステージ解除
+Unstage All Changes	すべての変更をステージ解除
+Unstage folder	フォルダーのステージを解除
+Unstage this change	この変更のステージを解除
+Unstaged files	ステージされていないファイル
+Unstaged files ({count})	ステージされていないファイル ({count})
+Unstaged {files} in {folder}.	{folder} 内の {files} のステージを解除しました。
+Unstages all {count} staged files, including those hidden by the filter	フィルターで隠れたものを含む、ステージ済みの {count} 件のファイルすべてのステージを解除します
+Updated the ignore rules.	無視ルールを更新しました。
+Use a recent summary	最近の要約を使う
+Wait for the current Git action to finish before cherry-picking.	チェリーピックの前に、進行中の Git 操作が終わるまでお待ちください。
+Which branches the graph includes	グラフに含めるブランチ
+Working tree	作業ツリー
+Write a summary to commit	コミットするには要約を入力してください
+You are here	現在位置
+You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.	ブランチにいないため、ここでのコミットはどのブランチにも属さず失われる可能性があります。先にブランチを作成してください。
+You can undo this from the Changes panel until the file changes again.	次にファイルが変更されるまでは、変更パネルから元に戻せます。
+[added: {text}]	[追加: {text}]
+[removed: {text}]	[削除: {text}]
+binary	バイナリ
+in {hash}	{hash}
+labels {refs}	ラベル {refs}
+scope	スコープ
+staged	ステージ済み
+touching {path}	{path} に関係
+unstaged	ステージされていない
+{count} branch hidden.	{count} 件のブランチを非表示
+{count} branches hidden.	{count} 件のブランチを非表示
+{count} commits selected	{count} 件のコミットを選択中
+{count} file change on	{count} 件のファイル変更:
+{count} file changes on	{count} 件のファイル変更:
+{count} line added	{count} 行追加
+{count} line removed	{count} 行削除
+{count} lines added	{count} 行追加
+{count} lines removed	{count} 行削除
+{count} of them are already on {branch}.	そのうち {count} 件はすでに {branch} にあります。
+{count} uncommitted file	{count} 件のコミットされていないファイル
+{count} uncommitted files	{count} 件のコミットされていないファイル
+{current} of {count}	{count} 件中 {current} 件目
+{kind} {number}: {code}	{kind} {number}: {code}
+{kind}: {code}	{kind}: {code}
+{label} this change	{label}：この変更
+{name}, {kind}, {place}	{name}、{kind}、{place}
+{path} is untracked and will be deleted. {note}	{path} は未追跡のため削除されます。{note}
+{shown} of {total}	{total} 件中 {shown} 件
+{title} ({count})	{title} ({count})
+{total}{more} commits	{total}{more} コミット
+{verb} line {number}	行 {number} を{verb}
+{verb} this line	この行を{verb}
+“{subject}” is applied to {branch} as a new commit.	「{subject}」は {branch} に新しいコミットとして適用されます。
+“{subject}” is removed from {branch}. Its changes stay staged so you can commit them again.	「{subject}」を {branch} から取り除きました。変更はステージされたままなので、再度コミットできます。
+Local branches	ローカルブランチ
+Current branch	現在のブランチ
+Added	追加
+Modified	変更
+Renamed	名前変更
+Conflict	競合
+Untracked	未追跡
+No diff tool is set. Set one with `git config --global diff.tool <name>`.	差分ツールが設定されていません。`git config --global diff.tool <name>` で設定してください。
+No merge tool is set. Set one with `git config --global merge.tool <name>`.	マージツールが設定されていません。`git config --global merge.tool <name>` で設定してください。

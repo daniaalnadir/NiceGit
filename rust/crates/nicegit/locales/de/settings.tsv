@@ -14,3 +14,86 @@ Dark	Dunkel
 System ({language})	System ({language})
 No Japanese font was found; some text may not display.	Keine japanische Schrift gefunden; einige Texte werden möglicherweise nicht angezeigt.
 No Chinese font was found; some text may not display.	Keine chinesische Schrift gefunden; einige Texte werden möglicherweise nicht angezeigt.
+Graph colours	Graphfarben
+Diffs	Diffs
+Hide whitespace-only changes	Änderungen nur an Leerzeichen ausblenden
+Show diffs side by side	Diffs nebeneinander anzeigen
+Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides.	Derzeit nicht aktiv: Das Diff-Feld ist schmaler als {minimum} Punkte. Zum Anzeigen beider Seiten verbreitern.
+Needs a diff panel at least {minimum} points wide.	Benötigt ein Diff-Feld mit mindestens {minimum} Punkten Breite.
+Show changed words inline	Geänderte Wörter direkt anzeigen
+Syntax highlighting	Syntaxhervorhebung
+External editor	Externer Editor
+The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.	Der Befehl, der eine Datei im Editor öffnet; der Pfad der Datei wird angehängt. Geänderte Dateien bieten danach Öffnen darin an.
+Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. Automatic turns this on when at least five of the last twenty commits use the convention.	Bietet über der Zusammenfassung ein Typ-Menü, einen Bereich und Breaking, die den Typ in die Zusammenfassung schreiben. Automatisch schaltet dies ein, wenn mindestens fünf der letzten zwanzig Commits die Konvention nutzen.
+Committing	Commits
+Refresh automatically when files change outside NiceGit	Automatisch aktualisieren, wenn sich Dateien außerhalb von NiceGit ändern
+Fetch from remotes	Von Remotes abrufen
+Off	Aus
+5 min	5 Min.
+15 min	15 Min.
+30 min	30 Min.
+1 hour	1 Stunde
+How often the open repository is fetched in the background, so ahead and behind counts stay current	Wie oft das geöffnete Repository im Hintergrund abgerufen wird, damit die Zähler für voraus und zurück aktuell bleiben
+Pull with	Pull mit
+How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.	Legt fest, wie Pull die Commits des Upstreams übernimmt. „Git-Einstellungen folgen“ liest pull.rebase, branch.<name>.rebase und pull.ff; sind keine gesetzt, führt Pull nur Fast-Forwards aus. Das Menü Abrufen und Pull führt zusätzlich einmal einen Merge- oder Rebase-Pull aus.
+Clone into	Klonen nach
+Not set	Nicht festgelegt
+Choose…	Auswählen …
+Clones go into this folder by default	Klone landen standardmäßig in diesem Ordner
+Clear	Leeren
+Default folder for clones	Standardordner für Klone
+The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.	Der Dialog Klonen übernimmt sein Ziel aus diesem Ordner. Ist keiner gesetzt, wird der übergeordnete Ordner des ersten Klons gemerkt.
+Custom actions	Eigene Aktionen
+Show pull request checks on branches	Checks von Pull Requests an Branches anzeigen
+A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.	Ein Punkt am Namen eines Branches und in der Seitenleiste zeigt, ob die Checks seiner offenen Pull- oder Merge-Anfrage bestanden, fehlgeschlagen sind oder noch laufen. Ausschalten beendet auch das Abrufen.
+Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.	Remotes auf diesen Hosts erhalten Pull Requests, Issues und „Auf GitHub öffnen“, wie github.com-Remotes.
+One hostname per line, such as github.example.com	Ein Hostname pro Zeile, z. B. github.example.com
+GitHub Enterprise hosts	GitHub-Enterprise-Hosts
+Not saved, as these are not hostnames: {hosts}. Use a name such as github.example.com, without https:// or a port.	Nicht gespeichert, da dies keine Hostnamen sind: {hosts}. Ein Name wie github.example.com genügt, ohne https:// oder Port.
+Remotes on these hosts get Open on GitLab links, as gitlab.com remotes do.	Remotes auf diesen Hosts erhalten „Auf GitLab öffnen“-Links, wie gitlab.com-Remotes.
+One hostname per line, such as gitlab.example.com	Ein Hostname pro Zeile, z. B. gitlab.example.com
+GitLab hosts	GitLab-Hosts
+Not saved, as these are not hostnames: {hosts}. Use a name such as gitlab.example.com, without https:// or a port.	Nicht gespeichert, da dies keine Hostnamen sind: {hosts}. Ein Name wie gitlab.example.com genügt, ohne https:// oder Port.
+Layout	Layout
+Interface size	Oberflächengröße
+Smaller (Ctrl/Cmd-minus)	Kleiner (Strg/Cmd-Minus)
+Larger (Ctrl/Cmd-plus)	Größer (Strg/Cmd-Plus)
+Normal size	Normale Größe
+Restore default panel widths	Standardbreiten der Bereiche wiederherstellen
+Columns and panels return to their original sizes	Spalten und Bereiche kehren zu ihrer ursprünglichen Größe zurück
+Accessibility	Barrierefreiheit
+Larger text	Größerer Text
+Draws the interface a quarter larger again, on top of the interface size	Zeichnet die Oberfläche zusätzlich um ein Viertel größer, zusätzlich zur Oberflächengröße
+Reduce motion	Bewegung reduzieren
+Switches off the fades and eased movements in the interface	Schaltet die Ein- und Ausblendungen und sanften Bewegungen der Oberfläche ab
+Keyboard shortcuts	Tastenkürzel
+Request a feature	Funktion anfragen
+Report a problem	Problem melden
+Issue links	Issue-Links
+Link #123 to the repository's host	#123 mit dem Host des Repositorys verlinken
+For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). On Azure DevOps, AB#123 links to the work item.	Für das origin-Remote auf GitHub, GitLab oder Bitbucket verlinkt #123 das Issue (auf GitLab verlinkt !123 die Merge-Anfrage). Auf Azure DevOps verlinkt AB#123 das Work Item.
+No custom rules. A rule can link text such as JIRA-7 to your tracker.	Keine eigenen Regeln. Eine Regel kann Text wie JIRA-7 mit dem Tracker verlinken.
+Only for repositories whose remote contains "{remote}"	Nur für Repositorys, deren Remote "{remote}" enthält
+Edit	Bearbeiten
+Change this rule	Diese Regel ändern
+Remove this rule	Diese Regel entfernen
+Add rule	Regel hinzufügen
+Add a rule that links text in messages	Eine Regel hinzufügen, die Text in Nachrichten verlinkt
+Pattern (a regular expression)	Muster (ein regulärer Ausdruck)
+Address to open ($0 is the match, $1 to $9 its groups)	Zu öffnende Adresse ($0 ist der Treffer, $1 bis $9 seine Gruppen)
+Only for repositories whose remote contains (empty for all)	Nur für Repositorys, deren Remote enthält (leer für alle)
+Rule pattern	Regelmuster
+Rule address	Regeladresse
+Rule remote filter	Regelfilter für Remote
+Save rule	Regel speichern
+3 lines	3 Zeilen
+10 lines	10 Zeilen
+25 lines	25 Zeilen
+Always	Immer
+Automatic	Automatisch
+Colour-blind safe	Farbenblind-sicher
+Fast-forward only	Nur Fast-Forward
+File	Datei
+Follow Git's settings	Git-Einstellungen folgen
+Muted	Gedämpft
+Standard	Standard

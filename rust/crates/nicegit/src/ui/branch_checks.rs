@@ -17,6 +17,7 @@ use nicegit_core::{Branch, GitClient};
 
 use crate::app::NiceGitApp;
 use crate::git_ext::{self, Forge};
+use crate::i18n::tr_fmt;
 use crate::theme::Colors;
 use crate::tools::Task;
 
@@ -137,16 +138,28 @@ impl RequestCheck {
         let checks = self.checks;
         let marker = if matches!(forge, Forge::GitLab(_)) { "!" } else { "#" };
         let counts = match (checks.passed, checks.failed, checks.pending) {
-            (passed, 0, 0) => format!("{passed} passed"),
-            (passed, failed, 0) => format!("{passed} passed, {failed} failed"),
-            (passed, failed, pending) => format!("{passed} passed, {failed} failed, {pending} pending"),
+            (passed, 0, 0) => tr_fmt!("{passed} passed", passed = passed),
+            (passed, failed, 0) => tr_fmt!("{passed} passed, {failed} failed", passed = passed, failed = failed),
+            (passed, failed, pending) => {
+                tr_fmt!("{passed} passed, {failed} failed, {pending} pending", passed = passed, failed = failed, pending = pending)
+            }
         };
         let label = match state {
-            CheckState::Failed => format!("Checks: {} failed", checks.failed),
-            CheckState::Pending => format!("Checks: {} pending", checks.pending),
-            CheckState::Passed => format!("Checks: {} passed", checks.passed),
+            CheckState::Failed => tr_fmt!("Checks: {count} failed", count = checks.failed),
+            CheckState::Pending => tr_fmt!("Checks: {count} pending", count = checks.pending),
+            CheckState::Passed => tr_fmt!("Checks: {count} passed", count = checks.passed),
         };
-        Some(Dot { state, label, hover: format!("{marker}{} {} — {counts}\nClick to open checks", self.number, self.title) })
+        Some(Dot {
+            state,
+            label,
+            hover: tr_fmt!(
+                "{marker}{number} {title} — {counts}\nClick to open checks",
+                marker = marker,
+                number = self.number,
+                title = self.title,
+                counts = counts
+            ),
+        })
     }
 }
 

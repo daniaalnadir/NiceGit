@@ -13,7 +13,7 @@ use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
 use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
 use crate::diff_view::DiffContent;
-use crate::i18n::Locale;
+use crate::i18n::{tr, tr_count, tr_fmt, Locale};
 use crate::notifications::FinishedWork;
 use crate::settings::{Draft, Settings, STORAGE_KEY};
 use crate::theme;
@@ -44,15 +44,17 @@ pub struct Notice {
 pub fn naming_problem(error: &str) -> Option<&'static str> {
     let lower = error.to_lowercase();
     if lower.contains("is not a valid branch name") || lower.contains("is not a valid tag name") || lower.contains("not a valid ref name") {
-        Some("That name cannot be used. Names cannot contain spaces, \"..\", \"~\", \"^\", \":\", \"?\", \"*\", or \"[\", or end with \".lock\" or \"/\".")
+        Some(tr(
+            "That name cannot be used. Names cannot contain spaces, \"..\", \"~\", \"^\", \":\", \"?\", \"*\", or \"[\", or end with \".lock\" or \"/\".",
+        ))
     } else if lower.contains("a branch named") && lower.contains("already exists") {
-        Some("A branch with that name already exists. Choose another name, or check out the existing branch.")
+        Some(tr("A branch with that name already exists. Choose another name, or check out the existing branch."))
     } else if lower.contains("tag") && lower.contains("already exists") {
-        Some("A tag with that name already exists. Choose another name, or delete the old tag first.")
+        Some(tr("A tag with that name already exists. Choose another name, or delete the old tag first."))
     } else if lower.contains("already exists and is not an empty directory") {
-        Some("That folder already has files in it. Choose a new or empty folder.")
+        Some(tr("That folder already has files in it. Choose a new or empty folder."))
     } else if lower.contains("would clobber existing tag") {
-        Some("A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours.")
+        Some(tr("A tag on the remote points somewhere else than your tag of the same name, so Git would not replace yours."))
     } else {
         None
     }
@@ -64,7 +66,7 @@ pub fn remote_problem(error: &str) -> Option<&'static str> {
     let lower = error.to_lowercase();
     let any = |signs: &[&str]| signs.iter().any(|sign| lower.contains(sign));
     if any(&["permission denied (publickey", "host key verification failed"]) {
-        Some("The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent.")
+        Some(tr("The remote did not accept your SSH key. Check that your key is added to your account and loaded in ssh-agent."))
     } else if any(&[
         "authentication failed",
         "could not read username",
@@ -72,7 +74,9 @@ pub fn remote_problem(error: &str) -> Option<&'static str> {
         "invalid username or password",
         "returned error: 403",
     ]) {
-        Some("The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.")
+        Some(tr(
+            "The remote did not accept your sign-in. For HTTPS, sign in through a credential helper (gh auth login sets one up for GitHub); for SSH, check your key.",
+        ))
     } else if any(&[
         "could not resolve host",
         "connection timed out",
@@ -81,9 +85,9 @@ pub fn remote_problem(error: &str) -> Option<&'static str> {
         "connection refused",
         "operation timed out",
     ]) {
-        Some("The remote could not be reached. Check your internet connection, and that the remote's address is right.")
+        Some(tr("The remote could not be reached. Check your internet connection, and that the remote's address is right."))
     } else if any(&["repository not found", "does not appear to be a git repository"]) {
-        Some("The remote repository was not found, or your account cannot see it. Check its address and your access.")
+        Some(tr("The remote repository was not found, or your account cannot see it. Check its address and your access."))
     } else {
         None
     }
@@ -122,7 +126,7 @@ pub fn overwritten_files(error: &str) -> String {
     let files: Vec<&str> =
         error.lines().filter_map(|line| line.strip_prefix('\t')).map(str::trim).filter(|file| !file.is_empty()).collect();
     if files.is_empty() {
-        "your files".to_string()
+        tr("your files").to_string()
     } else {
         files.join(", ")
     }
@@ -270,11 +274,6 @@ const FIRST_FETCH_DELAY: Duration = Duration::from_secs(30);
 
 /// The most recorded actions Undo steps back through; older ones are dropped.
 pub const MAX_UNDO_STEPS: usize = 20;
-
-/// Added to a failed undo's notice when older undo steps were dropped with it.
-const CLEARED_UNDO_NOTE: &str = "Older undo steps were cleared because the repository changed.";
-/// Added to a failed redo's notice when older redo steps were dropped with it.
-const CLEARED_REDO_NOTE: &str = "Older redo steps were cleared because the repository changed.";
 
 /// What a finished action recorded for undo, handed from the background thread.
 pub enum Recorded {
@@ -885,7 +884,7 @@ impl NiceGitApp {
             return;
         }
         if self.has_unsaved_editor() {
-            self.notify("Save or close the file you are editing before opening another repository.", true);
+            self.notify(tr("Save or close the file you are editing before opening another repository."), true);
             return;
         }
         self.save_draft();
@@ -926,7 +925,7 @@ impl NiceGitApp {
             painter.rect_stroke(screen.shrink(6.0), 12.0, egui::Stroke::new(2.0, c.accent), egui::StrokeKind::Inside);
             // On a solid label, so the words stay readable over whatever is beneath.
             let text = painter.layout_no_wrap(
-                "Drop a folder to open it, or a patch to apply it".into(),
+                tr("Drop a folder to open it, or a patch to apply it").into(),
                 egui::FontId::proportional(18.0),
                 c.accent_text,
             );
@@ -954,7 +953,7 @@ impl NiceGitApp {
             self.open_dropped_patch(patch);
         }
         if !files.is_empty() {
-            self.notify("Drop a folder to open it as a repository, or a .patch or .diff file to apply it.", true);
+            self.notify(tr("Drop a folder to open it as a repository, or a .patch or .diff file to apply it."), true);
         }
     }
 
@@ -962,7 +961,7 @@ impl NiceGitApp {
     /// repository, since the patch applies to its checkout.
     fn open_dropped_patch(&mut self, patch: PathBuf) {
         if self.snapshot().is_none() {
-            self.notify("Open a repository before applying a patch.", true);
+            self.notify(tr("Open a repository before applying a patch."), true);
             return;
         }
         self.open_tool(Box::new(crate::tools::apply_patch::ApplyPatchWindow::new(Some(patch))));
@@ -979,7 +978,7 @@ impl NiceGitApp {
             return;
         }
         if self.has_unsaved_editor() {
-            self.notify("Save or close the file you are editing before switching repositories.", true);
+            self.notify(tr("Save or close the file you are editing before switching repositories."), true);
             return;
         }
         self.save_draft();
@@ -1003,7 +1002,7 @@ impl NiceGitApp {
         }
         if index == self.active {
             if self.has_unsaved_editor() {
-                self.notify("Save or close the file you are editing first.", true);
+                self.notify(tr("Save or close the file you are editing first."), true);
                 return;
             }
             self.save_draft();
@@ -1028,7 +1027,7 @@ impl NiceGitApp {
         }
         // Checked before switching, so the refusal names closing rather than switching.
         if self.has_unsaved_editor() {
-            self.notify("Save or close the file you are editing first.", true);
+            self.notify(tr("Save or close the file you are editing first."), true);
             return;
         }
         if keep != self.active {
@@ -1049,7 +1048,7 @@ impl NiceGitApp {
         if self.busy.is_some() {
             return;
         }
-        if let Some(folder) = crate::file_dialog::pick_folder("Open a Git repository") {
+        if let Some(folder) = crate::file_dialog::pick_folder(tr("Open a Git repository")) {
             self.open(folder);
         }
     }
@@ -1297,7 +1296,7 @@ impl NiceGitApp {
             return;
         }
         if self.has_unsaved_editor() {
-            self.notify("Save or close the file you are editing before changing the repository.", true);
+            self.notify(tr("Save or close the file you are editing before changing the repository."), true);
             return;
         }
         let Some(repo) = self.repos.get_mut(self.active) else { return };
@@ -1377,7 +1376,7 @@ impl NiceGitApp {
     pub fn act_squash(&mut self, source_name: String, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {
         let slot = self.recorded.clone();
         let summary = format!("Squash merge of {source_name}");
-        self.act("Squash", move |client, path| {
+        self.act(tr("Squash"), move |client, path| {
             let result = action(client, path)?;
             *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::SquashSummary(summary));
             Ok(result)
@@ -1557,7 +1556,7 @@ impl NiceGitApp {
                                     sign: sent_sign,
                                 });
                                 self.notice = Some(Notice {
-                                    text: "A Git hook stopped the commit.".into(),
+                                    text: tr("A Git hook stopped the commit.").into(),
                                     is_error: true,
                                     action: retry.map(NoticeAction::CommitWithoutHooks),
                                     detail: Some(output),
@@ -1599,7 +1598,7 @@ impl NiceGitApp {
                             Err(error) if label == "Force push" && lease_was_refused(&error.to_string()) => {
                                 action_failed = true;
                                 self.notice = Some(Notice {
-                                    text: "The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.".into(),
+                                    text: tr("The remote branch changed since you last fetched, so nothing was pushed. Fetch, review, and try again.").into(),
                                     is_error: true,
                                     action: None,
                                     detail: Some(error.to_string()),
@@ -1607,19 +1606,22 @@ impl NiceGitApp {
                             }
                             Err(error) if matches!(label.as_str(), "Push" | "Commit and push") && push_needs_pull(&error.to_string()) => {
                                 action_failed = true;
-                                let committed = if label == "Commit and push" { "Your commit was made, but the " } else { "The " };
                                 // The snapshot is still the one from before the push, so its counts show whether the
                                 // branch had commits of its own as well as the remote's.
                                 let diverged = self.repos[index].snapshot.as_ref().is_some_and(|s| s.ahead > Some(0) && s.behind > Some(0));
-                                let rewritten = if label == "Push" && diverged {
-                                    " If you rewrote commits that were already pushed, use Force push… instead."
-                                } else {
-                                    ""
+                                let text = match (label.as_str(), diverged) {
+                                    ("Commit and push", _) => tr(
+                                        "Your commit was made, but the push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.",
+                                    ),
+                                    ("Push", true) => tr(
+                                        "The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again. If you rewrote commits that were already pushed, use Force push… instead.",
+                                    ),
+                                    _ => tr(
+                                        "The push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.",
+                                    ),
                                 };
                                 self.notice = Some(Notice {
-                                    text: format!(
-                                        "{committed}push was refused because the remote has commits this branch does not. Merge them or rebase onto them, then push again.{rewritten}"
-                                    ),
+                                    text: text.into(),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
                                     detail: Some(error.to_string()),
@@ -1631,10 +1633,11 @@ impl NiceGitApp {
                                 action_failed = true;
                                 // The snapshot is the one from before the pull, so its upstream is still the displayed one.
                                 let upstream = self.repos[index].snapshot.as_ref().and_then(|s| s.upstream.clone());
-                                let upstream = upstream.unwrap_or_else(|| "its upstream".into());
+                                let upstream = upstream.unwrap_or_else(|| tr("its upstream").into());
                                 self.notice = Some(Notice {
-                                    text: format!(
-                                        "Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them."
+                                    text: tr_fmt!(
+                                        "Your branch and {upstream} have both changed, so Pull cannot simply move your branch forward. Merge {upstream}'s commits or rebase onto them.",
+                                        upstream = upstream
                                     ),
                                     is_error: true,
                                     action: Some(NoticeAction::Integrate),
@@ -1644,7 +1647,7 @@ impl NiceGitApp {
                             Err(error) if label == "Continue" && blocked_by_unstaged_changes(&error.to_string()) => {
                                 action_failed = true;
                                 self.notice = Some(Notice {
-                                    text: "Stage or discard your unstaged changes before continuing.".into(),
+                                    text: tr("Stage or discard your unstaged changes before continuing.").into(),
                                     is_error: true,
                                     action: None,
                                     detail: Some(error.to_string()),
@@ -1662,11 +1665,17 @@ impl NiceGitApp {
                                     .cloned();
                                 let (text, action) = match stash {
                                     Some(stash) => (
-                                        format!("Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead."),
+                                        tr_fmt!(
+                                            "Git would overwrite your changes to {files}. NiceGit can apply the stash on top of them instead.",
+                                            files = files
+                                        ),
                                         Some(NoticeAction::ApplyIntoChanges { stash, drop_after }),
                                     ),
                                     None => (
-                                        format!("Git would overwrite your changes to {files}. Commit or stash them, then try again."),
+                                        tr_fmt!(
+                                            "Git would overwrite your changes to {files}. Commit or stash them, then try again.",
+                                            files = files
+                                        ),
                                         None,
                                     ),
                                 };
@@ -1675,7 +1684,10 @@ impl NiceGitApp {
                             Err(error) if blocked_by_local_changes(&error.to_string()) => {
                                 action_failed = true;
                                 self.notice = Some(Notice {
-                                    text: format!("{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again."),
+                                    text: tr_fmt!(
+                                        "{label} would overwrite uncommitted changes to the same files, so Git stopped. Stash or commit them, then try again.",
+                                        label = label
+                                    ),
                                     is_error: true,
                                     action: Some(NoticeAction::Stash),
                                     detail: Some(error.to_string()),
@@ -1684,7 +1696,7 @@ impl NiceGitApp {
                             Err(error) if needs_identity(&error.to_string()) => {
                                 action_failed = true;
                                 self.notice = Some(Notice {
-                                    text: "Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.".into(),
+                                    text: tr("Git needs your name and email before it can commit. Set them in Repository Settings, for this repository or as a profile.").into(),
                                     is_error: true,
                                     action: Some(NoticeAction::SetIdentity),
                                     detail: Some(error.to_string()),
@@ -1724,18 +1736,28 @@ impl NiceGitApp {
                             if let (Some(detail), Some(operation)) = (stopped_with.take(), snapshot.operation) {
                                 let conflicts = snapshot.status.iter().filter(|e| e.kind == nicegit_core::StatusKind::Conflicted).count();
                                 if conflicts > 0 {
-                                    let plural = if conflicts == 1 { "" } else { "s" };
+                                    let files = tr_count("1 file", "{count} files", conflicts);
                                     // Files Git resolved from a recorded resolution still need checking.
                                     let reused = snapshot.reused_resolutions.len();
                                     let reused_note = match reused {
                                         0 => String::new(),
-                                        1 => " Git reused 1 recorded resolution. Check it before continuing.".to_string(),
-                                        count => format!(" Git reused {count} recorded resolutions. Check them before continuing."),
+                                        1 => format!(" {}", tr("Git reused 1 recorded resolution. Check it before continuing.")),
+                                        count => format!(
+                                            " {}",
+                                            tr_fmt!(
+                                                "Git reused {count} recorded resolutions. Check them before continuing.",
+                                                count = count
+                                            )
+                                        ),
                                     };
                                     self.notice = Some(Notice {
                                         text: format!(
-                                            "The {} stopped at conflicts in {conflicts} file{plural}. Resolve them from the banner above the history, then continue, or abort to go back.{reused_note}",
-                                            operation.name()
+                                            "{}{reused_note}",
+                                            tr_fmt!(
+                                                "The {operation} stopped at conflicts in {files}. Resolve them from the banner above the history, then continue, or abort to go back.",
+                                                operation = operation.name(),
+                                                files = files
+                                            )
                                         ),
                                         is_error: true,
                                         action: None,
@@ -1761,7 +1783,7 @@ impl NiceGitApp {
                             } else if !action_failed {
                                 // The action itself completed; only the refresh failed.
                                 let done = self.notice.take().map(|n| n.text + " ").unwrap_or_default();
-                                self.notify(format!("{done}Refreshing the repository failed: {error}"), true);
+                                self.notify(tr_fmt!("{done}Refreshing the repository failed: {error}", done = done, error = error), true);
                             }
                         }
                     }
@@ -1800,7 +1822,7 @@ impl NiceGitApp {
                     repo.stash_files = Some((hash, result.map_err(|error| error.to_string())));
                 }
                 Message::FileSaved { result } => match result {
-                    Ok(name) => self.notify(format!("Saved {name}."), false),
+                    Ok(name) => self.notify(tr_fmt!("Saved {name}.", name = name), false),
                     Err(error) => self.notify(error.to_string(), true),
                 },
             }
@@ -1822,7 +1844,11 @@ impl NiceGitApp {
             Some(Recorded::Undo(entry)) => repo.push_undo_keep_redo(entry),
             Some(Recorded::HistoryFailed { redo }) => {
                 if repo.clear_on_failure(redo) {
-                    return Some(if redo { CLEARED_REDO_NOTE } else { CLEARED_UNDO_NOTE });
+                    return Some(if redo {
+                        tr("Older redo steps were cleared because the repository changed.")
+                    } else {
+                        tr("Older undo steps were cleared because the repository changed.")
+                    });
                 }
             }
             Some(Recorded::Discard(undo)) => {
@@ -2075,9 +2101,9 @@ impl NiceGitApp {
             match result {
                 Ok(details) => {
                     ctx.copy_text(details.message);
-                    self.notify("Copied the commit message.", false);
+                    self.notify(tr("Copied the commit message."), false);
                 }
-                Err(error) => self.notify(format!("Could not read the commit message: {error}"), true),
+                Err(error) => self.notify(tr_fmt!("Could not read the commit message: {error}", error = error), true),
             }
         }
     }
@@ -2354,7 +2380,7 @@ impl NiceGitApp {
             let task = Task::spawn(&context, move || GitClient::new().commit_line_counts(&counts_hash, &counts_path).ok());
             repo.commit_line_counts = Some((hash.clone(), task));
         }
-        let title = format!("Commit {}", short(&hash));
+        let title = tr_fmt!("Commit {hash}", hash = short(&hash));
         self.worker.diff(generation, title, move |client| client.commit_diff_with(&hash, None, request, &path));
     }
 
@@ -2389,7 +2415,7 @@ impl NiceGitApp {
         let Some((generation, path)) = self.start_diff() else { return };
         let repo = self.repo_mut().expect("active repository");
         repo.selection = Selection::Commit { hash: hash.clone(), file: file.clone() };
-        let title = file.clone().unwrap_or_else(|| format!("Commit {}", short(&hash)));
+        let title = file.clone().unwrap_or_else(|| tr_fmt!("Commit {hash}", hash = short(&hash)));
         if let Some(image) = file.clone().filter(|file| crate::tools::compare::is_image(file)) {
             // The image as its parent had it, against the commit's version.
             let (preview_path, commit) = (path.clone(), hash.clone());
@@ -2426,7 +2452,7 @@ impl NiceGitApp {
     /// the commit's listing, so the file must be listed there.
     pub fn select_commit_contents(&mut self, hash: String, path: String, open_anyway: bool) {
         let Some(entry) = self.repo_mut().and_then(|repo| listed_entry(repo, &hash, &path)) else {
-            self.notify("That file is not listed for this commit. Select the commit again.", true);
+            self.notify(tr("That file is not listed for this commit. Select the commit again."), true);
             return;
         };
         let context = self.worker.context.clone();
@@ -2448,7 +2474,7 @@ impl NiceGitApp {
         let Some(repo) = self.repo() else { return };
         let directory = repo.path.clone();
         let name = Path::new(path).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
-        let Some(destination) = crate::file_dialog::save_file("Save a copy", &name) else { return };
+        let Some(destination) = crate::file_dialog::save_file(tr("Save a copy"), &name) else { return };
         self.worker.save_copy(directory, hash.to_string(), path.to_string(), destination);
     }
 
@@ -2473,7 +2499,7 @@ impl NiceGitApp {
                     _ => None,
                 });
                 let Some(entry) = listed else {
-                    self.notify("That file is not listed for this stash. Select the stash again.", true);
+                    self.notify(tr("That file is not listed for this stash. Select the stash again."), true);
                     return;
                 };
                 Some(entry)
@@ -2523,22 +2549,25 @@ impl NiceGitApp {
     pub fn checkout(&mut self, branch: Branch) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         if snapshot.operation.is_some() {
-            self.notify("Finish or abort the current Git operation before switching branches.", true);
+            self.notify(tr("Finish or abort the current Git operation before switching branches."), true);
             return;
         }
         let expected = snapshot.current_branch.clone();
         let head = snapshot.head_hash.clone();
         let name = branch.display_name();
-        self.act(&format!("Switch to {name}"), move |client, path| {
+        self.act(&tr_fmt!("Switch to {name}", name = name), move |client, path| {
             let stashed = if branch.is_remote {
                 client.checkout_remote(&branch, &snapshot.remotes, &expected, head.as_deref(), path)?
             } else {
                 client.checkout(&branch, &expected, head.as_deref(), path)?
             };
             Ok(Some(if stashed {
-                format!("Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.")
+                tr_fmt!(
+                    "Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.",
+                    name = name
+                )
             } else {
-                format!("Switched to {name}.")
+                tr_fmt!("Switched to {name}.", name = name)
             }))
         });
     }
@@ -2553,7 +2582,7 @@ impl NiceGitApp {
             let Some(head) = snapshot.head_hash.clone() else { return };
             let branch = snapshot.current_branch.clone();
             self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
-                client.amend_with_options(&message, &branch, &head, skip, sign, path).map(|_| Some("Amended the last commit.".into()))
+                client.amend_with_options(&message, &branch, &head, skip, sign, path).map(|_| Some(tr("Amended the last commit.").into()))
             });
         } else {
             self.act_recording_detail("Commit", "Commit", summary_of(&message), move |client, path| {
@@ -2582,10 +2611,10 @@ impl NiceGitApp {
         let Some(head) = head else { return };
         let Some((skip, sign)) = self.repo().map(|repo| (repo.skip_hooks, repo.sign_override)) else { return };
         let short: String = target.chars().take(7).collect();
-        self.act_recording_detail("Fixup commit", "Commit", Some(format!("fixup! {subject}")), move |client, path| {
+        self.act_recording_detail(tr("Fixup commit"), "Commit", Some(format!("fixup! {subject}")), move |client, path| {
             client
                 .commit_fixup(&target, &branch, &head, skip, sign, path)
-                .map(|_| Some(format!("Committed a fixup for {short}. An interactive rebase can fold it in.")))
+                .map(|_| Some(tr_fmt!("Committed a fixup for {short}. An interactive rebase can fold it in.", short = short)))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
@@ -2604,7 +2633,10 @@ impl NiceGitApp {
         }
         let Some(snapshot) = self.snapshot().cloned() else { return };
         if snapshot.current_branch != retry.branch || snapshot.head_hash != retry.head {
-            self.notify("The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again.", true);
+            self.notify(
+                tr("The branch changed after the commit stopped, so nothing was committed. Review the commit and commit again."),
+                true,
+            );
             return;
         }
         let Some(message) = self.repo().map(|repo| repo.draft.message()) else { return };
@@ -2619,12 +2651,16 @@ impl NiceGitApp {
                 let Some(head) = retry.head.clone() else { return };
                 let branch = retry.branch.clone();
                 self.act_recording_detail("Amend", "Amend", summary_of(&message), move |client, path| {
-                    client.amend_with_options(&message, &branch, &head, true, sign, path).map(|_| Some("Amended the last commit.".into()))
+                    client
+                        .amend_with_options(&message, &branch, &head, true, sign, path)
+                        .map(|_| Some(tr("Amended the last commit.").into()))
                 });
             }
             HookCommit::CommitAndPush => {
                 self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
-                    client.commit_and_push_with_options(&message, &snapshot, true, sign, path).map(|_| Some("Committed and pushed.".into()))
+                    client
+                        .commit_and_push_with_options(&message, &snapshot, true, sign, path)
+                        .map(|_| Some(tr("Committed and pushed.").into()))
                 });
             }
         }
@@ -2664,7 +2700,7 @@ impl NiceGitApp {
             client.stage_all(path)?;
             client
                 .commit_with_options(&message, skip, sign, path)
-                .map(|_| Some(format!("Staged and committed {count} file{}.", if count == 1 { "" } else { "s" })))
+                .map(|_| Some(tr_count("Staged and committed 1 file.", "Staged and committed {count} files.", count)))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
@@ -2686,7 +2722,7 @@ impl NiceGitApp {
             return;
         };
         self.act_recording_detail("Commit and push", "Commit", summary_of(&message), move |client, path| {
-            client.commit_and_push_with_options(&message, &snapshot, skip, sign, path).map(|_| Some("Committed and pushed.".into()))
+            client.commit_and_push_with_options(&message, &snapshot, skip, sign, path).map(|_| Some(tr("Committed and pushed.").into()))
         });
         if self.busy.is_some() {
             if let Some(repo) = self.repo_mut() {
@@ -2728,7 +2764,7 @@ impl NiceGitApp {
                 Some(strategy) => strategy,
                 None => client.configured_pull_strategy(&snapshot.current_branch, path)?,
             };
-            client.pull(&snapshot, strategy, path).map(|_| Some("Pulled the latest changes.".into()))
+            client.pull(&snapshot, strategy, path).map(|_| Some(tr("Pulled the latest changes.").into()))
         });
     }
 
@@ -2738,15 +2774,15 @@ impl NiceGitApp {
             let remote = snapshot.remotes.iter().find(|r| *r == "origin").or(snapshot.remotes.first()).cloned();
             match remote {
                 Some(remote) => self.dialog = Some(Dialog::Publish { remote }),
-                None => self.notify("Add a remote in Repository Settings before pushing.", true),
+                None => self.notify(tr("Add a remote in Repository Settings before pushing."), true),
             }
             return;
         }
-        self.act("Push", move |client, path| client.push(&snapshot, path).map(|_| Some("Pushed.".into())));
+        self.act("Push", move |client, path| client.push(&snapshot, path).map(|_| Some(tr("Pushed.").into())));
     }
 
     pub fn fetch(&mut self) {
-        self.act("Fetch", |client, path| client.fetch(path).map(|_| Some("Fetched from all remotes.".into())));
+        self.act("Fetch", |client, path| client.fetch(path).map(|_| Some(tr("Fetched from all remotes.").into())));
     }
 
     /// Fetches one remote. The fetch addresses shown in the snapshot are passed to Git, so the fetch
@@ -2755,7 +2791,7 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot() else { return };
         let addresses = snapshot.remote_fetch_addresses.get(&remote).cloned().unwrap_or_default();
         let label = format!("{REMOTE_FETCH_PREFIX}{remote}");
-        let notice = format!("Fetched {remote}.");
+        let notice = tr_fmt!("Fetched {remote}.", remote = remote);
         self.act(&label, move |client, path| client.fetch_remote(&remote, &addresses, path).map(|_| Some(notice)));
     }
 
@@ -2776,7 +2812,7 @@ impl NiceGitApp {
             return;
         }
         if self.has_unsaved_editor() {
-            self.notify("Save or close the file you are editing before changing the repository.", true);
+            self.notify(tr("Save or close the file you are editing before changing the repository."), true);
             return;
         }
         let Some(repo) = self.repo_mut() else { return };
@@ -2787,8 +2823,8 @@ impl NiceGitApp {
 
     fn apply_history(&mut self, entry: HistoryEntry, redo: bool) {
         let slot = self.recorded.clone();
-        let verb = if redo { "Redo" } else { "Undo" };
-        let label = format!("{verb} {}", entry.title.to_lowercase());
+        let verb = if redo { tr("Redo") } else { tr("Undo") };
+        let label = tr_fmt!("{verb} {title}", verb = verb, title = entry.title.to_lowercase());
         self.act(&label, move |client, path| match client.undo_step(&entry.step, path) {
             Ok(step) => {
                 let inverse = HistoryEntry { title: entry.title.clone(), detail: entry.detail.clone(), step };
@@ -2810,8 +2846,8 @@ impl NiceGitApp {
     pub fn undo_discard(&mut self) {
         let Some(undo) = self.repo_mut().and_then(|r| r.discard_undo.pop()) else { return };
         let name = undo.path.clone();
-        self.act("Undo discard", move |client, path| {
-            client.undo_discard(&undo, path).map(|_| Some(format!("Restored your changes to {name}.")))
+        self.act(tr("Undo discard"), move |client, path| {
+            client.undo_discard(&undo, path).map(|_| Some(tr_fmt!("Restored your changes to {name}.", name = name)))
         });
     }
 
@@ -2861,23 +2897,23 @@ impl NiceGitApp {
     /// the action ends at once. When the tool closes, the repository is reread (see `poll_merge_tool`).
     pub fn open_in_merge_tool(&mut self, path: &str, ctx: &egui::Context) {
         if self.busy.is_some() {
-            self.notify("Wait for the current action to finish.", true);
+            self.notify(tr("Wait for the current action to finish."), true);
             return;
         }
         if self.has_unsaved_editor() || self.tools.iter().any(|tool| tool.has_unsaved_text_for(path)) {
-            self.notify("Save or close the file you are editing before opening the merge tool.", true);
+            self.notify(tr("Save or close the file you are editing before opening the merge tool."), true);
             return;
         }
         if self.merge_tool_exit.is_some() {
-            self.notify("A merge tool is already open. Close it first.", true);
+            self.notify(tr("A merge tool is already open. Close it first."), true);
             return;
         }
         let (sender, receiver) = channel();
         self.merge_tool_exit = Some((path.to_string(), receiver));
         let file = path.to_string();
         let ctx = ctx.clone();
-        let notice = format!("Opened the merge tool for {path}.");
-        self.act(&format!("Resolve {path} in merge tool"), move |client, repo| {
+        let notice = tr_fmt!("Opened the merge tool for {path}.", path = path);
+        self.act(&tr_fmt!("Resolve {path} in merge tool", path = path), move |client, repo| {
             client.open_in_mergetool(&file, repo, move |status| {
                 // The sender is dropped with this closure, so a tool that never started is seen as closed.
                 let _ = sender.send(status);
@@ -2905,9 +2941,9 @@ impl NiceGitApp {
         self.tools.retain(|tool| tool.id() != editor_id || tool.has_unsaved_text_for(&path));
         self.load(false);
         match outcome {
-            Some(Ok(status)) if status.success() => self.notify(format!("Closed the merge tool for {path}."), false),
-            Some(Ok(_)) => self.notify(format!("The merge tool for {path} exited without resolving it."), false),
-            Some(Err(error)) => self.notify(format!("Could not wait for the merge tool: {error}"), true),
+            Some(Ok(status)) if status.success() => self.notify(tr_fmt!("Closed the merge tool for {path}.", path = path), false),
+            Some(Ok(_)) => self.notify(tr_fmt!("The merge tool for {path} exited without resolving it.", path = path), false),
+            Some(Err(error)) => self.notify(tr_fmt!("Could not wait for the merge tool: {error}", error = error), true),
             None => {}
         }
     }
@@ -2967,7 +3003,7 @@ impl NiceGitApp {
             self.tools.remove(index);
         }
         if blocked_close {
-            self.notify("Save or discard your edits before closing the editor.", true);
+            self.notify(tr("Save or discard your edits before closing the editor."), true);
         }
         for request in requests {
             self.handle(request);
@@ -3014,12 +3050,12 @@ impl NiceGitApp {
                 }
                 let folder = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
                 self.notify_finished(FinishedWork::Clone(Ok(folder)));
-                self.notify(format!("Cloned into {}.", path.display()), false);
+                self.notify(tr_fmt!("Cloned into {path}.", path = path.display()), false);
                 self.open(path);
             }
             Err(error) => {
                 self.notify_finished(FinishedWork::Clone(Err(error.to_string())));
-                self.notify(format!("Clone failed: {error}"), true);
+                self.notify(tr_fmt!("Clone failed: {error}", error = error), true);
             }
         }
     }
@@ -3033,7 +3069,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let path = repo.path.clone();
         let expected = addresses.get(&remote).cloned().unwrap_or_default();
-        self.busy = Some("Read tags".into());
+        self.busy = Some(tr("Read tags").into());
         let context = self.worker.context.clone();
         let (read_path, read_remote) = (path.clone(), remote.clone());
         let task = Task::spawn(&context, move || GitClient::new().tags_missing_on_remote(&read_remote, &expected, &read_path));
@@ -3051,19 +3087,23 @@ impl NiceGitApp {
             return;
         }
         match result {
-            Err(error) => self.notify(format!("Could not read the tags on {}: {error}", scan.remote), true),
+            Err(error) => self.notify(tr_fmt!("Could not read the tags on {remote}: {error}", remote = scan.remote, error = error), true),
             Ok(tags) if tags.missing.is_empty() => {
                 let text = if tags.conflicting.is_empty() {
-                    format!("Every local tag is already on {}.", scan.remote)
+                    tr_fmt!("Every local tag is already on {remote}.", remote = scan.remote)
                 } else {
-                    format!("No local tags are missing from {}. {} differ there and were not pushed.", scan.remote, tags.conflicting.len())
+                    tr_fmt!(
+                        "No local tags are missing from {remote}. {count} differ there and were not pushed.",
+                        remote = scan.remote,
+                        count = tags.conflicting.len()
+                    )
                 };
                 self.notify(text, false);
             }
             Ok(tags) => {
                 let (title, message) = crate::ui::dialogs::push_tags_confirmation(&scan.remote, &tags.missing, &tags.conflicting);
                 let pending = Pending::PushTags { remote: scan.remote, tags: tags.missing, addresses: scan.addresses };
-                self.confirm(title, message, "Push tags", pending);
+                self.confirm(title, message, tr("Push tags"), pending);
             }
         }
     }
@@ -3084,11 +3124,11 @@ impl NiceGitApp {
             .collect();
         let addresses = snapshot.remote_push_addresses.get(&remote).cloned().unwrap_or_default();
         if branches.is_empty() {
-            self.notify("There are no local branches to push.", true);
+            self.notify(tr("There are no local branches to push."), true);
             return;
         }
         let (title, message) = crate::ui::dialogs::push_branches_confirmation(&remote, &branches);
-        self.confirm(title, message, "Push branches", Pending::PushBranches { remote, branches, addresses });
+        self.confirm(title, message, tr("Push branches"), Pending::PushBranches { remote, branches, addresses });
     }
 
     // MARK: Refresh

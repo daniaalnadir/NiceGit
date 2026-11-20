@@ -8,6 +8,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::Branch;
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools;
 
@@ -133,129 +134,147 @@ impl NiceGitApp {
             Some((current.name.clone(), target.repository.create_label(), target.repository.cli_name()))
         });
         let mut list = vec![
-            command("Fetch", "Download from all remotes", icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
-            command("Pull", "Fetch, then pull the current branch as Settings chooses", icon::ARROW_LINE_DOWN, idle && clean, Run::Pull),
-            command("Push", "Send the current branch to its upstream", icon::ARROW_LINE_UP, idle, Run::Push),
+            command(tr("Fetch"), tr("Download from all remotes"), icon::CLOUD_ARROW_DOWN, idle, Run::Fetch),
             command(
-                "Force push…",
-                "Replace the remote branch with yours, if no one pushed since you last fetched",
+                tr("Pull"),
+                tr("Fetch, then pull the current branch as Settings chooses"),
+                icon::ARROW_LINE_DOWN,
+                idle && clean,
+                Run::Pull,
+            ),
+            command(tr("Push"), tr("Send the current branch to its upstream"), icon::ARROW_LINE_UP, idle, Run::Push),
+            command(
+                tr("Force push…"),
+                tr("Replace the remote branch with yours, if no one pushed since you last fetched"),
                 icon::WARNING,
                 idle && snapshot.is_some_and(|s| s.is_on_branch() && s.operation.is_none() && s.upstream.is_some()),
                 Run::ForcePush,
             ),
-            command("Refresh", "Ctrl/Cmd-R", icon::ARROWS_CLOCKWISE, has && self.busy.is_none(), Run::Refresh),
-            command("Stage all changes", "", icon::PLUS_CIRCLE, idle && snapshot.is_some_and(|s| !s.status.is_empty()), Run::StageAll),
-            command("Unstage all changes", "", icon::MINUS_CIRCLE, idle && snapshot.is_some_and(|s| s.staged_count() > 0), Run::UnstageAll),
-            command("Show terminal", "Ctrl-`", icon::TERMINAL_WINDOW, has, Run::Terminal),
-            command("Settings", "Appearance, graph colours, and diffs", icon::GEAR, true, Run::Settings),
-            command("Keyboard shortcuts", "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
-            command("Show a tip", "The next tip about NiceGit, as a notice", icon::LIGHTBULB, true, Run::ShowTip),
+            command(tr("Refresh"), "Ctrl/Cmd-R", icon::ARROWS_CLOCKWISE, has && self.busy.is_none(), Run::Refresh),
+            command(tr("Stage all changes"), "", icon::PLUS_CIRCLE, idle && snapshot.is_some_and(|s| !s.status.is_empty()), Run::StageAll),
             command(
-                "Report a problem",
-                "Open a GitHub issue with NiceGit's version and your platform filled in",
+                tr("Unstage all changes"),
+                "",
+                icon::MINUS_CIRCLE,
+                idle && snapshot.is_some_and(|s| s.staged_count() > 0),
+                Run::UnstageAll,
+            ),
+            command(tr("Show terminal"), "Ctrl-`", icon::TERMINAL_WINDOW, has, Run::Terminal),
+            command(tr("Settings"), tr("Appearance, graph colours, and diffs"), icon::GEAR, true, Run::Settings),
+            command(tr("Keyboard shortcuts"), "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
+            command(tr("Show a tip"), tr("The next tip about NiceGit, as a notice"), icon::LIGHTBULB, true, Run::ShowTip),
+            command(
+                tr("Report a problem"),
+                tr("Open a GitHub issue with NiceGit's version and your platform filled in"),
                 icon::BUG,
                 true,
                 Run::Link(crate::updates::bug_report_url()),
             ),
             command(
-                "Request a feature",
-                "Open a GitHub feature request",
+                tr("Request a feature"),
+                tr("Open a GitHub feature request"),
                 icon::LIGHTBULB,
                 true,
                 Run::Link(nicegit_core::feedback::FEATURE_REQUEST_URL.to_string()),
             ),
-            command("Open repository…", "Ctrl/Cmd-O", icon::FOLDER_OPEN, self.busy.is_none(), Run::Open),
+            command(tr("Open repository…"), "Ctrl/Cmd-O", icon::FOLDER_OPEN, self.busy.is_none(), Run::Open),
             command(
-                "Find repositories in a folder…",
-                "Add every repository inside a folder",
+                tr("Find repositories in a folder…"),
+                tr("Add every repository inside a folder"),
                 icon::MAGNIFYING_GLASS,
                 true,
                 Run::FindRepositories,
             ),
-            command("Clone repository…", "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
-            command("New repository…", "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
-            command("Repository settings", "Identity, profiles, and remotes", icon::GEAR_SIX, has, Run::Tool("settings")),
-            command("Git settings", "This repository's Git configuration", icon::SLIDERS_HORIZONTAL, has, Run::Tool("git_settings")),
+            command(tr("Clone repository…"), "", icon::DOWNLOAD_SIMPLE, self.busy.is_none(), Run::Clone),
+            command(tr("New repository…"), "", icon::PLUS, self.busy.is_none(), Run::NewRepository),
+            command(tr("Repository settings"), tr("Identity, profiles, and remotes"), icon::GEAR_SIX, has, Run::Tool("settings")),
             command(
-                "Remember conflict resolutions: turn on",
-                "Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase",
+                tr("Git settings"),
+                tr("This repository's Git configuration"),
+                icon::SLIDERS_HORIZONTAL,
+                has,
+                Run::Tool("git_settings"),
+            ),
+            command(
+                tr("Remember conflict resolutions: turn on"),
+                tr("Reuse how you resolved a conflict when the same conflict happens again, as in a later rebase"),
                 icon::GIT_DIFF,
                 has && idle,
                 Run::RememberResolutions(true),
             ),
             command(
-                "Remember conflict resolutions: turn off",
-                "Stop recording how you resolve conflicts in this repository",
+                tr("Remember conflict resolutions: turn off"),
+                tr("Stop recording how you resolve conflicts in this repository"),
                 icon::GIT_DIFF,
                 has && idle,
                 Run::RememberResolutions(false),
             ),
-            command("Stashes", "Save selected files, preview, apply, or delete stashes", icon::ARCHIVE, has, Run::Tool("stashes")),
-            command("Search history", "Shift-Ctrl/Cmd-F · every branch", icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
-            command("Search file contents", "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
-            command("Go to file…", "Find a tracked file by name", icon::FILE, has, Run::GoToFile),
+            command(tr("Stashes"), tr("Save selected files, preview, apply, or delete stashes"), icon::ARCHIVE, has, Run::Tool("stashes")),
+            command(tr("Search history"), tr("Shift-Ctrl/Cmd-F · every branch"), icon::MAGNIFYING_GLASS, has, Run::Tool("search")),
+            command(tr("Search file contents"), "Alt-Ctrl/Cmd-F", icon::FILE_MAGNIFYING_GLASS, has, Run::Tool("grep")),
+            command(tr("Go to file…"), tr("Find a tracked file by name"), icon::FILE, has, Run::GoToFile),
             command(
-                "Go to HEAD",
-                "Select the checked-out commit in the history",
+                tr("Go to HEAD"),
+                tr("Select the checked-out commit in the history"),
                 icon::GIT_COMMIT,
                 snapshot.is_some_and(|s| s.head_hash.is_some()),
                 Run::GoToHead,
             ),
             command(
-                "Go to upstream",
+                tr("Go to upstream"),
                 &match snapshot.and_then(|s| s.upstream.as_deref()) {
-                    Some(upstream) => format!("Select {upstream}'s latest commit"),
-                    None => "Select the upstream's latest commit".into(),
+                    Some(upstream) => tr_fmt!("Select {upstream}'s latest commit", upstream = upstream),
+                    None => tr("Select the upstream's latest commit").into(),
                 },
                 icon::CLOUD,
                 snapshot.is_some_and(|s| s.upstream.is_some()),
                 Run::GoToUpstream,
             ),
             command(
-                "Recover lost work",
-                "Commits from resets, rebases, and deleted branches",
+                tr("Recover lost work"),
+                tr("Commits from resets, rebases, and deleted branches"),
                 icon::CLOCK_COUNTER_CLOCKWISE,
                 has,
                 Run::Tool("reflog"),
             ),
             command(
-                "Insights",
-                "Commits over time, authors, and the files and folders that change most",
+                tr("Insights"),
+                tr("Commits over time, authors, and the files and folders that change most"),
                 icon::CHART_BAR,
                 has,
                 Run::Tool("insights"),
             ),
             command(
-                "Compare branch versions…",
-                "Which commits changed after a rebase, amend, or force push",
+                tr("Compare branch versions…"),
+                tr("Which commits changed after a rebase, amend, or force push"),
                 icon::GIT_DIFF,
                 has,
                 Run::Tool("range_diff"),
             ),
-            command("Clean up branches", "Delete merged, inactive, or gone local branches", icon::BROOM, has, Run::Tool("cleanup")),
-            command("Bisect", "Find the commit that introduced a bug", icon::BUG, has, Run::Tool("bisect")),
-            command("Worktrees", "Linked worktrees", icon::FOLDERS, has, Run::Tool("worktrees")),
-            command("Submodules", "", icon::PACKAGE, has, Run::Tool("submodules")),
-            command("GitFlow", "Feature, release, and hotfix branches", icon::FLOW_ARROW, has, Run::Tool("gitflow")),
-            command("Git LFS", "Tracked patterns and large files", icon::DATABASE, has, Run::Tool("lfs")),
+            command(tr("Clean up branches"), tr("Delete merged, inactive, or gone local branches"), icon::BROOM, has, Run::Tool("cleanup")),
+            command(tr("Bisect"), tr("Find the commit that introduced a bug"), icon::BUG, has, Run::Tool("bisect")),
+            command(tr("Worktrees"), tr("Linked worktrees"), icon::FOLDERS, has, Run::Tool("worktrees")),
+            command(tr("Submodules"), "", icon::PACKAGE, has, Run::Tool("submodules")),
+            command("GitFlow", tr("Feature, release, and hotfix branches"), icon::FLOW_ARROW, has, Run::Tool("gitflow")),
+            command("Git LFS", tr("Tracked patterns and large files"), icon::DATABASE, has, Run::Tool("lfs")),
             command(
-                "Pull requests and issues",
-                "GitHub remotes, through the GitHub CLI",
+                tr("Pull requests and issues"),
+                tr("GitHub remotes, through the GitHub CLI"),
                 icon::GITHUB_LOGO,
                 has && snapshot.is_some_and(|s| !s.remotes.is_empty()),
                 Run::Tool("github"),
             ),
             command(
                 "Launchpad",
-                "Open pull requests across your open repositories and workspaces",
+                tr("Open pull requests across your open repositories and workspaces"),
                 icon::GIT_PULL_REQUEST,
                 has,
                 Run::Tool("launchpad"),
             ),
-            command("Apply patch…", "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
+            command(tr("Apply patch…"), "", icon::FILE_PLUS, idle && clean, Run::ApplyPatch),
             command(
-                "Absorb staged changes…",
-                "Fold staged changes into the unpushed commits that last changed their lines",
+                tr("Absorb staged changes…"),
+                tr("Fold staged changes into the unpushed commits that last changed their lines"),
                 icon::GIT_MERGE,
                 idle && clean && snapshot.is_some_and(|s| s.is_on_branch() && s.staged_count() > 0) && !self.has_unsaved_editor(),
                 Run::Absorb,
@@ -264,7 +283,7 @@ impl NiceGitApp {
         if let Some((branch, label, cli)) = pull_request {
             list.push(command(
                 &label,
-                &format!("For the current branch, through the {cli}"),
+                &tr_fmt!("For the current branch, through the {cli}", cli = cli),
                 icon::GIT_PULL_REQUEST,
                 true,
                 Run::PullRequest(branch),
@@ -274,16 +293,20 @@ impl NiceGitApp {
         if let Some(repository) = snapshot.and_then(|s| crate::git_ext::default_hosted_repository(s, self.settings.listed_hosts())) {
             let host = repository.kind.name();
             let mut pages = vec![
-                (format!("Open repository on {host}"), crate::git_ext::host_glyph(repository.kind), repository.home_url()),
+                (tr_fmt!("Open repository on {host}", host = host), crate::git_ext::host_glyph(repository.kind), repository.home_url()),
                 (
-                    format!("Open {} on {host}", crate::git_ext::pull_request_label(repository.kind).to_lowercase()),
+                    tr_fmt!(
+                        "Open {kind} on {host}",
+                        kind = crate::git_ext::pull_request_label(repository.kind).to_lowercase(),
+                        host = host
+                    ),
                     icon::GIT_PULL_REQUEST,
                     repository.pull_requests_url(),
                 ),
             ];
             // Actions is a GitHub page; the other hosts' pipelines are not offered here.
             if let Some(url) = repository.github_page_url("actions") {
-                pages.push((format!("Open Actions on {host}"), icon::PLAY, url));
+                pages.push((tr_fmt!("Open Actions on {host}", host = host), icon::PLAY, url));
             }
             for (title, glyph, url) in pages {
                 list.push(command(&title, &url, glyph, true, Run::OpenHosted(url.clone())));
@@ -291,19 +314,19 @@ impl NiceGitApp {
         }
         if let Some(snapshot) = snapshot {
             if snapshot.upstream.is_none() && snapshot.is_on_branch() && !snapshot.remotes.is_empty() {
-                list.push(command("Publish branch", "Push it to a remote and track it", icon::UPLOAD_SIMPLE, idle, Run::Publish));
+                list.push(command(tr("Publish branch"), tr("Push it to a remote and track it"), icon::UPLOAD_SIMPLE, idle, Run::Publish));
             }
             if let Some(operation) = snapshot.operation {
                 list.push(command(
-                    &format!("Continue {}", operation.name()),
-                    "After resolving conflicts",
+                    &tr_fmt!("Continue {operation}", operation = operation.name()),
+                    tr("After resolving conflicts"),
                     icon::PLAY,
                     idle,
                     Run::Continue(operation),
                 ));
                 list.push(command(
-                    &format!("Abort {}", operation.name()),
-                    "Return to the state before it started",
+                    &tr_fmt!("Abort {operation}", operation = operation.name()),
+                    tr("Return to the state before it started"),
                     icon::X_CIRCLE,
                     idle,
                     Run::Abort(operation),
@@ -311,8 +334,8 @@ impl NiceGitApp {
             }
             if snapshot.worktrees.iter().any(|w| w.is_prunable) {
                 list.push(command(
-                    "Forget missing worktrees",
-                    "Worktree folders deleted outside Git",
+                    tr("Forget missing worktrees"),
+                    tr("Worktree folders deleted outside Git"),
                     icon::BROOM,
                     idle,
                     Run::PruneWorktrees,
@@ -323,21 +346,33 @@ impl NiceGitApp {
             use nicegit_core::bisect::BisectMark;
             if self.bisect_status().is_some_and(|s| s.first_bad.is_none() && s.testing.is_some()) {
                 list.push(command(
-                    "Bisect: mark good",
-                    "This commit does not have the problem",
+                    tr("Bisect: mark good"),
+                    tr("This commit does not have the problem"),
                     icon::CHECK_CIRCLE,
                     idle,
                     Run::Bisect(BisectMark::Good),
                 ));
-                list.push(command("Bisect: mark bad", "This commit has the problem", icon::X_CIRCLE, idle, Run::Bisect(BisectMark::Bad)));
-                list.push(command("Bisect: skip", "This commit cannot be tested", icon::SKIP_FORWARD, idle, Run::Bisect(BisectMark::Skip)));
+                list.push(command(
+                    tr("Bisect: mark bad"),
+                    tr("This commit has the problem"),
+                    icon::X_CIRCLE,
+                    idle,
+                    Run::Bisect(BisectMark::Bad),
+                ));
+                list.push(command(
+                    tr("Bisect: skip"),
+                    tr("This commit cannot be tested"),
+                    icon::SKIP_FORWARD,
+                    idle,
+                    Run::Bisect(BisectMark::Skip),
+                ));
             }
-            list.push(command("End bisect", "Return to the original checkout", icon::BUG, idle, Run::EndBisect));
+            list.push(command(tr("End bisect"), tr("Return to the original checkout"), icon::BUG, idle, Run::EndBisect));
         }
         if let Some(step) = self.repo().and_then(|r| r.undo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
             list.push(command(
-                &format!("Undo {}", super::toolbar::step_name(step)),
+                &tr_fmt!("Undo {name}", name = super::toolbar::step_name(step)),
                 "",
                 icon::ARROW_COUNTER_CLOCKWISE,
                 idle && applies,
@@ -346,13 +381,19 @@ impl NiceGitApp {
         }
         if let Some(step) = self.repo().and_then(|r| r.redo.last()) {
             let applies = snapshot.is_some_and(|s| step.applies_to(&s.current_branch));
-            list.push(command(&format!("Redo {}", super::toolbar::step_name(step)), "", icon::ARROW_CLOCKWISE, idle && applies, Run::Redo));
+            list.push(command(
+                &tr_fmt!("Redo {name}", name = super::toolbar::step_name(step)),
+                "",
+                icon::ARROW_CLOCKWISE,
+                idle && applies,
+                Run::Redo,
+            ));
         }
         if let Some(snapshot) = snapshot {
             for branch in snapshot.branches.iter().filter(|b| !b.is_current && !b.is_detached()) {
                 list.push(Command {
-                    title: format!("Switch to {}", branch.display_name()),
-                    detail: if branch.is_remote { "Remote branch".into() } else { "Local branch".into() },
+                    title: tr_fmt!("Switch to {name}", name = branch.display_name()),
+                    detail: if branch.is_remote { tr("Remote branch").into() } else { tr("Local branch").into() },
                     glyph: if branch.is_remote { icon::CLOUD } else { icon::GIT_BRANCH },
                     enabled: idle && clean,
                     run: Run::Checkout(branch.clone()),
@@ -360,8 +401,8 @@ impl NiceGitApp {
             }
             for remote in &snapshot.remotes {
                 list.push(command(
-                    &format!("Fetch {remote}"),
-                    "Download from this remote only",
+                    &tr_fmt!("Fetch {remote}", remote = remote),
+                    tr("Download from this remote only"),
                     icon::CLOUD_ARROW_DOWN,
                     idle,
                     Run::FetchRemote(remote.clone()),
@@ -375,9 +416,13 @@ impl NiceGitApp {
             .data_mut(|data| data.get_persisted(egui::Id::unique(tools::repository_settings::PROFILES_KEY)))
             .unwrap_or_default();
         for profile in profiles {
-            let detail = if profile.signing_key.is_some() { format!("{} · signs commits", profile.email) } else { profile.email.clone() };
+            let detail = if profile.signing_key.is_some() {
+                tr_fmt!("{email} · signs commits", email = profile.email)
+            } else {
+                profile.email.clone()
+            };
             list.push(Command {
-                title: format!("Use identity {}", profile.name),
+                title: tr_fmt!("Use identity {name}", name = profile.name),
                 detail,
                 glyph: icon::USER_CIRCLE,
                 enabled: idle,
@@ -386,8 +431,8 @@ impl NiceGitApp {
         }
         for (index, action) in self.custom_actions_in(crate::settings::ActionScope::Repository) {
             list.push(command(
-                &format!("Run {}", action.name),
-                "Custom action",
+                &tr_fmt!("Run {name}", name = action.name),
+                tr("Custom action"),
                 icon::TERMINAL_WINDOW,
                 has && idle,
                 Run::CustomAction(index),
@@ -400,7 +445,7 @@ impl NiceGitApp {
             }
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             list.push(Command {
-                title: format!("Open {name}"),
+                title: tr_fmt!("Open {name}", name = name),
                 detail: path.display().to_string(),
                 glyph: icon::FOLDER,
                 enabled: self.busy.is_none(),
@@ -409,7 +454,7 @@ impl NiceGitApp {
         }
         for workspace in &self.settings.workspaces {
             list.push(Command {
-                title: format!("Open workspace {}", workspace.name),
+                title: tr_fmt!("Open workspace {name}", name = workspace.name),
                 detail: crate::ui::workspaces::repository_count(workspace.repositories.len()),
                 glyph: icon::FOLDERS,
                 enabled: self.busy.is_none(),
@@ -427,7 +472,7 @@ impl NiceGitApp {
             Run::Push => self.push(),
             Run::ForcePush => self.request_force_push(),
             Run::Refresh => self.load(true),
-            Run::RememberResolutions(enabled) => self.act("Remember conflict resolutions", move |client, path| {
+            Run::RememberResolutions(enabled) => self.act(tr("Remember conflict resolutions"), move |client, path| {
                 client.set_rerere_enabled(enabled, path).map(|()| Some(crate::tools::conflict::remember_notice(enabled).to_string()))
             }),
             Run::StageAll => self.act("Stage all", |client, path| client.stage_all(path).map(|_| None)),
@@ -469,24 +514,26 @@ impl NiceGitApp {
             Run::Continue(operation) => self
                 .act_recording("Continue", operation.name(), move |client, path| client.continue_operation(operation, path).map(|_| None)),
             Run::Abort(operation) => self.confirm(
-                format!("Abort the {}?", operation.name()),
-                "Git returns the branch and files to the state before it started. Resolutions you made are lost.",
-                "Abort",
+                tr_fmt!("Abort the {operation}?", operation = operation.name()),
+                tr("Git returns the branch and files to the state before it started. Resolutions you made are lost."),
+                tr("Abort"),
                 crate::ui::dialogs::Pending::Abort(operation),
             ),
             Run::Bisect(mark) => {
                 if let Some(testing) = self.bisect_status().and_then(|s| s.testing) {
-                    self.act("Mark bisect", move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
+                    self.act(tr("Mark bisect"), move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
                 }
             }
-            Run::EndBisect => self.act("End bisect", |client, path| client.end_bisect(path).map(|_| Some("Ended the bisect.".into()))),
-            Run::PruneWorktrees => self.act("Forget missing worktrees", |client, path| {
-                client.prune_worktrees(path).map(|_| Some("Forgot missing worktrees.".into()))
+            Run::EndBisect => {
+                self.act(tr("End bisect"), |client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into())))
+            }
+            Run::PruneWorktrees => self.act(tr("Forget missing worktrees"), |client, path| {
+                client.prune_worktrees(path).map(|_| Some(tr("Forgot missing worktrees.").into()))
             }),
-            Run::Identity { name, email, signing_key } => self.act("Apply identity", move |client, path| {
+            Run::Identity { name, email, signing_key } => self.act(tr("Apply identity"), move |client, path| {
                 client
                     .apply_identity(&name, &email, signing_key.as_deref(), path)
-                    .map(|_| Some(format!("This repository now commits as {name} <{email}>.")))
+                    .map(|_| Some(tr_fmt!("This repository now commits as {name} <{email}>.", name = name, email = email)))
             }),
             Run::Checkout(branch) => self.checkout(branch),
             Run::Repository(path) => self.open(path),
@@ -590,12 +637,12 @@ impl NiceGitApp {
                 ui.label(RichText::new(icon::COMMAND).size(18.0).color(c.muted));
                 let field = ui.add(
                     egui::TextEdit::singleline(&mut state.query)
-                        .hint_text("Type a command, branch, or repository")
+                        .hint_text(tr("Type a command, branch, or repository"))
                         .frame(egui::Frame::NONE)
                         .font(egui::FontId::proportional(17.0))
                         .desired_width(f32::INFINITY),
                 );
-                crate::tools::widgets::name_text_field(&field, "Type a command, branch, or repository");
+                crate::tools::widgets::name_text_field(&field, tr("Type a command, branch, or repository"));
                 if !state.focused {
                     field.request_focus();
                     state.focused = true;
@@ -619,7 +666,7 @@ impl NiceGitApp {
             }
             egui::ScrollArea::vertical().max_height(380.0).auto_shrink([false, true]).show(ui, |ui| {
                 if matches.is_empty() {
-                    ui.label(RichText::new("No matching commands").color(c.muted));
+                    ui.label(RichText::new(tr("No matching commands")).color(c.muted));
                 }
                 for (index, command) in matches.iter().enumerate() {
                     let selected = index == state.selection;

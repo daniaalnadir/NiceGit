@@ -21,6 +21,7 @@ use nicegit_core::hosting::{Host, HostedRepository, ListedHosts};
 use nicegit_core::{GitClient, GitError};
 
 use crate::app::NiceGitApp;
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::settings::Workspace;
 use crate::theme;
 use crate::tools::{widgets, CheckOutRequest, Ctx, ToolWindow};
@@ -89,15 +90,15 @@ pub enum Section {
 impl Section {
     pub fn title(self) -> &'static str {
         match self {
-            Section::NeedsReview => "Needs your review",
-            Section::Yours => "Yours",
-            Section::Other => "Other open",
+            Section::NeedsReview => tr("Needs your review"),
+            Section::Yours => tr("Yours"),
+            Section::Other => tr("Other open"),
         }
     }
 
-    /// The section for a row. A pull request the user wrote is "Yours" even when a review of it
+    /// The section for a row. A pull request the user wrote is tr("Yours") even when a review of it
     /// was asked for; otherwise a review requested from the user, as a user and not a team, puts
-    /// it in "Needs your review". Logins are compared without regard to case.
+    /// it in tr("Needs your review"). Logins are compared without regard to case.
     pub fn of(row: &Row) -> Section {
         let me = row.login.as_str();
         let pull_request = &row.pull_request;
@@ -150,31 +151,29 @@ pub fn group(rows: Vec<Row>) -> Groups {
 /// How long ago a pull request changed, as the row says it: "updated 5 minutes ago".
 pub fn updated_text(updated_at: i64, now: i64) -> String {
     let elapsed = (now - updated_at).max(0);
-    let (count, unit) = match elapsed {
-        0..=59 => return "updated just now".to_string(),
-        60..=3_599 => (elapsed / 60, "minute"),
-        3_600..=86_399 => (elapsed / 3_600, "hour"),
-        86_400..=2_591_999 => (elapsed / 86_400, "day"),
-        _ => return "updated over a month ago".to_string(),
-    };
-    let unit = if count == 1 { unit.to_string() } else { format!("{unit}s") };
-    format!("updated {count} {unit} ago")
+    match elapsed {
+        0..=59 => tr("updated just now").to_string(),
+        60..=3_599 => tr_count("updated {count} minute ago", "updated {count} minutes ago", (elapsed / 60) as usize),
+        3_600..=86_399 => tr_count("updated {count} hour ago", "updated {count} hours ago", (elapsed / 3_600) as usize),
+        86_400..=2_591_999 => tr_count("updated {count} day ago", "updated {count} days ago", (elapsed / 86_400) as usize),
+        _ => tr("updated over a month ago").to_string(),
+    }
 }
 
 /// The check totals as the row says them, such as "3 passing · 1 failing · 2 pending".
 pub fn checks_text(checks: Checks) -> String {
     if checks == Checks::default() {
-        return "No checks".to_string();
+        return tr("No checks").to_string();
     }
     let mut parts = Vec::new();
     if checks.passed > 0 {
-        parts.push(format!("{} passing", checks.passed));
+        parts.push(tr_fmt!("{count} passing", count = checks.passed));
     }
     if checks.failed > 0 {
-        parts.push(format!("{} failing", checks.failed));
+        parts.push(tr_fmt!("{count} failing", count = checks.failed));
     }
     if checks.pending > 0 {
-        parts.push(format!("{} pending", checks.pending));
+        parts.push(tr_fmt!("{count} pending", count = checks.pending));
     }
     parts.join(" · ")
 }
@@ -188,10 +187,10 @@ pub fn requests_text(requests: &[ReviewRequest]) -> Option<String> {
         .iter()
         .map(|request| match request {
             ReviewRequest::User(login) => login.clone(),
-            ReviewRequest::Team(name) => format!("team {name}"),
+            ReviewRequest::Team(name) => tr_fmt!("team {name}", name = name),
         })
         .collect();
-    Some(format!("Review requested from {}", names.join(", ")))
+    Some(tr_fmt!("Review requested from {names}", names = names.join(", ")))
 }
 
 /// The state of one repository in the list.
@@ -351,7 +350,7 @@ impl LaunchpadWindow {
             for entry in &mut self.entries {
                 if matches!(entry.reading, Reading::Loading) {
                     entry.reading =
-                        Reading::Done(Outcome::Unavailable("The read stopped before it finished. Refresh to try again.".into()));
+                        Reading::Done(Outcome::Unavailable(tr("The read stopped before it finished. Refresh to try again.").into()));
                 }
             }
         }
@@ -366,7 +365,7 @@ impl LaunchpadWindow {
             ui.label(RichText::new(icon::GIT_PULL_REQUEST).size(16.0).color(c.muted));
             ui.label(RichText::new("Launchpad").strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, "Refresh", true).clicked() {
+                if widgets::icon_button(ui, icon::ARROWS_CLOCKWISE, tr("Refresh"), true).clicked() {
                     self.read_again = true;
                 }
             });
@@ -375,11 +374,11 @@ impl LaunchpadWindow {
             return;
         }
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Include workspace").small().color(c.muted));
-            let shown = self.workspace.clone().unwrap_or_else(|| "None".to_string());
+            ui.label(RichText::new(tr("Include workspace")).small().color(c.muted));
+            let shown = self.workspace.clone().unwrap_or_else(|| tr("None").to_string());
             let mut chosen = self.workspace.clone();
             egui::ComboBox::from_id_salt("launchpad workspace").selected_text(shown).show_ui(ui, |ui| {
-                ui.selectable_value(&mut chosen, None, "None");
+                ui.selectable_value(&mut chosen, None, tr("None"));
                 for workspace in &self.workspaces {
                     ui.selectable_value(&mut chosen, Some(workspace.name.clone()), &workspace.name);
                 }
@@ -397,7 +396,7 @@ impl LaunchpadWindow {
             widgets::empty_state(
                 ui,
                 icon::GIT_PULL_REQUEST,
-                "Open a repository, or choose a workspace, to see its pull and merge requests.",
+                tr("Open a repository, or choose a workspace, to see its pull and merge requests."),
             );
             return;
         }
@@ -427,9 +426,9 @@ impl LaunchpadWindow {
             [(Section::NeedsReview, &groups.needs_review), (Section::Yours, &groups.yours), (Section::Other, &groups.other)]
         {
             ui.add_space(6.0);
-            ui.label(RichText::new(format!("{} ({})", section.title(), list.len())).strong());
+            ui.label(RichText::new(tr_fmt!("{title} ({count})", title = section.title(), count = list.len())).strong());
             if list.is_empty() && waiting == 0 {
-                ui.label(RichText::new("None").small().color(c.muted));
+                ui.label(RichText::new(tr("None")).small().color(c.muted));
             }
             for row in list {
                 row_card(ui, row, now, action);
@@ -437,18 +436,18 @@ impl LaunchpadWindow {
         }
         if waiting > 0 {
             ui.add_space(6.0);
-            widgets::loading(ui, &format!("Loading {}", plural(waiting, "repository", "repositories")));
+            widgets::loading(ui, &tr_count("Loading {count} repository", "Loading {count} repositories", waiting));
         }
         if capped {
             ui.label(
-                RichText::new(format!("Showing the first {OPEN_PULL_REQUEST_LIMIT} open pull requests of each repository."))
+                RichText::new(tr_fmt!("Showing the first {limit} open pull requests of each repository.", limit = OPEN_PULL_REQUEST_LIMIT))
                     .small()
                     .color(c.muted),
             );
         }
         if !unavailable.is_empty() {
             ui.add_space(10.0);
-            ui.label(RichText::new("Not available").strong().color(c.muted));
+            ui.label(RichText::new(tr("Not available")).strong().color(c.muted));
             for (name, reason) in &unavailable {
                 ui.add(egui::Label::new(RichText::new(format!("{name}: {reason}")).small().color(c.muted)).wrap());
             }
@@ -520,14 +519,14 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
             ui.add(egui::Label::new(RichText::new(&pull_request.title).strong()).wrap());
             ui.horizontal_wrapped(|ui| {
                 if pull_request.is_draft {
-                    widgets::pill(ui, "draft", c.muted);
+                    widgets::pill(ui, tr("draft"), c.muted);
                 }
                 if let Some(decision) = pull_request.review_decision {
                     widgets::pill(ui, decision_word(decision), decision_color(decision, &c));
                 }
                 let by = match &pull_request.author {
-                    Some(author) => format!("by {author}"),
-                    None => "by a deleted account".to_string(),
+                    Some(author) => tr_fmt!("by {author}", author = author),
+                    None => tr("by a deleted account").to_string(),
                 };
                 ui.label(RichText::new(by).small().color(c.muted));
                 ui.label(RichText::new(updated_text(pull_request.updated_at, now)).small().color(c.muted));
@@ -538,7 +537,7 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
             ui.label(RichText::new(checks_text(pull_request.checks)).small().color(checks_color(pull_request.checks, &c)));
             ui.horizontal(|ui| {
                 if can_check_out(row.kind) {
-                    if ui.button(format!("{}  Check out", icon::GIT_BRANCH)).clicked() {
+                    if ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Check out"))).clicked() {
                         *action = Some(Action::CheckOut(CheckOutRequest {
                             path: row.path.clone(),
                             remote: REMOTE.to_string(),
@@ -548,10 +547,10 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
                         }));
                     }
                 } else {
-                    ui.add_enabled(false, egui::Button::new(format!("{}  Check out", icon::GIT_BRANCH)))
-                        .on_disabled_hover_text("Check out is available for GitHub pull requests only.");
+                    ui.add_enabled(false, egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, tr("Check out"))))
+                        .on_disabled_hover_text(tr("Check out is available for GitHub pull requests only."));
                 }
-                if ui.button(format!("{}  Open in browser", icon::ARROW_SQUARE_OUT)).clicked() {
+                if ui.button(format!("{}  {}", icon::ARROW_SQUARE_OUT, tr("Open in browser"))).clicked() {
                     *action = Some(Action::Open(pull_request.url.clone()));
                 }
             });
@@ -562,9 +561,9 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
 /// The words a review decision carries on its pill.
 fn decision_word(decision: ReviewDecision) -> &'static str {
     match decision {
-        ReviewDecision::Approved => "approved",
-        ReviewDecision::ChangesRequested => "changes requested",
-        ReviewDecision::ReviewRequired => "review required",
+        ReviewDecision::Approved => tr("approved"),
+        ReviewDecision::ChangesRequested => tr("changes requested"),
+        ReviewDecision::ReviewRequired => tr("review required"),
     }
 }
 
@@ -599,7 +598,7 @@ fn read(client: &GitClient, path: &Path, sources: &Sources, cancel: &Cancel) -> 
 fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Cancel) -> Result<Outcome, String> {
     let remotes = client.run(&["remote"], path).map_err(|error| message(&error))?;
     if !remotes.lines().any(|line| line.trim() == REMOTE) {
-        return Err(format!("This repository has no {REMOTE} remote, so its pull requests cannot be read."));
+        return Err(tr_fmt!("This repository has no {remote} remote, so its pull requests cannot be read.", remote = REMOTE));
     }
     let address = client.run(&["remote", "get-url", "--all", REMOTE], path).map_err(|error| message(&error))?;
     let address = address.lines().next().unwrap_or("");
@@ -611,8 +610,8 @@ fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Can
             read_github(client, path, &repository, sources, cancel)
         }
         Host::GitLab => read_gitlab(client, path, &hosted, sources, cancel),
-        Host::Bitbucket => Err("Bitbucket pull requests are not listed here.".to_string()),
-        Host::AzureDevOps => Err("Azure DevOps pull requests are not listed here.".to_string()),
+        Host::Bitbucket => Err(tr("Bitbucket pull requests are not listed here.").to_string()),
+        Host::AzureDevOps => Err(tr("Azure DevOps pull requests are not listed here.").to_string()),
     }
 }
 
@@ -686,11 +685,6 @@ fn folder_name(path: &Path) -> String {
 
 fn now_seconds() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_secs() as i64).unwrap_or(0)
-}
-
-/// "1 repository" or "3 repositories".
-fn plural(count: usize, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
 }
 
 #[cfg(test)]
@@ -826,7 +820,7 @@ mod tests {
 
     #[test]
     fn check_totals_read_as_counts_and_say_when_there_are_none() {
-        assert_eq!(checks_text(Checks::default()), "No checks");
+        assert_eq!(checks_text(Checks::default()), tr("No checks"));
         assert_eq!(checks_text(Checks { passed: 3, failed: 1, pending: 2 }), "3 passing · 1 failing · 2 pending");
         assert_eq!(checks_text(Checks { passed: 0, failed: 0, pending: 4 }), "4 pending");
     }
@@ -840,9 +834,9 @@ mod tests {
 
     #[test]
     fn a_review_decision_has_its_own_words() {
-        assert_eq!(decision_word(ReviewDecision::Approved), "approved");
-        assert_eq!(decision_word(ReviewDecision::ChangesRequested), "changes requested");
-        assert_eq!(decision_word(ReviewDecision::ReviewRequired), "review required");
+        assert_eq!(decision_word(ReviewDecision::Approved), tr("approved"));
+        assert_eq!(decision_word(ReviewDecision::ChangesRequested), tr("changes requested"));
+        assert_eq!(decision_word(ReviewDecision::ReviewRequired), tr("review required"));
     }
 
     #[test]

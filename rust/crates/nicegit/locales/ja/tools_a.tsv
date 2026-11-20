@@ -1,0 +1,440 @@
+# ja: tools and pull request windows (group A). Format: English source, a tab, then the translation.
+Stores large files outside Git's history. Git keeps a small pointer in their place.	大きなファイルを Git の履歴の外に保存します。Git は代わりに小さなポインターを残します。
+Read Git LFS again	Git LFS を再読み込み
+Reading Git LFS status…	Git LFS の状態を読み込んでいます…
+Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once.	Git LFS がインストールされていないため、新しいファイルを保存できません。https://git-lfs.com からインストールし、`git lfs install` を一度実行してください。
+Installed, {version}	インストール済み、{version}
+Tracked patterns	追跡中のパターン
+No patterns yet. Files that match a pattern are stored with Git LFS.	パターンはまだありません。パターンに一致するファイルは Git LFS で保存されます。
+Untrack	追跡を解除
+Store new versions of matching files in Git itself. Files already committed are unchanged.	一致するファイルの新しいバージョンを Git 自体に保存します。コミット済みのファイルは変わりません。
+Track a pattern	パターンを追跡
+Track	追跡
+LFS pattern	LFS パターン
+Tracking changes .gitattributes. Commit that file so everyone stores these files the same way.	.gitattributes が変更されます。このファイルをコミットすると、全員が同じ方法でこれらのファイルを保存します。
+Files in Git LFS ({count})	Git LFS のファイル ({count})
+No tracked files use Git LFS yet.	追跡中のファイルで Git LFS を使用しているものはまだありません。
+Not downloaded	未ダウンロード
+Only the LFS pointer is here. Install Git LFS and pull to download the content.	ここには LFS ポインターしかありません。Git LFS をインストールし、pull して内容をダウンロードしてください。
+Locks	ロック
+Read the locks from the remote again	リモートからロックを再読み込み
+Reading file locks…	ファイルのロックを読み込んでいます…
+No user.name is set, so no lock is shown as yours.	user.name が設定されていないため、自分のロックとして表示されるものはありません。
+The server could not confirm ownership, so locks are yours when their owner is {name}.	サーバーは所有者を確認できなかったため、所有者が {name} の場合にロックが自分のものとして扱われます。
+No files are locked.	ロックされているファイルはありません。
+Unlock	ロック解除
+Force unlock…	強制ロック解除…
+Release a lock another person holds	他の人が保持しているロックを解除します
+Ownership was compared with your user.name, "{name}".	所有者已与你的 user.name「{name}」进行比较。
+The server confirmed the owner.	サーバーが所有者を確認しました。
+Force unlock	強制ロック解除
+Track {pattern}	{pattern} を追跡
+Untrack {pattern}	{pattern} の追跡を解除
+{action} {path}	{action} {path}
+Tracking {pattern}.	{pattern} を追跡しています。
+No longer tracking {pattern}.	{pattern} は追跡されなくなりました。
+Unlocked {path}.	{path} のロックを解除しました。
+Force unlock {path}? It is locked by {owner}. They may lose unsaved work they meant to upload. {note}	{path} を強制ロック解除しますか？ {owner} がロックしています。アップロードするつもりだった未保存の作業が失われる可能性があります。{note}
+No files changed.	変更されたファイルはありません。
+Choose a file to see its changes and review comments.	ファイルを選ぶと、その変更とレビューコメントが表示されます。
+Loading the diff	差分を読み込んでいます
+The diff has no lines to show for this file.	このファイルには表示する差分行がありません。
+Loading review comments	レビューコメントを読み込んでいます
+Outdated comments	古いコメント
+Comments on lines not in the diff	差分にない行へのコメント
+Showing the first {count} lines of this file.	このファイルの最初の {count} 行を表示しています。
+Comment on line {number}	{number} 行目にコメント
+Comment on this line	この行にコメント
+Resolved thread by {author}	{author} がスレッドを解決済みにしました
+Show	表示
+Hide	非表示
+Resolved	解決済み
+Reply	返信
+Unresolve	未解決に戻す
+Resolve	解決
+Reply text	返信の本文
+Write a reply	返信を書く
+Post reply	返信を投稿
+Comment text	コメントの本文
+Write a comment	コメントを書く
+Comment	コメント
+Unknown author	不明な作成者
+someone	誰か
+Reply to this thread.	このスレッドに返信します。
+Reply to review thread	レビュースレッドに返信
+Comment on line	行にコメント
+Resolve review thread	レビュースレッドを解決
+Reopen review thread	レビュースレッドを再オープン
+Post comment	コメントを投稿
+Loading from GitHub	GitHub から読み込んでいます
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.	GitHub CLI (gh) がインストールされていません。cli.github.com からインストールし、gh auth login でサインインして、もう一度確認してください。
+Check again	再確認
+GitHub CLI is not signed in. Run {command} in a terminal, then check again.	GitHub CLI にサインインしていません。ターミナルで {command} を実行してから、もう一度確認してください。
+Replied on #{number}.	#{number} に返信しました。
+Commented on #{number}.	#{number} にコメントしました。
+Resolved a thread on #{number}.	#{number} のスレッドを解決済みにしました。
+Reopened a thread on #{number}.	#{number} のスレッドを未解決に戻しました。
+Approved #{number}.	#{number} を承認しました。
+Requested changes on #{number}.	#{number} に変更を依頼しました。
+Merged #{number}.	#{number} をマージしました。
+Pull request #{number}	プルリクエスト #{number}
+by {author}	作成者: {author}
+{count} files	{count} 個のファイル
+opened {when}	作成 {when}
+updated {when}	更新 {when}
+Description	説明
+Checks ({count})	チェック ({count})
+Conversation ({count})	会話 ({count})
+Files ({count})	ファイル ({count})
+{files} files changed, +{added} −{removed}	{files} 個のファイルを変更、+{added} −{removed}
+Showing the first {count} files.	最初の {count} 個のファイルを表示しています。
+No description.	説明はありません。
+{passed} passed, {failed} failed, {pending} pending	{passed} 件成功、{failed} 件失敗、{pending} 件保留中
+No checks reported.	報告されたチェックはありません。
+Open check	チェックを開く
+No reviews or comments yet.	まだレビューやコメントはありません。
+{count} review threads ({unresolved} unresolved)	レビュースレッド {count} 件（未解決 {unresolved} 件）
+commented	コメント
+approved	承認
+changes requested	変更依頼
+review required	レビューが必要
+dismissed	却下
+pending	保留中
+reviewed	レビュー済み
+open	オープン
+draft	下書き
+merged	マージ済み
+closed	クローズ
+no author	作成者なし
+Open in browser	ブラウザーで開く
+Merge…	マージ…
+Review…	レビュー…
+The pull request is still loading.	プルリクエストはまだ読み込んでいます。
+Wait for the current action to finish.	現在の操作が終わるまでお待ちください。
+A merged or closed pull request cannot be reviewed.	マージ済みまたはクローズ済みのプルリクエストはレビューできません。
+Approve, request changes on, or comment on this pull request.	このプルリクエストを承認、変更依頼、またはコメントします。
+Merge this pull request into its base branch.	このプルリクエストをベースブランチにマージします。
+A draft cannot be merged. Mark it ready for review first.	下書きはマージできません。先にレビュー可能の状態にしてください。
+This pull request is already merged.	このプルリクエストはすでにマージされています。
+A closed pull request cannot be merged.	クローズ済みのプルリクエストはマージできません。
+GitHub does not report this pull request as mergeable. Refresh to check again.	GitHub はこのプルリクエストをマージ可能と報告していません。再読み込みして確認してください。
+A merged or closed pull request cannot take review comments.	マージ済みまたはクローズ済みのプルリクエストにはレビューコメントを付けられません。
+Your GitHub login could not be read, so the author cannot be checked. Refresh to try again.	GitHub のログイン情報を読み取れなかったため、作成者を確認できません。再読み込みしてやり直してください。
+You wrote this pull request, so you cannot approve or request changes on it. You can still comment.	このプルリクエストはご自身が作成したため、承認や変更依頼はできません。コメントは可能です。
+Review pull request	プルリクエストをレビュー
+Merge pull request	プルリクエストをマージ
+Review	レビュー
+Approve	承認
+Request changes	変更を依頼
+Optional comment	任意のコメント
+Approving tells the author the pull request is ready.	承認すると、作成者にプルリクエストの準備ができたことが伝わります。
+Say what needs to change	必要な変更を書く
+Asks the author to make changes. A comment is required.	作成者に変更を依頼します。コメントの入力が必要です。
+Posts your comment without approving or requesting changes. A comment is required.	承認や変更依頼はせず、コメントだけを投稿します。コメントの入力が必要です。
+Submit review	レビューを送信
+Method	方法
+Create a merge commit	マージコミットを作成
+Squash and merge	スカッシュしてマージ
+Rebase and merge	リベースしてマージ
+From {head} into {base}	{head} から {base} へ
+Head commit {oid}	ヘッドコミット {oid}
+The merge goes ahead only if the head commit is still this one.	ヘッドコミットがこのままの場合にのみマージを実行します。
+Sending to GitHub	GitHub に送信しています
+Identity	ID
+Profiles	プロファイル
+Commit identity	コミットの ID
+Commits made in this repository use this name and email. Other repositories keep their own.	このリポジトリでのコミットには、この名前とメールアドレスが使われます。他のリポジトリは独自の設定を保持します。
+Reading the identity	ID を読み込んでいます
+Name	名前
+Email	メール
+Saved the commit identity for this repository.	このリポジトリのコミット ID を保存しました。
+Saved profiles	保存済みのプロファイル
+A profile stores a name, email, and optional signing key. Applying one sets this repository's identity. A profile with a key also turns on commit signing.	プロファイルには名前、メールアドレス、任意の署名キーを保存します。適用すると、このリポジトリの ID が設定されます。署名キーを含むプロファイルでは、コミットの署名も有効になります。
+Signing key	署名キー
+Optional: GPG key ID or SSH public key path	任意: GPG キー ID または SSH 公開鍵のパス
+When set, applying this profile signs commits with this key.	設定されている場合、このプロファイルを適用するとこのキーでコミットに署名します。
+Saves {identity} from the Identity tab.	ID タブの {identity} を保存します。
+Save as profile	プロファイルとして保存
+No saved profiles yet	保存されたプロファイルはまだありません
+Signs commits	コミットに署名
+Forget this profile on this computer	このコンピューターからこのプロファイルを削除します
+No remotes yet. Add one below.	リモートはまだありません。下で追加してください。
+Add a remote	リモートを追加
+Remote name	リモート名
+URL	URL
+Remote URL	リモートの URL
+Edit remote name	リモート名を編集
+Fetch URL	Fetch の URL
+Edit fetch URL	Fetch の URL を編集
+Push URL	Push の URL
+Same as fetch URL	Fetch の URL と同じ
+Edit push URL	Push の URL を編集
+This remote pushes to several URLs; NiceGit leaves them as they are.	このリモートは複数の URL に push します。NiceGit はそのまま残します。
+Save remote	リモートを保存
+No fetch URL	Fetch の URL がありません
+NiceGit forgets this remote and deletes its remote-tracking branches from this repository. Local branches that track it lose their upstream. Nothing on the server changes.	NiceGit はこのリモートを忘れ、このリポジトリからリモート追跡ブランチを削除します。これを追跡しているローカルブランチは上流を失います。サーバーの内容は変わりません。
+Repository Settings	リポジトリの設定
+An action is running. Controls return when it finishes.	操作を実行中です。完了すると操作できるようになります。
+the name and email	名前とメール
+Save identity	ID を保存
+Apply identity	ID を適用
+Applied {label} to this repository.	{label} をこのリポジトリに適用しました。
+A remote named {name} already exists.	{name} という名前のリモートは既に存在します。
+Add remote {name}	リモート {name} を追加
+Added remote {name}.	リモート {name} を追加しました。
+Remove remote {name}	リモート {name} を削除
+Save remote {name}	リモート {name} を保存
+Saved remote {name}.	リモート {name} を保存しました。
+Removed remote {name}.	リモート {name} を削除しました。
+Push: {address}	Push: {address}
+Pick	選択
+Reword	メッセージ変更
+Squash	統合
+Fixup	修正統合
+Drop	削除
+Keep this commit as it is	このコミットをそのまま残します
+Keep this commit with a new message	このコミットを新しいメッセージで残します
+Stop after this commit so you can change its files	このコミットの後で停止し、ファイルを変更できるようにします
+Combine into the nearest kept commit below, keeping both messages	下にある最も近い残すコミットに統合し、両方のメッセージを残します
+Combine into the nearest kept commit below, discarding this message	下にある最も近い残すコミットに統合し、このメッセージは破棄します
+Remove this commit and its changes	このコミットと変更を削除します
+The selected commits must be in the loaded history, and none can be a merge.	選択したコミットは読み込み済みの履歴に含まれている必要があり、マージコミットは指定できません。
+The oldest kept commit has no earlier commit to combine into. Pick or reword it instead.	残すコミットのうち最も古いものには、統合先となる前のコミットがありません。代わりに選択するか、メッセージを変更してください。
+A reworded commit needs a message.	メッセージを変更するコミットにはメッセージが必要です。
+Result: {kept} {commits}, {dropped} dropped	結果: {kept} {commits}、{dropped} 件削除
+Result: {kept} {commits}	結果: {kept} {commits}
+commit	コミット
+commits	コミット
+commit is	コミット
+commits are	コミット
+fixup or squash commit	fixup または squash のコミット
+fixup or squash commits	fixup または squash のコミット
+Rewrite {count} {commits} on {branch}. Listed newest first; drag a row by its grip or use the arrows to reorder. Squash and fixup combine a commit into the nearest kept commit below it.	{branch} 上の {count} {commits} を書き換えます。新しい順に表示しています。行の取っ手をドラッグするか、矢印で並べ替えできます。squash と fixup は、コミットを下にある最も近い残すコミットに統合します。
+Selected commits were moved next to each other; moving commits can cause conflicts.	選択したコミットを隣り合うように移動しました。コミットを移動すると競合が起きる場合があります。
+{published} of these {commits} already on a remote. Rewriting them means you will need to force-push, and anyone who has them must reconcile their copies.	このうち {published} 件の{commits}はすでにリモートにあります。書き換えると強制プッシュが必要になり、それらを持つ人はコピーを合わせ直す必要があります。
+Reading commits...	コミットを読み込んでいます...
+Rewrite commits	コミットを書き換え
+Reset edits	編集を元に戻す
+Apply fixups	fixup を適用
+Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash	fixup! または squash! のコミットを、名前で指定されたコミットの直後に移動し、Fixup または Squash に設定します
+Wait for the plan to load and for the current Git action to finish	計画の読み込みと現在の Git 操作の完了をお待ちください
+No fixup! or squash! commit names an earlier commit in this list.	この一覧で、より前のコミットを指定している fixup! または squash! のコミットはありません。
+Applied {count} {noun}; each sits directly after the commit it names.	{count} 件の {noun} を適用しました。各コミットは指定されたコミットの直後に配置されます。
+{placed} Moving commits can cause conflicts.	{placed} コミットを移動すると競合が起きる場合があります。
+Rewrite commits on {branch}	{branch} のコミットを書き換え
+Interactive rebase	インタラクティブリベース
+Rewrote {count} commits on {branch}.	{branch} の {count} 件のコミットを書き換えました。
+Stopped at “{subject}”	「{subject}」で停止しました
+Stopped	停止しました
+{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase.	{stopped_at}。変更できます。ファイルを編集して追加し、「続ける」をクリックすると取り込まれます。「中止」を選ぶとリベース全体が取り消されます。
+Some selected commits are not part of {branch}'s history.	選択したコミットの一部は {branch} の履歴に含まれていません。
+This commit is not part of {branch}'s history.	このコミットは {branch} の履歴に含まれていません。
+Action for {subject}	{subject} の操作
+Message for {subject}	{subject} のメッセージ
+Drag to reorder	ドラッグして並べ替え
+Move up	上へ移動
+Move down	下へ移動
+Combined into the commit below	下のコミットに統合されています
+Already on a remote	リモートに存在します
+New commit message	新しいコミットメッセージ
+Edit commit message	コミットメッセージを編集
+Squash commits	コミットを統合
+Drop commits	コミットを削除
+Finish or abort the {operation} in progress before stashing.	スタッシュする前に、進行中の {operation} を完了するか中止してください。
+Wait for the current Git action to finish.	現在の Git 操作が完了するまでお待ちください。
+There are no changes to stash.	スタッシュする変更はありません。
+Select files to stash.	スタッシュするファイルを選択してください。
+WIP on {branch}	{branch} の作業中
+Stash message	スタッシュのメッセージ
+Include untracked files	追跡されていないファイルを含める
+None	なし
+All	すべて
+No changed files.	変更されたファイルはありません。
+(untracked)	(未追跡)
+Stash {count} file	{count} 個のファイルをスタッシュ
+Stash {count} files	{count} 個のファイルをスタッシュ
+Stash {count} selected files	選択した {count} 個のファイルをスタッシュ
+Saved your changes in a stash.	変更をスタッシュに保存しました。
+Saved {count} selected files in a stash.	選択した {count} 個のファイルをスタッシュに保存しました。
+No stashes	スタッシュはありません
+Delete stash	スタッシュを削除
+Restore the changes, then remove the stash if they apply	変更を復元し、適用できたらスタッシュを削除します
+Restore the changes and keep the stash	変更を復元し、スタッシュは残します
+Rename	名前を変更
+Give the stash a new name. It moves to the top of the list	スタッシュに新しい名前を付けます。一覧の先頭に移動します
+Rename {reference}	{reference} の名前を変更
+New name	新しい名前
+Apply {reference}	{reference} を適用
+Applied {reference}.	{reference} を適用しました。
+Apply {reference} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.	{reference} を適用して削除しますか？ スタッシュは変更が適用された後にのみ削除されます。適用に失敗するか競合した場合は残ります。
+Pop stash	スタッシュを適用して削除
+Pop {reference}	{reference} を適用して削除
+Popped {reference}.	{reference} を適用して削除しました。
+Delete {reference}? Undo can bring it back while NiceGit is open.	{reference} を削除しますか？ NiceGit を開いている間は、元に戻して復元できます。
+Delete {reference}	{reference} を削除
+Deleted {reference}.	{reference} を削除しました。
+Select a stash to see its changes.	変更を表示するスタッシュを選択してください。
+Reading the stash...	スタッシュを読み込んでいます...
+Set changes aside to switch work or clean up, and restore them later.	作業を切り替えたり片付けたりするために変更を一時退避し、後で復元します。
+Saved stashes	保存済みのスタッシュ
+Destination	移動先
+Replayed commit	再適用中のコミット
+Current	現在
+Incoming	受信
+Git will remember how you resolve conflicts and reuse it when the same conflict happens again.	Git は競合の解決方法を記憶し、同じ競合が再び起きたときに再利用します。
+Git will no longer remember how you resolve conflicts.	Git は競合の解決方法を記憶しなくなります。
+Remember how I resolve conflicts	競合の解決方法を記憶する
+Git will reuse your resolution if the same conflict happens again, for example in a later rebase.	同じ競合が再び起きた場合（後のリベースなど）に、Git は解決内容を再利用します。
+Remember conflict resolutions	競合の解決を記憶
+Resolve conflict: {path}	競合を解決: {path}
+Save or discard the result first.	先に結果を保存または破棄してください。
+Wait for the current action.	現在の操作が完了するまでお待ちください。
+Resolve in {tool}	{tool} で解決
+Resolve in merge tool	マージツールで解決
+Reading the conflicted file...	競合しているファイルを読み込んでいます...
+Result	結果
+The result still has conflict markers. Remove them before saving.	結果にはまだ競合マーカーがあります。保存する前に削除してください。
+Git reused a resolution you recorded earlier. Check it, then mark the file resolved.	Git が以前に記録した解決内容を再利用しました。確認してから、ファイルを解決済みにしてください。
+base	基点
+Replace the result with the {name} version? Edits in the result are lost.	結果を {name} のバージョンで置き換えますか？ 結果の編集内容は失われます。
+Use version	このバージョンを使用
+Take the {name} version of the whole file? This replaces the working file and discards editor changes.	ファイル全体を {name} のバージョンにしますか？ 作業ファイルが置き換えられ、エディターの変更は破棄されます。
+Take version	バージョンを採用
+Delete this file? This removes the working file and discards editor changes.	このファイルを削除しますか？ 作業ファイルが削除され、エディターの変更は破棄されます。
+Close the editor and discard its changes?	エディターを閉じて変更を破棄しますか？
+Discard changes	変更を破棄
+Whole file	ファイル全体
+Take {side}	{side} を採用
+Save and mark resolved	保存して解決済みにする
+Remove the conflict markers first.	先に競合マーカーを削除してください。
+Resolve {path}	{path} を解決
+Resolved {path}	{path} を解決しました。
+Not available for this file.	このファイルでは利用できません。
+Copy into result	結果にコピー
+Take current version of {path}	{path} の現在のバージョンを採用
+Take incoming version of {path}	{path} の受信バージョンを採用
+Delete {path}	{path} を削除
+Not checked out	チェックアウトされていません
+At recorded commit	記録されたコミット
+Different commit	別のコミット
+Local changes	ローカルの変更
+Recorded  {commit}	記録  {commit}
+Checked out  {commit}	チェックアウト  {commit}
+This submodule has uncommitted changes. Checking out the recorded commit keeps them when Git can, and Git refuses when they would be overwritten.	このサブモジュールにはコミットされていない変更があります。記録されたコミットをチェックアウトすると、可能な場合は変更を残します。上書きされる場合は Git が拒否します。
+Check out recorded commit	記録されたコミットをチェックアウト
+Initialise and check out	初期化してチェックアウト
+Already at the recorded commit	すでに記録されたコミットにあります
+Remove…	削除…
+Commit or discard its changes before removing it	削除する前に、その変更をコミットまたは破棄してください
+Removing deletes this submodule's checkout and stages the removal of its .gitmodules entry and its gitlink, so the change takes effect when you commit. The module's Git data in .git/modules is kept. Removal is refused while the checkout has uncommitted or ignored files.	削除すると、このサブモジュールのチェックアウトが削除され、.gitmodules のエントリと gitlink の削除がステージされます。変更はコミット時に反映されます。.git/modules にあるモジュールの Git データは残ります。チェックアウトにコミットされていない変更や無視されたファイルがある場合、削除は拒否されます。
+Remove submodule	サブモジュールを削除
+Remove submodule {path}	サブモジュール {path} を削除
+Removed {path}. Its .gitmodules entry and gitlink are staged for commit.	{path} を削除しました。.gitmodules のエントリと gitlink はコミット用にステージされています。
+Add a submodule	サブモジュールを追加
+Clones the repository at this URL into the path, then stages the new .gitmodules entry and gitlink for commit.	この URL のリポジトリをパスにクローンし、新しい .gitmodules のエントリと gitlink をコミット用にステージします。
+Repository URL	リポジトリの URL
+https://… or a local path	https://… またはローカルのパス
+Optional, the remote's default	任意。リモートの既定値
+Add submodule	サブモジュールを追加
+Add submodule {path}	サブモジュール {path} を追加
+Added {path}. Its .gitmodules entry and gitlink are staged for commit.	{path} を追加しました。.gitmodules のエントリと gitlink はコミット用にステージされています。
+Submodules are repositories nested in this one. Each is checked out at the commit this repository records.	サブモジュールは、このリポジトリ内にネストされたリポジトリです。各サブモジュールは、このリポジトリが記録しているコミットでチェックアウトされます。
+Update all	すべて更新
+Update all submodules	すべてのサブモジュールを更新
+Checked out every submodule at its recorded commit.	すべてのサブモジュールを記録されたコミットでチェックアウトしました。
+Sync URLs	URL を同期
+Sync submodule URLs	サブモジュールの URL を同期
+Copied the submodule URLs from .gitmodules into their checkouts.	サブモジュールの URL を .gitmodules からそれぞれのチェックアウトにコピーしました。
+Add submodule…	サブモジュールを追加…
+Reading submodules	サブモジュールを読み込んでいます
+This repository has no submodules.	このリポジトリにはサブモジュールがありません。
+Check out {path}	{path} をチェックアウト
+Checked out the recorded commit in {path}.	{path} で記録されたコミットをチェックアウトしました。
+Reading the bisect status	バイセクトの状態を読み込んでいます
+Bisect finds the commit that introduced a problem. Give a commit that is known to be good; NiceGit then tests the commits between it and the current commit.	バイセクトは、問題を持ち込んだコミットを見つけます。正常に動くと分かっているコミットを指定すると、NiceGit はそのコミットから現在のコミットまでの間のコミットをテストします。
+current commit	現在のコミット
+This repository has no commits yet.	このリポジトリにはまだコミットがありません。
+Commit, branch, or tag known to work	正常に動くと分かっているコミット、ブランチ、タグ
+Finish the current Git operation before starting a bisect.	バイセクトを開始する前に、現在の Git 操作を完了してください。
+Start bisect	バイセクトを開始
+Bisect started. Mark the checked-out commit as good or bad.	バイセクトを開始しました。チェックアウトしたコミットを良好または不良としてマークしてください。
+Checkouts happen during a bisect, so commit or stash changes first.	バイセクト中はチェックアウトが行われるため、先に変更をコミットまたはスタッシュしてください。
+First bad commit	最初の不良コミット
+Subject unavailable	件名を取得できません
+Git narrowed the search to this commit. Select it in the graph to inspect it.	Git は検索対象をこのコミットに絞り込みました。グラフで選択して確認してください。
+Select commit	コミットを選択
+Bisect ended. Returned to the starting checkout.	バイセクトを終了し、開始時のチェックアウトに戻りました。
+Testing	テスト中
+No commit is checked out for testing.	テスト用にチェックアウトされているコミットはありません。
+{good} good, {bad} bad, {skipped} skipped so far. Returns to {checkout} when ended.	これまでに良好 {good} 件、不良 {bad} 件、スキップ {skipped} 件。終了すると {checkout} に戻ります。
+Return to {checkout}	{checkout} に戻る
+Mark {label}	{label} とマーク
+One more mark should find the first bad commit.	あと 1 回マークすると最初の不良コミットが見つかるはずです。
+About 1 more mark after this one.	この後あと約 1 回マークします。
+About {count} more marks after this one.	この後あと約 {count} 回マークします。
+Mark this commit good or bad.	このコミットを良好または不良としてマークしてください。
+the starting checkout	開始時のチェックアウト
+Wait for the current Git action to finish before checking out a pull request.	プルリクエストをチェックアウトする前に、現在の Git 操作が終わるまでお待ちください。
+Finish or abort the current Git operation before checking out a pull request.	プルリクエストをチェックアウトする前に、進行中の Git 操作を完了または中止してください。
+Wait for the current Git action to finish before starting work on an issue.	issue の作業を始める前に、現在の Git 操作が終わるまでお待ちください。
+Finish or abort the current Git operation before starting work on an issue.	issue の作業を始める前に、進行中の Git 操作を完了または中止してください。
+Make a first commit before starting work on an issue, so there is a HEAD to start from.	issue の作業を始める前に最初のコミットを作成してください。作業の起点となる HEAD が必要です。
+Add a GitHub remote to load these	これらを読み込むには GitHub のリモートを追加してください
+Open with filters and closed items	フィルターと閉じた項目を指定して開く
+Open GitHub window	GitHub のウィンドウを開く
+Load from GitHub	GitHub から読み込む
+No open {kind}	オープンな{kind}はありません
+Copy link	リンクをコピー
+View details…	詳細を表示…
+Check out locally…	ローカルにチェックアウト…
+Start work…	作業を開始…
+Load {count} more	さらに {count} 件読み込む
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.	GitHub CLI (gh) がインストールされていません。cli.github.com からインストールし、gh auth login でサインインしてください。
+The branch's {remote} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.	このダイアログを開いた後にブランチの {remote} リモートが変わったため、何も作成されませんでした。ダイアログを閉じて、もう一度開いてください。
+pull request	プルリクエスト
+merge request	マージリクエスト
+Create {noun}	{noun}を作成
+Creating the {noun} on {forge}	{forge} に{noun}を作成しています
+{repo} on {host}	{repo}（{host}）
+Your branch has {count} commit that is not pushed. Push first, or the pull request will not include it.	ブランチに、まだプッシュしていないコミットが {count} 件あります。先にプッシュしてください。プルリクエストにはこのコミットが含まれません。
+Your branch has {count} commits that are not pushed. Push first, or the pull request will not include them.	ブランチに、まだプッシュしていないコミットが {count} 件あります。先にプッシュしてください。プルリクエストにはこれらのコミットが含まれません。
+Base branch	ベースブランチ
+{tool} is not signed in to {host}. Run {command} in a terminal, then open this dialog again.	{tool} は {host} にサインインしていません。ターミナルで {command} を実行してから、このダイアログを開き直してください。
+Title	タイトル
+Body	本文
+Create as a draft	下書きとして作成
+Open in browser instead	代わりにブラウザーで開く
+Created {noun} {marker}{number}.	{noun} {marker}{number} を作成しました。
+Needs your review	あなたのレビューが必要
+Yours	自分の
+Other open	その他のオープン
+The read stopped before it finished. Refresh to try again.	読み込みが完了する前に停止しました。再読み込みしてやり直してください。
+Include workspace	ワークスペースを含める
+Open a repository, or choose a workspace, to see its pull and merge requests.	リポジトリを開くか、ワークスペースを選ぶと、プルリクエストとマージリクエストが表示されます。
+Loading {count} repository	{count} 個のリポジトリを読み込んでいます
+Loading {count} repositories	{count} 個のリポジトリを読み込んでいます
+Showing the first {limit} open pull requests of each repository.	各リポジトリの最初の {limit} 件のオープンなプルリクエストを表示しています。
+Not available	利用できません
+by a deleted account	削除されたアカウントによる
+Check out is available for GitHub pull requests only.	チェックアウトは GitHub のプルリクエストでのみ利用できます。
+This repository has no {remote} remote, so its pull requests cannot be read.	このリポジトリには {remote} リモートがないため、そのプルリクエストを読み取れません。
+Bitbucket pull requests are not listed here.	Bitbucket のプルリクエストはここには表示されません。
+Azure DevOps pull requests are not listed here.	Azure DevOps のプルリクエストはここには表示されません。
+{count} passing	{count} 件成功
+{count} failing	{count} 件失敗
+{count} pending	{count} 件保留中
+No checks	チェックなし
+team {name}	チーム {name}
+Review requested from {names}	{names} にレビューを依頼
+updated {count} minute ago	{count} 分前に更新
+updated {count} minutes ago	{count} 分前に更新
+updated {count} hour ago	{count} 時間前に更新
+updated {count} hours ago	{count} 時間前に更新
+updated {count} day ago	{count} 日前に更新
+updated {count} days ago	{count} 日前に更新
+updated just now	たった今更新
+updated over a month ago	1 か月以上前に更新
+Add remote	リモートを追加
+Comment on {location}	{location} にコメント
+Base	基点
+Start a bisect	バイセクトを開始

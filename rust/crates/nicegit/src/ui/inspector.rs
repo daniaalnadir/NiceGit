@@ -8,6 +8,7 @@ use nicegit_core::models::short;
 use nicegit_core::{GitClient, Snapshot, Stash, StashFile};
 
 use crate::app::{NiceGitApp, Selection};
+use crate::i18n::{tr, tr_fmt};
 use crate::issue_links::{IssueLinks, Segment};
 use crate::ui::history::middle_ellipsis;
 
@@ -54,7 +55,11 @@ impl NiceGitApp {
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  Changes", icon::ARROW_LEFT)).on_hover_text("Back to the Changes panel (Esc)").clicked() {
+                if ui
+                    .button(format!("{}  {}", icon::ARROW_LEFT, tr("Changes")))
+                    .on_hover_text(tr("Back to the Changes panel (Esc)"))
+                    .clicked()
+                {
                     self.clear_selection();
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -65,7 +70,7 @@ impl NiceGitApp {
                             let can_switch = self.idle() && snapshot.operation.is_none();
                             self.commit_menu(ui, &commit, &snapshot, can_switch);
                         });
-                        crate::tools::widgets::name_icon(&menu.response, "More actions for this commit");
+                        crate::tools::widgets::name_icon(&menu.response, tr("More actions for this commit"));
                     }
                 });
             });
@@ -76,7 +81,7 @@ impl NiceGitApp {
         egui::ScrollArea::vertical().id_salt("inspector").auto_shrink(false).show(ui, |ui| {
             egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 8, bottom: 12 }).show(ui, |ui| {
                 match &details {
-                    None => widgets::loading(ui, "Loading commit…"),
+                    None => widgets::loading(ui, tr("Loading commit…")),
                     Some(Err(error)) => widgets::error(ui, error),
                     Some(Ok(details)) => {
                         let (subject, body) = details
@@ -96,7 +101,7 @@ impl NiceGitApp {
                             egui::Frame::new().fill(c.subtle_bg).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
                                 ui,
                                 |ui| {
-                                    ui.label(RichText::new("Notes").small().color(c.muted));
+                                    ui.label(RichText::new(tr("Notes")).small().color(c.muted));
                                     ui.add_space(2.0);
                                     ui.label(details.notes.as_str());
                                 },
@@ -125,31 +130,31 @@ impl NiceGitApp {
                             let caption = |ui: &mut Ui, text: &str| {
                                 ui.label(RichText::new(text).small().color(c.muted));
                             };
-                            caption(ui, "Author");
+                            caption(ui, tr("Author"));
                             ui.vertical(|ui| {
                                 ui.spacing_mut().item_spacing.y = 0.0;
                                 ui.label(&details.author);
                                 ui.label(RichText::new(&details.author_email).small().color(c.muted));
                             });
                             ui.end_row();
-                            caption(ui, "Date");
+                            caption(ui, tr("Date"));
                             ui.label(&details.author_date);
                             ui.end_row();
                             if details.committer != details.author {
-                                caption(ui, "Committer");
+                                caption(ui, tr("Committer"));
                                 ui.label(format!("{} · {}", details.committer, details.committer_date));
                                 ui.end_row();
                             }
-                            caption(ui, "Commit");
+                            caption(ui, tr("Commit"));
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(short(&details.hash)).monospace());
-                                if widgets::icon_button(ui, icon::COPY, "Copy the full commit ID", true).clicked() {
+                                if widgets::icon_button(ui, icon::COPY, tr("Copy the full commit ID"), true).clicked() {
                                     ui.ctx().copy_text(details.hash.clone());
                                 }
                             });
                             ui.end_row();
                             if !details.parents.is_empty() {
-                                caption(ui, if details.parents.len() > 1 { "Parents" } else { "Parent" });
+                                caption(ui, if details.parents.len() > 1 { tr("Parents") } else { tr("Parent") });
                                 ui.horizontal(|ui| {
                                     for parent in &details.parents {
                                         if ui.link(RichText::new(short(parent)).monospace()).clicked() {
@@ -161,7 +166,7 @@ impl NiceGitApp {
                             }
                             containing_rows(ui, &c, &containing);
                             if let Some((text, color, help)) = &signature {
-                                caption(ui, "Signature");
+                                caption(ui, tr("Signature"));
                                 let label = ui.label(RichText::new(text).color(*color));
                                 if !help.is_empty() {
                                     label.on_hover_text(help);
@@ -174,11 +179,11 @@ impl NiceGitApp {
                 ui.add_space(14.0);
                 // Changed files lists what the commit changed; All files lists its whole tree.
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::selectable(!all_files, format!("Changed files ({})", files.len()))).clicked() {
+                    if ui.add(egui::Button::selectable(!all_files, tr_fmt!("Changed files ({count})", count = files.len()))).clicked() {
                         self.set_all_files(false);
                     }
-                    let all = ui.add(egui::Button::selectable(all_files, "All files"));
-                    if all.on_hover_text("Every file in this commit's tree").clicked() {
+                    let all = ui.add(egui::Button::selectable(all_files, tr("All files")));
+                    if all.on_hover_text(tr("Every file in this commit's tree")).clicked() {
                         self.set_all_files(true);
                     }
                 });
@@ -187,7 +192,7 @@ impl NiceGitApp {
                     self.all_files_list(ui, &hash, viewing.as_deref());
                 } else {
                     let all_selected = file.is_none() && viewing.is_none();
-                    let all_changes = RichText::new(format!("{}  All changes", icon::FILES));
+                    let all_changes = RichText::new(format!("{}  {}", icon::FILES, tr("All changes")));
                     if ui.add(egui::Button::selectable(all_selected, all_changes)).clicked() {
                         self.select_commit_file(hash.clone(), None);
                     }
@@ -223,7 +228,11 @@ impl NiceGitApp {
 
         egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 12, bottom: 8 }).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  Changes", icon::ARROW_LEFT)).on_hover_text("Back to the Changes panel (Esc)").clicked() {
+                if ui
+                    .button(format!("{}  {}", icon::ARROW_LEFT, tr("Changes")))
+                    .on_hover_text(tr("Back to the Changes panel (Esc)"))
+                    .clicked()
+                {
                     self.clear_selection();
                 }
             });
@@ -237,13 +246,13 @@ impl NiceGitApp {
                     let caption = |ui: &mut Ui, text: &str| {
                         ui.label(RichText::new(text).small().color(c.muted));
                     };
-                    caption(ui, "Stash");
+                    caption(ui, tr("Stash"));
                     ui.label(RichText::new(stash.reference.as_str()).monospace());
                     ui.end_row();
-                    caption(ui, "Commit");
+                    caption(ui, tr("Commit"));
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(short(&stash.hash)).monospace());
-                        if widgets::icon_button(ui, icon::COPY, "Copy the full stash commit ID", true).clicked() {
+                        if widgets::icon_button(ui, icon::COPY, tr("Copy the full stash commit ID"), true).clicked() {
                             ui.ctx().copy_text(stash.hash.clone());
                         }
                     });
@@ -251,20 +260,23 @@ impl NiceGitApp {
                 });
                 ui.add_space(14.0);
                 ui.horizontal(|ui| match &listing {
-                    Some(Ok(files)) => widgets::section(ui, &format!("Changed files ({})", files.len())),
-                    _ => widgets::section(ui, "Changed files"),
+                    Some(Ok(files)) => widgets::section(ui, &tr_fmt!("Changed files ({count})", count = files.len())),
+                    _ => widgets::section(ui, tr("Changed files")),
                 });
                 ui.add_space(2.0);
-                if ui.add(egui::Button::selectable(file.is_none(), RichText::new(format!("{}  Show all changes", icon::FILES)))).clicked() {
+                if ui
+                    .add(egui::Button::selectable(file.is_none(), RichText::new(format!("{}  {}", icon::FILES, tr("Show all changes")))))
+                    .clicked()
+                {
                     self.select_stash_file(stash.clone(), None);
                 }
                 match &listing {
-                    None => widgets::loading(ui, "Listing files…"),
+                    None => widgets::loading(ui, tr("Listing files…")),
                     Some(Err(error)) => widgets::error(ui, error),
                     Some(Ok(files)) => {
                         for entry in files {
                             let selected = file.as_deref() == Some(entry.path.as_str());
-                            let tag = entry.untracked.then_some("untracked");
+                            let tag = entry.untracked.then_some(tr("untracked"));
                             let response = changed_file_row(ui, &entry.status, &entry.path, selected, None, tag);
                             if response.clicked() {
                                 self.select_stash_file(stash.clone(), Some(entry.path.clone()));
@@ -284,17 +296,21 @@ impl NiceGitApp {
         if !file.status.starts_with('D') {
             let allowed = self.idle() && snapshot.operation.is_none() && !self.has_unsaved_editor() && snapshot.is_on_branch();
             if ui
-                .add_enabled(allowed, egui::Button::new(format!("{}  Restore this file from the stash", icon::ARROW_COUNTER_CLOCKWISE)))
+                .add_enabled(
+                    allowed,
+                    egui::Button::new(format!("{}  {}", icon::ARROW_COUNTER_CLOCKWISE, tr("Restore this file from the stash"))),
+                )
                 .clicked()
             {
                 ui.close();
                 self.confirm(
-                    format!("Restore {}?", file.path),
-                    format!(
-                        "This replaces {} in your working files and in the staged version with its version from {}. Its current changes are lost; other files and the branch are not changed.",
-                        file.path, stash.reference
+                    tr_fmt!("Restore {path}?", path = file.path),
+                    tr_fmt!(
+                        "This replaces {path} in your working files and in the staged version with its version from {reference}. Its current changes are lost; other files and the branch are not changed.",
+                        path = file.path,
+                        reference = stash.reference
                     ),
-                    "Restore",
+                    tr("Restore"),
                     crate::ui::dialogs::Pending::RestoreFromStash {
                         path: file.path.clone(),
                         stash: stash.clone(),
@@ -306,7 +322,7 @@ impl NiceGitApp {
             }
             ui.separator();
         }
-        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
             ui.close();
             ui.ctx().copy_text(file.path.clone());
         }
@@ -316,11 +332,11 @@ impl NiceGitApp {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let idle = self.idle() && snapshot.operation.is_none();
         ui.set_min_width(240.0);
-        if ui.button(format!("{}  File history", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
+        if ui.button(format!("{}  {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("File history"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::file_history::FileHistoryWindow::new(path.to_string())));
         }
-        if !status.starts_with('D') && ui.button(format!("{}  Blame at this commit", icon::USER_LIST)).clicked() {
+        if !status.starts_with('D') && ui.button(format!("{}  {}", icon::USER_LIST, tr("Blame at this commit"))).clicked() {
             ui.close();
             self.open_tool(Box::new(tools::blame::BlameWindow::new(path.to_string(), Some(hash.to_string()))));
         }
@@ -328,7 +344,7 @@ impl NiceGitApp {
         if !status.starts_with('D') {
             crate::git_ext::web_open_menu(
                 ui,
-                "Open file",
+                tr("Open file"),
                 crate::git_ext::hosted_file_links(&snapshot, hash, path, self.settings.listed_hosts()),
                 crate::git_ext::PUSHED_COMMIT_NOTE,
             );
@@ -343,7 +359,7 @@ impl NiceGitApp {
         };
         self.custom_actions_submenu(ui, crate::settings::ActionScope::File, &values, self.idle());
         ui.separator();
-        for (before, text) in [(false, "Restore this version"), (true, "Restore version before this commit")] {
+        for (before, text) in [(false, tr("Restore this version")), (true, tr("Restore version before this commit"))] {
             if ui
                 .add_enabled(idle && snapshot.is_on_branch(), egui::Button::new(format!("{}  {text}", icon::ARROW_COUNTER_CLOCKWISE)))
                 .clicked()
@@ -353,14 +369,14 @@ impl NiceGitApp {
                 // Say whether the file comes back or goes away, before anything changes.
                 let deleted = (status.starts_with('A') && before) || (status.starts_with('D') && !before);
                 let what = if deleted {
-                    format!("{path} does not exist in that version, so it will be deleted.")
+                    tr_fmt!("{path} does not exist in that version, so it will be deleted.", path = path)
                 } else {
-                    format!("{path} will be replaced with that version.")
+                    tr_fmt!("{path} will be replaced with that version.", path = path)
                 };
                 self.confirm(
-                    format!("Restore {path}?"),
-                    format!("{what} Staged and unstaged changes to it are lost; other files and the branch are not changed."),
-                    "Restore",
+                    tr_fmt!("Restore {path}?", path = path),
+                    tr_fmt!("{what} Staged and unstaged changes to it are lost; other files and the branch are not changed.", what = what),
+                    tr("Restore"),
                     crate::ui::dialogs::Pending::RestoreFile {
                         path: path.to_string(),
                         source,
@@ -373,11 +389,11 @@ impl NiceGitApp {
         self.lfs_menu_items(ui, path, idle);
         ui.separator();
         // A file the commit deleted has no version at it to save.
-        if !status.starts_with('D') && ui.button(format!("{}  Save a copy…", icon::FLOPPY_DISK)).clicked() {
+        if !status.starts_with('D') && ui.button(format!("{}  {}", icon::FLOPPY_DISK, tr("Save a copy…"))).clicked() {
             ui.close();
             self.save_commit_file_copy(hash, path);
         }
-        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
             ui.close();
             ui.ctx().copy_text(path.to_string());
         }
@@ -457,32 +473,32 @@ fn containing_rows(ui: &mut Ui, c: &theme::Colors, containing: &Option<Option<Co
     };
     match containing {
         None => {
-            caption(ui, "Branches");
+            caption(ui, tr("Branches"));
             ui.label(RichText::new("…").color(c.muted));
             ui.end_row();
         }
         Some(None) => {}
         Some(Some(refs)) => {
             let names: Vec<&str> = refs.local.iter().chain(&refs.remote).map(String::as_str).collect();
-            caption(ui, "Branches");
+            caption(ui, tr("Branches"));
             if names.is_empty() {
-                ui.label(RichText::new("Not on any branch").color(c.muted));
+                ui.label(RichText::new(tr("Not on any branch")).color(c.muted));
             } else {
                 // Long lists are cut short to keep the inspector tidy; the hover text has them all.
                 let shown = names.len().min(8);
                 let mut text = names[..shown].join(", ");
                 if names.len() > shown {
-                    text = format!("{text} and {} more", names.len() - shown);
+                    text = tr_fmt!("{names} and {count} more", names = text, count = names.len() - shown);
                 }
                 ui.add(egui::Label::new(text).wrap()).on_hover_text(names.join("\n"));
             }
             ui.end_row();
             if let Some(tag) = &refs.first_tag {
-                caption(ui, "First tag");
+                caption(ui, tr("First tag"));
                 ui.horizontal_wrapped(|ui| {
                     ui.label(tag);
                     if refs.tag_count > 1 {
-                        ui.label(RichText::new(format!("and {} later", refs.tag_count - 1)).color(c.muted));
+                        ui.label(RichText::new(tr_fmt!("and {count} later", count = refs.tag_count - 1)).color(c.muted));
                     }
                 });
                 ui.end_row();

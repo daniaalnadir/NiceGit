@@ -1,7 +1,7 @@
 //! "Create pull request" for a local branch: a form that creates the pull request through the GitHub
 //! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`). It fills in the
 //! base branch from the host, and the title and body from the branch's commits. The browser's compare
-//! page, or GitLab's new merge request form, stays available as "Open in browser instead". Nothing here
+//! page, or GitLab's new merge request form, stays available as tr("Open in browser instead"). Nothing here
 //! blocks the interface; every `gh`, `glab`, and Git read runs in the background.
 
 use std::path::{Path, PathBuf};
@@ -16,6 +16,7 @@ use nicegit_core::{Branch, GitClient, GitError, Snapshot};
 
 use crate::app::{NiceGitApp, Notice, NoticeAction};
 use crate::git_ext::{self, Forge, PullRequestTarget};
+use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
 use crate::tools::{widgets, Task};
 
@@ -23,8 +24,6 @@ use crate::tools::{widgets, Task};
 const BODY_MIN: usize = 2;
 /// ...and at most this many. Longer lists are left for the person to write.
 const BODY_MAX: usize = 20;
-
-const NOT_INSTALLED: &str = "The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.";
 
 /// What the dialog's form was closed or used for in one frame.
 pub enum Outcome {
@@ -64,7 +63,7 @@ enum Creation {
 /// and the checkout it reads are captured when it opens; creation checks them again.
 pub struct PullRequestDialog {
     target: PullRequestTarget,
-    /// The GitHub compare page, opened by "Open in browser instead".
+    /// The GitHub compare page, opened by tr("Open in browser instead").
     compare_link: String,
     /// The local branch's name, as shown in the heading.
     branch: String,
@@ -139,10 +138,21 @@ fn message(error: &GitError) -> String {
     }
 }
 
+/// The noun for a forge's request, translated for the dialog.
+fn noun_text(noun: &str) -> &'static str {
+    if noun == "merge request" {
+        tr("merge request")
+    } else {
+        tr("pull request")
+    }
+}
+
 /// What to say when the forge's command-line tool is not installed.
 fn not_installed(forge: &Forge) -> String {
     match forge {
-        Forge::GitHub(_) => NOT_INSTALLED.to_string(),
+        Forge::GitHub(_) => {
+            tr("The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.").to_string()
+        }
         Forge::GitLab(repository) => gitlab::not_installed_message(&repository.host),
     }
 }
@@ -286,10 +296,7 @@ impl PullRequestDialog {
     /// that the dialog shows. `current` is the target the snapshot gives now.
     fn create(&mut self, ctx: &egui::Context, current: Option<&PullRequestTarget>) {
         if current != Some(&self.target) {
-            self.error = Some(format!(
-                "The branch's {} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.",
-                self.target.repository.kind().name()
-            ));
+            self.error = Some(tr_fmt!("The branch's {remote} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.", remote = self.target.repository.kind().name()));
             return;
         }
         let forge = self.target.repository.clone();
@@ -329,9 +336,9 @@ impl PullRequestDialog {
         // Creation cannot work without gh, so its button waits for a verdict that says gh is usable.
         let gh_blocked = matches!(self.lookup, Lookup::Done(Ok(BaseLookup::NotInstalled | BaseLookup::SignedOut(_))));
         let can_create = !creating && !gh_blocked && !self.title.trim().is_empty() && !self.base.trim().is_empty();
-        let noun = self.target.repository.request_noun();
-        let create_label = format!("Create {noun}");
-        let creating_text = format!("Creating the {noun} on {}", self.target.repository.kind().name());
+        let noun = noun_text(self.target.repository.request_noun());
+        let create_label = tr_fmt!("Create {noun}", noun = noun);
+        let creating_text = tr_fmt!("Creating the {noun} on {forge}", noun = noun, forge = self.target.repository.kind().name());
         let mut action = Action::None;
         let modal = egui::Modal::new(egui::Id::unique("pull-request")).show(ctx, |ui| {
             ui.set_width(480.0);
@@ -339,28 +346,35 @@ impl PullRequestDialog {
             let base_text = self.base.trim();
             let shown_base = if base_text.is_empty() { "…" } else { base_text };
             ui.heading(format!("{} → {shown_base}", self.branch));
-            ui.label(RichText::new(format!("{} on {}", self.target.repository.slug(), self.target.repository.host())).small().color(c.muted));
+            ui.label(
+                RichText::new(tr_fmt!("{repo} on {host}", repo = self.target.repository.slug(), host = self.target.repository.host()))
+                    .small()
+                    .color(c.muted),
+            );
             ui.add_space(8.0);
 
             if self.unpushed > 0 {
                 let count = self.unpushed;
-                let (noun, verb, pronoun) = if count == 1 { ("commit", "is", "it") } else { ("commits", "are", "them") };
                 widgets::callout(
                     ui,
-                    &format!("Your branch has {count} {noun} that {verb} not pushed. Push first, or the pull request will not include {pronoun}."),
+                    &tr_count(
+                        "Your branch has {count} commit that is not pushed. Push first, or the pull request will not include it.",
+                        "Your branch has {count} commits that are not pushed. Push first, or the pull request will not include them.",
+                        count,
+                    ),
                     true,
                 );
                 ui.add_space(8.0);
             }
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Base branch").color(c.muted));
+                ui.label(RichText::new(tr("Base branch")).color(c.muted));
                 if loading {
                     ui.spinner();
                 }
             });
             let response = ui.add(egui::TextEdit::singleline(&mut self.base).hint_text("main").desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Base branch"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Base branch")));
             if response.changed() {
                 self.base_edited = true;
             }
@@ -371,10 +385,11 @@ impl PullRequestDialog {
                     let command = sign_in_command(&self.target.repository);
                     widgets::callout(
                         ui,
-                        &format!(
-                            "{} is not signed in to {}. Run {command} in a terminal, then open this dialog again.",
-                            self.target.repository.cli_name(),
-                            self.target.repository.host()
+                        &tr_fmt!(
+                            "{tool} is not signed in to {host}. Run {command} in a terminal, then open this dialog again.",
+                            tool = self.target.repository.cli_name(),
+                            host = self.target.repository.host(),
+                            command = command
                         ),
                         true,
                     );
@@ -386,23 +401,23 @@ impl PullRequestDialog {
             }
             ui.add_space(8.0);
 
-            ui.label(RichText::new("Title").color(c.muted));
+            ui.label(RichText::new(tr("Title")).color(c.muted));
             let response = ui.add(egui::TextEdit::singleline(&mut self.title).desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Title"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Title")));
             if response.changed() {
                 self.title_edited = true;
             }
             ui.add_space(8.0);
 
-            ui.label(RichText::new("Body").color(c.muted));
+            ui.label(RichText::new(tr("Body")).color(c.muted));
             let response = ui.add(egui::TextEdit::multiline(&mut self.body).desired_rows(8).desired_width(f32::INFINITY));
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Body"));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, tr("Body")));
             if response.changed() {
                 self.body_edited = true;
             }
             ui.add_space(6.0);
 
-            widgets::checkbox(ui, !creating, &mut self.draft, "Create as a draft");
+            widgets::checkbox(ui, !creating, &mut self.draft, tr("Create as a draft"));
             ui.add_space(10.0);
 
             if let Some(text) = &self.error {
@@ -417,10 +432,10 @@ impl PullRequestDialog {
                 if widgets::primary_button(ui, &create_label, can_create).clicked() {
                     action = Action::Create;
                 }
-                if ui.add_enabled(!creating, egui::Button::new("Open in browser instead")).clicked() {
+                if ui.add_enabled(!creating, egui::Button::new(tr("Open in browser instead"))).clicked() {
                     action = Action::Browser;
                 }
-                if ui.add_enabled(!creating, egui::Button::new("Cancel")).clicked() {
+                if ui.add_enabled(!creating, egui::Button::new(tr("Cancel"))).clicked() {
                     action = Action::Cancel;
                 }
             });
@@ -484,10 +499,11 @@ impl NiceGitApp {
             Some(Outcome::Created { url, kind }) => {
                 self.pull_request = None;
                 let number = url.rsplit('/').next().unwrap_or_default().to_string();
-                let (noun, marker) = if kind == Host::GitLab { ("merge request", "!") } else { ("pull request", "#") };
+                let (noun, marker) =
+                    if kind == Host::GitLab { (noun_text("merge request"), "!") } else { (noun_text("pull request"), "#") };
                 // The notice's button opens the pull request, so nothing opens before the person asks.
                 self.notice = Some(Notice {
-                    text: format!("Created {noun} {marker}{number}."),
+                    text: tr_fmt!("Created {noun} {marker}{number}.", noun = noun, marker = marker, number = number),
                     is_error: false,
                     action: Some(NoticeAction::OpenUrl(url)),
                     detail: None,
@@ -605,7 +621,16 @@ impl PrBadge {
             label: format!("{glyph}  {noun} {marker}{}", status.number),
             label_color: color,
             checks: checks_label,
-            hover: format!("{}\n{} passed, {} failed, {} pending", status.title, checks.passed, checks.failed, checks.pending),
+            hover: format!(
+                "{}\n{}",
+                status.title,
+                tr_fmt!(
+                    "{passed} passed, {failed} failed, {pending} pending",
+                    passed = checks.passed,
+                    failed = checks.failed,
+                    pending = checks.pending
+                )
+            ),
             url: status.url.clone(),
             number: status.number,
             details: status.kind == Host::GitHub,
@@ -644,7 +669,7 @@ pub fn show_pull_request_badge(ui: &mut egui::Ui, badge: &PrBadge) -> BadgeActio
     let mut action = if label.clicked() { BadgeAction::Open } else { BadgeAction::None };
     if badge.details {
         label.context_menu(|ui| {
-            if ui.button(format!("{}  View details…", icon::GIT_PULL_REQUEST)).clicked() {
+            if ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("View details…"))).clicked() {
                 ui.close();
                 action = BadgeAction::Details;
             }

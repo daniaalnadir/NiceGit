@@ -1,0 +1,463 @@
+# zh-Hans: tools and the repository pickers.
+Save as ZIP	另存为 ZIP
+Writing {name}…	正在写入 {name}…
+Saved {name} ({size}).	已保存 {name}（{size}）。
+{name} output	{name} 的输出
+The program printed nothing.	程序没有输出任何内容。
+Error output	错误输出
+This file is not UTF-8 text, so it cannot be edited here.	此文件不是 UTF-8 文本，无法在此编辑。
+The file changed on disk since you opened it. Reload it, then reapply your edits.	你打开文件后，文件已被修改。请重新加载，然后重新应用你的编辑。
+{name} — edited	{name} — 已编辑
+Saved {path}.	已保存 {path}。
+Revert	还原
+Discard your edits and reload the file	放弃你的编辑并重新加载文件
+File contents	文件内容
+Clean Up Branches	清理分支
+Clean up {count} branch	清理 {count} 个分支
+Clean up {count} branches	清理 {count} 个分支
+Local branches merged into {current}, whose remote branch was deleted, or with no commits for a while.	已合并到 {current} 的本地分支，其远程分支已被删除，或一段时间内没有提交。
+Also list unmerged branches with no commit for	同时列出以下时间内没有提交的未合并分支：
+ days	 天
+Deleted {count} branch.	已删除 {count} 个分支。
+Deleted {count} branches.	已删除 {count} 个分支。
+Undo	撤销
+Restore {count} branch	恢复 {count} 个分支
+Restore {count} branches	恢复 {count} 个分支
+Finding branches…	正在查找分支…
+No branches to clean up.	没有需要清理的分支。
+{count} to review	待审查 {count} 个
+Select merged	选择已合并的
+Main branch	主分支
+The main line is never selected automatically. Tick it only if you mean to delete it.	主线不会被自动选中。只有确定要删除时才勾选它。
+Merged	已合并
+Not merged	未合并
+Upstream gone	上游已删除
+Its branch on the remote was deleted, as usually happens once a pull request is merged	其在远程上的分支已被删除，这通常发生在拉取请求被合并之后
+{count} selected branch is the main line. Deleting it removes that line of work locally.	已选中的 {count} 个分支是主线。删除它会在本地移除这条工作线。
+{count} selected branches are the main line. Deleting it removes that line of work locally.	已选中的 {count} 个分支是主线。删除它会在本地移除这条工作线。
+{count} selected branch has commits on no other branch. Undo can restore it until another deletion.	已选中的 {count} 个分支有提交不在任何其他分支上。撤销可以在下一次删除前恢复它。
+{count} selected branches have commits on no other branch. Undo can restore them until another deletion.	已选中的 {count} 个分支有提交不在任何其他分支上。撤销可以在下一次删除前恢复它们。
+Delete {count} branch…	删除 {count} 个分支…
+Delete {count} branches…	删除 {count} 个分支…
+{count} selected	已选 {count} 个
+Delete {count} local branch?	删除 {count} 个本地分支？
+Delete {count} local branches?	删除 {count} 个本地分支？
+Remote branches are not changed.	远程分支不会被更改。
+Unmerged branches hold commits found on no other branch.	未合并的分支包含其他分支上没有的提交。
+Undo restores them until you take another undoable action.	在你进行下一次可撤销操作之前，撤销可以恢复它们。
+Delete, including unmerged	删除，包括未合并的分支
+Delete branches	删除分支
+Delete {count} branch	删除 {count} 个分支
+Delete {count} branches	删除 {count} 个分支
+Deleted {count} branch. Undo restores them.	已删除 {count} 个分支。撤销可以恢复它们。
+Deleted {count} branches. Undo restores them.	已删除 {count} 个分支。撤销可以恢复它们。
+Deleted {deleted} of {total} before stopping. Undo restores those. {error}	停止前已删除 {total} 个中的 {deleted} 个。撤销可以恢复这些分支。{error}
+Restored {restored} of {total} before stopping. {error}	停止前已恢复 {total} 个中的 {restored} 个。{error}
+Restored {count} branch.	已恢复 {count} 个分支。
+Restored {count} branches.	已恢复 {count} 个分支。
+{count}+ commits	{count}+ 个提交
+{count} commit	{count} 个提交
+{count} commits	{count} 个提交
+{first} on {other} that {current} does not have · {second} on {current} that {other} does not have	{other} 上有而 {current} 没有的 {first} · {current} 上有而 {other} 没有的 {second}
+These branches share no history.	这些分支没有共同的历史。
+Changed files…	已更改的文件…
+The files that merging {branch} would change	合并 {branch} 会更改的文件
+No commits.	没有提交。
+Only the newest {count} are listed.	只列出最新的 {count} 个。
+{other} and {current}	{other} 和 {current}
+Comparing the branches…	正在比较分支…
+On {other} but not on {current}	在 {other} 上，但不在 {current} 上
+On {current} but not on {other}	在 {current} 上，但不在 {other} 上
+Search commit messages	搜索提交信息
+Search author names and emails	搜索作者姓名和邮箱
+Text added or removed in a file	文件中新增或删除的文本
+Full or abbreviated commit ID	完整或缩写的提交 ID
+Code change	代码更改
+Commit ID	提交 ID
+Search commits	搜索提交
+Press Return to search every branch, including history not yet loaded in the graph.	按 Return 搜索所有分支，包括图中尚未加载的历史。
+Searching	正在搜索…
+No commits found	没有找到提交
+Showing the newest {limit} matches	显示最新的 {limit} 个匹配项
+Open {hash} in the inspector	在检查器中打开 {hash}
+Before	之前
+After	之后
+Added in this change	本次更改中新增
+Deleted in this change	本次更改中删除
+Compare	比较
+Comparing files	正在比较文件…
+No differences in tracked files	已跟踪的文件没有差异
+working files	工作区文件
+{count} changed file	已更改 {count} 个文件
+{count} changed files	已更改 {count} 个文件
+Comparison unavailable	无法比较
+Comparing…	正在比较…
+Select a file to see how it changed	选择一个文件以查看其更改
+Side by side	并排显示
+Loading the change	正在加载更改…
+{title} image	{title}图片
+This format cannot be previewed	无法预览此格式
+{bytes} bytes	{bytes} 字节
+commit {revision}	提交 {revision}
+Find in {label}	在 {label} 中查找
+Text in files	文件中的文本
+Match case	区分大小写
+Searching {label}	正在搜索 {label}…
+Press Return to search every tracked text file.	按 Return 搜索所有已跟踪的文本文件。
+No matches	没有匹配项
+First {limit} matches	前 {limit} 个匹配项
+{matches} in {files}	在 {files} 个文件中有 {matches}
+{count} match	{count} 个匹配项
+{count} matches	{count} 个匹配项
+{count} file	{count} 个文件
+Blame	追溯
+Show who last changed this line	显示最后修改此行的人
+File history: {name}	文件历史：{name}
+Latest {limit} commits	最近 {limit} 个提交
+Select a commit to see how it changed this file.	选择一个提交以查看它如何更改此文件。
+in commit {revision}	在提交 {revision} 中
+Reading history	正在读取历史…
+No commits in this checkout changed this file.	当前检出中没有提交更改此文件。
+As {path}	名为 {path}
+Delete file to this version…	将文件删除为此版本…
+Restore file to this version…	将文件恢复为此版本…
+Blame at this commit	在此提交处追溯
+Copy commit hash	复制提交哈希
+Delete file	删除文件
+Restore this version	恢复此版本
+Restore file	恢复文件
+Finish the current Git operation first.	请先完成当前的 Git 操作。
+Git restores by path. This commit holds the file under another name.	Git 按路径还原。此提交中该文件使用了其他名称。
+Replace this file with its version in the selected commit.	用所选提交中的版本替换此文件。
+Loading change	正在加载更改…
+Delete {path}?	删除 {path}？
+Restore {path}?	恢复 {path}？
+This file does not exist {description}. It will be deleted from your working files and the deletion staged. Any uncommitted changes to it will be lost. Your commits and other files are not changed.	该文件在{description}中不存在。它将从工作文件中删除，并暂存删除操作。其中未提交的更改将丢失。你的提交和其他文件不会改变。
+Your working copy of this file will be replaced with its version {description}, and the change staged. Any staged or unstaged changes to it will be lost. Your commits and other files are not changed.	该文件的工作副本将被替换为{description}的版本，并暂存此更改。其中已暂存或未暂存的更改将丢失。你的提交和其他文件不会改变。
+Deleted	已删除
+Restored	已恢复
+{verb} {path} {description}.	{verb} {path} {description}。
+Restore {path}	恢复 {path}
+Soft: keep changes staged	Soft：保留更改为已暂存
+Mixed: keep changes unstaged	Mixed：保留更改为未暂存
+Hard: discard local changes	Hard：丢弃本地更改
+Moves the branch without changing the index or working files. Changes from the removed commits remain staged.	移动分支，但不更改索引或工作文件。被移除提交中的更改保持为已暂存。
+Moves the branch and resets the index. Working files are kept, and the changes become unstaged.	移动分支并重置索引。工作文件保持不变，更改变为未暂存。
+Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.	移动分支并替换索引和已跟踪的文件。未提交的已跟踪文件更改将丢失。阻碍恢复路径的未跟踪文件也可能被删除。
+Reset to {target}	重置到 {target}
+Moves {branch} to this commit.	将 {branch} 移动到此提交。
+Mode	模式
+Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.	硬重置会丢弃已跟踪文件中未提交的更改。无法从 NiceGit 的更改面板撤销此操作。
+The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.	分支将指向所选提交。其历史之外的提交将不再位于此分支上。远程分支不会被更改。
+Reset and discard changes	重置并丢弃更改
+Reset branch	重置分支
+Waiting for the current action	正在等待当前操作
+Reset {branch}	重置 {branch}
+Reset {branch} to {target}.	已将 {branch} 重置到 {target}。
+Reset	重置
+line {start}	第 {start} 行
+lines {start}–{end}	第 {start}–{end} 行
+History of {file} {lines}	{file} 的历史（{lines}）
+Select a commit to see how it changed these lines.	选择一个提交以查看它如何更改这些行。
+Uncommitted changes are not included.	未提交的更改不包括在内。
+No commits changed these lines.	没有提交更改这些行。
+GitFlow	GitFlow
+Branches for releases, ongoing development, and short-lived work, compatible with the git-flow tool.	用于发布、持续开发和短期工作的分支，与 git-flow 工具兼容。
+Reading GitFlow settings…	正在读取 GitFlow 设置…
+Production branch	生产分支
+Development branch	开发分支
+Feature prefix	功能前缀
+Release prefix	发布前缀
+Hotfix prefix	热修复前缀
+Version tag prefix	版本标签前缀
+The production and development branches need different names.	生产分支和开发分支需要使用不同的名称。
+Set up GitFlow	设置 GitFlow
+GitFlow is set up.	GitFlow 已设置。
+Production  {branch}	生产  {branch}
+Development  {branch}	开发  {branch}
+Start	开始
+Finish	完成
+Feature name	功能名称
+Version, such as 1.2.0	版本，例如 1.2.0
+Creates {name} from {base} and checks it out.	从 {base} 创建 {name} 并签出。
+Feature	功能
+Release	发布
+Hotfix	热修复
+feature	功能
+release	发布
+hotfix	热修复
+Start {kind}	开始 {kind}
+Start {kind} {name}	开始 {kind} {name}
+Started {branch}.	已开始 {branch}。
+Check out a {feature}…, {release}…, or {hotfix}… branch to finish it.	请签出一个 {feature}…、{release}… 或 {hotfix}… 分支以完成它。
+Merges {branch} into {develop} without fast-forwarding, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	不使用快进方式将 {branch} 合并到 {develop}，然后删除 {branch}。如果出现冲突，NiceGit 会停止，以便你解决后再次完成。
+Merges {branch} into {main} and {develop} without fast-forwarding, tags {tag_prefix}{version} on {main}, then deletes {branch}. If a merge conflicts, NiceGit stops so you can resolve it, then finish again.	不使用快进方式将 {branch} 合并到 {main} 和 {develop}，在 {main} 上打标签 {tag_prefix}{version}，然后删除 {branch}。如果出现冲突，NiceGit 会停止，以便你解决后再次完成。
+Tag message (optional)	标签信息（可选）
+Commit or stash your changes before finishing.	完成前请先提交或贮藏你的更改。
+Finish {branch}	完成 {branch}
+Git Settings	Git 设置
+Settings saved in this repository's own Git configuration.	保存在此仓库自身 Git 配置中的设置。
+Filter settings	筛选设置
+Read the settings again	重新读取设置
+Reading the settings…	正在读取设置…
+No settings are saved in this repository yet. Add one below.	此仓库尚未保存任何设置。请在下方添加。
+No setting matches the filter.	没有与筛选条件匹配的设置。
+Remove {key}	删除 {key}
+Edit {key}	编辑 {key}
+Setting value	设置值
+Remove {key}? Git deletes this setting from this repository. Other settings stay as they are.	删除 {key}？Git 会从此仓库中删除此设置。其他设置保持不变。
+Has several values; edit in a terminal	有多个值；请在终端中编辑
+Global settings, read only	全局设置（只读）
+From your global Git configuration, which applies to every repository. Change these in a terminal with git config --global.	来自全局 Git 配置，适用于所有仓库。请在终端中使用 git config --global 更改。
+Reading global settings…	正在读取全局设置…
+Add a setting	添加设置
+section.name	section.name
+Setting name	设置名称
+Value	值
+Add	添加
+{key} is already set. Edit its row instead.	{key} 已设置，请改为编辑它的行。
+Set {key}	设置 {key}
+Set {key}.	已设置 {key}。
+Removed {key}.	已删除 {key}。
+Jan	1月
+Feb	2月
+Mar	3月
+Apr	4月
+May	5月
+Jun	6月
+Jul	7月
+Aug	8月
+Sep	9月
+Oct	10月
+Nov	11月
+Dec	12月
+{day} {month} {year}	{year}年{month}{day}日
+Period	时间段
+30 days	30 天
+90 days	90 天
+1 year	1 年
+All time	全部时间
+This branch	当前分支
+All branches	所有分支
+Reading history… {count} commits so far	正在读取历史… 已读取 {count} 个提交
+Insights	洞察
+Reading the history was cancelled.	历史读取已取消。
+Read again	再次读取
+No commits in this period.	此时间段内没有提交。
+Showing the newest 20,000 commits.	显示最新的 20,000 个提交。
+{first} – {last}	{first} – {last}
+Commits	提交
+Authors	作者
+Active days	活跃天数
+First to last commit	首次到末次提交
+Commits over time	随时间的提交
+Week of {date}: {commits}	{date} 所在周：{commits}
+{date}: {commits}	{date}：{commits}
+Lines	行数
+Last active	最近活动
+Most changed files	修改最多的文件
+No files changed in this period.	此时间段内没有文件被更改。
+Open its history	打开其历史
+{count} lines	{count} 行
+Folders	文件夹
+just now	刚刚
+{count} minute ago	{count} 分钟前
+{count} minutes ago	{count} 分钟前
+{count} hour ago	{count} 小时前
+{count} hours ago	{count} 小时前
+{count} day ago	{count} 天前
+{count} days ago	{count} 天前
+{count} month ago	{count} 个月前
+{count} months ago	{count} 个月前
+{count} year ago	{count} 年前
+{count} years ago	{count} 年前
+Tip history of {branch}	{branch} 的顶端历史
+Recover Lost Work	恢复丢失的工作
+Every commit {branch} has pointed to, including ones it no longer points to.	{branch} 曾指向的每个提交，包括它已不再指向的提交。
+Every position HEAD has had, including commits that no branch points to any more.	HEAD 曾经指向过的每个位置，包括已不再被任何分支指向的提交。
+Read the reflog again	重新读取引用日志
+Reading the reflog…	正在读取引用日志…
+No tip history. Git keeps no reflog for this branch, so its earlier tips are not recorded.	没有顶端历史。Git 不为此分支保留引用日志，因此不记录其早先的顶端。
+No history yet.	暂无历史。
+Not on any branch	不在任何分支上
+Only the reflog keeps this commit. Git may delete it after the reflog expires.	只有引用日志保留着这个提交。引用日志过期后，Git 可能会删除它。
+Create branch here…	在此创建分支…
+Reset {name} to here…	将 {name} 重置到这里…
+Select an entry to see its commit.	选择一个条目以查看其提交。
+Only the reflog keeps this commit. Git may delete it when the reflog expires. Create a branch to keep it.	只有引用日志保留着这个提交。引用日志过期时，Git 可能会删除它。创建一个分支来保留它。
+Show in graph	在图中显示
+Copy hash	复制哈希
+Create branch at {hash}	在 {hash} 处创建分支
+The branch keeps this commit and its history. Your current checkout does not change.	该分支会保留此提交及其历史。你当前的检出不会改变。
+Branch name	分支名称
+Create branch	创建分支
+Create branch {name}	创建分支 {name}
+Created branch {name}.	已创建分支 {name}。
+{count} change	{count} 处更改
+{count} changes	{count} 处更改
+(some changes)	（部分更改）
+moves as a whole	整体移动
+Hide the changes	隐藏更改
+Show the changes	显示更改
+Change {number}	更改 {number}
+{count} more lines	另外 {count} 行
+Split commit	拆分提交
+Rewrites {branch} as two commits. The commits after it are replayed.	将 {branch} 改写为两个提交。之后的提交会被重新应用。
+Reading the commit's changes	正在读取提交的更改…
+This commit is already on a remote. Splitting it rewrites it, so you will need to force-push, and anyone who has it must reconcile their copy.	此提交已在远程上。拆分会改写它，因此你需要强制推送，而拥有它的人必须同步各自的副本。
+Changes in the first commit	第一个提交中的更改
+This commit has no changes to split.	此提交没有可拆分的更改。
+{first} in the first commit, {second} in the second.	第一个提交中有 {first}，第二个提交中有 {second}。
+First commit	第一个提交
+Second commit	第二个提交
+First commit message	第一个提交的信息
+Second commit message	第二个提交的信息
+Wait for the current Git action to finish	请等待当前的 Git 操作完成
+Check out a branch first	请先签出一个分支
+Check at least one change for the first commit	请为第一个提交至少选择一项更改
+Leave at least one change for the second commit	请为第二个提交至少保留一项更改
+Both commits need a message	两个提交都需要信息
+Rewrites the commit as two commits	将提交改写为两个提交
+Split {hash}	拆分 {hash}
+Split {hash} into two commits.	已将 {hash} 拆分为两个提交。
+No worktrees were listed for this repository.	没有列出此仓库的工作树。
+Remove worktree {path}	删除工作树 {path}
+Removed the worktree. Its branch was kept.	已删除工作树，其分支已保留。
+A worktree folder no longer exists on disk. Forget it to remove it from Git's list.	有一个工作树文件夹在磁盘上已不存在。忘记它即可将其从 Git 列表中移除。
+{count} worktree folders no longer exist on disk. Forget them to remove them from Git's list.	{count} 个工作树文件夹在磁盘上已不存在。忘记它们即可将其从 Git 列表中移除。
+Forgot the missing worktrees.	已忘记缺失的工作树。
+Create a worktree	创建工作树
+Check a local branch out in its own folder, so you can work on it without switching this checkout.	在独立的文件夹中签出一个本地分支，无需切换当前检出即可在其上工作。
+Every local branch is already checked out. Create a branch first.	所有本地分支都已签出。请先创建一个分支。
+Choose a branch	选择分支
+Parent folder	父文件夹
+Choose folder	选择文件夹
+Choose where the new worktree folder goes	选择新工作树文件夹的位置
+Type a path or choose a folder	输入路径或选择文件夹
+Folder name	文件夹名称
+feature-branch	feature-branch
+Creates {path}	将创建 {path}
+Checking the branch	正在检查分支…
+Create worktree	创建工作树
+Create worktree for {name}	为 {name} 创建工作树
+Created a worktree for {name} at {path}.	已为 {name} 在 {path} 创建工作树。
+{name} moved after it was selected. Choose it again and review it.	{name} 在被选中后有所变动。请重新选择并检查。
+Could not read {name}: {error}	无法读取 {name}：{error}
+A linked worktree checks out another branch in its own folder and shares this repository's history.	关联的工作树会在自己的文件夹中签出另一个分支，并与此仓库共享历史。
+Main	主
+Open here	在此打开
+Locked	已锁定
+Missing	缺失
+Bare repository	裸仓库
+Detached HEAD	分离的 HEAD
+A locked worktree must be unlocked in a terminal before it can be removed	已锁定的工作树需要先在终端中解锁才能删除
+The main worktree and the checkout open here cannot be removed	无法删除主工作树和此处打开的检出
+Remove this worktree and its folder	删除此工作树及其文件夹
+Remove this worktree and its folder? Git refuses if the folder has uncommitted or untracked files. The branch is kept.	删除此工作树及其文件夹？如果文件夹中有未提交或未跟踪的文件，Git 会拒绝删除。分支会保留。
+Remove worktree	删除工作树
+Choose a remote to see its GitHub pull requests and issues.	选择一个远程，以查看其 GitHub 拉取请求和议题。
+Checking the GitHub CLI	正在检查 GitHub CLI…
+Read GitHub again	重新读取 GitHub
+Pull requests	拉取请求
+Issues	议题
+pull requests	拉取请求
+issues	议题
+Closed	已关闭
+all	全部的
+Filter loaded items by title, author, or number	按标题、作者或编号筛选已加载的项目
+No {state} {kind}	没有{state}的{kind}
+No matches in the loaded items	已加载的项目中没有匹配项
+Load more	加载更多
+Showing the first 1,000 items	显示前 1,000 个项目
+Back to the newer blame	返回较新的 blame
+at {revision}	位于 {revision}
+at {revision} ({summary})	位于 {revision}（{summary}）
+Ignore whitespace	忽略空白
+Attribute lines past whitespace-only changes to the commit that changed their content	将仅有空白变更之后的行归于更改其内容的提交
+Skip commits in .git-blame-ignore-revs	跳过 .git-blame-ignore-revs 中的提交
+Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does.	仅由 .git-blame-ignore-revs 中列出的提交更改的行（如重新格式化）会归于其之前的更改，与 GitHub 的 blame 一致。
+Blame: {name}	Blame：{name}
+Reading blame	正在读取 blame…
+The ignore list could not be used, so every commit is shown: {reason}	无法使用忽略列表，因此显示所有提交：{reason}
+Uncommitted	未提交
+Your working changes	你的工作更改
+Blame at HEAD	在 HEAD 处追溯
+Show commit in history	在历史中显示提交
+Copy commit ID	复制提交 ID
+History of {lines}…	{lines} 的历史…
+This commit has no earlier version of the file	此提交没有该文件的更早版本
+Blame before this change	追溯此更改之前的版本
+Close this change	关闭此更改
+Shell	终端
+{title} (exited)	{title}（已退出）
+[Process exited with status {code}]	[进程已退出，状态码 {code}]
+[Process exited]	[进程已退出]
+Restart	重新启动
+Could not start a shell: {error}	无法启动 shell：{error}
+New shell tab	新建 shell 标签页
+End this shell…	结束此 shell…
+End this shell? Programs running in it stop.	结束此 shell？其中运行的程序将停止。
+End shell	结束 shell
+No shell open	没有打开 shell
+Give the workspace a name.	请为工作区命名。
+Another workspace already has this name.	已有另一个工作区使用此名称。
+{count} repository	{count} 个仓库
+{count} repositories	{count} 个仓库
+Save open tabs as workspace…	将打开的标签页保存为工作区…
+Open workspace	打开工作区
+Manage workspaces…	管理工作区…
+Workspaces	工作区
+Save workspace	保存工作区
+Workspace name	工作区名称
+Replace workspace {name}?	替换工作区 {name}？
+It will hold the {count} open now instead of the folders it holds. Folders on disk are not changed.	它将改为保存当前打开的 {count}，而不是原有的文件夹。磁盘上的文件夹不会更改。
+Saved workspace {name} with {count}.	已保存工作区 {name}，包含 {count}。
+Workspace {name} has {missing}, which did not open: {list}.	工作区 {name} 有 {missing} 无法打开：{list}。
+{count} missing folder	{count} 个缺失的文件夹
+{count} missing folders	{count} 个缺失的文件夹
+Every repository in workspace {name} is already open.	工作区 {name} 中的所有仓库都已打开。
+Opened workspace {name}.	已打开工作区 {name}。
+Deleted workspace {name}. Its folders are unchanged.	已删除工作区 {name}。其文件夹未更改。
+Name of {name}	{name} 的名称
+Renamed workspace {from} to {to}.	已将工作区 {from} 重命名为 {to}。
+Delete workspace {name}?	删除工作区 {name}？
+The saved list is removed. Its folders stay on disk, and any tabs open from it stay open.	已保存的列表将被删除。其文件夹保留在磁盘上，从中打开的标签页仍保持打开。
+Find repositories	查找仓库
+Looking for repositories…	正在查找仓库…
+No repositories found	没有找到仓库
+No repositories found in {folder}.	在 {folder} 中没有找到仓库。
+Found {repositories} in {folder}	在 {folder} 中找到 {repositories}
+Showing the first {count}. Choose a folder inside this one to find the rest.	显示前 {count} 个。请选择此文件夹内的一个文件夹以查找其余仓库。
+Select all	全选
+Select none	全不选
+Also open them as tabs	同时作为标签页打开
+Opening many tabs reads each repository in the background.	打开大量标签页时，会在后台读取每个仓库。
+Add {count} to Recent	将 {count} 个添加到最近使用
+Not a repository	不是仓库
+This folder isn't a repository. Look for repositories inside it?	此文件夹不是仓库。要在其中查找仓库吗？
+Find	查找
+Find repositories in a folder	在文件夹中查找仓库
+Added {count} to Recent.	已将 {count} 个添加到最近使用。
+Added {added} of {total} to Recent. Recent keeps only the {limit} newest.	已将 {total} 个中的 {added} 个添加到最近使用。“最近使用”只保留最新的 {limit} 个。
+The repositories were not opened as tabs, because an action is running.	因为有操作正在运行，仓库未作为标签页打开。
+The repositories were not opened as tabs, because a file is being edited.	因为有文件正在编辑，仓库未作为标签页打开。
+Opened {count} as tabs.	已将 {count} 个作为标签页打开。
+Host	主机
+Use SSH	使用 SSH
+Filter repositories	筛选仓库
+Loading your repositories from GitHub	正在从 GitHub 加载你的仓库…
+GitHub CLI is not signed in to {host}. Run {command} in a terminal, then check again.	GitHub CLI 未登录到 {host}。请在终端中运行 {command}，然后重新检查。
+No repositories on this host	此主机上没有仓库
+Showing the first {count} repositories. Filter to narrow them.	显示前 {count} 个仓库。请通过筛选缩小范围。
+No repositories match the filter	没有与筛选条件匹配的仓库
+Private	私有
+Fork	复刻
+Type a file name	输入文件名
+Loading files…	正在加载文件…
+Type to find a file	输入以查找文件
+Enter history · {command}-Enter blame · {alt}-Enter edit	Enter 查看历史 · {command}-Enter 查看 blame · {alt}-Enter 编辑
+Delete {name}	删除 {name}
+Rename {name}	重命名 {name}
+No saved workspaces. Save the open tabs as one from the Workspaces menu in the repositories column.	没有已保存的工作区。可在仓库列的“工作区”菜单中将打开的标签页保存为工作区。
+Reading history…	正在读取历史…
+working file	工作区文件

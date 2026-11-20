@@ -518,6 +518,8 @@ mod tests {
         let keys = keys_in_source();
         // The guard against a scan that finds nothing: the Settings window alone has 15 keys.
         assert!(keys.len() >= 15, "the scan found only {} keys", keys.len());
+        // Every problem is listed, one per line, so a catalog can be fixed in one pass.
+        let mut problems = Vec::new();
         for locale in LOCALES.into_iter().filter(|locale| *locale != Locale::English) {
             let name = locale.code();
             // A key belongs to one file only, so two parts of the interface never disagree.
@@ -526,22 +528,30 @@ mod tests {
             for (file, source) in locale.catalog_files() {
                 for (key, value) in catalog_entries(source) {
                     if let Some(other) = seen.insert(key.clone(), file) {
-                        panic!("{name}: {key:?} is in both {other}.tsv and {file}.tsv");
+                        problems.push(format!("duplicate\t{name}\t{file}\t{key:?}\talso in {other}.tsv"));
                     }
                     entries.push((key, value, *file));
                 }
             }
             let translations: HashMap<&str, &str> = entries.iter().map(|(key, value, _)| (key.as_str(), value.as_str())).collect();
             for key in &keys {
-                let translation = translations.get(key.as_str()).unwrap_or_else(|| panic!("{name} has no translation for {key:?}"));
-                assert!(!translation.trim().is_empty(), "{name} has an empty translation for {key:?}");
-                assert_eq!(placeholders(key), placeholders(translation), "{name} placeholders differ for {key:?}");
+                match translations.get(key.as_str()) {
+                    None => problems.push(format!("missing\t{name}\t-\t{key:?}")),
+                    Some(translation) if translation.trim().is_empty() => problems.push(format!("empty\t{name}\t-\t{key:?}")),
+                    Some(translation) if placeholders(key) != placeholders(translation) => {
+                        problems.push(format!("placeholders\t{name}\t-\t{key:?}\t{translation:?}"))
+                    }
+                    Some(_) => {}
+                }
             }
             // common.tsv holds everyday words ready for any part of the interface, used or not.
             for (key, _, file) in entries.iter().filter(|(_, _, file)| *file != "common") {
-                assert!(keys.contains(key), "{name} {file}.tsv has {key:?}, which the source no longer uses");
+                if !keys.contains(key) {
+                    problems.push(format!("unused\t{name}\t{file}\t{key:?}"));
+                }
             }
         }
+        assert!(problems.is_empty(), "{} catalog problems:\n{}", problems.len(), problems.join("\n"));
     }
 
     #[test]

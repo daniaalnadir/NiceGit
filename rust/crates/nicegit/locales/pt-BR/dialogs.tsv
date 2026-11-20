@@ -1,0 +1,224 @@
+# pt-BR: dialogs, confirmations and short forms. Format: English source, a tab, then the translation.
+1 branch	1 branch
+1 commit	1 commit
+1 tag	1 tag
+1 uncommitted change	1 alteração não confirmada
+A README.md with the folder's name as its heading. An existing README is kept as it is.	Um README.md com o nome da pasta como título. Um README existente é mantido como está.
+A workspace with this name exists. You will be asked to replace it.	Já existe um espaço de trabalho com este nome. Será pedida confirmação para substituí-lo.
+Aborted the {operation}.	{operation} abortado.
+Add a README	Adicionar um README
+Adds “(cherry picked from commit …)” to each new commit's message, as git cherry-pick -x does. Useful when backporting a fix to another branch.	Adiciona «(cherry picked from commit …)» à mensagem de cada novo commit, como git cherry-pick -x. Útil para levar uma correção para outro branch.
+All changes	Todas as alterações
+All files	Todos os arquivos
+All folders	Todas as pastas
+Always create a merge commit	Sempre criar um commit de merge
+Annotated, with a message	Anotada, com uma mensagem
+Applied and deleted the stash.	Stash aplicado e excluído.
+Back to the Changes panel (Esc)	Voltar ao painel Alterações (Esc)
+Blame a file to see who changed each line. Right-click a line to blame the file before that change.	Blame de um arquivo mostra quem alterou cada linha. Clique com o botão direito em uma linha para ver o blame anterior a essa alteração.
+Changed files	Arquivos alterados
+Changed files ({count})	Arquivos alterados ({count})
+Check out pull request #{number}	Fazer checkout do pull request #{number}
+Checked out every folder.	Todas as pastas foram obtidas no checkout.
+Checked out pull request #{number} as {local}.	Pull request #{number} obtido no checkout como {local}.
+Cherry-pick a merge	Cherry-pick de um merge
+Cherry-picked the commit.	Commit trazido com cherry-pick.
+Cherry-picked {count} commits.	{count} commits trazidos com cherry-pick.
+Choose a GitHub repository	Escolher um repositório do GitHub
+Choose a destination folder.	Escolha uma pasta de destino.
+Choose a folder for the new repository	Escolher uma pasta para o novo repositório
+Choose one of your GitHub repositories	Escolher um dos seus repositórios do GitHub
+Clear 1 recent repository?	Limpar 1 repositório recente?
+Clear all…	Limpar tudo…
+Clear {count} recent repositories?	Limpar {count} repositórios recentes?
+Clone repository	Clonar repositório
+Close other tabs	Fechar as outras abas
+Close tab	Fechar aba
+Close {name}	Fechar {name}
+Cmd-P goes to any tracked file by name, and Cmd-Enter in that list opens the file's blame.	Cmd-P vai para qualquer arquivo rastreado pelo nome, e Cmd-Enter nessa lista abre o blame do arquivo.
+Cmd-click commits in the graph to select several, then cherry-pick them together.	Use Cmd-clique em commits no gráfico para selecionar vários e depois fazer cherry-pick deles juntos.
+Commits the README as “Initial commit”, or an empty commit when there is no README.	Faz commit do README como «Initial commit», ou um commit vazio quando não há README.
+Committer	Committer
+Compare with remote	Comparar com o remoto
+Copy the full commit ID	Copiar o ID completo do commit
+Copy the full stash commit ID	Copiar o ID completo do commit do stash
+Create	Criar
+Create and push	Criar e enviar
+Created and switched to {branch}.	{branch} criado e alternado.
+Created branch {branch}.	Branch {branch} criado.
+Created repository {name}.	Repositório {name} criado.
+Created {branch} from the stash and switched to it.	{branch} criado a partir do stash e alternado.
+Created {created} {name} and pushed it to {remote}.	{created} {name} criada e enviada para {remote}.
+Created {created} {name}, but could not push it to {remote}: {reason}	{created} {name} criado, mas não foi possível enviá-lo para {remote}: {reason}
+Created {created} {name}.	{created} {name} criado.
+Creates the branch and switches to it, carrying your changes across as Create branch does. The branch gets no upstream. A branch that already exists is not replaced.	Cria o branch, alterna para ele e leva suas alterações como Criar branch faz. O branch não recebe upstream. Um branch que já existe não é substituído.
+Creates the branch at the commit this stash was made on, switches to it, applies the stash, and removes the stash once it applies.	Cria o branch no commit em que este stash foi feito, alterna para ele, aplica o stash e remove o stash depois de aplicado.
+Current HEAD	HEAD atual
+Default branch (loading…)	Branch padrão (carregando…)
+Deleted 1 branch. Undo restores them.	1 branch excluído. Desfazer o restaura.
+Deleted branch {name}.	Branch {name} excluído.
+Deleted tag {name}.	Tag {name} excluída.
+Deleted the stash.	Stash excluído.
+Deleted {branch} from {remote}.	Branch {branch} excluído de {remote}.
+Deleted {deleted} of {count} branch before stopping. Undo restores those. {error}	{deleted} de {count} branch excluído antes de parar. Desfazer restaura esse. {error}
+Deleted {deleted} of {count} branches before stopping. Undo restores those. {error}	{deleted} de {count} branches excluídos antes de parar. Desfazer restaura esses. {error}
+Deleted {tag} from {remote}.	Tag {tag} excluída de {remote}.
+Destination folder	Pasta de destino
+Discarded 1 changed file.	1 arquivo alterado descartado.
+Discarded 1 changed line in {name}.	1 linha alterada descartada em {name}.
+Discarded changes to {name}.	Alterações em {name} descartadas.
+Discarded {count} changed files.	{count} arquivos alterados descartados.
+Discarded {count} changed lines in {name}.	{count} linhas alteradas descartadas em {name}.
+Download all files now	Baixar todos os arquivos agora
+Download file contents when needed	Baixar o conteúdo dos arquivos quando necessário
+Drag a branch onto the current branch in the sidebar to merge it in or rebase onto it.	Arraste um branch sobre o branch atual na barra lateral para mesclá-lo ou fazer rebase sobre ele.
+Each file is replaced with its {side} version and marked resolved. Changes from the other side in these files are discarded. A file that the {side} side deleted is removed instead.	Cada arquivo é substituído pela versão de {side} e marcado como resolvido. As alterações do outro lado nesses arquivos são descartadas. Um arquivo excluído por {side} é removido.
+Each local branch is pushed to the branch of the same name on {remote}. A branch that {remote} already has is only fast-forwarded, never forced. Tags are not pushed.	Cada branch local é enviado para o branch de mesmo nome em {remote}. Um branch que {remote} já tem só é avançado (fast-forward), nunca forçado. Tags não são enviadas.
+Enter a number of commits from 1 to 100000.	Digite um número de commits de 1 a 100000.
+Every file in this commit's tree	Cada arquivo na árvore deste commit
+Faster for large projects. You can fetch the full history later.	Mais rápido para projetos grandes. Você pode buscar o histórico completo depois.
+Fetches pull request #{number} from {remote} into this new branch, then switches to it. The branch gets no upstream, because the pull request may come from a fork. An existing branch with this name is used only if it already points at the pull request.	Busca o pull request #{number} de {remote} para este novo branch e depois alterna para ele. O branch não recebe upstream, porque o pull request pode vir de um fork. Um branch existente com este nome só é usado se já apontar para o pull request.
+First tag	Primeira tag
+Fix up with staged changes, in a commit's menu, folds what you have staged into that older commit.	Fixup com alterações preparadas: no menu de um commit, incorpora o que está preparado nesse commit anterior.
+Folded the staged changes into “{subject}”.	Alterações preparadas incorporadas em «{subject}».
+Folder	Pasta
+Folder not found	Pasta não encontrada
+Folders, one per line	Pastas, uma por linha
+Force pushed {branch} to {upstream}.	{branch} enviado à força para {upstream}.
+Forget every repository in this list. No folder is deleted.	Esquecer todos os repositórios desta lista. Nenhuma pasta é excluída.
+Forget the repositories whose folders no longer exist. No folder is deleted.	Esquecer os repositórios cujas pastas não existem mais. Nenhuma pasta é excluída.
+From GitHub…	Do GitHub…
+Full history	Histórico completo
+Git follows this repository's merge.ff setting.	O Git segue a configuração merge.ff deste repositório.
+Git signs the tag with your configured signing key (user.signingKey and gpg.format), as `git tag --sign` does.	O Git assina a tag com sua chave de assinatura configurada (user.signingKey e gpg.format), como `git tag --sign`.
+Hide repositories	Ocultar repositórios
+Initial branch	Branch inicial
+Integrate {branch}	Integrar {branch}
+Keep staged changes	Manter as alterações preparadas
+Lightweight	Leve
+Loading commit…	Carregando commit…
+Local branch	Branch local
+Lost commits after a reset or rebase? Repository > Recover lost work lists every earlier position of HEAD.	Perdeu commits depois de um reset ou rebase? Repositório > Recuperar trabalho perdido lista todas as posições anteriores do HEAD.
+Made a mistake in a commit, merge, or rebase? Undo in the toolbar steps back through recent actions.	Errou em um commit, merge ou rebase? Desfazer na barra de ferramentas volta pelas ações recentes.
+Make a first commit	Fazer um primeiro commit
+Merge (fast-forward when possible)	Mesclar (avanço rápido quando possível)
+Merge {source} into {current}, or replay {current}'s commits on top of it?	Mesclar {source} em {current} ou reaplicar os commits de {current} por cima?
+Merged {name}.	{name} mesclado.
+Middle-click a repository tab to close it, as in a browser.	Clique com o botão do meio em uma aba de repositório para fechá-la, como em um navegador.
+More actions for this commit	Mais ações para este commit
+New files that Git does not track yet are saved in the stash and removed from the folder.	Os arquivos novos que o Git ainda não rastreia são salvos no stash e removidos da pasta.
+New repository	Novo repositório
+New tag	Nova tag
+No open repositories	Nenhum repositório aberto
+Note the original commit in each message	Registrar o commit original em cada mensagem
+Notes	Notas
+Nothing was deleted. {error}	Nada foi excluído. {error}
+Number of commits	Número de commits
+One folder per line, relative to the repository.	Uma pasta por linha, relativa ao repositório.
+Only the latest N commits	Somente os últimos N commits
+Only the message changes; staged and unstaged edits are left out. The commit gets a new ID.	Só a mensagem muda; as edições preparadas e não preparadas ficam de fora. O commit recebe um novo ID.
+Only these folders	Somente estas pastas
+Open another repository	Abrir outro repositório
+Open recent repository {name}	Abrir o repositório recente {name}
+Open tabs	Abas abertas
+Options	Opções
+Parent	Pai
+Parent {number} · {commit} {subject}	Pai {number} · {commit} {subject}
+Parents	Pais
+Press Cmd-/ to see every keyboard shortcut.	Pressione Cmd-/ para ver todos os atalhos de teclado.
+Press Ctrl-` to show or hide the terminal. Its shells keep running while it is hidden.	Pressione Ctrl-` para mostrar ou ocultar o terminal. Os shells continuam em execução enquanto ele estiver oculto.
+Press Shift-Cmd-P to open the command palette, which lists most actions and their shortcuts.	Pressione Shift-Cmd-P para abrir a paleta de comandos, que lista a maioria das ações e seus atalhos.
+Publish branch	Publicar branch
+Published {branch} to {remote}.	{branch} publicado em {remote}.
+Push 1 branch to {remote}?	Enviar 1 branch para {remote}?
+Push 1 tag to {remote}?	Enviar 1 tag para {remote}?
+Push to	Enviar para
+Push to remote	Enviar ao remoto
+Push {branch} to a remote and track it there.	Enviar {branch} para um remoto e rastreá-lo lá.
+Push {count} branches to {remote}?	Enviar {count} branches para {remote}?
+Push {count} tags to {remote}?	Enviar {count} tags para {remote}?
+Pushed {branches} to {remote}.	{branches} enviados para {remote}.
+Pushed {name} to {remote}.	{name} enviado para {remote}.
+Pushed {summary} to {remote}.	{summary} enviados para {remote}.
+RECENT REPOSITORIES	REPOSITÓRIOS RECENTES
+Rebased onto {name}.	Rebase feito sobre {name}.
+Rebase…	Rebase…
+Recent repository {name}	Repositório recente {name}
+Recent repository {name}, folder not found	Repositório recente {name}, pasta não encontrada
+Records the merge with a merge commit even when the branch could move forward.	Registra o merge com um commit de merge, mesmo quando o branch poderia avançar sem isso.
+Remote	Remoto
+Remove from recent repositories	Remover dos repositórios recentes
+Remove from recent repositories. The folder is not deleted.	Remover dos repositórios recentes. A pasta não é excluída.
+Remove missing	Remover os ausentes
+Remove {name} from recent repositories	Remover {name} dos repositórios recentes
+Removed 1 repository from recent. Their folders are unchanged.	1 repositório removido dos recentes. As pastas não foram alteradas.
+Removed {count} repositories from recent. Their folders are unchanged.	{count} repositórios removidos dos recentes. As pastas não foram alteradas.
+Renamed the stash. It is at the top of the list.	Stash renomeado. Ele está no topo da lista.
+Repositories	Repositórios
+Repository URL or local path	URL do repositório ou caminho local
+Resolved 1 file with the {side} version.	1 arquivo resolvido com a versão de {side}.
+Resolved {count} files with the {side} version.	{count} arquivos resolvidos com a versão de {side}.
+Restore	Restaurar
+Restore this file from the stash	Restaurar este arquivo do stash
+Restore version before this commit	Restaurar a versão anterior a este commit
+Restored {path} from {reference}.	{path} restaurado de {reference}.
+Restored {path}. Review and commit the staged change.	{path} restaurado. Revise e faça o commit da alteração preparada.
+Revert a merge	Reverter um merge
+Reverted the commit.	Commit revertido.
+Reverted {count} commits.	{count} commits revertidos.
+Save message	Salvar mensagem
+Saves the staged changes only. Unstaged and untracked changes stay in your files. A file with both staged and unstaged changes must be staged or unstaged in full first.	Salva somente as alterações preparadas. As alterações não preparadas e não rastreadas permanecem nos seus arquivos. Um arquivo com alterações preparadas e não preparadas precisa ser totalmente preparado ou despreparado antes.
+Settings (Cmd-,) offers a colour-blind safe graph palette.	Configurações (Cmd-,) oferece uma paleta de gráfico segura para daltonismo.
+Show all changes	Mostrar todas as alterações
+Shows which commits the remote would lose	Mostra quais commits o remoto perderia
+Sign with your signing key	Assinar com sua chave de assinatura
+Signature	Assinatura
+Skipped, because {remote} has a different tag with the same name: {names}.	Ignoradas, porque {remote} tem uma tag diferente com o mesmo nome: {names}.
+Smaller and faster; Git downloads older file versions when you look at them. Needs a server that supports partial clone.	Menor e mais rápido; o Git baixa versões antigas dos arquivos quando você as consulta. Requer um servidor que suporte clone parcial.
+Squash into staged changes	Compactar nas alterações preparadas
+Stage one line at a time: press + beside a line in the diff, or drag over several lines first.	Prepare uma linha por vez: clique em + ao lado de uma linha no diff, ou arraste sobre várias linhas primeiro.
+Staged changes stay staged and in your files, and only unstaged changes leave your files. The stash still holds a copy of the staged changes, as Git's --keep-index does.	As alterações preparadas continuam preparadas e nos seus arquivos; só as não preparadas saem deles. O stash ainda guarda uma cópia das alterações preparadas, como faz o --keep-index do Git.
+Staged {name}'s changes as a squash. Review and commit them.	Alterações de {name} preparadas como squash. Revise-as e faça o commit.
+Stages the branch's changes without committing, so you can commit them as one new commit. The branch is not recorded as merged.	Prepara as alterações do branch sem fazer commit, para que você as confirme como um único commit novo. O branch não é registrado como mesclado.
+Start from	Partir de
+Start work	Começar o trabalho
+Start work on issue #{number}	Começar o trabalho na issue #{number}
+Started work on issue #{number} on {local}.	Trabalho na issue #{number} iniciado em {local}.
+Stash only staged changes	Guardar somente as alterações preparadas
+Stashed the selected lines of {name}.	Linhas selecionadas de {name} guardadas no stash.
+Tag message	Mensagem da tag
+Tag name	Nome da tag
+Take the {side} version for all conflicts?	Usar a versão de {side} em todos os conflitos?
+Take {side} versions	Usar as versões de {side}
+The folder is created if it does not exist.	A pasta é criada se não existir.
+The remote's default branch is not ready yet. Try again in a moment.	O branch padrão do remoto ainda não está pronto. Tente novamente em instantes.
+The repository was created, but Git needs your name and email before it can make the first commit.	O repositório foi criado, mas o Git precisa do seu nome e e-mail antes de fazer o primeiro commit.
+The stash keeps its changes. Once renamed, it moves to the top of the list.	O stash mantém suas alterações. Depois de renomeado, ele vai para o topo da lista.
+These local tags are not on {remote} yet. Tags already on {remote} are never replaced.	Estas tags locais ainda não estão em {remote}. Tags que já estão em {remote} nunca são substituídas.
+They are removed from the recent list. Their folders are not deleted.	Eles são removidos da lista de recentes. As pastas não são excluídas.
+This commit is already on a remote. Changing its message rewrites it, so others who pulled it will need to reconcile.	Este commit já está em um remoto. Alterar a mensagem o reescreve, então quem o baixou precisará reconciliar.
+This replaces {path} in your working files and in the staged version with its version from {reference}. Its current changes are lost; other files and the branch are not changed.	Isto substitui {path} nos seus arquivos de trabalho e na versão preparada pela versão de {reference}. As alterações atuais dele se perdem; os outros arquivos e o branch não mudam.
+Type at least one folder, one per line.	Digite pelo menos uma pasta, uma por linha.
+Undid the last commit. Its changes are staged.	Último commit desfeito. Suas alterações estão preparadas.
+Updated the commit message.	Mensagem do commit atualizada.
+and {count} later	e mais {count}
+by an unknown author	por um autor desconhecido
+signed tag	tag assinada
+tag	tag
+untracked	não rastreado
+{branches} already up to date on {remote}.	{branches} já estão atualizados em {remote}.
+{count} branches	{count} branches
+{count} could not be resolved: {names} (open them in the conflict editor).	{count} não puderam ser resolvidos: {names} (abra-os no editor de conflitos).
+{count} tags	{count} tags
+{count} uncommitted changes	{count} alterações não confirmadas
+{names} and {count} more	{names} e mais {count}
+{names}, and {count} more	{names}, e mais {count}
+{path} already exists; choose another folder.	{path} já existe; escolha outra pasta.
+{path} does not exist in that version, so it will be deleted.	{path} não existe nessa versão, então será excluído.
+{path} will be replaced with that version.	{path} será substituído por essa versão.
+{remote} refused {branches}: {names}. Nothing was forced, so fetch and review them.	{remote} recusou {branches}: {names}. Nada foi forçado, então busque-os e revise.
+{remote}'s default branch	Branch padrão de {remote}
+{remote}/{branch} (the default branch)	{remote}/{branch} (o branch padrão)
+{what} Staged and unstaged changes to it are lost; other files and the branch are not changed.	{what} As alterações preparadas e não preparadas nele se perdem; os outros arquivos e o branch não mudam.
+“{subject}” has {count} parents. Choose the one its changes are measured against; usually the first, the branch it was merged into.	«{subject}» tem {count} pais. Escolha aquele com o qual as alterações são comparadas; normalmente o primeiro, o branch em que foi mesclado.
+…and {count} more	…e mais {count}

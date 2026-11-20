@@ -2,6 +2,7 @@
 //! changed most. Everything is read from the history in the background, and nothing in the
 //! repository changes.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -21,7 +22,11 @@ const AUTHOR_LIMIT: usize = 20;
 /// Folders listed before "and N more".
 const FOLDER_LIMIT: usize = 15;
 const CHART_HEIGHT: f32 = 120.0;
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/// The short name of a month, from 0 for January.
+fn month_name(index: usize) -> &'static str {
+    [tr("Jan"), tr("Feb"), tr("Mar"), tr("Apr"), tr("May"), tr("Jun"), tr("Jul"), tr("Aug"), tr("Sep"), tr("Oct"), tr("Nov"), tr("Dec")]
+        [index]
+}
 
 /// A read of the history in progress: its result, and the flags that stop it early.
 struct Reading {
@@ -71,12 +76,12 @@ impl InsightsWindow {
     fn controls(&mut self, ui: &mut Ui) {
         let c = theme::of(ui);
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Period").small().color(c.muted));
+            ui.label(RichText::new(tr("Period")).small().color(c.muted));
             let periods = [
-                (InsightsPeriod::Days30, "30 days"),
-                (InsightsPeriod::Days90, "90 days"),
-                (InsightsPeriod::Year, "1 year"),
-                (InsightsPeriod::AllTime, "All time"),
+                (InsightsPeriod::Days30, tr("30 days")),
+                (InsightsPeriod::Days90, tr("90 days")),
+                (InsightsPeriod::Year, tr("1 year")),
+                (InsightsPeriod::AllTime, tr("All time")),
             ];
             for (period, text) in periods {
                 if ui.selectable_label(self.range.period == period, text).clicked() && self.range.period != period {
@@ -85,7 +90,7 @@ impl InsightsWindow {
                 }
             }
             ui.add_space(12.0);
-            for (all_branches, text) in [(false, "This branch"), (true, "All branches")] {
+            for (all_branches, text) in [(false, tr("This branch")), (true, tr("All branches"))] {
                 if ui.selectable_label(self.range.all_branches == all_branches, text).clicked() && self.range.all_branches != all_branches {
                     self.range.all_branches = all_branches;
                     self.needs_load = true;
@@ -99,12 +104,16 @@ impl InsightsWindow {
         let c = theme::of(ui);
         ui.ctx().request_repaint_after(Duration::from_millis(100));
         let count = reading.progress.load(Ordering::Relaxed);
-        let text = if count == 0 { "Reading history…".to_string() } else { format!("Reading history… {count} commits so far") };
+        let text = if count == 0 {
+            tr("Reading history…").to_string()
+        } else {
+            tr_fmt!("Reading history… {count} commits so far", count = count)
+        };
         let mut cancel = false;
         ui.horizontal(|ui| {
             ui.spinner();
             ui.label(RichText::new(text).color(c.muted));
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 cancel = true;
             }
         });
@@ -127,7 +136,7 @@ impl ToolWindow for InsightsWindow {
     }
 
     fn title(&self) -> String {
-        "Insights".to_string()
+        tr("Insights").to_string()
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -159,9 +168,9 @@ impl ToolWindow for InsightsWindow {
             return;
         }
         if self.cancelled {
-            widgets::empty_state(ui, icon::CHART_BAR, "Reading the history was cancelled.");
+            widgets::empty_state(ui, icon::CHART_BAR, tr("Reading the history was cancelled."));
             ui.vertical_centered(|ui| {
-                if ui.button("Read again").clicked() {
+                if ui.button(tr("Read again")).clicked() {
                     self.needs_load = true;
                 }
             });
@@ -172,7 +181,7 @@ impl ToolWindow for InsightsWindow {
             Some(Err(text)) => widgets::error(ui, text),
             Some(Ok(insights)) => {
                 if insights.commits == 0 {
-                    widgets::empty_state(ui, icon::CHART_BAR, "No commits in this period.");
+                    widgets::empty_state(ui, icon::CHART_BAR, tr("No commits in this period."));
                     return;
                 }
                 egui::ScrollArea::vertical().id_salt("insights").auto_shrink([false, false]).show(ui, |ui| {
@@ -186,7 +195,7 @@ impl ToolWindow for InsightsWindow {
 /// Everything the window shows for a finished read.
 fn show(ui: &mut Ui, cx: &mut Ctx, insights: &Insights) {
     if insights.truncated {
-        widgets::callout(ui, "Showing the newest 20,000 commits.", false);
+        widgets::callout(ui, tr("Showing the newest 20,000 commits."), false);
         ui.add_space(6.0);
     }
     summary(ui, insights);
@@ -202,14 +211,14 @@ fn show(ui: &mut Ui, cx: &mut Ctx, insights: &Insights) {
 
 fn summary(ui: &mut Ui, insights: &Insights) {
     let span = match (insights.first_commit, insights.last_commit) {
-        (Some(first), Some(last)) => format!("{} – {}", date_text(first), date_text(last)),
-        _ => "None".to_string(),
+        (Some(first), Some(last)) => tr_fmt!("{first} – {last}", first = date_text(first), last = date_text(last)),
+        _ => tr("None").to_string(),
     };
     ui.horizontal_wrapped(|ui| {
-        stat(ui, "Commits", insights.commits.to_string());
-        stat(ui, "Authors", insights.authors.len().to_string());
-        stat(ui, "Active days", insights.active_days.to_string());
-        stat(ui, "First to last commit", span);
+        stat(ui, tr("Commits"), insights.commits.to_string());
+        stat(ui, tr("Authors"), insights.authors.len().to_string());
+        stat(ui, tr("Active days"), insights.active_days.to_string());
+        stat(ui, tr("First to last commit"), span);
     });
 }
 
@@ -229,7 +238,7 @@ fn stat(ui: &mut Ui, caption: &str, value: String) {
 /// Commits over time as bars, one per bucket, which shrink to fit the width.
 fn chart(ui: &mut Ui, insights: &Insights) {
     let c = theme::of(ui);
-    widgets::section(ui, "Commits over time");
+    widgets::section(ui, tr("Commits over time"));
     ui.add_space(4.0);
     let width = ui.available_width().max(120.0);
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, CHART_HEIGHT + 22.0), Sense::hover());
@@ -275,26 +284,26 @@ fn chart(ui: &mut Ui, insights: &Insights) {
 
 /// The tooltip for one bar, such as "Week of 3 Nov 2026: 14 commits".
 fn bucket_text(bucket: &Bucket, granularity: Granularity) -> String {
-    let commits = if bucket.commits == 1 { "1 commit".to_string() } else { format!("{} commits", bucket.commits) };
+    let commits = tr_count("{count} commit", "{count} commits", bucket.commits);
     match granularity {
-        Granularity::Week => format!("Week of {}: {commits}", date_text(bucket.start)),
-        Granularity::Day => format!("{}: {commits}", date_text(bucket.start)),
+        Granularity::Week => tr_fmt!("Week of {date}: {commits}", date = date_text(bucket.start), commits = commits),
+        Granularity::Day => tr_fmt!("{date}: {commits}", date = date_text(bucket.start), commits = commits),
     }
 }
 
 fn authors(ui: &mut Ui, authors: &[AuthorStat]) {
     let c = theme::of(ui);
-    widgets::section(ui, "Authors");
+    widgets::section(ui, tr("Authors"));
     ui.add_space(4.0);
     let max = authors.iter().map(|author| author.commits).max().unwrap_or(0).max(1);
     let available = ui.available_width();
     // Name takes what the other columns leave: the commit bar and count, lines, and last active date.
     let name_width = (available - (150.0 + 130.0 + 96.0 + 24.0)).max(90.0);
     ui.horizontal(|ui| {
-        header(ui, name_width, "Author");
-        header(ui, 150.0, "Commits");
-        header(ui, 130.0, "Lines");
-        header(ui, 96.0, "Last active");
+        header(ui, name_width, tr("Author"));
+        header(ui, 150.0, tr("Commits"));
+        header(ui, 130.0, tr("Lines"));
+        header(ui, 96.0, tr("Last active"));
     });
     for author in authors.iter().take(AUTHOR_LIMIT) {
         ui.horizontal(|ui| {
@@ -324,16 +333,16 @@ fn authors(ui: &mut Ui, authors: &[AuthorStat]) {
         });
     }
     if authors.len() > AUTHOR_LIMIT {
-        ui.label(RichText::new(format!("and {} more", authors.len() - AUTHOR_LIMIT)).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("and {count} more", count = authors.len() - AUTHOR_LIMIT)).small().color(c.muted));
     }
 }
 
 fn files(ui: &mut Ui, cx: &mut Ctx, files: &[FileStat]) {
     let c = theme::of(ui);
-    widgets::section(ui, "Most changed files");
+    widgets::section(ui, tr("Most changed files"));
     ui.add_space(4.0);
     if files.is_empty() {
-        ui.label(RichText::new("No files changed in this period.").small().color(c.muted));
+        ui.label(RichText::new(tr("No files changed in this period.")).small().color(c.muted));
         return;
     }
     let path_width = (ui.available_width() - 190.0).max(120.0);
@@ -341,8 +350,9 @@ fn files(ui: &mut Ui, cx: &mut Ctx, files: &[FileStat]) {
         ui.horizontal(|ui| {
             let shown = truncate_from_left(ui, &file.path, path_width);
             let response = left_cell(ui, [path_width, 20.0], egui::Label::new(RichText::new(shown)).sense(Sense::click()));
-            let response =
-                response.on_hover_text(format!("{}\nOpen its history", file.path)).on_hover_cursor(egui::CursorIcon::PointingHand);
+            let response = response
+                .on_hover_text(format!("{}\n{}", file.path, tr("Open its history")))
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
             if response.clicked() {
                 cx.open(Box::new(FileHistoryWindow::new(file.path.clone())));
             }
@@ -352,7 +362,7 @@ fn files(ui: &mut Ui, cx: &mut Ctx, files: &[FileStat]) {
             });
             ui.scope(|ui| {
                 ui.set_min_width(90.0);
-                ui.label(RichText::new(format!("{} lines", file.lines)).color(c.muted));
+                ui.label(RichText::new(tr_fmt!("{count} lines", count = file.lines)).color(c.muted));
             });
         });
     }
@@ -360,7 +370,7 @@ fn files(ui: &mut Ui, cx: &mut Ctx, files: &[FileStat]) {
 
 fn folders(ui: &mut Ui, folders: &[FolderStat]) {
     let c = theme::of(ui);
-    widgets::section(ui, "Folders");
+    widgets::section(ui, tr("Folders"));
     ui.add_space(4.0);
     let max = folders.iter().map(|folder| folder.commits).max().unwrap_or(0).max(1);
     let name_width = (ui.available_width() - 190.0).max(120.0);
@@ -380,7 +390,7 @@ fn folders(ui: &mut Ui, folders: &[FolderStat]) {
         });
     }
     if folders.len() > FOLDER_LIMIT {
-        ui.label(RichText::new(format!("and {} more", folders.len() - FOLDER_LIMIT)).small().color(c.muted));
+        ui.label(RichText::new(tr_fmt!("and {count} more", count = folders.len() - FOLDER_LIMIT)).small().color(c.muted));
     }
 }
 
@@ -391,7 +401,7 @@ fn header(ui: &mut Ui, width: f32, text: &str) {
 }
 
 fn commits_text(count: usize) -> RichText {
-    RichText::new(if count == 1 { "1 commit".to_string() } else { format!("{count} commits") })
+    RichText::new(tr_count("{count} commit", "{count} commits", count))
 }
 
 /// The start of a path cut from the left so that its file name stays visible, with an ellipsis.
@@ -420,7 +430,7 @@ fn truncate_from_left(ui: &Ui, path: &str, max_width: f32) -> String {
 /// A date as "3 Nov 2026", from a time in seconds since the Unix epoch, in UTC.
 fn date_text(time: i64) -> String {
     let (year, month, day) = civil_date(time.div_euclid(86_400));
-    format!("{day} {} {year}", MONTHS[(month - 1) as usize])
+    tr_fmt!("{day} {month} {year}", day = day, month = month_name((month - 1) as usize), year = year)
 }
 
 fn message(error: &GitError) -> String {

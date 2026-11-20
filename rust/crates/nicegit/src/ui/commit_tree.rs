@@ -10,6 +10,7 @@ use nicegit_core::commit_tree::{FileView, TreeEntry, TreeListing};
 use nicegit_core::models::short;
 
 use crate::app::{NiceGitApp, Selection};
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{self, widgets};
 
@@ -74,7 +75,7 @@ impl NiceGitApp {
         let c = theme::of(ui);
         let Some(repo) = self.repos.get_mut(self.active) else { return };
         let Some(tree) = repo.commit_tree.as_mut().filter(|tree| tree.hash == hash) else {
-            widgets::loading(ui, "Listing files…");
+            widgets::loading(ui, tr("Listing files…"));
             return;
         };
         // The folder index is built once, when the listing has arrived.
@@ -92,21 +93,21 @@ impl NiceGitApp {
         };
         if let Some(error) = error {
             widgets::error(ui, &error);
-            if ui.button("Try again").clicked() {
+            if ui.button(tr("Try again")).clicked() {
                 self.relist_commit_tree();
             }
             return;
         }
         let Some(index) = index else {
-            widgets::loading(ui, "Listing files…");
+            widgets::loading(ui, tr("Listing files…"));
             return;
         };
         if index.truncated() {
-            let text = format!("Showing the first {} of {} entries in this commit.", index.shown, index.total);
+            let text = tr_fmt!("Showing the first {shown} of {total} entries in this commit.", shown = index.shown, total = index.total);
             ui.label(RichText::new(text).small().color(c.muted));
         }
         if index.shown == 0 {
-            ui.label(RichText::new("This commit's tree has no files.").color(c.muted));
+            ui.label(RichText::new(tr("This commit's tree has no files.")).color(c.muted));
             return;
         }
         self.tree_rows(ui, &index.root, "", hash, viewing);
@@ -138,7 +139,7 @@ impl NiceGitApp {
                 clicked.set(response.clicked());
                 response.context_menu(|ui| {
                     ui.set_min_width(230.0);
-                    if ui.button(format!("{}  Copy folder path", icon::COPY)).clicked() {
+                    if ui.button(format!("{}  {}", icon::COPY, tr("Copy folder path"))).clicked() {
                         ui.close();
                         ui.ctx().copy_text(format!("{path}/"));
                     }
@@ -179,29 +180,29 @@ impl NiceGitApp {
     pub(crate) fn tree_file_menu(&mut self, ui: &mut Ui, hash: &str, path: &str, submodule: bool) {
         ui.set_min_width(240.0);
         if !submodule {
-            if ui.button(format!("{}  File history", icon::CLOCK_COUNTER_CLOCKWISE)).clicked() {
+            if ui.button(format!("{}  {}", icon::CLOCK_COUNTER_CLOCKWISE, tr("File history"))).clicked() {
                 ui.close();
                 self.open_tool(Box::new(tools::file_history::FileHistoryWindow::new(path.to_string())));
             }
-            if ui.button(format!("{}  Blame at this commit", icon::USER_LIST)).clicked() {
+            if ui.button(format!("{}  {}", icon::USER_LIST, tr("Blame at this commit"))).clicked() {
                 ui.close();
                 self.open_tool(Box::new(tools::blame::BlameWindow::new(path.to_string(), Some(hash.to_string()))));
             }
             if let Some(snapshot) = self.snapshot().cloned() {
                 crate::git_ext::web_open_menu(
                     ui,
-                    "Open file",
+                    tr("Open file"),
                     crate::git_ext::hosted_file_links(&snapshot, hash, path, self.settings.listed_hosts()),
                     crate::git_ext::PUSHED_COMMIT_NOTE,
                 );
             }
             ui.separator();
-            if ui.button(format!("{}  Save a copy…", icon::FLOPPY_DISK)).clicked() {
+            if ui.button(format!("{}  {}", icon::FLOPPY_DISK, tr("Save a copy…"))).clicked() {
                 ui.close();
                 self.save_commit_file_copy(hash, path);
             }
         }
-        if ui.button(format!("{}  Copy path", icon::COPY)).clicked() {
+        if ui.button(format!("{}  {}", icon::COPY, tr("Copy path"))).clicked() {
             ui.close();
             ui.ctx().copy_text(path.to_string());
         }
@@ -219,17 +220,21 @@ impl NiceGitApp {
             .is_some_and(|result| matches!(result, Ok(FileView::Submodule(_))));
         egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(14, 7)).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  History", icon::CARET_LEFT)).on_hover_text("Back to the commit history (Esc)").clicked() {
+                if ui
+                    .button(format!("{}  {}", icon::CARET_LEFT, tr("History")))
+                    .on_hover_text(tr("Back to the commit history (Esc)"))
+                    .clicked()
+                {
                     self.close_diff();
                 }
                 ui.add_space(6.0);
                 ui.label(RichText::new(icon::FILE).color(c.muted));
                 ui.add(egui::Label::new(RichText::new(&path).strong()).truncate()).on_hover_text(&path);
-                ui.label(RichText::new(format!("in {}", short(&hash))).small().color(c.muted));
+                ui.label(RichText::new(tr_fmt!("in {hash}", hash = short(&hash))).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let menu =
                         ui.menu_button(RichText::new(icon::DOTS_THREE).size(16.0), |ui| self.tree_file_menu(ui, &hash, &path, submodule));
-                    crate::tools::widgets::name_icon(&menu.response, "More actions for this file");
+                    crate::tools::widgets::name_icon(&menu.response, tr("More actions for this file"));
                 });
             });
         });
@@ -238,12 +243,12 @@ impl NiceGitApp {
         let repo = &mut self.repos[self.active];
         let shown = repo.commit_contents.as_mut().and_then(|task| task.get());
         match shown {
-            None => widgets::loading(ui, "Reading file…"),
+            None => widgets::loading(ui, tr("Reading file…")),
             Some(Err(error)) => widgets::error(ui, &error.to_string()),
             Some(Ok(FileView::Submodule(commit))) => {
-                let text = format!(
-                    "This is a submodule. It records commit {}, but its files are in its own repository, so they are not shown here.",
-                    short(commit)
+                let text = tr_fmt!(
+                    "This is a submodule. It records commit {commit}, but its files are in its own repository, so they are not shown here.",
+                    commit = short(commit)
                 );
                 egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| {
                     ui.label(RichText::new(text).color(c.muted));
@@ -251,18 +256,18 @@ impl NiceGitApp {
             }
             Some(Ok(FileView::Binary(bytes))) => {
                 egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| {
-                    ui.label(RichText::new(format!("Binary file, {bytes} bytes")).color(c.muted));
-                    if ui.button(format!("{}  Save a copy…", icon::FLOPPY_DISK)).clicked() {
+                    ui.label(RichText::new(tr_fmt!("Binary file, {bytes} bytes", bytes = bytes)).color(c.muted));
+                    if ui.button(format!("{}  {}", icon::FLOPPY_DISK, tr("Save a copy…"))).clicked() {
                         ask = Some(Ask::SaveCopy);
                     }
                 });
             }
             Some(Ok(FileView::TooLarge(bytes))) => {
                 egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| {
-                    let text = format!("This file is {}. Large files are not shown until you open them.", megabytes(*bytes));
+                    let text = tr_fmt!("This file is {size}. Large files are not shown until you open them.", size = megabytes(*bytes));
                     ui.label(RichText::new(text).color(c.muted));
                     ui.add_space(6.0);
-                    if ui.button("Open anyway").clicked() {
+                    if ui.button(tr("Open anyway")).clicked() {
                         ask = Some(Ask::OpenAnyway);
                     }
                 });
@@ -282,7 +287,7 @@ impl NiceGitApp {
 fn text_lines(ui: &mut Ui, lines: &[String], c: &theme::Colors) {
     if lines.is_empty() {
         ui.add_space(8.0);
-        ui.label(RichText::new("This file is empty.").color(c.muted));
+        ui.label(RichText::new(tr("This file is empty.")).color(c.muted));
         return;
     }
     let row_height = ui.text_style_height(&egui::TextStyle::Monospace);

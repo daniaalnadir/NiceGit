@@ -14,3 +14,86 @@ Dark	Sombre
 System ({language})	Système ({language})
 No Japanese font was found; some text may not display.	Aucune police japonaise trouvée ; certains textes risquent de ne pas s'afficher.
 No Chinese font was found; some text may not display.	Aucune police chinoise trouvée ; certains textes risquent de ne pas s'afficher.
+Graph colours	Couleurs du graphe
+Diffs	Diffs
+Hide whitespace-only changes	Masquer les modifications d'espaces uniquement
+Show diffs side by side	Afficher les diffs côte à côte
+Not in effect now: the diff panel is narrower than {minimum} points. Widen it to see both sides.	Non appliqué pour l'instant : le panneau des diffs est plus étroit que {minimum} points. Élargissez-le pour voir les deux côtés.
+Needs a diff panel at least {minimum} points wide.	Nécessite un panneau des diffs d'au moins {minimum} points de large.
+Show changed words inline	Afficher les mots modifiés dans la ligne
+Syntax highlighting	Coloration syntaxique
+External editor	Éditeur externe
+The command that opens a file in your editor; the file's path is added after it. Changed files then offer Open in it.	La commande qui ouvre un fichier dans votre éditeur ; le chemin du fichier est ajouté après. Les fichiers modifiés proposent ensuite de l'ouvrir dedans.
+Offers a type menu, scope, and Breaking above the summary, which write the type into the summary. Automatic turns this on when at least five of the last twenty commits use the convention.	Propose au-dessus du résumé un menu de type, une portée et Breaking, qui écrivent le type dans le résumé. Automatique l'active lorsqu'au moins cinq des vingt derniers commits suivent cette convention.
+Committing	Commits
+Refresh automatically when files change outside NiceGit	Actualiser automatiquement quand des fichiers changent en dehors de NiceGit
+Fetch from remotes	Récupérer depuis les dépôts distants
+Off	Désactivé
+5 min	5 min
+15 min	15 min
+30 min	30 min
+1 hour	1 heure
+How often the open repository is fetched in the background, so ahead and behind counts stay current	Fréquence de récupération en arrière-plan du dépôt ouvert, pour que les compteurs d'avance et de retard restent à jour
+Pull with	Tirer avec
+How Pull brings in the upstream's commits. Follow Git's settings reads pull.rebase, branch.<name>.rebase and pull.ff; with none of them set, Pull only fast-forwards. The Fetch and Pull menu also runs a merge or rebase pull once.	Définit comment Pull reprend les commits de l'amont. « Suivre les réglages de Git » lit pull.rebase, branch.<nom>.rebase et pull.ff ; sans aucun de ces réglages, Pull ne fait que des avances rapides. Le menu Récupérer et tirer lance aussi une fois un pull par fusion ou rebase.
+Clone into	Cloner dans
+Not set	Non défini
+Choose…	Choisir…
+Clones go into this folder by default	Les clones sont placés par défaut dans ce dossier
+Clear	Effacer
+Default folder for clones	Dossier par défaut pour les clones
+The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set.	La boîte de dialogue Cloner remplit sa destination à partir de ce dossier. Si aucun n'est défini, le dossier parent du premier clone est retenu.
+Custom actions	Actions personnalisées
+Show pull request checks on branches	Afficher les vérifications des demandes de tirage sur les branches
+A dot on a branch's label and in the sidebar shows whether its open pull or merge request's checks passed, failed, or are pending. Turning this off also stops reading them.	Un point sur l'étiquette d'une branche et dans la barre latérale indique si les vérifications de sa demande de tirage ou de fusion ouverte ont réussi, échoué ou sont en attente. Désactiver cette option arrête aussi leur lecture.
+Remotes on these hosts get pull requests, issues, and Open on GitHub, as github.com remotes do.	Les dépôts distants sur ces hôtes ont accès aux demandes de tirage, aux tickets et à « Ouvrir sur GitHub », comme les remotes github.com.
+One hostname per line, such as github.example.com	Un nom d'hôte par ligne, par exemple github.example.com
+GitHub Enterprise hosts	Hôtes GitHub Enterprise
+Not saved, as these are not hostnames: {hosts}. Use a name such as github.example.com, without https:// or a port.	Non enregistré, car ce ne sont pas des noms d'hôte : {hosts}. Utilisez un nom comme github.example.com, sans https:// ni port.
+Remotes on these hosts get Open on GitLab links, as gitlab.com remotes do.	Les dépôts distants sur ces hôtes ont des liens « Ouvrir sur GitLab », comme les remotes gitlab.com.
+One hostname per line, such as gitlab.example.com	Un nom d'hôte par ligne, par exemple gitlab.example.com
+GitLab hosts	Hôtes GitLab
+Not saved, as these are not hostnames: {hosts}. Use a name such as gitlab.example.com, without https:// or a port.	Non enregistré, car ce ne sont pas des noms d'hôte : {hosts}. Utilisez un nom comme gitlab.example.com, sans https:// ni port.
+Layout	Mise en page
+Interface size	Taille de l'interface
+Smaller (Ctrl/Cmd-minus)	Plus petit (Ctrl/Cmd-moins)
+Larger (Ctrl/Cmd-plus)	Plus grand (Ctrl/Cmd-plus)
+Normal size	Taille normale
+Restore default panel widths	Rétablir la largeur par défaut des panneaux
+Columns and panels return to their original sizes	Les colonnes et les panneaux reprennent leur taille d'origine
+Accessibility	Accessibilité
+Larger text	Texte plus grand
+Draws the interface a quarter larger again, on top of the interface size	Agrandit encore l'interface d'un quart, en plus de la taille de l'interface
+Reduce motion	Réduire les animations
+Switches off the fades and eased movements in the interface	Désactive les fondus et les mouvements adoucis de l'interface
+Keyboard shortcuts	Raccourcis clavier
+Request a feature	Demander une fonctionnalité
+Report a problem	Signaler un problème
+Issue links	Liens vers les tickets
+Link #123 to the repository's host	Lier #123 à l'hôte du dépôt
+For the origin remote on GitHub, GitLab, or Bitbucket, #123 links to the issue (on GitLab, !123 to the merge request). On Azure DevOps, AB#123 links to the work item.	Pour le remote origin sur GitHub, GitLab ou Bitbucket, #123 renvoie au ticket (sur GitLab, !123 à la demande de fusion). Sur Azure DevOps, AB#123 renvoie à l'élément de travail.
+No custom rules. A rule can link text such as JIRA-7 to your tracker.	Aucune règle personnalisée. Une règle peut relier un texte tel que JIRA-7 à votre outil de suivi.
+Only for repositories whose remote contains "{remote}"	Seulement pour les dépôts dont le remote contient "{remote}"
+Edit	Modifier
+Change this rule	Modifier cette règle
+Remove this rule	Supprimer cette règle
+Add rule	Ajouter une règle
+Add a rule that links text in messages	Ajouter une règle qui relie du texte dans les messages
+Pattern (a regular expression)	Motif (une expression régulière)
+Address to open ($0 is the match, $1 to $9 its groups)	Adresse à ouvrir ($0 est la correspondance, $1 à $9 ses groupes)
+Only for repositories whose remote contains (empty for all)	Seulement pour les dépôts dont le remote contient (vide pour tous)
+Rule pattern	Motif de la règle
+Rule address	Adresse de la règle
+Rule remote filter	Filtre de remote de la règle
+Save rule	Enregistrer la règle
+3 lines	3 lignes
+10 lines	10 lignes
+25 lines	25 lignes
+Always	Toujours
+Automatic	Automatique
+Colour-blind safe	Adapté au daltonisme
+Fast-forward only	Avance rapide uniquement
+File	Fichier
+Follow Git's settings	Suivre les réglages de Git
+Muted	Atténué
+Standard	Standard

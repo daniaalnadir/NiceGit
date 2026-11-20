@@ -2,6 +2,7 @@
 //! Blame: each line of a file beside the commit that last changed it. Newer changes are tinted
 //! more strongly, and selecting a line shows that commit's change to the file.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -55,7 +56,7 @@ pub struct BlameWindow {
     focus_pending: bool,
     /// A one-based line to scroll to once a view's lines arrive.
     scroll_line: Option<usize>,
-    /// The views that "Blame before this change" stepped back from, newest last.
+    /// The views that tr("Blame before this change") stepped back from, newest last.
     history: Vec<View>,
     /// The blame and whether the repository has an ignore list.
     lines: Option<Task<nicegit_core::Result<(BlameReport, bool)>>>,
@@ -181,32 +182,29 @@ impl BlameWindow {
     fn header(&mut self, ui: &mut Ui, reload: &mut bool, back: &mut bool) {
         let c = theme::of(ui);
         ui.horizontal(|ui| {
-            if widgets::icon_button(ui, icon::ARROW_LEFT, "Back to the newer blame", !self.history.is_empty()).clicked() {
+            if widgets::icon_button(ui, icon::ARROW_LEFT, tr("Back to the newer blame"), !self.history.is_empty()).clicked() {
                 *back = true;
             }
             let scope = match &self.revision {
                 Some(revision) => match self.summary.as_mut().and_then(|task| task.get()) {
-                    Some(Ok(summary)) if !summary.is_empty() => format!("at {} ({summary})", short_revision(revision)),
-                    _ => format!("at {}", short_revision(revision)),
+                    Some(Ok(summary)) if !summary.is_empty() => tr_fmt!("at {revision} ({summary})", revision = short_revision(revision), summary = summary),
+                    _ => tr_fmt!("at {revision}", revision = short_revision(revision)),
                 },
-                None => "working file".to_string(),
+                None => tr("working file").to_string(),
             };
             ui.vertical(|ui| {
                 ui.label(RichText::new(&self.path).monospace());
                 ui.label(RichText::new(scope).small().color(c.muted));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let toggle = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_whitespace, "Ignore whitespace")
-                    .on_hover_text("Attribute lines past whitespace-only changes to the commit that changed their content");
+                let toggle = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_whitespace, tr("Ignore whitespace"))
+                    .on_hover_text(tr("Attribute lines past whitespace-only changes to the commit that changed their content"));
                 if toggle.changed() {
                     *reload = true;
                 }
                 if self.ignore_list {
-                    let skip = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_revs, "Skip commits in .git-blame-ignore-revs")
-                        .on_hover_text(
-                            "Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as \
-                             reformatting, are attributed to the change before them, as GitHub's blame does.",
-                        );
+                    let skip = crate::tools::widgets::checkbox(ui, true, &mut self.ignore_revs, tr("Skip commits in .git-blame-ignore-revs"))
+                        .on_hover_text(tr("Lines changed only by the commits this repository lists in .git-blame-ignore-revs, such as reformatting, are attributed to the change before them, as GitHub's blame does."));
                     if skip.changed() {
                         *reload = true;
                     }
@@ -222,7 +220,7 @@ impl ToolWindow for BlameWindow {
     }
 
     fn title(&self) -> String {
-        format!("Blame: {}", file_name(&self.path))
+        tr_fmt!("Blame: {name}", name = file_name(&self.path))
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -253,7 +251,7 @@ impl ToolWindow for BlameWindow {
         }
         let Some(task) = lines.as_mut() else { return };
         let Some(result) = task.get() else {
-            widgets::loading(ui, "Reading blame");
+            widgets::loading(ui, tr("Reading blame"));
             return;
         };
         let (report, has_ignore_list) = match result {
@@ -268,11 +266,13 @@ impl ToolWindow for BlameWindow {
         if let IgnoredRevs::Unusable(reason) = &report.ignored_revs {
             let c = theme::of(ui);
             ui.label(
-                RichText::new(format!("The ignore list could not be used, so every commit is shown: {reason}")).small().color(c.muted),
+                RichText::new(tr_fmt!("The ignore list could not be used, so every commit is shown: {reason}", reason = reason))
+                    .small()
+                    .color(c.muted),
             );
         }
         if lines.is_empty() {
-            widgets::empty_state(ui, icon::FILE_TEXT, "This file is empty.");
+            widgets::empty_state(ui, icon::FILE_TEXT, tr("This file is empty."));
             return;
         }
         let ages = ages.get_or_insert_with(|| age_ranks(lines));
@@ -434,7 +434,7 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
         let gutter = Rect::from_min_max(pos2(rect.left() + ACCENT_WIDTH, rect.top()), pos2(rect.left() + GUTTER, rect.bottom()));
         let gutter_painter = painter.with_clip_rect(gutter);
         let (hash, author) = if uncommitted {
-            ("Uncommitted".to_string(), "Your working changes")
+            (tr("Uncommitted").to_string(), tr("Your working changes"))
         } else {
             (commit.short_hash().to_string(), commit.author_name.as_str())
         };
@@ -457,13 +457,13 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
 
     let clicked = response.clicked();
     // Described for screen readers and UI tests as the commit, author, and line text.
-    let described = if uncommitted { "Uncommitted".to_string() } else { commit.short_hash().to_string() };
-    let author_text = if uncommitted { "Your working changes" } else { commit.author_name.as_str() };
+    let described = if uncommitted { tr("Uncommitted").to_string() } else { commit.short_hash().to_string() };
+    let author_text = if uncommitted { tr("Your working changes") } else { commit.author_name.as_str() };
     response.widget_info(|| {
         egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{described} · {author_text} · {}", displayed(&line.content)))
     });
     let tooltip = if uncommitted {
-        "Not committed yet".to_string()
+        tr("Not committed yet").to_string()
     } else {
         format!("{}\n{} <{}> · {}", commit.summary, commit.author_name, commit.author_email, commit.short_hash())
     };
@@ -472,46 +472,46 @@ fn paint_row(ui: &mut Ui, rows: &Rows, index: usize, choice: &mut Option<Choice>
     let line_number = line.number;
     response.context_menu(|ui| {
         if uncommitted {
-            if ui.button("Blame at HEAD").clicked() {
+            if ui.button(tr("Blame at HEAD")).clicked() {
                 *choice = Some(Choice::BlameAtHead { path: rows.path.to_string(), line: line_number });
                 ui.close();
             }
-            ui.add_enabled(false, egui::Button::new("Show commit in history")).on_disabled_hover_text("Not committed yet");
-            ui.add_enabled(false, egui::Button::new("Copy commit ID")).on_disabled_hover_text("Not committed yet");
+            ui.add_enabled(false, egui::Button::new(tr("Show commit in history"))).on_disabled_hover_text(tr("Not committed yet"));
+            ui.add_enabled(false, egui::Button::new(tr("Copy commit ID"))).on_disabled_hover_text(tr("Not committed yet"));
             ui.separator();
             let ((first, last), _) = group_bounds(rows.lines, index);
-            ui.add_enabled(false, egui::Button::new(format!("History of {}…", lines_text(first, last))))
-                .on_disabled_hover_text("Not committed yet");
+            ui.add_enabled(false, egui::Button::new(tr_fmt!("History of {lines}…", lines = lines_text(first, last))))
+                .on_disabled_hover_text(tr("Not committed yet"));
             return;
         }
         // Git names the version these lines came from, with the file's path there, which
         // follows a rename made in this very commit.
         let before = match &commit.previous {
             Some((revision, path)) => Ok((revision.clone(), path.clone())),
-            None => Err("This commit has no earlier version of the file".to_string()),
+            None => Err(tr("This commit has no earlier version of the file").to_string()),
         };
         match before {
             Ok((revision, path)) => {
-                if ui.button("Blame before this change").clicked() {
+                if ui.button(tr("Blame before this change")).clicked() {
                     *choice = Some(Choice::BlameBefore { revision, path, line: line_number });
                     ui.close();
                 }
             }
             Err(reason) => {
-                ui.add_enabled(false, egui::Button::new("Blame before this change")).on_disabled_hover_text(reason);
+                ui.add_enabled(false, egui::Button::new(tr("Blame before this change"))).on_disabled_hover_text(reason);
             }
         }
-        if ui.button("Show commit in history").clicked() {
+        if ui.button(tr("Show commit in history")).clicked() {
             *choice = Some(Choice::ShowCommit(commit.hash.clone()));
             ui.close();
         }
-        if ui.button("Copy commit ID").clicked() {
+        if ui.button(tr("Copy commit ID")).clicked() {
             *choice = Some(Choice::CopyCommit(commit.hash.clone()));
             ui.close();
         }
         ui.separator();
         let ((first, last), (original_first, original_last)) = group_bounds(rows.lines, index);
-        if ui.button(format!("History of {}…", lines_text(first, last))).clicked() {
+        if ui.button(tr_fmt!("History of {lines}…", lines = lines_text(first, last))).clicked() {
             // Read at the lines' own commit, by their numbers and path there: blame says no later
             // commit changed them, and edits above them in the working file cannot shift the range.
             let path = if commit.path.is_empty() { rows.path } else { commit.path.as_str() };
@@ -552,15 +552,15 @@ fn diff_pane(ui: &mut Ui, selection: &mut Selected, split: &mut bool) -> bool {
         widgets::hash_label(ui, &selection.hash);
         ui.add(egui::Label::new(RichText::new(&selection.summary).strong()).truncate());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::icon_button(ui, icon::X, "Close this change", true).clicked() {
+            if widgets::icon_button(ui, icon::X, tr("Close this change"), true).clicked() {
                 close = true;
             }
-            crate::tools::widgets::checkbox(ui, true, split, "Side by side");
+            crate::tools::widgets::checkbox(ui, true, split, tr("Side by side"));
         });
     });
     ui.separator();
     match selection.diff.get() {
-        None => widgets::loading(ui, "Loading change"),
+        None => widgets::loading(ui, tr("Loading change")),
         Some(Err(error)) => widgets::error(ui, &error.to_string()),
         Some(Ok(content)) => diff_view::show(ui, content, *split),
     }
@@ -587,16 +587,14 @@ pub fn file_name(path: &str) -> &str {
 pub fn relative_time(time: i64) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|elapsed| elapsed.as_secs() as i64).unwrap_or(time);
     let seconds = (now - time).max(0);
-    let (value, unit) = match seconds {
-        0..=59 => return "just now".to_string(),
-        60..=3_599 => (seconds / 60, "minute"),
-        3_600..=86_399 => (seconds / 3_600, "hour"),
-        86_400..=2_591_999 => (seconds / 86_400, "day"),
-        2_592_000..=31_535_999 => (seconds / 2_592_000, "month"),
-        _ => (seconds / 31_536_000, "year"),
-    };
-    let plural = if value == 1 { "" } else { "s" };
-    format!("{value} {unit}{plural} ago")
+    match seconds {
+        0..=59 => tr("just now").to_string(),
+        60..=3_599 => tr_count("{count} minute ago", "{count} minutes ago", (seconds / 60) as usize),
+        3_600..=86_399 => tr_count("{count} hour ago", "{count} hours ago", (seconds / 3_600) as usize),
+        86_400..=2_591_999 => tr_count("{count} day ago", "{count} days ago", (seconds / 86_400) as usize),
+        2_592_000..=31_535_999 => tr_count("{count} month ago", "{count} months ago", (seconds / 2_592_000) as usize),
+        _ => tr_count("{count} year ago", "{count} years ago", (seconds / 31_536_000) as usize),
+    }
 }
 
 /// Tabs keep their width, and the carriage return of a CRLF line stays invisible.

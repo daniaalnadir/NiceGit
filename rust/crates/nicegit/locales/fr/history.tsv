@@ -1,0 +1,300 @@
+# fr: the commit history, changes, and diff views.
+(and {count} earlier)	(et {count} de plus)
+A binary file has no lines	Un fichier binaire n'a aucune ligne
+A large file. GitHub warns about files over 50 MB and refuses files over 100 MB; consider Git LFS or ignoring it.	Un fichier volumineux. GitHub avertit au-delà de 50 Mo et refuse les fichiers de plus de 100 Mo ; pensez à Git LFS ou à l'ignorer.
+A new commit on {branch} undoes the changes from “{subject}”.	Un nouveau commit sur {branch} annule les modifications de « {subject} ».
+Absorb staged changes into the earlier commits that last changed their lines	Intégrer les modifications indexées aux commits précédents qui ont modifié ces lignes en dernier
+Add trailers	Ajouter des trailers
+Added line	Ligne ajoutée
+All .{extension} files in .gitignore	Tous les fichiers .{extension} dans .gitignore
+All {count} commits are already on {branch}.	Les {count} commits sont déjà sur {branch}.
+Amend last commit	Modifier le dernier commit
+Binary file, {bytes} bytes	Fichier binaire, {bytes} octets
+Branch / tag	Branche / étiquette
+Branch label {name}	Étiquette de branche {name}
+Branches shown	Branches affichées
+Breaking	Rupture
+Check out	Basculer
+Check out a branch before cherry-picking.	Basculez sur une branche avant de faire un cherry-pick.
+Check out {branch}	Basculer sur {branch}
+Check out {name} and cherry-pick {commits}?	Basculer sur {name} et appliquer {commits} par cherry-pick ?
+Cherry-pick	Cherry-pick
+Cherry-pick this commit?	Appliquer ce commit par cherry-pick ?
+Cherry-pick {count} commit	Cherry-pick de {count} commit
+Cherry-pick {count} commits	Cherry-pick de {count} commits
+Cherry-pick {count} commits?	Appliquer {count} commits par cherry-pick ?
+Cherry-pick {hash}	Cherry-pick {hash}
+Choose a type first	Choisissez d'abord un type
+Choose the branch and tag labels the graph draws, and whether stashes are shown	Choisir les étiquettes de branche et de tag affichées dans le graphe, et si les remises sont affichées
+Clear filters	Effacer les filtres
+Close this file's conflict editor first	Fermez d'abord l'éditeur de conflits de ce fichier
+Columns	Colonnes
+Combine the selected commits into one, in the interactive rebase window to review	Fusionner les commits sélectionnés en un seul, dans la fenêtre de rebase interactif à vérifier
+Commit and push	Commit et pousser
+Commit description	Description du commit
+Commit history	Historique des commits
+Commit message	Message du commit
+Commit options	Options du commit
+Commit or stash your changes before cherry-picking.	Committez ou remisez vos modifications avant de faire un cherry-pick.
+Commit or stash your changes first	Committez ou remisez d'abord vos modifications
+Commit scope	Périmètre du commit
+Commit staged changes as fixup	Committer les modifications indexées comme fixup
+Commit summary	Résumé du commit
+Commit type	Type de commit
+Commit {count} file to {branch}	Committer {count} fichier sur {branch}
+Commit {count} files to {branch}	Committer {count} fichiers sur {branch}
+Commit {id}	Commit {id}
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter)	Commit, puis pousser vers {upstream} (Shift-Ctrl/Cmd-Enter)
+Commit, then push to {upstream} (Shift-Ctrl/Cmd-Enter). Git hooks are skipped for the commit and the push.	Commit, puis pousser vers {upstream} (Shift-Ctrl/Cmd-Enter). Les hooks Git sont ignorés pour le commit et le push.
+Committing as {name} <{email}>	Commit en tant que {name} <{email}>
+Compare with marked commit	Comparer avec le commit marqué
+Compare with working files	Comparer avec les fichiers de travail
+Conflicts stop the sequence for you to resolve or abort.	Les conflits interrompent la séquence pour que vous les résolviez ou annuliez.
+Copied the commit message.	Message du commit copié.
+Copy folder path	Copier le chemin du dossier
+Copy path	Copier le chemin
+Could not read the commits on {branch}: {error}	Impossible de lire les commits de {branch} : {error}
+Create a branch at {hash}	Créer une branche sur {hash}
+Create tag here…	Créer un tag ici…
+Discard all	Tout abandonner
+Discard all changes?	Abandonner toutes les modifications ?
+Discard all changes…	Abandonner toutes les modifications…
+Discard changes in {path}?	Abandonner les modifications dans {path} ?
+Discard changes?	Abandonner les modifications ?
+Discard changes…	Abandonner les modifications…
+Discard folder changes…	Abandonner les modifications du dossier…
+Discard this change from the file. You can undo it.	Abandonner cette modification du fichier. Vous pouvez l'annuler.
+Discarded changes to {path}{more}	Modifications de {path} abandonnées{more}
+Discards changes to all {count} unstaged files, including those hidden by the filter	Abandonne les modifications des {count} fichiers non indexés, y compris ceux masqués par le filtre
+Divides this commit into two, with a message for each	Divise ce commit en deux, avec un message pour chacun
+Drag a column's edge to resize it. Right-click to choose columns.	Faites glisser le bord d'une colonne pour la redimensionner. Clic droit pour choisir les colonnes.
+Drop…	Supprimer…
+Each stash as a row above the commit it was made on, when that commit is loaded	Chaque remise est affichée sur une ligne au-dessus du commit sur lequel elle a été créée, lorsque ce commit est chargé
+Edit file	Modifier le fichier
+Edit message…	Modifier le message…
+File history	Historique du fichier
+File or folder in the repository	Fichier ou dossier du dépôt
+File view	Affichage des fichiers
+Files hidden by the filter are included.	Les fichiers masqués par le filtre sont inclus.
+Fill in the template to commit	Remplissez le modèle pour committer
+Filter authors	Filtrer les auteurs
+Filter by author	Filtrer par auteur
+Filter by path	Filtrer par chemin
+Filter changed files	Filtrer les fichiers modifiés
+Filter loaded commits	Filtrer les commits chargés
+Filter…	Filtrer…
+Find in diff	Rechercher dans le diff
+Finish or abort the current Git operation before cherry-picking.	Terminez ou annulez l'opération Git en cours avant de faire un cherry-pick.
+Finish or abort the current Git operation before switching branches.	Terminez ou annulez l'opération Git en cours avant de changer de branche.
+Finish the current Git operation first	Terminez d'abord l'opération Git en cours
+Fix up	Fixup
+Fix up with staged changes…	Corriger avec les modifications indexées…
+Fix up “{subject}”?	Corriger « {subject} » ?
+Folder {name}, {files}	Dossier {name}, {files}
+Folds the staged changes into this commit and replays the commits after it	Intègre les modifications indexées à ce commit et rejoue les commits suivants
+From commit.template	Depuis commit.template
+Git hooks are skipped for this commit	Les hooks Git sont ignorés pour ce commit
+Graph	Graphe
+History columns	Colonnes de l'historique
+Hunk at line {start}	Bloc à la ligne {start}
+Hunk at lines {start} to {end}	Bloc aux lignes {start} à {end}
+Ignore	Ignorer
+Interactive rebase from here…	Rebase interactif à partir d'ici…
+It is applied to {branch} as a new commit.	Il est appliqué à {branch} comme nouveau commit.
+Labels such as origin/main. A local branch that tracks one keeps its label.	Étiquettes telles que origin/main. Une branche locale qui en suit une garde son étiquette.
+Leave out the pre-commit and commit-msg hooks for the next commit, and the pre-push hook when committing and pushing. Resets after each commit.	Ignorer les hooks pre-commit et commit-msg pour le prochain commit, et le hook pre-push lors d'un commit avec push. Réinitialisé après chaque commit.
+Line	Ligne
+Listing files…	Liste des fichiers…
+Load older history	Charger l'historique plus ancien
+Lock file (LFS)	Verrouiller le fichier (LFS)
+Locked {path} with Git LFS.	{path} verrouillé avec Git LFS.
+Mark for comparison	Marquer pour comparaison
+Marked {hash}. Right-click another commit to compare.	{hash} marqué. Cliquez avec le bouton droit sur un autre commit pour comparer.
+Matches each commit's message, author, ID, branches, and tags	Correspond au message, à l'auteur, à l'identifiant, aux branches et aux tags de chaque commit
+Merge commits can't be edited here	Les commits de fusion ne peuvent pas être modifiés ici
+Merge commits can't be fixed up here	Les commits de fusion ne peuvent pas être corrigés ici
+Merge commits can't be split	Les commits de fusion ne peuvent pas être divisés
+More actions for this file	Autres actions pour ce fichier
+Name or email	Nom ou e-mail
+New commits on {branch} undo the changes from {count} commits, newest first. The original commits stay in history. Conflicts stop the sequence for you to resolve or abort.	De nouveaux commits sur {branch} annulent les modifications de {count} commits, du plus récent au plus ancien. Les commits d'origine restent dans l'historique. Les conflits interrompent la séquence pour que vous les résolviez ou annuliez.
+Next match (Enter)	Occurrence suivante (Entrée)
+NiceGit switches to {name} first, saving uncommitted changes in a stash as checkout does. Then you confirm the cherry-pick on {name}.	NiceGit bascule d'abord sur {name} et enregistre les modifications non committées dans une remise, comme le fait le checkout. Vous confirmez ensuite le cherry-pick sur {name}.
+No Git identity set. Choose one under Identity in the repository menu.	Aucune identité Git définie. Choisissez-en une dans « Identité » du menu du dépôt.
+No authors match	Aucun auteur ne correspond
+No changes to show	Aucune modification à afficher
+No matching files	Aucun fichier correspondant
+No other authors in the loaded history	Aucun autre auteur dans l'historique chargé
+No unstaged changes	Aucune modification non indexée
+Not available right now	Indisponible pour le moment
+Not committed yet	Pas encore commité
+Only files shown by the filter are included.	Seuls les fichiers affichés par le filtre sont inclus.
+Open anyway	Ouvrir quand même
+Open file	Ouvrir le fichier
+Open in default app	Ouvrir avec l'application par défaut
+Open in diff tool	Ouvrir dans l'outil de comparaison
+Open in {name}	Ouvrir dans {name}
+Path	Chemin
+Previous match (Shift+Enter)	Occurrence précédente (Maj+Entrée)
+Reading file…	Lecture du fichier…
+Recent commit summaries	Résumés de commits récents
+Records a fixup! commit for this commit. An interactive rebase folds it in later	Enregistre un commit fixup! pour ce commit. Un rebase interactif l'intègre ensuite
+Remote branch labels	Étiquettes des branches distantes
+Remove the selected commits and their changes, in the interactive rebase window to review	Supprimer les commits sélectionnés et leurs modifications, dans la fenêtre de rebase interactif à vérifier
+Removed line	Ligne supprimée
+Reorder, edit, squash, or drop the commits after this one	Réordonner, modifier, fusionner ou supprimer les commits après celui-ci
+Reset {branch} to here…	Réinitialiser {branch} ici…
+Resize the {column} column	Redimensionner la colonne {column}
+Resolve conflict…	Résoudre le conflit…
+Resolve in {name}	Résoudre dans {name}
+Resolve the conflicted files first	Résolvez d'abord les fichiers en conflit
+Resolved from memory	Résolu à partir de la mémoire
+Restore column widths	Restaurer la largeur des colonnes
+Revert this commit?	Annuler ce commit ?
+Revert {count} commits?	Annuler {count} commits ?
+Revert…	Annuler…
+Rewrites this commit and the ones after it	Réécrit ce commit et ceux qui suivent
+Save a copy…	Enregistrer une copie…
+Save as ZIP…	Enregistrer en ZIP…
+Save as patch	Enregistrer comme correctif
+Save as patch…	Enregistrer comme correctif…
+Save staged changes as a patch	Enregistrer les modifications indexées comme correctif
+Save staged changes as a patch, including files hidden by the filter	Enregistrer les modifications indexées comme correctif, y compris les fichiers masqués par le filtre
+Save unstaged changes as a patch, including untracked files	Enregistrer les modifications non indexées comme correctif, y compris les fichiers non suivis
+Save unstaged changes as a patch, including untracked files and those hidden by the filter	Enregistrer les modifications non indexées comme correctif, y compris les fichiers non suivis et ceux masqués par le filtre
+Saved {file}.	{file} enregistré.
+Saved {name}.	{name} enregistré.
+Search all history	Rechercher dans tout l'historique
+Search all history (Shift-Ctrl/Cmd-F)	Rechercher dans tout l'historique (Shift-Ctrl/Cmd-F)
+Search files in this commit…	Rechercher des fichiers dans ce commit…
+Search history	Rechercher dans l'historique
+Select at least two commits to squash	Sélectionnez au moins deux commits à fusionner
+Set your Git name and email first	Définissez d'abord votre nom et votre e-mail Git
+Short commit ID	Identifiant court du commit
+Show all	Tout afficher
+Show all branches	Afficher toutes les branches
+Show all branches to choose which the graph includes	Afficher toutes les branches pour choisir celles que le graphe inclut
+Show in file manager	Afficher dans le gestionnaire de fichiers
+Show in the graph	Afficher dans le graphe
+Show only commits by an author, or that touch a path.	Afficher seulement les commits d'un auteur ou qui touchent un chemin.
+Show only the commits by an author, or that touch a file or folder	Afficher seulement les commits d'un auteur ou qui touchent un fichier ou un dossier
+Showing commits {filters}.	Commits affichés {filters}.
+Showing local branches.	Branches locales affichées.
+Showing only {branch}.	Affichage de {branch} uniquement.
+Showing the current branch and its upstream.	Branche actuelle et sa branche distante affichées.
+Showing the first {shown} of {total} entries in this commit.	Affichage des {shown} premières entrées sur {total} de ce commit.
+Show…	Afficher…
+Sign the next commit, amend, or Commit and push with your signing key, or leave it unsigned. Starts from commit.gpgSign and resets after each commit.	Signer le prochain commit, la modification ou le commit et push avec votre clé de signature, ou le laisser non signé. Part de commit.gpgSign et est réinitialisé après chaque commit.
+Sign this commit	Signer ce commit
+Skip Git hooks	Ignorer les hooks Git
+Split commit…	Diviser le commit…
+Squash…	Fusionner…
+Stage All	Tout indexer
+Stage All Changes	Indexer toutes les modifications
+Stage all {changes} and commit	Indexer les {changes} et committer
+Stage every change, as Stage All Changes does, then commit	Indexer chaque modification, comme le fait « Indexer toutes les modifications », puis committer
+Stage files to commit	Indexer les fichiers à committer
+Stage files to include them in the next commit	Indexez des fichiers pour les inclure dans le prochain commit
+Stage folder	Indexer le dossier
+Stage the changes to commit as a fixup first	Indexez d'abord les modifications à committer comme fixup
+Stage the changes to fold into this commit first	Indexez d'abord les modifications à intégrer à ce commit
+Stage this change	Indexer cette modification
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{hidden}	Les modifications indexées et non indexées de {count} fichier(s) seront perdues, et les fichiers non suivis supprimés. Cette action est irréversible.{hidden}
+Staged and unstaged changes to {count} file(s) are lost, and untracked files are deleted. This cannot be undone.{scope}	Les modifications indexées et non indexées de {count} fichier(s) seront perdues, et les fichiers non suivis supprimés. Cette action est irréversible.{scope}
+Staged and unstaged changes to {path} are discarded. {note}	Les modifications indexées et non indexées de {path} sont abandonnées. {note}
+Staged files	Fichiers indexés
+Staged files ({count})	Fichiers indexés ({count})
+Staged {files} in {folder}.	{files} indexé(s) dans {folder}.
+Stages all {count} unstaged files, including those hidden by the filter	Indexe les {count} fichiers non indexés, y compris ceux masqués par le filtre
+Start bisect: this commit is good	Démarrer un bisect : ce commit est bon
+Stash or discard unstaged changes first	Remisez ou abandonnez d'abord les modifications non indexées
+Stash this change and remove it from the file	Remiser cette modification et la retirer du fichier
+Stash this file…	Remiser ce fichier…
+Stashed {path}.	{path} remisé.
+Subject	Sujet
+Tag labels	Étiquettes de tag
+Tag {name}	Tag {name}
+Take {side} version	Prendre la version {side}
+That commit is already on {branch}.	Ce commit est déjà sur {branch}.
+The last commit is already on a remote. Amending rewrites it, so others who pulled it will need to reconcile.	Le dernier commit est déjà sur un dépôt distant. Le modifier le réécrit, donc ceux qui l'ont tiré devront se réaligner.
+The selected commits must be in the loaded history, and none can be a merge	Les commits sélectionnés doivent figurer dans l'historique chargé, et aucun ne doit être une fusion
+The staged changes become part of {commit}, and the commits after it on {branch} are rewritten, so their hashes change. If they were already pushed, you'll need to force-push.	Les modifications indexées deviennent une partie de {commit}, et les commits suivants sur {branch} sont réécrits, donc leurs empreintes changent. S'ils ont déjà été poussés, vous devrez faire un push forcé.
+They are applied to {branch} oldest first.	Ils sont appliqués à {branch}, du plus ancien au plus récent.
+They are applied to {branch} oldest first. Conflicts stop the sequence for you to resolve or abort.	Ils sont appliqués à {branch}, du plus ancien au plus récent. Les conflits interrompent la séquence pour que vous les résolviez ou annuliez.
+This cannot be undone: renames, conflicts, folders, and submodules are discarded without a saved copy.	Cette action est irréversible : les renommages, conflits, dossiers et sous-modules sont abandonnés sans copie enregistrée.
+This commit's tree has no files.	L'arborescence de ce commit ne contient aucun fichier.
+This file in .gitignore	Ce fichier dans .gitignore
+This file is empty.	Ce fichier est vide.
+This file is {size}. Large files are not shown until you open them.	Ce fichier fait {size}. Les fichiers volumineux ne sont affichés qu'après ouverture.
+This file on this computer only	Ce fichier sur cet ordinateur uniquement
+This is a submodule. It records commit {commit}, but its files are in its own repository, so they are not shown here.	Ceci est un sous-module. Il pointe vers le commit {commit}, mais ses fichiers sont dans son propre dépôt, donc ils ne sont pas affichés ici.
+This repository uses Conventional Commits	Ce dépôt utilise Conventional Commits
+Took the {side} version of {path}.	La version {side} de {path} a été prise.
+Tree	Arborescence
+Try again	Réessayer
+Type	Type
+Undo commit	Annuler le commit
+Undo discard	Annuler l'abandon
+Undo the last commit?	Annuler le dernier commit ?
+Undo the selected commits with new commits, newest first	Annuler les commits sélectionnés par de nouveaux commits, du plus récent au plus ancien
+Undo this commit…	Annuler ce commit…
+Unlock file (LFS)	Déverrouiller le fichier (LFS)
+Unstage All	Tout désindexer
+Unstage All Changes	Désindexer toutes les modifications
+Unstage folder	Désindexer le dossier
+Unstage this change	Désindexer cette modification
+Unstaged files	Fichiers non indexés
+Unstaged files ({count})	Fichiers non indexés ({count})
+Unstaged {files} in {folder}.	{files} désindexé(s) dans {folder}.
+Unstages all {count} staged files, including those hidden by the filter	Désindexe les {count} fichiers indexés, y compris ceux masqués par le filtre
+Updated the ignore rules.	Les règles d'ignorage ont été mises à jour.
+Use a recent summary	Utiliser un résumé récent
+Wait for the current Git action to finish before cherry-picking.	Attendez la fin de l'action Git en cours avant de faire un cherry-pick.
+Which branches the graph includes	Branches incluses dans le graphe
+Working tree	Copie de travail
+Write a summary to commit	Rédigez un résumé pour committer
+You are here	Vous êtes ici
+You are not on a branch, so a commit here would belong to no branch and could be lost. Create a branch first.	Vous n'êtes sur aucune branche : un commit ici n'appartiendrait à aucune branche et pourrait être perdu. Créez d'abord une branche.
+You can undo this from the Changes panel until the file changes again.	Vous pouvez annuler cette action depuis le panneau Modifications tant que le fichier n'a pas changé à nouveau.
+[added: {text}]	[ajouté : {text}]
+[removed: {text}]	[supprimé : {text}]
+binary	binaire
+in {hash}	dans {hash}
+labels {refs}	étiquettes {refs}
+scope	portée
+staged	indexé
+touching {path}	touchant {path}
+unstaged	non indexé
+{count} branch hidden.	{count} branche masquée.
+{count} branches hidden.	{count} branches masquées.
+{count} commits selected	{count} commits sélectionnés
+{count} file change on	{count} modification de fichier sur
+{count} file changes on	{count} modifications de fichiers sur
+{count} line added	{count} ligne ajoutée
+{count} line removed	{count} ligne supprimée
+{count} lines added	{count} lignes ajoutées
+{count} lines removed	{count} lignes supprimées
+{count} of them are already on {branch}.	{count} d'entre eux sont déjà sur {branch}.
+{count} uncommitted file	{count} fichier non commité
+{count} uncommitted files	{count} fichiers non commités
+{current} of {count}	{current} sur {count}
+{kind} {number}: {code}	{kind} {number} : {code}
+{kind}: {code}	{kind} : {code}
+{label} this change	{label} cette modification
+{name}, {kind}, {place}	{name}, {kind}, {place}
+{path} is untracked and will be deleted. {note}	{path} n'est pas suivi et sera supprimé. {note}
+{shown} of {total}	{shown} sur {total}
+{title} ({count})	{title} ({count})
+{total}{more} commits	{total}{more} commits
+{verb} line {number}	{verb} la ligne {number}
+{verb} this line	{verb} cette ligne
+“{subject}” is applied to {branch} as a new commit.	« {subject} » est appliqué à {branch} comme nouveau commit.
+“{subject}” is removed from {branch}. Its changes stay staged so you can commit them again.	« {subject} » est retiré de {branch}. Ses modifications restent indexées pour que vous puissiez les committer à nouveau.
+Local branches	Branches locales
+Current branch	Branche actuelle
+Added	Ajouté
+Modified	Modifié
+Renamed	Renommé
+Conflict	Conflit
+Untracked	Non suivi
+No diff tool is set. Set one with `git config --global diff.tool <name>`.	Aucun outil de diff n’est défini. Définissez-en un avec `git config --global diff.tool <name>`.
+No merge tool is set. Set one with `git config --global merge.tool <name>`.	Aucun outil de fusion n’est défini. Définissez-en un avec `git config --global merge.tool <name>`.

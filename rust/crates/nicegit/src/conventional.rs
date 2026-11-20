@@ -19,9 +19,9 @@ impl ConventionalCommits {
 
     pub fn title(self) -> &'static str {
         match self {
-            ConventionalCommits::Off => "Off",
-            ConventionalCommits::Automatic => "Automatic",
-            ConventionalCommits::Always => "Always",
+            ConventionalCommits::Off => crate::i18n::tr("Off"),
+            ConventionalCommits::Automatic => crate::i18n::tr("Automatic"),
+            ConventionalCommits::Always => crate::i18n::tr("Always"),
         }
     }
 }

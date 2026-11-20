@@ -14,6 +14,7 @@ use nicegit_core::github_review::{
     anchor_index, comment_body, comment_target, FileDiff, NewLineComment, ReviewSide, ReviewThread, ThreadComment,
 };
 
+use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::github::message;
 use crate::tools::pull_request_detail::footer;
@@ -121,7 +122,7 @@ impl Files<'_, '_, '_> {
     fn draw(&mut self, ui: &mut Ui) {
         let c = theme::of(ui);
         if self.view.files.is_empty() {
-            ui.label(RichText::new("No files changed.").color(c.muted));
+            ui.label(RichText::new(tr("No files changed.")).color(c.muted));
             return;
         }
         for file in self.view.files {
@@ -129,14 +130,14 @@ impl Files<'_, '_, '_> {
         }
         ui.add_space(8.0);
         let Some(path) = self.state.selected.clone() else {
-            ui.label(RichText::new("Choose a file to see its changes and review comments.").color(c.muted));
+            ui.label(RichText::new(tr("Choose a file to see its changes and review comments.")).color(c.muted));
             return;
         };
         ui.add(egui::Label::new(RichText::new(clean(&path)).monospace().strong()).wrap());
         ui.add_space(4.0);
         let lines: &[DiffLine] = match self.view.diff {
             None => {
-                widgets::loading(ui, "Loading the diff");
+                widgets::loading(ui, tr("Loading the diff"));
                 &[]
             }
             Some(Err(error)) => {
@@ -146,13 +147,13 @@ impl Files<'_, '_, '_> {
             Some(Ok(diffs)) => match diffs.iter().find(|file| file.path == path) {
                 Some(file) => file.lines.as_slice(),
                 None => {
-                    ui.label(RichText::new("The diff has no lines to show for this file.").small().color(c.muted));
+                    ui.label(RichText::new(tr("The diff has no lines to show for this file.")).small().color(c.muted));
                     &[]
                 }
             },
         };
         match self.view.threads {
-            None => widgets::loading(ui, "Loading review comments"),
+            None => widgets::loading(ui, tr("Loading review comments")),
             Some(Err(error)) => widgets::callout(ui, &message(error), true),
             Some(Ok(threads)) => {
                 let on_file: Vec<&ReviewThread> = threads.iter().filter(|thread| thread.path == path).collect();
@@ -177,7 +178,7 @@ impl Files<'_, '_, '_> {
             }
         }
         if !outdated.is_empty() {
-            widgets::section(ui, "Outdated comments");
+            widgets::section(ui, tr("Outdated comments"));
             ui.add_space(2.0);
             for thread in outdated {
                 self.card(ui, path, thread);
@@ -199,12 +200,16 @@ impl Files<'_, '_, '_> {
             }
         }
         if lines.len() > ROW_LIMIT {
-            ui.label(RichText::new(format!("Showing the first {ROW_LIMIT} lines of this file.")).small().color(theme::of(ui).muted));
+            ui.label(
+                RichText::new(tr_fmt!("Showing the first {count} lines of this file.", count = ROW_LIMIT))
+                    .small()
+                    .color(theme::of(ui).muted),
+            );
         }
 
         if !elsewhere.is_empty() {
             ui.add_space(6.0);
-            widgets::section(ui, "Comments on lines not in the diff");
+            widgets::section(ui, tr("Comments on lines not in the diff"));
             ui.add_space(2.0);
             for thread in elsewhere {
                 self.card(ui, path, thread);
@@ -252,9 +257,13 @@ impl Files<'_, '_, '_> {
                     Some((side, number)) if hovered && can_comment => {
                         let button = ui.add_sized([22.0, 16.0], egui::Button::new(RichText::new(icon::PLUS).small()));
                         button.widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, format!("Comment on line {number}"))
+                            egui::WidgetInfo::labeled(
+                                egui::accesskit::Role::Button,
+                                true,
+                                tr_fmt!("Comment on line {number}", number = number),
+                            )
                         });
-                        if button.on_hover_text("Comment on this line").clicked() {
+                        if button.on_hover_text(tr("Comment on this line")).clicked() {
                             self.state.composer =
                                 Some(Composer { target: Target::Line { path: path.to_string(), side, line: number }, text: String::new() });
                         }
@@ -283,10 +292,10 @@ impl Files<'_, '_, '_> {
             |ui| {
                 ui.set_width(ui.available_width());
                 if thread.resolved && !self.state.expanded.contains(&thread.id) {
-                    let author = thread.comments.first().and_then(|comment| comment.author.as_deref()).unwrap_or("someone");
+                    let author = thread.comments.first().and_then(|comment| comment.author.as_deref()).unwrap_or(tr("someone"));
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(format!("Resolved thread by {author}")).small().color(c.muted));
-                        if ui.link("Show").clicked() {
+                        ui.label(RichText::new(tr_fmt!("Resolved thread by {author}", author = author)).small().color(c.muted));
+                        if ui.link(tr("Show")).clicked() {
                             self.state.expanded.insert(thread.id.clone());
                         }
                     });
@@ -297,8 +306,8 @@ impl Files<'_, '_, '_> {
                 }
                 if thread.resolved {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Resolved").small().color(c.muted));
-                        if ui.link("Hide").clicked() {
+                        ui.label(RichText::new(tr("Resolved")).small().color(c.muted));
+                        if ui.link(tr("Hide")).clicked() {
                             self.state.expanded.remove(&thread.id);
                         }
                     });
@@ -312,16 +321,16 @@ impl Files<'_, '_, '_> {
     /// The Reply and Resolve buttons of a thread, and the reply box when it is the one being answered.
     fn thread_actions(&mut self, ui: &mut Ui, thread: &ReviewThread, location: &str) {
         let refusal = self.view.refusal;
-        let hover = refusal.unwrap_or("Reply to this thread.");
+        let hover = refusal.unwrap_or(tr("Reply to this thread."));
         ui.horizontal_wrapped(|ui| {
-            let reply = widgets::labeled_button(ui, icon::ARROW_BEND_UP_LEFT, "Reply", refusal.is_none())
+            let reply = widgets::labeled_button(ui, icon::ARROW_BEND_UP_LEFT, tr("Reply"), refusal.is_none())
                 .on_hover_text(hover)
                 .on_disabled_hover_text(hover);
             if reply.clicked() {
                 self.state.composer = Some(Composer { target: Target::Reply(thread.id.clone()), text: String::new() });
             }
             let (word, glyph) =
-                if thread.resolved { ("Unresolve", icon::ARROW_COUNTER_CLOCKWISE) } else { ("Resolve", icon::CHECK_CIRCLE) };
+                if thread.resolved { (tr("Unresolve"), icon::ARROW_COUNTER_CLOCKWISE) } else { (tr("Resolve"), icon::CHECK_CIRCLE) };
             let resolve = widgets::labeled_button(ui, glyph, word, refusal.is_none()).on_hover_text(hover).on_disabled_hover_text(hover);
             if resolve.clicked() {
                 self.confirm = Some(Confirm {
@@ -335,7 +344,7 @@ impl Files<'_, '_, '_> {
         let replying = matches!(self.state.composer.as_ref().map(|composer| &composer.target), Some(Target::Reply(id)) if *id == thread.id);
         if replying {
             ui.add_space(4.0);
-            if self.composer_box(ui, "Reply text", "Write a reply", "Post reply") {
+            if self.composer_box(ui, tr("Reply text"), tr("Write a reply"), tr("Post reply")) {
                 let body = self.composer_body();
                 self.confirm = Some(self.confirm_for(location, Write::Reply { thread_id: thread.id.clone(), body }));
             }
@@ -352,8 +361,8 @@ impl Files<'_, '_, '_> {
         ui.add_space(4.0);
         egui::Frame::new().fill(theme::of(ui).card_bg).inner_margin(egui::Margin::same(8)).corner_radius(6.0).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new(format!("Comment on {location}")).small().color(theme::of(ui).muted));
-            if self.composer_box(ui, "Comment text", "Write a comment", "Comment") {
+            ui.label(RichText::new(tr_fmt!("Comment on {location}", location = location)).small().color(theme::of(ui).muted));
+            if self.composer_box(ui, tr("Comment text"), tr("Write a comment"), tr("Comment")) {
                 let body = self.composer_body();
                 let comment = NewLineComment { head_oid: self.view.pull.head_oid.clone(), path: path.to_string(), line, side, body };
                 self.confirm = Some(self.confirm_for(&location, Write::Line(comment)));
@@ -382,7 +391,7 @@ impl Files<'_, '_, '_> {
             if widgets::primary_button(ui, submit, ready).clicked() {
                 posted = true;
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 self.state.composer = None;
             }
         });
@@ -404,7 +413,7 @@ impl Files<'_, '_, '_> {
 fn comment_block(ui: &mut Ui, comment: &ThreadComment, now: i64) {
     let c = theme::of(ui);
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(comment.author.as_deref().unwrap_or("Unknown author")).strong());
+        ui.label(RichText::new(comment.author.as_deref().unwrap_or(tr("Unknown author"))).strong());
         if let Some(ago) = relative_time(&comment.created_at, now) {
             ui.label(RichText::new(ago).small().color(c.muted));
         }
@@ -473,20 +482,20 @@ fn confirm_body(ui: &mut Ui, pending: &Confirm, busy: bool, error: Option<&str>)
 /// The heading of a confirmation, for what the write does.
 fn heading(write: &Write) -> &'static str {
     match write {
-        Write::Reply { .. } => "Reply to review thread",
-        Write::Line(_) => "Comment on line",
-        Write::Resolve { resolved: true, .. } => "Resolve review thread",
-        Write::Resolve { resolved: false, .. } => "Reopen review thread",
+        Write::Reply { .. } => tr("Reply to review thread"),
+        Write::Line(_) => tr("Comment on line"),
+        Write::Resolve { resolved: true, .. } => tr("Resolve review thread"),
+        Write::Resolve { resolved: false, .. } => tr("Reopen review thread"),
     }
 }
 
 /// The text of the confirm button for a write.
 fn submit_text(write: &Write) -> &'static str {
     match write {
-        Write::Reply { .. } => "Post reply",
-        Write::Line(_) => "Post comment",
-        Write::Resolve { resolved: true, .. } => "Resolve",
-        Write::Resolve { resolved: false, .. } => "Unresolve",
+        Write::Reply { .. } => tr("Post reply"),
+        Write::Line(_) => tr("Post comment"),
+        Write::Resolve { resolved: true, .. } => tr("Resolve"),
+        Write::Resolve { resolved: false, .. } => tr("Unresolve"),
     }
 }
 

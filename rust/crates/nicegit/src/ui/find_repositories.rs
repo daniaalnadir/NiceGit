@@ -2,6 +2,7 @@
 //! background thread; its results list each repository with a checkbox, and the chosen ones are
 //! added to Recent or opened as tabs.
 
+use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -92,45 +93,51 @@ pub fn show(ui: &mut egui::Ui, folder: &Path, state: &mut FindState, open_tabs: 
     poll(state, folder);
     match state {
         FindState::Scanning(_) => {
-            ui.heading("Find repositories");
+            ui.heading(tr("Find repositories"));
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label("Looking for repositories…");
+                ui.label(tr("Looking for repositories…"));
             });
             ui.add_space(16.0);
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 return Choice::Close;
             }
             Choice::Pending
         }
         FindState::Done { found, limited } => {
             if found.is_empty() {
-                ui.heading("No repositories found");
+                ui.heading(tr("No repositories found"));
                 ui.add_space(8.0);
-                ui.label(format!("No repositories found in {}.", folder.display()));
+                ui.label(tr_fmt!("No repositories found in {folder}.", folder = folder.display()));
                 ui.add_space(16.0);
-                if ui.button("Close").clicked() {
+                if ui.button(tr("Close")).clicked() {
                     return Choice::Close;
                 }
                 return Choice::Pending;
             }
-            let noun = if found.len() == 1 { "repository" } else { "repositories" };
-            ui.heading(format!("Found {} {noun} in {}", found.len(), folder.display()));
+            ui.heading(tr_fmt!(
+                "Found {repositories} in {folder}",
+                repositories = tr_count("{count} repository", "{count} repositories", found.len()),
+                folder = folder.display()
+            ));
             if *limited {
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new(format!("Showing the first {MAX_REPOSITORIES}. Choose a folder inside this one to find the rest."))
-                        .small()
-                        .color(c.muted),
+                    RichText::new(tr_fmt!(
+                        "Showing the first {count}. Choose a folder inside this one to find the rest.",
+                        count = MAX_REPOSITORIES
+                    ))
+                    .small()
+                    .color(c.muted),
                 );
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("Select all").clicked() {
+                if ui.button(tr("Select all")).clicked() {
                     found.iter_mut().for_each(|repository| repository.checked = true);
                 }
-                if ui.button("Select none").clicked() {
+                if ui.button(tr("Select none")).clicked() {
                     found.iter_mut().for_each(|repository| repository.checked = false);
                 }
             });
@@ -140,18 +147,18 @@ pub fn show(ui: &mut egui::Ui, folder: &Path, state: &mut FindState, open_tabs: 
                 }
             });
             ui.add_space(8.0);
-            ui.checkbox(open_tabs, "Also open them as tabs");
+            ui.checkbox(open_tabs, tr("Also open them as tabs"));
             let chosen = found.iter().filter(|repository| repository.checked).count();
             if *open_tabs && chosen > MANY_TABS {
-                ui.label(RichText::new("Opening many tabs reads each repository in the background.").small().color(c.muted));
+                ui.label(RichText::new(tr("Opening many tabs reads each repository in the background.")).small().color(c.muted));
             }
             ui.add_space(16.0);
             let mut choice = Choice::Pending;
             ui.horizontal(|ui| {
-                if widgets::primary_button(ui, &format!("Add {chosen} to Recent"), chosen > 0).clicked() {
+                if widgets::primary_button(ui, &tr_fmt!("Add {count} to Recent", count = chosen), chosen > 0).clicked() {
                     choice = Choice::Add;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     choice = Choice::Close;
                 }
             });
@@ -162,16 +169,16 @@ pub fn show(ui: &mut egui::Ui, folder: &Path, state: &mut FindState, open_tabs: 
 
 /// The body of the offer shown when a folder that is not a repository is dropped on the window.
 pub fn show_offer(ui: &mut egui::Ui) -> Choice {
-    ui.heading("Not a repository");
+    ui.heading(tr("Not a repository"));
     ui.add_space(8.0);
-    ui.label("This folder isn't a repository. Look for repositories inside it?");
+    ui.label(tr("This folder isn't a repository. Look for repositories inside it?"));
     ui.add_space(16.0);
     let mut choice = Choice::Pending;
     ui.horizontal(|ui| {
-        if widgets::primary_button(ui, "Find", true).clicked() {
+        if widgets::primary_button(ui, tr("Find"), true).clicked() {
             choice = Choice::Add;
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(tr("Cancel")).clicked() {
             choice = Choice::Close;
         }
     });
@@ -181,7 +188,7 @@ pub fn show_offer(ui: &mut egui::Ui) -> Choice {
 impl NiceGitApp {
     /// Asks for a folder to search, then starts searching it.
     pub fn choose_folder_to_find(&mut self, ctx: &egui::Context) {
-        if let Some(folder) = crate::file_dialog::pick_folder("Find repositories in a folder") {
+        if let Some(folder) = crate::file_dialog::pick_folder(tr("Find repositories in a folder")) {
             self.start_find(ctx, folder);
         }
     }
@@ -202,15 +209,20 @@ impl NiceGitApp {
             self.settings.remember(path.clone());
         }
         let mut text = if added == chosen.len() {
-            format!("Added {added} to Recent.")
+            tr_fmt!("Added {count} to Recent.", count = added)
         } else {
-            format!("Added {added} of {} to Recent. Recent keeps only the {RECENT_LIMIT} newest.", chosen.len())
+            tr_fmt!(
+                "Added {added} of {total} to Recent. Recent keeps only the {limit} newest.",
+                added = added,
+                total = chosen.len(),
+                limit = RECENT_LIMIT
+            )
         };
         if open_tabs {
             if self.busy.is_some() {
-                text.push_str(" The repositories were not opened as tabs, because an action is running.");
+                text.push_str(&format!(" {}", tr("The repositories were not opened as tabs, because an action is running.")));
             } else if self.has_unsaved_editor() {
-                text.push_str(" The repositories were not opened as tabs, because a file is being edited.");
+                text.push_str(&format!(" {}", tr("The repositories were not opened as tabs, because a file is being edited.")));
             } else {
                 // The tabs are added without reading them: the first is switched to and read now,
                 // and the background reader reads the others a couple at a time, so choosing many
@@ -231,7 +243,7 @@ impl NiceGitApp {
                 if let Some(index) = first {
                     self.switch_to(index);
                 }
-                text.push_str(&format!(" Opened {count} as tabs."));
+                text.push_str(&format!(" {}", tr_fmt!("Opened {count} as tabs.", count = count)));
             }
         }
         self.notify(text, false);

@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+use crate::i18n::{tr, tr_fmt};
 use egui::RichText;
 use egui_phosphor::regular as icon;
 use nicegit_core::models::short;
@@ -41,18 +42,18 @@ impl ResetWindow {
 /// What a reset mode does, as shown beside its choice.
 fn mode_title(mode: ResetMode) -> &'static str {
     match mode {
-        ResetMode::Soft => "Soft: keep changes staged",
-        ResetMode::Mixed => "Mixed: keep changes unstaged",
-        ResetMode::Hard => "Hard: discard local changes",
+        ResetMode::Soft => tr("Soft: keep changes staged"),
+        ResetMode::Mixed => tr("Mixed: keep changes unstaged"),
+        ResetMode::Hard => tr("Hard: discard local changes"),
     }
 }
 
 fn mode_detail(mode: ResetMode) -> &'static str {
     match mode {
-        ResetMode::Soft => "Moves the branch without changing the index or working files. Changes from the removed commits remain staged.",
-        ResetMode::Mixed => "Moves the branch and resets the index. Working files are kept, and the changes become unstaged.",
+        ResetMode::Soft => tr("Moves the branch without changing the index or working files. Changes from the removed commits remain staged."),
+        ResetMode::Mixed => tr("Moves the branch and resets the index. Working files are kept, and the changes become unstaged."),
         ResetMode::Hard => {
-            "Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted."
+            tr("Moves the branch and replaces the index and tracked files. Uncommitted tracked changes are lost. Untracked files that block restored paths may also be deleted.")
         }
     }
 }
@@ -85,7 +86,7 @@ impl ToolWindow for ResetWindow {
     }
 
     fn title(&self) -> String {
-        format!("Reset to {}", self.short_target())
+        tr_fmt!("Reset to {target}", target = self.short_target())
     }
 
     fn default_size(&self) -> egui::Vec2 {
@@ -99,10 +100,18 @@ impl ToolWindow for ResetWindow {
             widgets::hash_label(ui, &self.target);
             ui.label(RichText::new(&self.subject).color(ui.visuals().text_color()).strong());
         });
-        ui.label(RichText::new(format!("{}  Moves {} to this commit.", icon::ARROW_COUNTER_CLOCKWISE, self.branch)).small().color(c.muted));
+        ui.label(
+            RichText::new(format!(
+                "{}  {}",
+                icon::ARROW_COUNTER_CLOCKWISE,
+                tr_fmt!("Moves {branch} to this commit.", branch = self.branch)
+            ))
+            .small()
+            .color(c.muted),
+        );
         ui.add_space(10.0);
 
-        widgets::section(ui, "Mode");
+        widgets::section(ui, tr("Mode"));
         ui.add_space(2.0);
         for option in [ResetMode::Soft, ResetMode::Mixed, ResetMode::Hard] {
             mode_card(ui, &mut self.mode, option);
@@ -111,14 +120,14 @@ impl ToolWindow for ResetWindow {
         if self.mode == ResetMode::Hard {
             widgets::callout(
                 ui,
-                "Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel.",
+                tr("Hard reset discards uncommitted changes to tracked files. This cannot be undone from NiceGit's Changes panel."),
                 true,
             );
             ui.add_space(6.0);
         }
         ui.label(
             RichText::new(
-                "The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed.",
+                tr("The branch will point to the selected commit. Commits outside its history will no longer be on this branch. Remote branches are not changed."),
             )
             .small()
             .color(c.muted),
@@ -133,17 +142,17 @@ impl ToolWindow for ResetWindow {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Hard discards local changes, so it gets the danger style and a label that says so.
                 let clicked = if self.mode == ResetMode::Hard {
-                    widgets::danger_button(ui, "Reset and discard changes", enabled).clicked()
+                    widgets::danger_button(ui, tr("Reset and discard changes"), enabled).clicked()
                 } else {
-                    widgets::primary_button(ui, "Reset branch", enabled).clicked()
+                    widgets::primary_button(ui, tr("Reset branch"), enabled).clicked()
                 };
                 confirmed = clicked;
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     self.closing = true;
                 }
                 if !cx.idle {
                     ui.spinner();
-                    ui.label(RichText::new("Waiting for the current action").small().color(c.muted));
+                    ui.label(RichText::new(tr("Waiting for the current action")).small().color(c.muted));
                 }
             });
         });
@@ -153,10 +162,16 @@ impl ToolWindow for ResetWindow {
                 let (target, branch, mode) = (self.target.clone(), self.branch.clone(), self.mode);
                 let short_target = self.short_target().to_string();
                 let undo = nicegit_core::undo::UndoMode::for_reset(mode);
-                cx.act_recording(format!("Reset {}", self.branch), "Reset", Some(short_target.clone()), undo, move |client, repo| {
-                    client.reset(&target, mode, &branch, &head, repo)?;
-                    Ok(Some(format!("Reset {branch} to {short_target}.")))
-                });
+                cx.act_recording(
+                    tr_fmt!("Reset {branch}", branch = self.branch),
+                    tr("Reset"),
+                    Some(short_target.clone()),
+                    undo,
+                    move |client, repo| {
+                        client.reset(&target, mode, &branch, &head, repo)?;
+                        Ok(Some(tr_fmt!("Reset {branch} to {target}.", branch = branch, target = short_target)))
+                    },
+                );
                 self.closing = true;
             }
         }

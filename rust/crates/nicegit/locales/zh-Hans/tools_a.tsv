@@ -1,0 +1,440 @@
+# zh-Hans: tools and pull request windows (group A). Format: English source, a tab, then the translation.
+Stores large files outside Git's history. Git keeps a small pointer in their place.	将大文件存储在 Git 历史之外。Git 会在原处保留一个小指针。
+Read Git LFS again	重新读取 Git LFS
+Reading Git LFS status…	正在读取 Git LFS 状态…
+Git LFS is not installed, so new files cannot be stored with it. Install it from https://git-lfs.com, then run `git lfs install` once.	未安装 Git LFS，因此无法用它存储新文件。请从 https://git-lfs.com 安装，然后运行一次 `git lfs install`。
+Installed, {version}	已安装，{version}
+Tracked patterns	已跟踪的模式
+No patterns yet. Files that match a pattern are stored with Git LFS.	还没有模式。与模式匹配的文件将使用 Git LFS 存储。
+Untrack	取消跟踪
+Store new versions of matching files in Git itself. Files already committed are unchanged.	将匹配文件的新版本直接存储在 Git 中。已提交的文件保持不变。
+Track a pattern	跟踪模式
+Track	跟踪
+LFS pattern	LFS 模式
+Tracking changes .gitattributes. Commit that file so everyone stores these files the same way.	跟踪会修改 .gitattributes。提交该文件，以便所有人以相同方式存储这些文件。
+Files in Git LFS ({count})	Git LFS 中的文件（{count}）
+No tracked files use Git LFS yet.	还没有已跟踪的文件使用 Git LFS。
+Not downloaded	未下载
+Only the LFS pointer is here. Install Git LFS and pull to download the content.	这里只有 LFS 指针。请安装 Git LFS 并拉取以下载内容。
+Locks	锁定
+Read the locks from the remote again	重新从远程读取锁定信息
+Reading file locks…	正在读取文件锁定…
+No user.name is set, so no lock is shown as yours.	未设置 user.name，因此不会将任何锁定显示为你的。
+The server could not confirm ownership, so locks are yours when their owner is {name}.	服务器无法确认所有权，因此当所有者为 {name} 时，锁定才算作你的。
+No files are locked.	没有锁定的文件。
+Unlock	解锁
+Force unlock…	强制解锁…
+Release a lock another person holds	释放他人持有的锁定
+Ownership was compared with your user.name, "{name}".	已与你的 user.name“{name}”进行比较。
+The server confirmed the owner.	服务器已确认所有者。
+Force unlock	强制解锁
+Track {pattern}	跟踪 {pattern}
+Untrack {pattern}	取消跟踪 {pattern}
+{action} {path}	{action} {path}
+Tracking {pattern}.	正在跟踪 {pattern}。
+No longer tracking {pattern}.	已不再跟踪 {pattern}。
+Unlocked {path}.	已解锁 {path}。
+Force unlock {path}? It is locked by {owner}. They may lose unsaved work they meant to upload. {note}	要强制解锁 {path} 吗？它由 {owner} 锁定。对方可能会丢失打算上传的未保存工作。{note}
+No files changed.	没有更改的文件。
+Choose a file to see its changes and review comments.	选择一个文件以查看其更改和审查评论。
+Loading the diff	正在加载差异
+The diff has no lines to show for this file.	此文件没有可显示的差异行。
+Loading review comments	正在加载审查评论
+Outdated comments	过时的评论
+Comments on lines not in the diff	差异之外行上的评论
+Showing the first {count} lines of this file.	正在显示此文件的前 {count} 行。
+Comment on line {number}	评论第 {number} 行
+Comment on this line	评论此行
+Resolved thread by {author}	线程已由 {author} 解决
+Show	显示
+Hide	隐藏
+Resolved	已解决
+Reply	回复
+Unresolve	取消解决
+Resolve	解决
+Reply text	回复内容
+Write a reply	撰写回复
+Post reply	发布回复
+Comment text	评论内容
+Write a comment	撰写评论
+Comment	评论
+Unknown author	未知作者
+someone	某人
+Reply to this thread.	回复此线程。
+Reply to review thread	回复审查线程
+Comment on line	评论行
+Resolve review thread	解决审查线程
+Reopen review thread	重新打开审查线程
+Post comment	发布评论
+Loading from GitHub	正在从 GitHub 加载
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login and check again.	未安装 GitHub CLI (gh)。请从 cli.github.com 安装，然后使用 gh auth login 登录并重新检查。
+Check again	重新检查
+GitHub CLI is not signed in. Run {command} in a terminal, then check again.	GitHub CLI 未登录。请在终端中运行 {command}，然后重新检查。
+Replied on #{number}.	已回复 #{number}。
+Commented on #{number}.	已评论 #{number}。
+Resolved a thread on #{number}.	已解决 #{number} 中的一个线程。
+Reopened a thread on #{number}.	已重新打开 #{number} 中的一个线程。
+Approved #{number}.	已批准 #{number}。
+Requested changes on #{number}.	已对 #{number} 请求修改。
+Merged #{number}.	已合并 #{number}。
+Pull request #{number}	拉取请求 #{number}
+by {author}	作者：{author}
+{count} files	{count} 个文件
+opened {when}	开启于 {when}
+updated {when}	更新于 {when}
+Description	描述
+Checks ({count})	检查 ({count})
+Conversation ({count})	讨论 ({count})
+Files ({count})	文件 ({count})
+{files} files changed, +{added} −{removed}	已更改 {files} 个文件，+{added} −{removed}
+Showing the first {count} files.	正在显示前 {count} 个文件。
+No description.	没有描述。
+{passed} passed, {failed} failed, {pending} pending	{passed} 项通过，{failed} 项失败，{pending} 项待定
+No checks reported.	没有报告的检查。
+Open check	打开检查
+No reviews or comments yet.	还没有审查或评论。
+{count} review threads ({unresolved} unresolved)	{count} 个审查线程（{unresolved} 个未解决）
+commented	已评论
+approved	已批准
+changes requested	已请求修改
+review required	需要审查
+dismissed	已驳回
+pending	待定
+reviewed	已审查
+open	开启
+draft	草稿
+merged	已合并
+closed	已关闭
+no author	无作者
+Open in browser	在浏览器中打开
+Merge…	合并…
+Review…	审查…
+The pull request is still loading.	拉取请求仍在加载。
+Wait for the current action to finish.	请等待当前操作完成。
+A merged or closed pull request cannot be reviewed.	已合并或已关闭的拉取请求无法审查。
+Approve, request changes on, or comment on this pull request.	批准、请求修改或评论此拉取请求。
+Merge this pull request into its base branch.	将此拉取请求合并到其基础分支。
+A draft cannot be merged. Mark it ready for review first.	草稿无法合并。请先将其标记为可供审查。
+This pull request is already merged.	此拉取请求已合并。
+A closed pull request cannot be merged.	已关闭的拉取请求无法合并。
+GitHub does not report this pull request as mergeable. Refresh to check again.	GitHub 未报告此拉取请求可合并。请刷新以再次检查。
+A merged or closed pull request cannot take review comments.	已合并或已关闭的拉取请求无法添加审查评论。
+Your GitHub login could not be read, so the author cannot be checked. Refresh to try again.	无法读取你的 GitHub 登录名，因此无法检查作者。请刷新后重试。
+You wrote this pull request, so you cannot approve or request changes on it. You can still comment.	这是你创建的拉取请求，因此你无法批准或请求修改。你仍可以评论。
+Review pull request	审查拉取请求
+Merge pull request	合并拉取请求
+Review	审查
+Approve	批准
+Request changes	请求修改
+Optional comment	可选评论
+Approving tells the author the pull request is ready.	批准会告诉作者此拉取请求已就绪。
+Say what needs to change	说明需要修改的内容
+Asks the author to make changes. A comment is required.	请作者进行修改。必须填写评论。
+Posts your comment without approving or requesting changes. A comment is required.	发布你的评论，不批准也不请求修改。必须填写评论。
+Submit review	提交审查
+Method	方式
+Create a merge commit	创建合并提交
+Squash and merge	压缩并合并
+Rebase and merge	变基并合并
+From {head} into {base}	从 {head} 合并到 {base}
+Head commit {oid}	头部提交 {oid}
+The merge goes ahead only if the head commit is still this one.	只有当头部提交仍为此提交时，才会执行合并。
+Sending to GitHub	正在发送到 GitHub
+Identity	身份
+Profiles	配置文件
+Commit identity	提交身份
+Commits made in this repository use this name and email. Other repositories keep their own.	在此仓库中创建的提交使用此名称和邮箱。其他仓库保留各自的设置。
+Reading the identity	正在读取身份
+Name	名称
+Email	邮箱
+Saved the commit identity for this repository.	已保存此仓库的提交身份。
+Saved profiles	已保存的配置文件
+A profile stores a name, email, and optional signing key. Applying one sets this repository's identity. A profile with a key also turns on commit signing.	配置文件保存名称、邮箱和可选的签名密钥。应用后会设置此仓库的身份。包含密钥的配置文件还会启用提交签名。
+Signing key	签名密钥
+Optional: GPG key ID or SSH public key path	可选：GPG 密钥 ID 或 SSH 公钥路径
+When set, applying this profile signs commits with this key.	设置后，应用此配置文件会使用此密钥对提交签名。
+Saves {identity} from the Identity tab.	从“身份”标签页保存 {identity}。
+Save as profile	保存为配置文件
+No saved profiles yet	还没有已保存的配置文件
+Signs commits	为提交签名
+Forget this profile on this computer	在此计算机上删除此配置文件
+No remotes yet. Add one below.	还没有远程仓库。请在下方添加。
+Add a remote	添加远程仓库
+Remote name	远程仓库名称
+URL	URL
+Remote URL	远程仓库 URL
+Edit remote name	编辑远程仓库名称
+Fetch URL	Fetch URL
+Edit fetch URL	编辑 Fetch URL
+Push URL	Push URL
+Same as fetch URL	与 Fetch URL 相同
+Edit push URL	编辑 Push URL
+This remote pushes to several URLs; NiceGit leaves them as they are.	此远程仓库会推送到多个 URL，NiceGit 会保持它们不变。
+Save remote	保存远程仓库
+No fetch URL	没有 Fetch URL
+NiceGit forgets this remote and deletes its remote-tracking branches from this repository. Local branches that track it lose their upstream. Nothing on the server changes.	NiceGit 会忘记此远程仓库，并从此仓库删除其远程跟踪分支。跟踪它的本地分支将失去上游设置。服务器上的内容不会改变。
+Repository Settings	仓库设置
+An action is running. Controls return when it finishes.	正在执行操作。操作完成后将恢复控件。
+the name and email	名称和邮箱
+Save identity	保存身份
+Apply identity	应用身份
+Applied {label} to this repository.	已将 {label} 应用到此仓库。
+A remote named {name} already exists.	名为 {name} 的远程仓库已存在。
+Add remote {name}	添加远程仓库 {name}
+Added remote {name}.	已添加远程仓库 {name}。
+Remove remote {name}	删除远程仓库 {name}
+Save remote {name}	保存远程仓库 {name}
+Saved remote {name}.	已保存远程仓库 {name}。
+Removed remote {name}.	已删除远程仓库 {name}。
+Push: {address}	Push：{address}
+Pick	选用
+Reword	改写
+Squash	压缩
+Fixup	修正
+Drop	丢弃
+Keep this commit as it is	保持此提交不变
+Keep this commit with a new message	保留此提交，但使用新的消息
+Stop after this commit so you can change its files	在此提交后停止，以便修改其文件
+Combine into the nearest kept commit below, keeping both messages	合并到下方最近的保留提交中，并保留两条消息
+Combine into the nearest kept commit below, discarding this message	合并到下方最近的保留提交中，并丢弃此消息
+Remove this commit and its changes	删除此提交及其更改
+The selected commits must be in the loaded history, and none can be a merge.	所选提交必须位于已加载的历史中，并且不能是合并提交。
+The oldest kept commit has no earlier commit to combine into. Pick or reword it instead.	最早的保留提交前面没有可合并到的提交。请改为选用或改写它。
+A reworded commit needs a message.	改写的提交需要一条消息。
+Result: {kept} {commits}, {dropped} dropped	结果：{kept} {commits}，{dropped} 个已丢弃
+Result: {kept} {commits}	结果：{kept} {commits}
+commit	提交
+commits	提交
+commit is	提交
+commits are	提交
+fixup or squash commit	fixup 或 squash 提交
+fixup or squash commits	fixup 或 squash 提交
+Rewrite {count} {commits} on {branch}. Listed newest first; drag a row by its grip or use the arrows to reorder. Squash and fixup combine a commit into the nearest kept commit below it.	改写 {branch} 上的 {count} {commits}。按从新到旧列出；拖动行的抓手或使用箭头重新排序。Squash 和 fixup 会将提交合并到下方最近的保留提交中。
+Selected commits were moved next to each other; moving commits can cause conflicts.	所选提交已移到彼此相邻的位置；移动提交可能导致冲突。
+{published} of these {commits} already on a remote. Rewriting them means you will need to force-push, and anyone who has them must reconcile their copies.	其中 {published} 个{commits}已在远程仓库中。改写它们后需要强制推送，持有这些提交的人必须同步各自的副本。
+Reading commits...	正在读取提交...
+Rewrite commits	改写提交
+Reset edits	重置编辑
+Apply fixups	应用 fixup
+Move each fixup! or squash! commit directly after the commit it names, and set it to Fixup or Squash	将每个 fixup! 或 squash! 提交移到它所指向的提交之后，并将其设为 Fixup 或 Squash
+Wait for the plan to load and for the current Git action to finish	请等待计划加载完成，并等待当前的 Git 操作完成
+No fixup! or squash! commit names an earlier commit in this list.	此列表中没有 fixup! 或 squash! 提交指向更早的提交。
+Applied {count} {noun}; each sits directly after the commit it names.	已应用 {count} 个{noun}；每个都位于其所指向的提交之后。
+{placed} Moving commits can cause conflicts.	{placed} 移动提交可能导致冲突。
+Rewrite commits on {branch}	改写 {branch} 上的提交
+Interactive rebase	交互式变基
+Rewrote {count} commits on {branch}.	已改写 {branch} 上的 {count} 个提交。
+Stopped at “{subject}”	停止于“{subject}”
+Stopped	已停止
+{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase.	{stopped_at}，以便你进行修改。编辑并暂存文件，然后点击“继续”将其合并；“中止”会撤销整个变基。
+Some selected commits are not part of {branch}'s history.	部分所选提交不属于 {branch} 的历史。
+This commit is not part of {branch}'s history.	此提交不属于 {branch} 的历史。
+Action for {subject}	{subject} 的操作
+Message for {subject}	{subject} 的消息
+Drag to reorder	拖动以重新排序
+Move up	上移
+Move down	下移
+Combined into the commit below	已合并到下方的提交
+Already on a remote	已在远程仓库中
+New commit message	新的提交消息
+Edit commit message	编辑提交消息
+Squash commits	压缩提交
+Drop commits	丢弃提交
+Finish or abort the {operation} in progress before stashing.	贮藏前请先完成或中止正在进行的 {operation}。
+Wait for the current Git action to finish.	请等待当前的 Git 操作完成。
+There are no changes to stash.	没有可贮藏的更改。
+Select files to stash.	请选择要贮藏的文件。
+WIP on {branch}	{branch} 上的进行中工作
+Stash message	贮藏消息
+Include untracked files	包括未跟踪的文件
+None	无
+All	全部
+No changed files.	没有更改的文件。
+(untracked)	(未跟踪)
+Stash {count} file	贮藏 {count} 个文件
+Stash {count} files	贮藏 {count} 个文件
+Stash {count} selected files	贮藏所选的 {count} 个文件
+Saved your changes in a stash.	已将你的更改保存到贮藏中。
+Saved {count} selected files in a stash.	已将所选的 {count} 个文件保存到贮藏中。
+No stashes	没有贮藏
+Delete stash	删除贮藏
+Restore the changes, then remove the stash if they apply	恢复更改，如果更改成功应用则删除贮藏
+Restore the changes and keep the stash	恢复更改并保留贮藏
+Rename	重命名
+Give the stash a new name. It moves to the top of the list	为贮藏重新命名。它会移到列表顶部
+Rename {reference}	重命名 {reference}
+New name	新名称
+Apply {reference}	应用 {reference}
+Applied {reference}.	已应用 {reference}。
+Apply {reference} and remove it? The stash is removed only after its changes apply. If applying fails or conflicts, it is kept.	应用 {reference} 并将其删除？只有在更改应用后才会删除贮藏。如果应用失败或产生冲突，贮藏会被保留。
+Pop stash	应用并删除贮藏
+Pop {reference}	应用并删除 {reference}
+Popped {reference}.	已应用并删除 {reference}。
+Delete {reference}? Undo can bring it back while NiceGit is open.	删除 {reference}？在 NiceGit 打开期间，可以撤销以将其恢复。
+Delete {reference}	删除 {reference}
+Deleted {reference}.	已删除 {reference}。
+Select a stash to see its changes.	选择一个贮藏以查看其更改。
+Reading the stash...	正在读取贮藏...
+Set changes aside to switch work or clean up, and restore them later.	暂存更改以便切换工作或清理，之后再恢复它们。
+Saved stashes	已保存的贮藏
+Destination	目标
+Replayed commit	重放的提交
+Current	当前
+Incoming	传入
+Git will remember how you resolve conflicts and reuse it when the same conflict happens again.	Git 会记住你解决冲突的方式，并在同样的冲突再次出现时重复使用。
+Git will no longer remember how you resolve conflicts.	Git 将不再记住你解决冲突的方式。
+Remember how I resolve conflicts	记住我解决冲突的方式
+Git will reuse your resolution if the same conflict happens again, for example in a later rebase.	如果再次出现相同的冲突（例如在之后的变基中），Git 会重复使用你的解决方式。
+Remember conflict resolutions	记住冲突解决方式
+Resolve conflict: {path}	解决冲突：{path}
+Save or discard the result first.	请先保存或放弃结果。
+Wait for the current action.	请等待当前操作完成。
+Resolve in {tool}	在 {tool} 中解决
+Resolve in merge tool	在合并工具中解决
+Reading the conflicted file...	正在读取有冲突的文件...
+Result	结果
+The result still has conflict markers. Remove them before saving.	结果中仍有冲突标记。请先删除后再保存。
+Git reused a resolution you recorded earlier. Check it, then mark the file resolved.	Git 重复使用了你之前记录的解决方式。请检查后将文件标记为已解决。
+base	基础
+Replace the result with the {name} version? Edits in the result are lost.	用 {name} 版本替换结果？结果中的编辑将丢失。
+Use version	使用此版本
+Take the {name} version of the whole file? This replaces the working file and discards editor changes.	采用整个文件的 {name} 版本？这会替换工作文件并放弃编辑器中的更改。
+Take version	采用版本
+Delete this file? This removes the working file and discards editor changes.	删除此文件？这会移除工作文件并放弃编辑器中的更改。
+Close the editor and discard its changes?	关闭编辑器并放弃其中的更改？
+Discard changes	放弃更改
+Whole file	整个文件
+Take {side}	采用{side}
+Save and mark resolved	保存并标记为已解决
+Remove the conflict markers first.	请先删除冲突标记。
+Resolve {path}	解决 {path}
+Resolved {path}	已解决 {path}。
+Not available for this file.	此文件不可用。
+Copy into result	复制到结果
+Take current version of {path}	采用 {path} 的当前版本
+Take incoming version of {path}	采用 {path} 的传入版本
+Delete {path}	删除 {path}
+Not checked out	未检出
+At recorded commit	位于记录的提交
+Different commit	不同的提交
+Local changes	本地更改
+Recorded  {commit}	记录  {commit}
+Checked out  {commit}	已检出  {commit}
+This submodule has uncommitted changes. Checking out the recorded commit keeps them when Git can, and Git refuses when they would be overwritten.	此子模块有未提交的更改。检出记录的提交时，Git 能保留它们则保留，若会被覆盖则 Git 会拒绝。
+Check out recorded commit	检出记录的提交
+Initialise and check out	初始化并检出
+Already at the recorded commit	已位于记录的提交
+Remove…	删除…
+Commit or discard its changes before removing it	删除前请先提交或放弃其更改
+Removing deletes this submodule's checkout and stages the removal of its .gitmodules entry and its gitlink, so the change takes effect when you commit. The module's Git data in .git/modules is kept. Removal is refused while the checkout has uncommitted or ignored files.	删除会移除此子模块的检出，并暂存其 .gitmodules 条目和 gitlink 的删除，因此更改在提交时生效。.git/modules 中的模块 Git 数据会保留。检出中有未提交或被忽略的文件时将拒绝删除。
+Remove submodule	删除子模块
+Remove submodule {path}	删除子模块 {path}
+Removed {path}. Its .gitmodules entry and gitlink are staged for commit.	已删除 {path}。其 .gitmodules 条目和 gitlink 已暂存待提交。
+Add a submodule	添加子模块
+Clones the repository at this URL into the path, then stages the new .gitmodules entry and gitlink for commit.	将此 URL 的仓库克隆到该路径，然后暂存新的 .gitmodules 条目和 gitlink 待提交。
+Repository URL	仓库 URL
+https://… or a local path	https://… 或本地路径
+Optional, the remote's default	可选，远程仓库的默认分支
+Add submodule	添加子模块
+Add submodule {path}	添加子模块 {path}
+Added {path}. Its .gitmodules entry and gitlink are staged for commit.	已添加 {path}。其 .gitmodules 条目和 gitlink 已暂存待提交。
+Submodules are repositories nested in this one. Each is checked out at the commit this repository records.	子模块是嵌套在此仓库中的仓库。每个子模块都检出到此仓库记录的提交。
+Update all	全部更新
+Update all submodules	更新所有子模块
+Checked out every submodule at its recorded commit.	已将每个子模块检出到其记录的提交。
+Sync URLs	同步 URL
+Sync submodule URLs	同步子模块 URL
+Copied the submodule URLs from .gitmodules into their checkouts.	已将 .gitmodules 中的子模块 URL 复制到各自的检出中。
+Add submodule…	添加子模块…
+Reading submodules	正在读取子模块
+This repository has no submodules.	此仓库没有子模块。
+Check out {path}	检出 {path}
+Checked out the recorded commit in {path}.	已在 {path} 中检出记录的提交。
+Reading the bisect status	正在读取二分查找状态
+Bisect finds the commit that introduced a problem. Give a commit that is known to be good; NiceGit then tests the commits between it and the current commit.	二分查找会找出引入问题的提交。请指定一个已知正常的提交；NiceGit 随后会测试它与当前提交之间的各个提交。
+current commit	当前提交
+This repository has no commits yet.	此仓库还没有提交。
+Commit, branch, or tag known to work	已知正常的提交、分支或标签
+Finish the current Git operation before starting a bisect.	开始二分查找前，请先完成当前的 Git 操作。
+Start bisect	开始二分查找
+Bisect started. Mark the checked-out commit as good or bad.	已开始二分查找。请将检出的提交标记为正常或有问题。
+Checkouts happen during a bisect, so commit or stash changes first.	二分查找期间会切换检出，因此请先提交或贮藏更改。
+First bad commit	第一个有问题的提交
+Subject unavailable	无法获取主题
+Git narrowed the search to this commit. Select it in the graph to inspect it.	Git 已将搜索范围缩小到此提交。请在图中选中它进行检查。
+Select commit	选择提交
+Bisect ended. Returned to the starting checkout.	已结束二分查找，并已返回起始检出。
+Testing	测试
+No commit is checked out for testing.	没有检出用于测试的提交。
+{good} good, {bad} bad, {skipped} skipped so far. Returns to {checkout} when ended.	目前有 {good} 个正常、{bad} 个有问题、{skipped} 个已跳过。结束后将返回 {checkout}。
+Return to {checkout}	返回 {checkout}
+Mark {label}	标记为{label}
+One more mark should find the first bad commit.	再标记一次应能找到第一个有问题的提交。
+About 1 more mark after this one.	此后大约还需标记 1 次。
+About {count} more marks after this one.	此后大约还需标记 {count} 次。
+Mark this commit good or bad.	将此提交标记为正常或有问题。
+the starting checkout	起始检出
+Wait for the current Git action to finish before checking out a pull request.	检出拉取请求前，请等待当前的 Git 操作完成。
+Finish or abort the current Git operation before checking out a pull request.	检出拉取请求前，请先完成或中止当前的 Git 操作。
+Wait for the current Git action to finish before starting work on an issue.	开始处理 issue 前，请等待当前的 Git 操作完成。
+Finish or abort the current Git operation before starting work on an issue.	开始处理 issue 前，请先完成或中止当前的 Git 操作。
+Make a first commit before starting work on an issue, so there is a HEAD to start from.	开始处理 issue 前请先创建一次提交，以便有可以起步的 HEAD。
+Add a GitHub remote to load these	添加 GitHub 远程仓库以加载这些内容
+Open with filters and closed items	打开并使用筛选和已关闭项目
+Open GitHub window	打开 GitHub 窗口
+Load from GitHub	从 GitHub 加载
+No open {kind}	没有打开的{kind}
+Copy link	复制链接
+View details…	查看详情…
+Check out locally…	在本地检出…
+Start work…	开始处理…
+Load {count} more	再加载 {count} 个
+The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.	未安装 GitHub CLI (gh)。请从 cli.github.com 安装，然后使用 gh auth login 登录。
+The branch's {remote} remote changed after this dialog opened, so nothing was created. Close the dialog and open it again.	此对话框打开后，分支的 {remote} 远程仓库已发生变化，因此未创建任何内容。请关闭对话框后重新打开。
+pull request	拉取请求
+merge request	合并请求
+Create {noun}	创建{noun}
+Creating the {noun} on {forge}	正在 {forge} 上创建{noun}
+{repo} on {host}	{repo}（{host}）
+Your branch has {count} commit that is not pushed. Push first, or the pull request will not include it.	你的分支有 {count} 个提交尚未推送。请先推送，否则拉取请求将不包含它。
+Your branch has {count} commits that are not pushed. Push first, or the pull request will not include them.	你的分支有 {count} 个提交尚未推送。请先推送，否则拉取请求将不包含它们。
+Base branch	基础分支
+{tool} is not signed in to {host}. Run {command} in a terminal, then open this dialog again.	{tool} 尚未登录 {host}。请在终端中运行 {command}，然后重新打开此对话框。
+Title	标题
+Body	正文
+Create as a draft	创建为草稿
+Open in browser instead	改为在浏览器中打开
+Created {noun} {marker}{number}.	已创建{noun} {marker}{number}。
+Needs your review	需要你审查
+Yours	我的
+Other open	其他已打开
+The read stopped before it finished. Refresh to try again.	读取在完成前停止。请刷新后重试。
+Include workspace	包括工作区
+Open a repository, or choose a workspace, to see its pull and merge requests.	打开一个仓库或选择一个工作区，即可查看其拉取请求和合并请求。
+Loading {count} repository	正在加载 {count} 个仓库
+Loading {count} repositories	正在加载 {count} 个仓库
+Showing the first {limit} open pull requests of each repository.	正在显示每个仓库的前 {limit} 个已打开的拉取请求。
+Not available	不可用
+by a deleted account	由已删除的账户创建
+Check out is available for GitHub pull requests only.	检出仅适用于 GitHub 拉取请求。
+This repository has no {remote} remote, so its pull requests cannot be read.	此仓库没有 {remote} 远程仓库，因此无法读取其拉取请求。
+Bitbucket pull requests are not listed here.	此处不列出 Bitbucket 拉取请求。
+Azure DevOps pull requests are not listed here.	此处不列出 Azure DevOps 拉取请求。
+{count} passing	{count} 项通过
+{count} failing	{count} 项失败
+{count} pending	{count} 项待定
+No checks	没有检查
+team {name}	团队 {name}
+Review requested from {names}	已请求 {names} 审查
+updated {count} minute ago	{count} 分钟前更新
+updated {count} minutes ago	{count} 分钟前更新
+updated {count} hour ago	{count} 小时前更新
+updated {count} hours ago	{count} 小时前更新
+updated {count} day ago	{count} 天前更新
+updated {count} days ago	{count} 天前更新
+updated just now	刚刚更新
+updated over a month ago	更新于一个多月前
+Add remote	添加远程仓库
+Comment on {location}	评论 {location}
+Base	基础
+Start a bisect	开始二分查找

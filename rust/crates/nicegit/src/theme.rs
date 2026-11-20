@@ -26,9 +26,9 @@ pub enum GraphPalette {
 impl GraphPalette {
     pub fn title(self) -> &'static str {
         match self {
-            GraphPalette::Standard => "Standard",
-            GraphPalette::ColorBlindSafe => "Colour-blind safe",
-            GraphPalette::Muted => "Muted",
+            GraphPalette::Standard => crate::i18n::tr("Standard"),
+            GraphPalette::ColorBlindSafe => crate::i18n::tr("Colour-blind safe"),
+            GraphPalette::Muted => crate::i18n::tr("Muted"),
         }
     }
 

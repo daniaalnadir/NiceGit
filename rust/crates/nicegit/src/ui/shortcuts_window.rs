@@ -1,6 +1,7 @@
 use egui::RichText;
 
 use crate::app::NiceGitApp;
+use crate::i18n::tr;
 use crate::theme;
 use crate::tools::widgets;
 
@@ -11,50 +12,50 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
     let with = |keys: &str| keys.replace("Cmd", command).replace("Alt", alt);
     vec![
         (
-            "Anywhere",
+            tr("Anywhere"),
             vec![
-                (with("Shift-Cmd-P"), "Command palette"),
-                (with("Cmd-P"), "Go to a file"),
-                (with("Cmd-O"), "Open a repository"),
-                (with("Cmd-1 … Cmd-9"), "Go to a repository tab; Cmd-9 for the last"),
-                (with("Cmd-W"), "Close the open window, or else the repository tab"),
-                (with("Cmd-R"), "Refresh the repository"),
-                (with("Shift-Cmd-F"), "Search the history of every branch"),
-                (with("Shift-Cmd-L"), "Filter the changed files"),
-                (with("Alt-Cmd-F"), "Search file contents"),
-                (with("Shift-Cmd-H"), "Go to the checked-out commit"),
-                ("Ctrl-`".to_string(), "Show or hide the terminal"),
-                (with("Cmd-,"), "Settings"),
-                (with("Cmd-+, Cmd-−"), "Make everything larger or smaller"),
-                (with("Cmd-0"), "Normal size"),
-                (with("Cmd-/"), "These shortcuts"),
+                (with("Shift-Cmd-P"), tr("Command palette")),
+                (with("Cmd-P"), tr("Go to a file")),
+                (with("Cmd-O"), tr("Open a repository")),
+                (with("Cmd-1 … Cmd-9"), tr("Go to a repository tab; Cmd-9 for the last")),
+                (with("Cmd-W"), tr("Close the open window, or else the repository tab")),
+                (with("Cmd-R"), tr("Refresh the repository")),
+                (with("Shift-Cmd-F"), tr("Search the history of every branch")),
+                (with("Shift-Cmd-L"), tr("Filter the changed files")),
+                (with("Alt-Cmd-F"), tr("Search file contents")),
+                (with("Shift-Cmd-H"), tr("Go to the checked-out commit")),
+                ("Ctrl-`".to_string(), tr("Show or hide the terminal")),
+                (with("Cmd-,"), tr("Settings")),
+                (with("Cmd-+, Cmd-−"), tr("Make everything larger or smaller")),
+                (with("Cmd-0"), tr("Normal size")),
+                (with("Cmd-/"), tr("These shortcuts")),
             ],
         ),
         (
-            "History",
+            tr("History"),
             vec![
-                ("Up, Down".to_string(), "Select the previous or next commit"),
-                ("Home, End".to_string(), "Jump to the top or bottom of the loaded history"),
-                (with("Cmd-click"), "Mark several commits to cherry-pick"),
-                ("Escape".to_string(), "Clear the selection"),
+                ("Up, Down".to_string(), tr("Select the previous or next commit")),
+                ("Home, End".to_string(), tr("Jump to the top or bottom of the loaded history")),
+                (with("Cmd-click"), tr("Mark several commits to cherry-pick")),
+                ("Escape".to_string(), tr("Clear the selection")),
             ],
         ),
         (
-            "Diff",
+            tr("Diff"),
             vec![
-                (with("Alt-Up, Alt-Down"), "Open the previous or next changed file"),
-                (with("Shift-Cmd-S"), "Stage or unstage the open file"),
-                (with("Cmd-F"), "Find in the diff"),
-                ("Enter, Shift-Enter".to_string(), "Next or previous match"),
-                ("Escape".to_string(), "Back to the history"),
+                (with("Alt-Up, Alt-Down"), tr("Open the previous or next changed file")),
+                (with("Shift-Cmd-S"), tr("Stage or unstage the open file")),
+                (with("Cmd-F"), tr("Find in the diff")),
+                ("Enter, Shift-Enter".to_string(), tr("Next or previous match")),
+                ("Escape".to_string(), tr("Back to the history")),
             ],
         ),
         (
-            "Committing",
+            tr("Committing"),
             vec![
-                (with("Cmd-Enter"), "Commit the staged changes"),
-                (with("Shift-Cmd-Enter"), "Commit and push"),
-                (with("Cmd-S"), "Save in the built-in editor"),
+                (with("Cmd-Enter"), tr("Commit the staged changes")),
+                (with("Shift-Cmd-Enter"), tr("Commit and push")),
+                (with("Cmd-S"), tr("Save in the built-in editor")),
             ],
         ),
     ]
@@ -66,7 +67,7 @@ impl NiceGitApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Keyboard shortcuts")
+        egui::Window::new(tr("Keyboard shortcuts"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
