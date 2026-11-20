@@ -154,13 +154,11 @@ pub fn focused_row_key() -> egui::Id {
 /// whether it is HEAD. Built only when a screen reader is listening.
 fn commit_description(commit: &Commit, is_head: bool) -> String {
     let mut parts = vec![tr_fmt!("Commit {id}", id = commit.short_hash), tr_fmt!("by {author}", author = commit.author_name)];
-    let mut parts = vec![format!("Commit {}", commit.short_hash), format!("by {}", commit.author_name)];
     if !commit.relative_date.is_empty() {
         parts.push(commit.relative_date.clone());
     }
     if !commit.refs.is_empty() {
         parts.push(tr_fmt!("labels {refs}", refs = commit.refs.join(", ")));
-        parts.push(format!("labels {}", commit.refs.join(", ")));
     }
     if is_head {
         parts.push("HEAD".into());

@@ -71,7 +71,6 @@ impl NiceGitApp {
                             self.commit_menu(ui, &commit, &snapshot, can_switch);
                         });
                         crate::tools::widgets::name_icon(&menu.response, tr("More actions for this commit"));
-                        crate::tools::widgets::name_icon(&menu.response, "More actions for this commit");
                     }
                 });
             });
