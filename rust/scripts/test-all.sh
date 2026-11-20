@@ -49,6 +49,9 @@ fi
 
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nicegit-test-all.XXXXXX")"
 LINUX_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/nicegit-linux"
+# Every checkout is mounted at /src, so Cargo would take one checkout's build for another's
+# when their files are older; each checkout gets its own build folder.
+LINUX_TARGET="$LINUX_CACHE/target-$(printf '%s' "$RUST_DIR" | shasum | cut -c1-12)"
 
 # Runs inside the container: installs the system libraries, then runs the
 # suite REPEATS times, printing one NICEGIT_RESULT line per repeat.
@@ -96,10 +99,10 @@ run_macos() {
 }
 
 run_linux() {
-  mkdir -p "$LINUX_CACHE/target" "$LINUX_CACHE/registry"
+  mkdir -p "$LINUX_TARGET" "$LINUX_CACHE/registry"
   docker run --rm --cpus=2 \
     -v "$RUST_DIR:/src:ro" \
-    -v "$LINUX_CACHE/target:/target" \
+    -v "$LINUX_TARGET:/target" \
     -v "$LINUX_CACHE/registry:/usr/local/cargo/registry" \
     -e CARGO_TARGET_DIR=/target \
     rust:latest \
