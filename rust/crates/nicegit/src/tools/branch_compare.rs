@@ -147,6 +147,8 @@ fn commit_row(ui: &mut Ui, cx: &mut Ctx, commit: &ComparedCommit) {
         })
         .response
         .interact(Sense::click());
+    // The row is a click target painted from labels, so it is named for screen readers.
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{} {}", short(&commit.hash), commit.subject)));
     if response.clicked() {
         cx.select_commit(commit.hash.clone());
     }
