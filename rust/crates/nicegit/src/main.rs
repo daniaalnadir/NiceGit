@@ -28,6 +28,8 @@ mod ui_screenshots;
 #[cfg(test)]
 mod ui_tests;
 #[cfg(test)]
+mod ui_tests_absorb;
+#[cfg(test)]
 mod ui_tests_ai_message;
 #[cfg(test)]
 mod ui_tests_apply_patch;

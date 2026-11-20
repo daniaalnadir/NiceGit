@@ -93,3 +93,4 @@
 - `git apply --numstat -z` gives a rename only its new path, and `--summary` writes unquoted text that is not NUL-separated; read a patch's file statuses and old paths from its header lines before the first hunk.
 - Tests that start a long-running Git program, such as `git daemon`, must start the real program (`git-daemon` from `git --exec-path`): the `git` wrapper runs it as its own child, so killing the wrapper leaves it running for good, holding any pipes inherited from tests running at the same time.
 - `git range-diff` refuses a series with no commits (`A..A`, "need two commit ranges"); list the other side's commits directly, as `range_diff` does, instead of asking Git.
+- Absorb places each staged hunk by mapping HEAD's line numbers onto the rebuilt commit's tree; `git apply --unidiff-zero` at HEAD's numbers puts a zero-context insertion in the wrong place once a later commit has shifted the lines above it.
