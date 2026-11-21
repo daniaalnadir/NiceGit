@@ -1,0 +1,19 @@
+# de: the command log window, its filters, rows, and menus.
+Command Log	Befehlsprotokoll
+Filter commands	Befehle filtern
+Show reads	Lesevorgänge anzeigen
+Only this repository	Nur dieses Repository
+Copy all	Alle kopieren
+No Git commands have run yet.	Bisher hat NiceGit keine Git-Befehle ausgeführt.
+No commands match these filters.	Keine Befehle passen zu diesen Filtern.
+Copy command	Befehl kopieren
+Copy output	Ausgabe kopieren
+No error output.	Keine Fehlerausgabe.
+Succeeded	Erfolgreich
+Stopped or did not start.	Abgebrochen oder nicht gestartet.
+Command log	Befehlsprotokoll
+Command log…	Befehlsprotokoll …
+Show in command log	Im Befehlsprotokoll anzeigen
+Show the command log	Befehlsprotokoll anzeigen
+{milliseconds} ms	{milliseconds} ms
+Exited with status {code}.	Beendet mit Status {code}.

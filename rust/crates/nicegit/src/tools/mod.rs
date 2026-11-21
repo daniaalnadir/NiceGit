@@ -18,6 +18,7 @@ pub mod bisect;
 pub mod blame;
 pub mod branch_cleanup;
 pub mod branch_compare;
+pub mod command_log;
 pub mod commit_search;
 pub mod compare;
 pub mod conflict;
@@ -28,6 +29,7 @@ pub mod file_history;
 pub mod git_settings;
 pub mod gitflow;
 pub mod github;
+pub mod image_diff;
 pub mod insights;
 pub mod interactive_rebase;
 pub mod launchpad;
@@ -39,6 +41,7 @@ pub mod range_diff;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;
+pub mod snapshots;
 pub mod split_commit;
 pub mod stash;
 pub mod submodules;
@@ -96,6 +99,8 @@ pub enum Request {
     Dialog(Box<crate::ui::dialogs::Dialog>),
     /// Reload the repository.
     Refresh,
+    /// Remembers how changed images are compared, in the app settings.
+    SetImageDiffMode(image_diff::ImageDiffMode),
     /// Open a conflicted file, by its path, in the configured merge tool.
     OpenMergeTool(String),
     /// Switch to the repository the pull request is in, then open its Check out dialog.
@@ -120,6 +125,11 @@ pub struct Ctx<'a> {
     pub diff_context: DiffContext,
     /// The diff and merge tools the repository's configuration names, as last read.
     pub external: ExternalTools,
+    /// How changed images are compared, following the app setting.
+    pub image_diff_mode: image_diff::ImageDiffMode,
+    /// How many days snapshots are kept, when the repository is saved in snapshots; `None` when
+    /// they are off. See `Ctx::guard_rewrite`.
+    pub snapshot_keep_days: Option<u64>,
 }
 
 impl<'a> Ctx<'a> {
@@ -133,7 +143,14 @@ impl<'a> Ctx<'a> {
             requests,
             diff_context: DiffContext::default(),
             external: ExternalTools::default(),
+            image_diff_mode: image_diff::ImageDiffMode::default(),
+            snapshot_keep_days: None,
         }
+    }
+
+    /// Remembers how changed images are compared, in the app settings.
+    pub fn set_image_diff_mode(&mut self, mode: image_diff::ImageDiffMode) {
+        self.requests.push(Request::SetImageDiffMode(mode));
     }
 
     /// Opens a conflicted file in the configured merge tool. The app refuses while an action runs
@@ -151,6 +168,15 @@ impl<'a> Ctx<'a> {
     /// The diff options the app settings ask for: whitespace and context.
     pub fn diff_request(&self) -> DiffRequest {
         DiffRequest { ignore_whitespace: self.ignore_whitespace, context: self.diff_context }
+    }
+
+    /// Wraps an action that can overwrite or remove working files, so the files are saved as a
+    /// snapshot first. Use it wherever a tool starts such an action, as `act` takes no snapshot.
+    pub fn guard_rewrite<R>(
+        &self,
+        action: impl FnOnce(&GitClient, &Path) -> R + Send + 'static,
+    ) -> impl FnOnce(&GitClient, &Path) -> R + Send + 'static {
+        crate::autosnapshot::before_rewrite(self.snapshot_keep_days, action)
     }
 
     pub fn act(&mut self, label: impl Into<String>, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {

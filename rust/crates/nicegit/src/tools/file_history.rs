@@ -310,10 +310,18 @@ fn confirm_restore(ui: &mut Ui, cx: &mut Ctx, restore: &mut Option<PendingRestor
             if let Some(pending) = restore.take() {
                 let verb = if pending.removes_file { tr("Deleted") } else { tr("Restored") };
                 let label = tr_fmt!("Restore {path}", path = pending.path);
-                cx.act(label, move |git, directory| {
-                    git.restore(&pending.path, &pending.source, &pending.branch, pending.head.as_deref(), directory)?;
-                    Ok(Some(tr_fmt!("{verb} {path} {description}.", verb = verb, path = pending.path, description = pending.description)))
-                });
+                cx.act(
+                    label,
+                    cx.guard_rewrite(move |git, directory| {
+                        git.restore(&pending.path, &pending.source, &pending.branch, pending.head.as_deref(), directory)?;
+                        Ok(Some(tr_fmt!(
+                            "{verb} {path} {description}.",
+                            verb = verb,
+                            path = pending.path,
+                            description = pending.description
+                        )))
+                    }),
+                );
                 *close = true;
             }
         }

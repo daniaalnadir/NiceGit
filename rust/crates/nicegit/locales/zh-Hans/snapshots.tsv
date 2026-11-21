@@ -1,0 +1,37 @@
+# zh-Hans: working-tree snapshots, their restore and delete, and the Settings section.
+Snapshots	快照
+NiceGit saves copies of your working files while they change. Pick a snapshot to see what differs from now.	NiceGit 会在工作文件变化时保存它们的副本。选择一个快照，查看它与当前文件的差异。
+Read the snapshots again	重新读取快照
+Reading the snapshots…	正在读取快照…
+No snapshots yet. NiceGit saves them as your files change.	还没有快照。文件变化时 NiceGit 会保存快照。
+{count} file differs from now	与现在相比有 {count} 个文件不同
+{count} files differ from now	与现在相比有 {count} 个文件不同
+Select a snapshot to see its files.	选择一个快照，查看其中的文件。
+Restore {count} selected…	恢复所选的 {count} 个…
+Restore selected files…	恢复所选文件…
+Ticked files are written back to their saved versions. Your current versions are kept in a snapshot first.	勾选的文件会恢复为保存的版本。当前版本会先保存为一个快照。
+Save or close the file you are editing before restoring files.	恢复文件前，请先保存或关闭正在编辑的文件。
+Delete snapshot	删除快照
+Comparing the files…	正在比较文件…
+Nothing differs from now.	与现在相比没有任何不同。
+This file is not in the snapshot, so there is nothing to restore.	此文件不在快照中，因此无需恢复。
+Select a file to see what changed since the snapshot.	选择一个文件，查看自快照以来的变化。
+Reading the difference…	正在读取差异…
+Restore selected files	恢复所选文件
+This file in your working tree is replaced with its saved version.	工作区中的此文件将被替换为保存的版本。
+These {count} files in your working tree are replaced with their saved versions.	工作区中的这 {count} 个文件将被替换为保存的版本。
+Your current versions are saved as a snapshot first, so this can be undone.	当前版本会先保存为快照，因此可以撤销。
+Restore snapshot files	从快照恢复文件
+Restored {count} file.	已恢复 {count} 个文件。
+Restored {count} files.	已恢复 {count} 个文件。
+The snapshot is removed from this repository. Its files cannot be restored from it afterwards.	快照将从此仓库中删除。之后将无法再从它恢复文件。
+Deleted the snapshot.	已删除快照。
+Snapshots…	快照…
+Saved copies of your working files, to bring lost files back	工作文件的已保存副本，用于找回丢失的文件
+Save snapshots of my working files	保存工作文件的快照
+Save every	保存间隔
+1 min	1 分钟
+Keep for	保留时长
+1 day	1 天
+7 days	7 天
+Snapshots stay in this repository under refs/nicegit/snapshots and are never pushed by NiceGit. A git push --mirror would send them. Files over 20 MB are skipped.	快照保存在此仓库的 refs/nicegit/snapshots 中，NiceGit 从不推送它们。但 git push --mirror 会将其一并推送。超过 20 MB 的文件会被跳过。

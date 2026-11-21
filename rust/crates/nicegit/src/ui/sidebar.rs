@@ -276,8 +276,9 @@ impl NiceGitApp {
                         self.open_request_checks(check.forge, check.request);
                     }
                 }
+                let stacked = self.stack_parent_of(&branch.name).map(|parent| format!("\n\u{21b3} {parent}")).unwrap_or_default();
                 let response = response.on_hover_text(format!(
-                    "{}  {}{}{tracking_note}{}",
+                    "{}  {}{}{tracking_note}{}{stacked}",
                     short(&branch.tip),
                     branch.subject,
                     if in_other { format!("\n{}", tr("Checked out in another worktree")) } else { String::new() },
@@ -505,9 +506,12 @@ impl NiceGitApp {
                         ui.close();
                         let stash = stash.clone();
                         // The label names the stash, so a refusal can offer to apply it into the changes.
-                        self.act(&tr_fmt!("Apply {stash}", stash = stash.reference), move |client, path| {
-                            client.apply_stash(&stash, path).map(|_| Some(tr("Applied the stash.").into()))
-                        });
+                        self.act(
+                            &tr_fmt!("Apply {stash}", stash = stash.reference),
+                            self.guard_rewrite(move |client, path| {
+                                client.apply_stash(&stash, path).map(|_| Some(tr("Applied the stash.").into()))
+                            }),
+                        );
                     }
                     if ui
                         .add_enabled(allowed, egui::Button::new(format!("{}  {}", icon::TRAY_ARROW_UP, tr("Pop (apply and delete)"))))
@@ -931,6 +935,29 @@ impl NiceGitApp {
                             addresses: snapshot.remote_push_addresses.clone(),
                         },
                     );
+                }
+            }
+        }
+        if !branch.is_remote {
+            if let Some(stack) = self.stack_of(&branch.name).filter(|stack| stack.branches.len() >= 2) {
+                let names: Vec<String> = stack.branches.iter().map(|member| member.name.clone()).collect();
+                let count = names.len();
+                let label = tr_fmt!("Push stack ({count} branches)…", count = count);
+                let can_push = idle && snapshot.operation.is_none();
+                if ui.add_enabled(can_push, egui::Button::new(format!("{}  {}", icon::STACK, label))).clicked() {
+                    ui.close();
+                    self.request_push_stack(names);
+                }
+            }
+            if branch.is_current {
+                let outdated = self.outdated_for(&branch.name);
+                let label = tr_fmt!("Restack branches on {name}…", name = branch.name);
+                let can_restack = idle && outdated.is_some() && snapshot.operation.is_none();
+                if ui.add_enabled(can_restack, egui::Button::new(format!("{}  {}", icon::GIT_BRANCH, label))).clicked() {
+                    ui.close();
+                    if let Some(outdated) = outdated {
+                        self.request_restack(outdated);
+                    }
                 }
             }
         }

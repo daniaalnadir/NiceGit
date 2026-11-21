@@ -1,0 +1,21 @@
+# es: stacked branches, the restack and push-stack confirmations. Format: English source, a tab, then the translation.
+{count} branch is still based on the old {parent}: {names}.	{count} rama todavía se basa en el {parent} anterior: {names}.
+{count} branches are still based on the old {parent}: {names}.	{count} ramas todavía se basan en el {parent} anterior: {names}.
+Restack	Reapilar
+Restack branches on {parent}?	¿Reapilar las ramas sobre {parent}?
+Each branch's own commits are replayed onto the new tip of {parent}. Branches built on them move too. The working tree changes only if the checked-out branch moves.	Los commits propios de cada rama se reaplican sobre la nueva punta de {parent}. Las ramas construidas sobre ellas también se mueven. El directorio de trabajo solo cambia si se mueve la rama activa.
+{name}: {count} commit	{name}: {count} commit
+{name}: {count} commits	{name}: {count} commits
+Nothing needed restacking.	No hacía falta reapilar nada.
+Restacked 1 branch.	Se reapiló 1 rama.
+Restacked {count} branches.	Se reapilaron {count} ramas.
+Push this branch?	¿Subir esta rama?
+Push {count} branches?	¿Subir {count} ramas?
+{branch} to {remote}/{name}, replacing the remote branch	{branch} a {remote}/{name}, reemplazando la rama remota
+{branch} to {remote}/{name}	{branch} a {remote}/{name}
+None of these branches has a remote branch to push to. Set an upstream first.	Ninguna de estas ramas tiene una rama remota a la que subir. Define primero una rama de seguimiento.
+Each branch is pushed to its own remote branch in one atomic push. Tags are not pushed.	Cada rama se sube a su propia rama remota en una sola subida atómica. Las etiquetas no se suben.
+Pushed 1 branch.	Se subió 1 rama.
+Pushed {count} branches.	Se subieron {count} ramas.
+Push stack ({count} branches)…	Subir la pila ({count} ramas)…
+Restack branches on {name}…	Reapilar las ramas sobre {name}…

@@ -5,13 +5,17 @@
 - Gitea and Forgejo repositories (codeberg.org, gitea.com, or a host listed under Settings, in Gitea and Forgejo) show their pull requests and issues in the sidebar, the status bar and branch check dots, the Launchpad, and Create pull request; a token saved under Settings is needed to create one.
 - The interface is available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese; choose the language under Settings, General (System follows your computer).
 - Screen readers (VoiceOver, Narrator, NVDA, Orca) name every control, commit, file, and diff line; Settings has Larger text and Reduce motion options under Accessibility.
+- Changed images compare side by side, swiped with a draggable divider, faded over each other with an opacity slider, or with the changed pixels highlighted and counted; the chosen mode is remembered.
 - Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
 - A dot on each branch with an open pull or merge request shows whether its checks passed, failed, or are pending, on the graph and in the sidebar; click it to see the checks. Turn it off in Settings.
 - Optional Draft button in the commit box writes a commit message from the staged changes with Claude, using your own Anthropic API key. Off by default; set it up under Settings, in Claude.
 - Compare versions of a branch after a rebase, amend, or force push, to see which commits changed, were added, or were removed, with each change's diff. Use it from a branch's menu, from Force push's "Compare with remote", or from "Compare branch versions" in the command palette.
 - Apply patch opens a preview window: paste a patch or drop a .patch, .diff or .mbox file onto NiceGit, see the files it changes, then apply it unstaged, staged, or as commits from a mailbox patch.
 - Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
+- Snapshots save copies of your working files, untracked files included, every few minutes while they change and before actions that rewrite them, so a lost file can be restored from Repository, Snapshots. Kept in the repository under refs/nicegit/snapshots, never pushed by NiceGit; turn them off or change how long they are kept in Settings.
 - Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
+- Stacked branches: when a branch in a stack is amended or rebased, a notice offers to restack the branches built on it, and a branch's menu can push its whole stack in one atomic push.
+- Command log lists every Git command NiceGit has run, newest first, with its time, duration, exit status and error output. Open it from the command palette or the Repository menu; a failed command links to it from the status bar.
 
 ## 2.2.0 - Reshape your history
 

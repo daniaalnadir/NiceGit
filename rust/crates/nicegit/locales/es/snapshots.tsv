@@ -1,0 +1,37 @@
+# es: working-tree snapshots, their restore and delete, and the Settings section.
+Snapshots	Instantáneas
+NiceGit saves copies of your working files while they change. Pick a snapshot to see what differs from now.	NiceGit guarda copias de tus archivos de trabajo mientras cambian. Elige una instantánea para ver qué difiere de ahora.
+Read the snapshots again	Volver a leer las instantáneas
+Reading the snapshots…	Leyendo las instantáneas…
+No snapshots yet. NiceGit saves them as your files change.	Todavía no hay instantáneas. NiceGit las guarda mientras cambian tus archivos.
+{count} file differs from now	{count} archivo difiere de ahora
+{count} files differ from now	{count} archivos difieren de ahora
+Select a snapshot to see its files.	Elige una instantánea para ver sus archivos.
+Restore {count} selected…	Restaurar {count} seleccionados…
+Restore selected files…	Restaurar los archivos seleccionados…
+Ticked files are written back to their saved versions. Your current versions are kept in a snapshot first.	Los archivos marcados vuelven a su versión guardada. Tus versiones actuales se guardan antes en una instantánea.
+Save or close the file you are editing before restoring files.	Guarda o cierra el archivo que estás editando antes de restaurar archivos.
+Delete snapshot	Eliminar instantánea
+Comparing the files…	Comparando los archivos…
+Nothing differs from now.	Nada difiere de ahora.
+This file is not in the snapshot, so there is nothing to restore.	Este archivo no está en la instantánea, así que no hay nada que restaurar.
+Select a file to see what changed since the snapshot.	Elige un archivo para ver qué cambió desde la instantánea.
+Reading the difference…	Leyendo la diferencia…
+Restore selected files	Restaurar los archivos seleccionados
+This file in your working tree is replaced with its saved version.	Este archivo de tu directorio de trabajo se reemplazará por su versión guardada.
+These {count} files in your working tree are replaced with their saved versions.	Estos {count} archivos de tu directorio de trabajo se reemplazarán por sus versiones guardadas.
+Your current versions are saved as a snapshot first, so this can be undone.	Tus versiones actuales se guardan antes en una instantánea, así que se puede deshacer.
+Restore snapshot files	Restaurar archivos de la instantánea
+Restored {count} file.	Se restauró {count} archivo.
+Restored {count} files.	Se restauraron {count} archivos.
+The snapshot is removed from this repository. Its files cannot be restored from it afterwards.	La instantánea se elimina de este repositorio. Después no se podrán restaurar sus archivos desde ella.
+Deleted the snapshot.	Instantánea eliminada.
+Snapshots…	Instantáneas…
+Saved copies of your working files, to bring lost files back	Copias guardadas de tus archivos de trabajo, para recuperar archivos perdidos
+Save snapshots of my working files	Guardar instantáneas de mis archivos de trabajo
+Save every	Guardar cada
+1 min	1 min
+Keep for	Conservar durante
+1 day	1 día
+7 days	7 días
+Snapshots stay in this repository under refs/nicegit/snapshots and are never pushed by NiceGit. A git push --mirror would send them. Files over 20 MB are skipped.	Las instantáneas se guardan en este repositorio, en refs/nicegit/snapshots, y NiceGit nunca las envía. Sin embargo, git push --mirror sí las enviaría. Los archivos de más de 20 MB se omiten.

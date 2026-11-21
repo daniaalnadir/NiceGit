@@ -1,0 +1,37 @@
+# ja: working-tree snapshots, their restore and delete, and the Settings section.
+Snapshots	スナップショット
+NiceGit saves copies of your working files while they change. Pick a snapshot to see what differs from now.	NiceGit は作業中のファイルが変わるたびにコピーを保存します。スナップショットを選ぶと、現在との違いを確認できます。
+Read the snapshots again	スナップショットを再読み込み
+Reading the snapshots…	スナップショットを読み込み中…
+No snapshots yet. NiceGit saves them as your files change.	スナップショットはまだありません。ファイルが変わると NiceGit が保存します。
+{count} file differs from now	現在と {count} 件異なります
+{count} files differ from now	現在と {count} 件異なります
+Select a snapshot to see its files.	スナップショットを選ぶと、そのファイルを表示します。
+Restore {count} selected…	選択した {count} 件を復元…
+Restore selected files…	選択したファイルを復元…
+Ticked files are written back to their saved versions. Your current versions are kept in a snapshot first.	チェックしたファイルは保存されたバージョンに戻ります。現在のバージョンは先にスナップショットとして保存されます。
+Save or close the file you are editing before restoring files.	ファイルを復元する前に、編集中のファイルを保存するか閉じてください。
+Delete snapshot	スナップショットを削除
+Comparing the files…	ファイルを比較中…
+Nothing differs from now.	現在と異なるものはありません。
+This file is not in the snapshot, so there is nothing to restore.	このファイルはスナップショットに含まれていないため、復元するものがありません。
+Select a file to see what changed since the snapshot.	ファイルを選ぶと、スナップショット以降の変更を表示します。
+Reading the difference…	差分を読み込み中…
+Restore selected files	選択したファイルを復元
+This file in your working tree is replaced with its saved version.	作業ツリーのこのファイルは、保存されたバージョンに置き換えられます。
+These {count} files in your working tree are replaced with their saved versions.	作業ツリーのこの {count} 件のファイルは、保存されたバージョンに置き換えられます。
+Your current versions are saved as a snapshot first, so this can be undone.	現在のバージョンは先にスナップショットとして保存されるため、元に戻せます。
+Restore snapshot files	スナップショットからファイルを復元
+Restored {count} file.	{count} 件のファイルを復元しました。
+Restored {count} files.	{count} 件のファイルを復元しました。
+The snapshot is removed from this repository. Its files cannot be restored from it afterwards.	スナップショットはこのリポジトリから削除されます。削除後、そこからファイルを復元することはできません。
+Deleted the snapshot.	スナップショットを削除しました。
+Snapshots…	スナップショット…
+Saved copies of your working files, to bring lost files back	作業中のファイルの保存済みコピー。失ったファイルを取り戻せます
+Save snapshots of my working files	作業中のファイルのスナップショットを保存
+Save every	保存間隔
+1 min	1 分
+Keep for	保存期間
+1 day	1 日
+7 days	7 日
+Snapshots stay in this repository under refs/nicegit/snapshots and are never pushed by NiceGit. A git push --mirror would send them. Files over 20 MB are skipped.	スナップショットはこのリポジトリの refs/nicegit/snapshots に保存され、NiceGit が送信することはありません。ただし git push --mirror では送信されます。20 MB を超えるファイルは対象外です。

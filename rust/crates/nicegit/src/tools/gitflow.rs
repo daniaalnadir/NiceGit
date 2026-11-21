@@ -187,11 +187,14 @@ impl GitFlowWindow {
                 let expected_head = cx.snapshot.head_hash.clone();
                 self.pending_start = Some(format!("{prefix}{name}"));
                 let started = name.clone();
-                cx.act(tr_fmt!("Start {kind} {name}", kind = kind_name(kind), name = started), move |client, directory| {
-                    client
-                        .start_gitflow(kind, &started, &expected_branch, expected_head.as_deref(), directory)
-                        .map(|branch| Some(tr_fmt!("Started {branch}.", branch = branch)))
-                });
+                cx.act(
+                    tr_fmt!("Start {kind} {name}", kind = kind_name(kind), name = started),
+                    cx.guard_rewrite(move |client, directory| {
+                        client
+                            .start_gitflow(kind, &started, &expected_branch, expected_head.as_deref(), directory)
+                            .map(|branch| Some(tr_fmt!("Started {branch}.", branch = branch)))
+                    }),
+                );
             }
         });
 
@@ -250,9 +253,12 @@ impl GitFlowWindow {
                 let message = self.tag_message.trim().to_string();
                 let tag_message = (!message.is_empty()).then_some(message);
                 self.pending_finish = Some(current.clone());
-                cx.act(tr_fmt!("Finish {branch}", branch = current), move |client, directory| {
-                    client.finish_gitflow(&expected_branch, expected_head.as_deref(), tag_message.as_deref(), directory).map(Some)
-                });
+                cx.act(
+                    tr_fmt!("Finish {branch}", branch = current),
+                    cx.guard_rewrite(move |client, directory| {
+                        client.finish_gitflow(&expected_branch, expected_head.as_deref(), tag_message.as_deref(), directory).map(Some)
+                    }),
+                );
             }
         });
     }
