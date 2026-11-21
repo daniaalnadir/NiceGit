@@ -232,12 +232,14 @@ pub fn ref_name_problem(name: &str) -> Option<&'static str> {
 }
 
 /// The repository a pull or merge request goes to: a GitHub repository, for `gh`, a GitLab project,
-/// for `glab`, or a Gitea or Forgejo repository, for its API.
+/// for `glab`, or a Gitea, Forgejo, Bitbucket, or Azure DevOps repository, for its API.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Forge {
     GitHub(nicegit_core::github::GitHubRepository),
     GitLab(HostedRepository),
     Gitea(HostedRepository),
+    Bitbucket(HostedRepository),
+    AzureDevOps(HostedRepository),
 }
 
 impl Forge {
@@ -247,6 +249,8 @@ impl Forge {
             Forge::GitHub(_) => Host::GitHub,
             Forge::GitLab(_) => Host::GitLab,
             Forge::Gitea(_) => Host::Gitea,
+            Forge::Bitbucket(_) => Host::Bitbucket,
+            Forge::AzureDevOps(_) => Host::AzureDevOps,
         }
     }
 
@@ -254,15 +258,19 @@ impl Forge {
     pub fn host(&self) -> &str {
         match self {
             Forge::GitHub(repository) => &repository.host,
-            Forge::GitLab(repository) | Forge::Gitea(repository) => &repository.host,
+            Forge::GitLab(repository) | Forge::Gitea(repository) | Forge::Bitbucket(repository) | Forge::AzureDevOps(repository) => {
+                &repository.host
+            }
         }
     }
 
-    /// The owner and name, or the group path and name on GitLab.
+    /// The owner and name, or the group path and name on GitLab, or the organization, project, and name on Azure DevOps.
     pub fn slug(&self) -> String {
         match self {
             Forge::GitHub(repository) => repository.slug(),
-            Forge::GitLab(repository) | Forge::Gitea(repository) => repository.slug(),
+            Forge::GitLab(repository) | Forge::Gitea(repository) | Forge::Bitbucket(repository) | Forge::AzureDevOps(repository) => {
+                repository.slug()
+            }
         }
     }
 
@@ -274,13 +282,14 @@ impl Forge {
         }
     }
 
-    /// The command-line tool that creates and reads the requests. Gitea and Forgejo have none: their
-    /// API is reached directly, with a token.
+    /// The command-line tool that creates and reads the requests. Gitea, Forgejo, Bitbucket, and Azure
+    /// DevOps have none: their APIs are reached directly, with a token or credentials.
     pub fn cli_name(&self) -> &'static str {
         match self.kind() {
             Host::GitLab => "GitLab CLI",
-            Host::GitHub | Host::Bitbucket => "GitHub CLI",
-            Host::AzureDevOps => "Azure DevOps CLI",
+            Host::GitHub => "GitHub CLI",
+            Host::Bitbucket => "Bitbucket API",
+            Host::AzureDevOps => "Azure DevOps API",
             Host::Gitea => "Gitea / Forgejo API",
         }
     }
@@ -301,7 +310,7 @@ impl Forge {
             Forge::GitLab(repository) => {
                 format!("{}/new?merge_request[source_branch]={}", repository.pull_requests_url(), encode_path(branch))
             }
-            Forge::Gitea(repository) => repository.pull_requests_url(),
+            Forge::Gitea(repository) | Forge::Bitbucket(repository) | Forge::AzureDevOps(repository) => repository.pull_requests_url(),
         }
     }
 
@@ -309,7 +318,9 @@ impl Forge {
     /// names both branches. Other services name the head only, as [`Self::compare_link`] does.
     pub fn compare_link_between(&self, base: &str, head: &str) -> String {
         match self {
-            Forge::Gitea(repository) => repository.compare_url(base, head).unwrap_or_else(|| repository.pull_requests_url()),
+            Forge::Gitea(repository) | Forge::AzureDevOps(repository) => {
+                repository.compare_url(base, head).unwrap_or_else(|| repository.pull_requests_url())
+            }
             _ => self.compare_link(head),
         }
     }
@@ -344,12 +355,14 @@ pub fn pull_request_target(
     Some(PullRequestTarget { repository, remote: remote.to_string(), remote_branch: remote_branch.to_string() })
 }
 
-/// The GitHub, GitLab, or Gitea repository behind a remote. Other hosts have no forge here, so they give none.
+/// The GitHub, GitLab, Gitea, Bitbucket, or Azure DevOps repository behind a remote. Other hosts have no forge here, so they give none.
 pub fn forge_for_remote(snapshot: &nicegit_core::Snapshot, remote: &str, hosts: ListedHosts) -> Option<Forge> {
     match hosted_repository_for_remote(snapshot, remote, hosts)? {
         HostedRepository { kind: Host::GitHub, .. } => github_repository_for_remote(snapshot, remote, hosts.github).map(Forge::GitHub),
         hosted if hosted.kind == Host::GitLab => Some(Forge::GitLab(hosted)),
         hosted if hosted.kind == Host::Gitea => Some(Forge::Gitea(hosted)),
+        hosted if hosted.kind == Host::Bitbucket => Some(Forge::Bitbucket(hosted)),
+        hosted if hosted.kind == Host::AzureDevOps => Some(Forge::AzureDevOps(hosted)),
         _ => None,
     }
 }

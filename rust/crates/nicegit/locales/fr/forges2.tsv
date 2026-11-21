@@ -1,0 +1,24 @@
+# fr: Pull requests on Bitbucket and Azure DevOps (Français, vouvoiement).
+Add a personal access token in Settings to see pull requests.	Ajoutez un jeton d'accès personnel dans les réglages pour voir les demandes de tirage.
+App password or API token	Mot de passe d'application ou jeton d'API
+App password or API token for {host}	Mot de passe d'application ou jeton d'API pour {host}
+Azure DevOps	Azure DevOps
+Azure DevOps lists nothing without a personal access token for the organization. Creating a pull request needs one with code read and write access.	Azure DevOps n'affiche rien sans jeton d'accès personnel pour l'organisation. Pour créer une demande de tirage, il vous faut un jeton avec un accès en lecture et en écriture au code.
+Bitbucket	Bitbucket
+Bitbucket and Azure DevOps are reached through their API, not a command-line tool.	Bitbucket et Azure DevOps s'utilisent par leur API, et non avec un outil en ligne de commande.
+Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.	Pour créer une demande de tirage sur {host}, il vous faut un jeton d'accès personnel. Ajoutez-en un dans les réglages, sous Azure DevOps, puis rouvrez cette fenêtre.
+Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.	Pour créer une demande de tirage sur {host}, il vous faut votre nom d'utilisateur et un mot de passe d'application. Ajoutez-les dans les réglages, sous Bitbucket, puis rouvrez cette fenêtre.
+Load from Azure DevOps	Charger depuis Azure DevOps
+Load from Bitbucket	Charger depuis Bitbucket
+Organization	Organisation
+Organization, such as acme	Organisation, par exemple acme
+Personal access token	Jeton d'accès personnel
+Remotes on bitbucket.org get pull requests and issues. Public repositories can be read without credentials; creating a pull request needs your username and an app password or API token.	Les dépôts distants sur bitbucket.org reçoivent les demandes de tirage et les tickets. Les dépôts publics se lisent sans identifiants ; pour créer une demande de tirage, il vous faut votre nom d'utilisateur et un mot de passe d'application ou un jeton d'API.
+Remove the credentials for {host}	Supprimer les identifiants de {host}
+Save the credentials for {host}	Enregistrer les identifiants de {host}
+The credentials for {host} could not be saved: {error}	Les identifiants de {host} n'ont pas pu être enregistrés : {error}
+The organization name must use only letters, digits, and hyphens.	Le nom de l'organisation ne peut contenir que des lettres, des chiffres et des tirets.
+The username must have no spaces, colons, or control characters.	Le nom d'utilisateur ne doit contenir ni espace, ni deux-points, ni caractère de contrôle.
+This repository has no issue tracker on Bitbucket.	Ce dépôt n'a pas de gestionnaire de tickets sur Bitbucket.
+Username	Nom d'utilisateur
+Username for {host}	Nom d'utilisateur pour {host}

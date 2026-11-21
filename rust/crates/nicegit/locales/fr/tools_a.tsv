@@ -418,8 +418,6 @@ Not available	Non disponible
 by a deleted account	par un compte supprimé
 Check out is available for GitHub pull requests only.	L'extraction n'est disponible que pour les demandes de tirage GitHub.
 This repository has no {remote} remote, so its pull requests cannot be read.	Ce dépôt n'a pas de dépôt distant {remote}, donc ses demandes de tirage ne peuvent pas être lues.
-Bitbucket pull requests are not listed here.	Les demandes de tirage Bitbucket ne sont pas listées ici.
-Azure DevOps pull requests are not listed here.	Les demandes de tirage Azure DevOps ne sont pas listées ici.
 {count} passing	{count} réussies
 {count} failing	{count} échouées
 {count} pending	{count} en attente

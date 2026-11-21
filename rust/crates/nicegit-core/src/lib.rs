@@ -5,7 +5,9 @@
 
 pub mod absorb;
 pub mod ai_message;
+pub mod azure_devops;
 pub mod bisect;
+pub mod bitbucket;
 pub mod blame;
 pub mod branch_compare;
 pub mod cleanup;
@@ -20,6 +22,7 @@ pub mod discover;
 pub mod external;
 pub mod feedback;
 pub mod file_history;
+pub mod forge_api;
 pub mod git_config;
 pub mod gitea;
 pub mod gitflow;

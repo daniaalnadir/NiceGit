@@ -1,0 +1,24 @@
+# de: Pull requests on Bitbucket and Azure DevOps (Deutsch, informell (du)).
+Add a personal access token in Settings to see pull requests.	Füge unter Einstellungen ein persönliches Zugriffstoken hinzu, um Pull Requests zu sehen.
+App password or API token	App-Passwort oder API-Token
+App password or API token for {host}	App-Passwort oder API-Token für {host}
+Azure DevOps	Azure DevOps
+Azure DevOps lists nothing without a personal access token for the organization. Creating a pull request needs one with code read and write access.	Azure DevOps zeigt ohne persönliches Zugriffstoken für die Organisation nichts an. Zum Erstellen eines Pull Requests brauchst du eines mit Lese- und Schreibzugriff auf den Code.
+Bitbucket	Bitbucket
+Bitbucket and Azure DevOps are reached through their API, not a command-line tool.	Bitbucket und Azure DevOps werden über ihre API angesprochen, nicht über ein Kommandozeilenprogramm.
+Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.	Zum Erstellen eines Pull Requests auf {host} brauchst du ein persönliches Zugriffstoken. Lege eines unter Einstellungen bei Azure DevOps an und öffne dieses Fenster danach erneut.
+Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.	Zum Erstellen eines Pull Requests auf {host} brauchst du deinen Benutzernamen und ein App-Passwort. Trage sie unter Einstellungen bei Bitbucket ein und öffne dieses Fenster danach erneut.
+Load from Azure DevOps	Von Azure DevOps laden
+Load from Bitbucket	Von Bitbucket laden
+Organization	Organisation
+Organization, such as acme	Organisation, zum Beispiel acme
+Personal access token	Persönliches Zugriffstoken
+Remotes on bitbucket.org get pull requests and issues. Public repositories can be read without credentials; creating a pull request needs your username and an app password or API token.	Remotes auf bitbucket.org erhalten Pull Requests und Issues. Öffentliche Repositorys lassen sich ohne Zugangsdaten lesen; zum Erstellen eines Pull Requests brauchst du deinen Benutzernamen und ein App-Passwort oder API-Token.
+Remove the credentials for {host}	Zugangsdaten für {host} entfernen
+Save the credentials for {host}	Zugangsdaten für {host} speichern
+The credentials for {host} could not be saved: {error}	Die Zugangsdaten für {host} konnten nicht gespeichert werden: {error}
+The organization name must use only letters, digits, and hyphens.	Der Name der Organisation darf nur Buchstaben, Ziffern und Bindestriche enthalten.
+The username must have no spaces, colons, or control characters.	Der Benutzername darf keine Leerzeichen, Doppelpunkte oder Steuerzeichen enthalten.
+This repository has no issue tracker on Bitbucket.	Dieses Repository hat auf Bitbucket keinen Issue-Tracker.
+Username	Benutzername
+Username for {host}	Benutzername für {host}

@@ -418,8 +418,6 @@ Not available	利用できません
 by a deleted account	削除されたアカウントによる
 Check out is available for GitHub pull requests only.	チェックアウトは GitHub のプルリクエストでのみ利用できます。
 This repository has no {remote} remote, so its pull requests cannot be read.	このリポジトリには {remote} リモートがないため、そのプルリクエストを読み取れません。
-Bitbucket pull requests are not listed here.	Bitbucket のプルリクエストはここには表示されません。
-Azure DevOps pull requests are not listed here.	Azure DevOps のプルリクエストはここには表示されません。
 {count} passing	{count} 件成功
 {count} failing	{count} 件失敗
 {count} pending	{count} 件保留中
