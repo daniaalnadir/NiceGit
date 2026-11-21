@@ -1,0 +1,19 @@
+# zh-Hans: the command log window, its filters, rows, and menus.
+Command Log	命令日志
+Filter commands	筛选命令
+Show reads	显示读取操作
+Only this repository	仅此仓库
+Copy all	全部复制
+No Git commands have run yet.	尚未运行任何 Git 命令。
+No commands match these filters.	没有符合这些筛选条件的命令。
+Copy command	复制命令
+Copy output	复制输出
+No error output.	没有错误输出。
+Succeeded	成功
+Stopped or did not start.	已中断或未能启动。
+Command log	命令日志
+Command log…	命令日志…
+Show in command log	在命令日志中显示
+Show the command log	显示命令日志
+{milliseconds} ms	{milliseconds} 毫秒
+Exited with status {code}.	退出状态为 {code}。

@@ -41,6 +41,8 @@ mod ui_tests_branch_checks;
 #[cfg(test)]
 mod ui_tests_clone;
 #[cfg(test)]
+mod ui_tests_command_log;
+#[cfg(test)]
 mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_custom_actions;

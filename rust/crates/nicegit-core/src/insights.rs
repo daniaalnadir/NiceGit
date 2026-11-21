@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
+use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -177,7 +178,7 @@ impl GitClient {
         }
         arguments.push("--");
 
-        let mut child = runner::spawn_piped(&arguments, directory, &self.options())?;
+        let (mut child, run) = runner::spawn_piped(&arguments, directory, &self.options())?;
         let Some(stdout) = child.stdout.take() else {
             let _ = child.kill();
             let _ = child.wait();
@@ -200,8 +201,10 @@ impl GitClient {
         if outcome.is_err() {
             let _ = child.kill();
         }
-        let status = child.wait().map_err(|error| GitError::failed(OPERATION, error.to_string()))?;
+        let status = child.wait();
         let errors = errors.join().unwrap_or_default();
+        run.finish(status.as_ref().ok().and_then(ExitStatus::code), 0, &errors);
+        let status = status.map_err(|error| GitError::failed(OPERATION, error.to_string()))?;
         outcome?;
         if !status.success() {
             let message = String::from_utf8_lossy(&errors).trim().to_string();

@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::{Child, ExitStatus};
 
 use crate::client::GitClient;
+use crate::command_log::Run;
 use crate::models::{GitError, Result};
 use crate::runner;
 
@@ -57,8 +58,8 @@ impl GitClient {
             arguments.push("--cached");
         }
         arguments.extend(["--", path]);
-        let child = runner::spawn(&arguments, directory, &self.options())?;
-        wait_on_thread(child, |_| {});
+        let (child, run) = runner::spawn(&arguments, directory, &self.options())?;
+        wait_on_thread(child, run, |_| {});
         Ok(())
     }
 
@@ -76,13 +77,18 @@ impl GitClient {
             return Err(GitError::failed("mergetool", "No merge tool is set. Use `git config --global merge.tool <name>`."));
         }
         self.require_conflict(path, directory)?;
-        let child = runner::spawn(&["mergetool", "--no-prompt", "--", path], directory, &self.options())?;
-        wait_on_thread(child, on_exit);
+        let (child, run) = runner::spawn(&["mergetool", "--no-prompt", "--", path], directory, &self.options())?;
+        wait_on_thread(child, run, on_exit);
         Ok(())
     }
 }
 
-/// Waits for a child on a background thread, so it is reaped without holding up the caller.
-fn wait_on_thread(mut child: Child, on_exit: impl FnOnce(io::Result<ExitStatus>) + Send + 'static) {
-    std::thread::spawn(move || on_exit(child.wait()));
+/// Waits for a child on a background thread, so it is reaped without holding up the caller. Its
+/// exit status is recorded in the command log with `run`.
+fn wait_on_thread(mut child: Child, run: Run, on_exit: impl FnOnce(io::Result<ExitStatus>) + Send + 'static) {
+    std::thread::spawn(move || {
+        let status = child.wait();
+        run.finish_status(&status);
+        on_exit(status)
+    });
 }
