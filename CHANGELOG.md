@@ -11,6 +11,7 @@
 - Compare versions of a branch after a rebase, amend, or force push, to see which commits changed, were added, or were removed, with each change's diff. Use it from a branch's menu, from Force push's "Compare with remote", or from "Compare branch versions" in the command palette.
 - Apply patch opens a preview window: paste a patch or drop a .patch, .diff or .mbox file onto NiceGit, see the files it changes, then apply it unstaged, staged, or as commits from a mailbox patch.
 - Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
+- Snapshots save copies of your working files, untracked files included, every few minutes while they change and before actions that rewrite them, so a lost file can be restored from Repository, Snapshots. Kept in the repository under refs/nicegit/snapshots, never pushed by NiceGit; turn them off or change how long they are kept in Settings.
 - Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
 - Stacked branches: when a branch in a stack is amended or rebased, a notice offers to restack the branches built on it, and a branch's menu can push its whole stack in one atomic push.
 - Command log lists every Git command NiceGit has run, newest first, with its time, duration, exit status and error output. Open it from the command palette or the Repository menu; a failed command links to it from the status bar.

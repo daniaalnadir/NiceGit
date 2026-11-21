@@ -600,7 +600,7 @@ impl NiceGitApp {
                 }
                 if let Some((stash, drop_after)) = apply_into {
                     self.notice = None;
-                    self.act(tr("Apply into changes"), move |client, path| {
+                    self.act(tr("Apply into changes"), self.guard_rewrite(move |client, path| {
                         client.apply_stash_into_changes(&stash, drop_after, path).map(|outcome| {
                             Some(match outcome {
                                 nicegit_core::staging::StashIntoChanges::Removed => {
@@ -613,7 +613,7 @@ impl NiceGitApp {
                                 }
                             })
                         })
-                    });
+                    }));
                 }
                 return;
             }
@@ -800,7 +800,10 @@ impl NiceGitApp {
                         ] {
                             if ui.add_enabled(idle, egui::Button::new(label)).clicked() {
                                 let testing = testing.clone();
-                                self.act(action, move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
+                                self.act(
+                                    action,
+                                    self.guard_rewrite(move |client, path| client.mark_bisect(mark, &testing, path).map(Some)),
+                                );
                             }
                         }
                     }
@@ -813,7 +816,10 @@ impl NiceGitApp {
                     .add_enabled(idle, egui::Button::new(tr_fmt!("End bisect, return to {branch}", branch = status.original_checkout)))
                     .clicked()
                 {
-                    self.act(tr("End bisect"), |client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into())));
+                    self.act(
+                        tr("End bisect"),
+                        self.guard_rewrite(|client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into()))),
+                    );
                 }
             });
         });

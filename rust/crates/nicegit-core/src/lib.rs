@@ -45,6 +45,7 @@ pub mod runner;
 pub mod search;
 pub mod settings;
 pub mod signature;
+pub mod snapshots;
 pub mod split;
 pub mod stack;
 pub mod staging;

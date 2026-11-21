@@ -1364,11 +1364,16 @@ impl NiceGitApp {
                     let operation = if revert { Operation::Revert } else { Operation::CherryPick };
                     let title = if revert { "Revert" } else { "Cherry-pick" };
                     let record_origin = !revert && self.settings.cherry_pick_record_origin;
-                    self.act_recording_detail(title, title, Some(short(&commit).to_string()), move |client, path| {
-                        let expected =
-                            nicegit_core::rebase::Expectation { branch: Some(&branch), head: head.as_deref(), source_branch: None };
-                        client.start(operation, &commit, Some(selected + 1), record_origin, expected, path).map(|_| None)
-                    });
+                    self.act_recording_detail(
+                        title,
+                        title,
+                        Some(short(&commit).to_string()),
+                        self.guard_rewrite(move |client, path| {
+                            let expected =
+                                nicegit_core::rebase::Expectation { branch: Some(&branch), head: head.as_deref(), source_branch: None };
+                            client.start(operation, &commit, Some(selected + 1), record_origin, expected, path).map(|_| None)
+                        }),
+                    );
                 }
                 Dialog::EditMessage { message, branch, head } => {
                     self.act_recording_detail("Edit message", "Edit message", crate::app::summary_of(&message), move |client, path| {
@@ -1381,11 +1386,14 @@ impl NiceGitApp {
                 Dialog::CheckOutPullRequest { remote, number, local, fetch_addresses, branch, head, .. } => {
                     let local = local.trim().to_string();
                     let notice = tr_fmt!("Checked out pull request #{number} as {local}.", number = number, local = local);
-                    self.act(&format!("Check out pull request #{number}"), move |client, path| {
-                        client
-                            .checkout_pull_request(&remote, number, &local, &fetch_addresses, &branch, head.as_deref(), path)
-                            .map(|_| Some(notice))
-                    });
+                    self.act(
+                        &format!("Check out pull request #{number}"),
+                        self.guard_rewrite(move |client, path| {
+                            client
+                                .checkout_pull_request(&remote, number, &local, &fetch_addresses, &branch, head.as_deref(), path)
+                                .map(|_| Some(notice))
+                        }),
+                    );
                 }
                 Dialog::StartIssueWork { number, local, from_default, mut default, branch, head, .. } => {
                     // The default branch is used only with its tip as it was read, which the core checks again.
@@ -1395,9 +1403,12 @@ impl NiceGitApp {
                     } else {
                         let local = local.trim().to_string();
                         let notice = tr_fmt!("Started work on issue #{number} on {local}.", number = number, local = local);
-                        self.act(&format!("Start work on issue #{number}"), move |client, path| {
-                            client.start_issue_branch(&local, source.as_ref(), &branch, head.as_deref(), path).map(|_| Some(notice))
-                        });
+                        self.act(
+                            &format!("Start work on issue #{number}"),
+                            self.guard_rewrite(move |client, path| {
+                                client.start_issue_branch(&local, source.as_ref(), &branch, head.as_deref(), path).map(|_| Some(notice))
+                            }),
+                        );
                     }
                 }
                 Dialog::Publish { remote } => {
@@ -1422,27 +1433,36 @@ impl NiceGitApp {
             Pending::InstallUpdate { version } => self.start_install(version),
             Pending::Discard(entry) => {
                 let name = entry.path.clone();
-                self.act_with_record("Discard", move |client, path| {
-                    let undo = client.discard_keeping_undo(&entry, path)?;
-                    Ok((Some(tr_fmt!("Discarded changes to {name}.", name = name)), undo.map(crate::app::Recorded::Discard)))
-                })
+                self.act_with_record(
+                    "Discard",
+                    self.guard_rewrite(move |client, path| {
+                        let undo = client.discard_keeping_undo(&entry, path)?;
+                        Ok((Some(tr_fmt!("Discarded changes to {name}.", name = name)), undo.map(crate::app::Recorded::Discard)))
+                    }),
+                )
             }
             Pending::DiscardLines { lines, review } => {
                 let name = review.path.clone();
                 let count = lines.len();
-                self.act_with_record("Discard lines", move |client, path| {
-                    let undo = client.discard_lines_keeping_undo(&lines, &review, path)?;
-                    let message = tr_count("Discarded 1 changed line in {name}.", "Discarded {count} changed lines in {name}.", count)
-                        .replace("{name}", &name);
-                    Ok((Some(message), undo.map(crate::app::Recorded::Discard)))
-                })
+                self.act_with_record(
+                    "Discard lines",
+                    self.guard_rewrite(move |client, path| {
+                        let undo = client.discard_lines_keeping_undo(&lines, &review, path)?;
+                        let message = tr_count("Discarded 1 changed line in {name}.", "Discarded {count} changed lines in {name}.", count)
+                            .replace("{name}", &name);
+                        Ok((Some(message), undo.map(crate::app::Recorded::Discard)))
+                    }),
+                )
             }
-            Pending::DiscardAll(entries) => self.act("Discard", move |client, path| {
-                for entry in &entries {
-                    client.discard(entry, path)?;
-                }
-                Ok(Some(tr_count("Discarded 1 changed file.", "Discarded {count} changed files.", entries.len())))
-            }),
+            Pending::DiscardAll(entries) => self.act(
+                "Discard",
+                self.guard_rewrite(move |client, path| {
+                    for entry in &entries {
+                        client.discard(entry, path)?;
+                    }
+                    Ok(Some(tr_count("Discarded 1 changed file.", "Discarded {count} changed files.", entries.len())))
+                }),
+            ),
             Pending::DeleteBranch { branch, force } => {
                 let name = branch.name.clone();
                 self.act_with_record("Delete branch", move |client, path| {
@@ -1504,26 +1524,37 @@ impl NiceGitApp {
                 let name = source.display_name();
                 match style {
                     // A squash leaves HEAD where it is, so there is no merge to undo.
-                    MergeStyle::Squash => self.act_squash(name.clone(), move |client, path| {
-                        client
-                            .merge(&source, &branch, head.as_deref(), MergeStyle::Squash, path)
-                            .map(|_| Some(tr_fmt!("Staged {name}'s changes as a squash. Review and commit them.", name = name)))
-                    }),
-                    MergeStyle::Default | MergeStyle::NoFastForward => {
-                        self.act_recording_detail("Merge", "Merge", Some(name.clone()), move |client, path| {
+                    MergeStyle::Squash => self.act_squash(
+                        name.clone(),
+                        self.guard_rewrite(move |client, path| {
+                            client
+                                .merge(&source, &branch, head.as_deref(), MergeStyle::Squash, path)
+                                .map(|_| Some(tr_fmt!("Staged {name}'s changes as a squash. Review and commit them.", name = name)))
+                        }),
+                    ),
+                    MergeStyle::Default | MergeStyle::NoFastForward => self.act_recording_detail(
+                        "Merge",
+                        "Merge",
+                        Some(name.clone()),
+                        self.guard_rewrite(move |client, path| {
                             client
                                 .merge(&source, &branch, head.as_deref(), style, path)
                                 .map(|_| Some(tr_fmt!("Merged {name}.", name = name)))
-                        })
-                    }
+                        }),
+                    ),
                 }
             }
             Pending::Rebase { onto, branch, head } => {
                 let name = onto.display_name();
-                self.act_recording_detail("Rebase", "Rebase", Some(format!("onto {name}")), move |client, path| {
-                    crate::git_ext::rebase_onto(client, &onto, &branch, head.as_deref(), path)
-                        .map(|_| Some(tr_fmt!("Rebased onto {name}.", name = name)))
-                })
+                self.act_recording_detail(
+                    "Rebase",
+                    "Rebase",
+                    Some(format!("onto {name}")),
+                    self.guard_rewrite(move |client, path| {
+                        crate::git_ext::rebase_onto(client, &onto, &branch, head.as_deref(), path)
+                            .map(|_| Some(tr_fmt!("Rebased onto {name}.", name = name)))
+                    }),
+                )
             }
             Pending::CheckOutAndCherryPick { branch, commits } => {
                 let Some(path) = self.repo().map(|repo| repo.path.clone()) else { return };
@@ -1537,28 +1568,41 @@ impl NiceGitApp {
             Pending::CherryPick { commits, branch, head } => {
                 let count = commits.len();
                 let record_origin = self.settings.cherry_pick_record_origin;
-                self.act_recording_detail("Cherry-pick", "Cherry-pick", Some(commits_detail(&commits)), move |client, path| {
-                    client.cherry_pick(&commits, head.as_deref(), &branch, record_origin, path).map(|_| {
-                        Some(if count == 1 {
-                            tr("Cherry-picked the commit.").to_string()
-                        } else {
-                            tr_fmt!("Cherry-picked {count} commits.", count = count)
+                self.act_recording_detail(
+                    "Cherry-pick",
+                    "Cherry-pick",
+                    Some(commits_detail(&commits)),
+                    self.guard_rewrite(move |client, path| {
+                        client.cherry_pick(&commits, head.as_deref(), &branch, record_origin, path).map(|_| {
+                            Some(if count == 1 {
+                                tr("Cherry-picked the commit.").to_string()
+                            } else {
+                                tr_fmt!("Cherry-picked {count} commits.", count = count)
+                            })
                         })
-                    })
-                })
+                    }),
+                )
             }
-            Pending::Revert { commit, branch, head } => {
-                self.act_recording_detail("Revert", "Revert", Some(short(&commit).to_string()), move |client, path| {
+            Pending::Revert { commit, branch, head } => self.act_recording_detail(
+                "Revert",
+                "Revert",
+                Some(short(&commit).to_string()),
+                self.guard_rewrite(move |client, path| {
                     crate::git_ext::revert(client, &commit, &branch, head.as_deref(), path).map(|_| Some(tr("Reverted the commit.").into()))
-                })
-            }
+                }),
+            ),
             Pending::RevertMany { commits, branch, head } => {
                 let count = commits.len();
-                self.act_recording_detail("Revert", "Revert", Some(commits_detail(&commits)), move |client, path| {
-                    client
-                        .revert_commits(&commits, head.as_deref(), &branch, path)
-                        .map(|_| Some(tr_fmt!("Reverted {count} commits.", count = count)))
-                })
+                self.act_recording_detail(
+                    "Revert",
+                    "Revert",
+                    Some(commits_detail(&commits)),
+                    self.guard_rewrite(move |client, path| {
+                        client
+                            .revert_commits(&commits, head.as_deref(), &branch, path)
+                            .map(|_| Some(tr_fmt!("Reverted {count} commits.", count = count)))
+                    }),
+                )
             }
             Pending::FixupInto { target, subject, branch, head } => {
                 let Some(head) = head else { return };
@@ -1570,25 +1614,28 @@ impl NiceGitApp {
                     "Fix up",
                     Some(subject.clone()),
                     nicegit_core::undo::UndoMode::Soft,
-                    move |client, path| {
+                    self.guard_rewrite(move |client, path| {
                         client.fixup_into(&target, &branch, &head, path)?;
                         Ok(Some(tr_fmt!("Folded the staged changes into “{subject}”.", subject = subject)))
-                    },
+                    }),
                 )
             }
             Pending::Abort(operation) => self.act("Abort", move |client, path| {
                 client.abort_operation(operation, path).map(|_| Some(tr_fmt!("Aborted the {operation}.", operation = operation.name())))
             }),
-            Pending::ResolveConflictsSide { paths, incoming, side_name } => self.act("Resolve conflicts", move |client, repo| {
-                let report = client.resolve_conflicts_side(&paths, incoming, repo)?;
-                let text = resolve_conflicts_notice(&report, &side_name);
-                // Nothing resolved is an error. The app shows the message itself, without a prefix.
-                if report.resolved.is_empty() && !report.failed.is_empty() {
-                    Err(GitError::failed("resolve conflicts", text))
-                } else {
-                    Ok(Some(text))
-                }
-            }),
+            Pending::ResolveConflictsSide { paths, incoming, side_name } => self.act(
+                "Resolve conflicts",
+                self.guard_rewrite(move |client, repo| {
+                    let report = client.resolve_conflicts_side(&paths, incoming, repo)?;
+                    let text = resolve_conflicts_notice(&report, &side_name);
+                    // Nothing resolved is an error. The app shows the message itself, without a prefix.
+                    if report.resolved.is_empty() && !report.failed.is_empty() {
+                        Err(GitError::failed("resolve conflicts", text))
+                    } else {
+                        Ok(Some(text))
+                    }
+                }),
+            ),
             Pending::PushBranch { branch, remote, addresses } => {
                 let name = branch.name.clone();
                 self.act("Push branch", move |client, path| {
@@ -1631,18 +1678,24 @@ impl NiceGitApp {
                         .map(|_| Some(tr_fmt!("Force pushed {branch} to {upstream}.", branch = branch, upstream = upstream)))
                 })
             }
-            Pending::RestoreFile { path, source, branch, head } => self.act("Restore file", move |client, repo| {
-                client
-                    .restore(&path, &source, &branch, head.as_deref(), repo)
-                    .map(|_| Some(tr_fmt!("Restored {path}. Review and commit the staged change.", path = path)))
-            }),
+            Pending::RestoreFile { path, source, branch, head } => self.act(
+                "Restore file",
+                self.guard_rewrite(move |client, repo| {
+                    client
+                        .restore(&path, &source, &branch, head.as_deref(), repo)
+                        .map(|_| Some(tr_fmt!("Restored {path}. Review and commit the staged change.", path = path)))
+                }),
+            ),
             Pending::RestoreFromStash { path, stash, untracked, branch, head } => {
                 let reference = stash.reference.clone();
-                self.act("Restore file", move |client, repo| {
-                    client
-                        .restore_from_stash(&path, &stash, untracked, &branch, head.as_deref(), repo)
-                        .map(|_| Some(tr_fmt!("Restored {path} from {reference}.", path = path, reference = reference)))
-                })
+                self.act(
+                    "Restore file",
+                    self.guard_rewrite(move |client, repo| {
+                        client
+                            .restore_from_stash(&path, &stash, untracked, &branch, head.as_deref(), repo)
+                            .map(|_| Some(tr_fmt!("Restored {path} from {reference}.", path = path, reference = reference)))
+                    }),
+                )
             }
             Pending::DeleteRemoteTag { tag, tip, remote, addresses } => self.act("Delete remote tag", move |client, path| {
                 let expected = addresses.get(&remote).map(Vec::as_slice).unwrap_or_default();
@@ -1662,9 +1715,12 @@ impl NiceGitApp {
             Pending::ShowAllFolders => self.act("Show all folders", |client, path| {
                 client.show_all_folders(path).map(|_| Some(tr("Checked out every folder.").into()))
             }),
-            Pending::PopStash(stash) => self.act(&format!("Pop {}", stash.reference), move |client, path| {
-                client.pop_stash(&stash, path).map(|_| Some(tr("Applied and deleted the stash.").into()))
-            }),
+            Pending::PopStash(stash) => self.act(
+                &format!("Pop {}", stash.reference),
+                self.guard_rewrite(move |client, path| {
+                    client.pop_stash(&stash, path).map(|_| Some(tr("Applied and deleted the stash.").into()))
+                }),
+            ),
             Pending::ReplaceWorkspace { name, repositories } => self.store_workspace(name, repositories),
             Pending::DeleteWorkspace { name } => self.delete_workspace(&name),
             Pending::ForgetRecent { paths } => self.forget_recent_paths(&paths),
@@ -1708,19 +1764,25 @@ impl NiceGitApp {
 
     pub fn run_input(&mut self, kind: InputKind, value: String, second: String) {
         match kind {
-            InputKind::CreateBranch { branch, head } => self.act("Create branch", move |client, path| {
-                client
-                    .create_branch(&value, &branch, head.as_deref(), path)
-                    .map(|_| Some(tr_fmt!("Created and switched to {branch}.", branch = value.trim())))
-            }),
+            InputKind::CreateBranch { branch, head } => self.act(
+                "Create branch",
+                self.guard_rewrite(move |client, path| {
+                    client
+                        .create_branch(&value, &branch, head.as_deref(), path)
+                        .map(|_| Some(tr_fmt!("Created and switched to {branch}.", branch = value.trim())))
+                }),
+            ),
             InputKind::CreateBranchFrom(source) => self.act("Create branch", move |client, path| {
                 client.create_branch_from(&value, &source, path).map(|_| Some(tr_fmt!("Created branch {branch}.", branch = value.trim())))
             }),
-            InputKind::BranchFromStash { stash, branch, head } => self.act("Create branch from stash", move |client, path| {
-                client
-                    .branch_from_stash(&value, &stash, &branch, head.as_deref(), path)
-                    .map(|_| Some(tr_fmt!("Created {branch} from the stash and switched to it.", branch = value.trim())))
-            }),
+            InputKind::BranchFromStash { stash, branch, head } => self.act(
+                "Create branch from stash",
+                self.guard_rewrite(move |client, path| {
+                    client
+                        .branch_from_stash(&value, &stash, &branch, head.as_deref(), path)
+                        .map(|_| Some(tr_fmt!("Created {branch} from the stash and switched to it.", branch = value.trim())))
+                }),
+            ),
             InputKind::RenameBranch(branch) => {
                 self.act("Rename branch", move |client, path| client.rename_branch(&branch, &value, path).map(|_| None))
             }

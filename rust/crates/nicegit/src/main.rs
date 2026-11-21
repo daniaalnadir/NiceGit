@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod autosnapshot;
 mod claude;
 mod conventional;
 mod custom_actions;
@@ -88,6 +89,8 @@ mod ui_tests_range_diff;
 mod ui_tests_resolutions;
 #[cfg(test)]
 mod ui_tests_review_threads;
+#[cfg(test)]
+mod ui_tests_snapshots;
 #[cfg(test)]
 mod ui_tests_speed;
 #[cfg(test)]

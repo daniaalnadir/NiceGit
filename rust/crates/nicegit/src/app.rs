@@ -12,6 +12,7 @@ use nicegit_core::models::short;
 use nicegit_core::undo::{DiscardUndo, UndoMode, UndoStep};
 use nicegit_core::{Branch, GitClient, GitError, PullStrategy, Snapshot, Stash, StatusEntry};
 
+use crate::autosnapshot::{self, RETRY, SETTLE};
 use crate::diff_view::DiffContent;
 use crate::i18n::{tr, tr_count, tr_fmt, Locale};
 use crate::notifications::FinishedWork;
@@ -326,6 +327,10 @@ pub struct Repo {
     pub last_load: Instant,
     /// When the next background fetch is due.
     pub next_fetch: Instant,
+    /// When a watched working file last changed, while no snapshot has saved that change yet.
+    pub snapshot_changed_at: Option<Instant>,
+    /// When the repository was last snapshotted, by the timer or before an action.
+    pub snapshot_saved_at: Option<Instant>,
     /// When the repository was last fetched, by hand or in the background.
     pub last_fetched: Option<Instant>,
     /// Why the last background fetch failed, shown quietly in the status bar.
@@ -561,6 +566,8 @@ impl Repo {
             last_load: Instant::now(),
             // Soon after opening, rather than at once, so opening stays quick.
             next_fetch: Instant::now() + FIRST_FETCH_DELAY,
+            snapshot_changed_at: None,
+            snapshot_saved_at: None,
             last_fetched: None,
             fetch_problem: None,
             selection: Selection::None,
@@ -705,6 +712,8 @@ pub struct NiceGitApp {
     /// Whether a watched change since the last refresh touched the Git directory, which means a
     /// full load rather than a quick status refresh.
     watched_git_change: bool,
+    /// The background snapshot of the active repository being taken, if any.
+    pub(crate) snapshot_task: Option<Task<()>>,
     /// Loads started by the interface, counted for the tests: quick status refreshes and full loads.
     #[cfg(test)]
     pub(crate) quick_loads: usize,
@@ -823,6 +832,7 @@ impl NiceGitApp {
             watcher: None,
             watched_change: None,
             watched_git_change: false,
+            snapshot_task: None,
             #[cfg(test)]
             quick_loads: 0,
             #[cfg(test)]
@@ -1303,6 +1313,79 @@ impl NiceGitApp {
         let active = self.active;
         self.refresh_pr_status(active);
         ctx.request_repaint_after(PR_STATUS_INTERVAL);
+    }
+
+    /// Takes a snapshot of the active repository in the background, now, rather than when the timer
+    /// is due. Nothing is started while another snapshot is being taken.
+    pub fn start_snapshot(&mut self, ctx: &egui::Context) {
+        if self.snapshot_task.is_some() {
+            return;
+        }
+        let keep_days = u64::from(self.settings.snapshot_keep_days.max(1));
+        let Some(repo) = self.repos.get_mut(self.active) else { return };
+        let path = repo.path.clone();
+        repo.snapshot_changed_at = None;
+        repo.snapshot_saved_at = Some(Instant::now());
+        self.snapshot_task = Some(Task::spawn(ctx, move || {
+            autosnapshot::save_and_prune(&GitClient::new(), &path, keep_days);
+        }));
+    }
+
+    /// Saves the active repository's files every few minutes while they change, as Settings chooses.
+    /// A change is saved once the files have settled, and never sooner than the interval after the
+    /// last save. It waits while an action, a dialog, a load, or unsaved editor text is in the way,
+    /// and while the checkout is in the middle of a Git operation.
+    fn auto_snapshot(&mut self, ctx: &egui::Context) {
+        if let Some(task) = self.snapshot_task.as_mut() {
+            if task.get().is_none() {
+                return;
+            }
+            self.snapshot_task = None;
+        }
+        if !self.settings.snapshots_enabled {
+            return;
+        }
+        let interval = Duration::from_secs(u64::from(self.settings.snapshot_interval_minutes.max(1)) * 60);
+        let Some(repo) = self.repos.get(self.active) else { return };
+        let Some(changed) = repo.snapshot_changed_at else { return };
+        let now = Instant::now();
+        let due = repo.snapshot_saved_at.map_or(now, |saved| saved + interval).max(changed + SETTLE);
+        if now < due {
+            ctx.request_repaint_after(due - now);
+            return;
+        }
+        let ready = repo.snapshot.as_ref().is_some_and(|snapshot| snapshot.operation.is_none()) && self.snapshot_keep_days().is_some();
+        let quiet = self.busy.is_none() && self.dialog.is_none() && self.palette.is_none() && !repo.loading && !self.has_unsaved_editor();
+        if !quiet || !ready {
+            ctx.request_repaint_after(RETRY);
+            return;
+        }
+        self.start_snapshot(ctx);
+    }
+
+    /// How many days snapshots are kept, when the active repository is saved in snapshots: Settings
+    /// has them on, and the repository has working files whose state has been read.
+    pub fn snapshot_keep_days(&self) -> Option<u64> {
+        let repo = self.repo()?;
+        let has_files = repo.shape.is_some_and(|shape| !shape.bare);
+        (self.settings.snapshots_enabled && has_files).then(|| u64::from(self.settings.snapshot_keep_days.max(1)))
+    }
+
+    /// The snapshot settings for a save before an action that rewrites working files, or `None`
+    /// when the shown working tree is clean: then every file is already in HEAD, and the save
+    /// would only cost a full scan before the action.
+    fn rewrite_keep_days(&self) -> Option<u64> {
+        let dirty = self.repo().and_then(|repo| repo.snapshot.as_ref()).is_none_or(|snapshot| !snapshot.status.is_empty());
+        self.snapshot_keep_days().filter(|_| dirty)
+    }
+
+    /// Wraps an action that can overwrite or remove working files, so the files are saved as a
+    /// snapshot first. Use it at each place that starts such an action, as `act` takes no snapshot.
+    pub fn guard_rewrite<R>(
+        &self,
+        action: impl FnOnce(&GitClient, &Path) -> R + Send + 'static,
+    ) -> impl FnOnce(&GitClient, &Path) -> R + Send + 'static {
+        autosnapshot::before_rewrite(self.rewrite_keep_days(), action)
     }
 
     /// Runs an action that changes the repository in the background, then refreshes it.
@@ -2572,21 +2655,24 @@ impl NiceGitApp {
         let expected = snapshot.current_branch.clone();
         let head = snapshot.head_hash.clone();
         let name = branch.display_name();
-        self.act(&tr_fmt!("Switch to {name}", name = name), move |client, path| {
-            let stashed = if branch.is_remote {
-                client.checkout_remote(&branch, &snapshot.remotes, &expected, head.as_deref(), path)?
-            } else {
-                client.checkout(&branch, &expected, head.as_deref(), path)?
-            };
-            Ok(Some(if stashed {
-                tr_fmt!(
-                    "Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.",
-                    name = name
-                )
-            } else {
-                tr_fmt!("Switched to {name}.", name = name)
-            }))
-        });
+        self.act(
+            &tr_fmt!("Switch to {name}", name = name),
+            self.guard_rewrite(move |client, path| {
+                let stashed = if branch.is_remote {
+                    client.checkout_remote(&branch, &snapshot.remotes, &expected, head.as_deref(), path)?
+                } else {
+                    client.checkout(&branch, &expected, head.as_deref(), path)?
+                };
+                Ok(Some(if stashed {
+                    tr_fmt!(
+                        "Switched to {name}. Your uncommitted changes were saved in a stash; apply it from Stashes when you need them.",
+                        name = name
+                    )
+                } else {
+                    tr_fmt!("Switched to {name}.", name = name)
+                }))
+            }),
+        );
     }
 
     pub fn commit(&mut self) {
@@ -2776,13 +2862,18 @@ impl NiceGitApp {
     pub fn pull_using(&mut self, strategy: Option<PullStrategy>) {
         let Some(snapshot) = self.snapshot().cloned() else { return };
         let branch = snapshot.is_on_branch().then(|| snapshot.current_branch.clone());
-        self.act_recording_detail("Pull", "Pull", branch, move |client, path| {
-            let strategy = match strategy {
-                Some(strategy) => strategy,
-                None => client.configured_pull_strategy(&snapshot.current_branch, path)?,
-            };
-            client.pull(&snapshot, strategy, path).map(|_| Some(tr("Pulled the latest changes.").into()))
-        });
+        self.act_recording_detail(
+            "Pull",
+            "Pull",
+            branch,
+            self.guard_rewrite(move |client, path| {
+                let strategy = match strategy {
+                    Some(strategy) => strategy,
+                    None => client.configured_pull_strategy(&snapshot.current_branch, path)?,
+                };
+                client.pull(&snapshot, strategy, path).map(|_| Some(tr("Pulled the latest changes.").into()))
+            }),
+        );
     }
 
     pub fn push(&mut self) {
@@ -2842,30 +2933,36 @@ impl NiceGitApp {
         let slot = self.recorded.clone();
         let verb = if redo { tr("Redo") } else { tr("Undo") };
         let label = tr_fmt!("{verb} {title}", verb = verb, title = entry.title.to_lowercase());
-        self.act(&label, move |client, path| match client.undo_step(&entry.step, path) {
-            Ok(step) => {
-                let inverse = HistoryEntry { title: entry.title.clone(), detail: entry.detail.clone(), step };
-                // Undoing offers the inverse as a redo; redoing offers it as an undo, and the redo steps not yet
-                // applied stay.
-                let record = if redo { Recorded::Undo(inverse) } else { Recorded::Redo(inverse) };
-                *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(record);
-                Ok(Some(format!("{verb}: {}.", entry.title.to_lowercase())))
-            }
-            Err(error) => {
-                // Older steps in this stack assume the state this one would have produced.
-                *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::HistoryFailed { redo });
-                Err(error)
-            }
-        });
+        self.act(
+            &label,
+            self.guard_rewrite(move |client, path| match client.undo_step(&entry.step, path) {
+                Ok(step) => {
+                    let inverse = HistoryEntry { title: entry.title.clone(), detail: entry.detail.clone(), step };
+                    // Undoing offers the inverse as a redo; redoing offers it as an undo, and the redo steps not yet
+                    // applied stay.
+                    let record = if redo { Recorded::Undo(inverse) } else { Recorded::Redo(inverse) };
+                    *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(record);
+                    Ok(Some(format!("{verb}: {}.", entry.title.to_lowercase())))
+                }
+                Err(error) => {
+                    // Older steps in this stack assume the state this one would have produced.
+                    *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(Recorded::HistoryFailed { redo });
+                    Err(error)
+                }
+            }),
+        );
     }
 
     /// Reverses the last discard, if the file has not changed since.
     pub fn undo_discard(&mut self) {
         let Some(undo) = self.repo_mut().and_then(|r| r.discard_undo.pop()) else { return };
         let name = undo.path.clone();
-        self.act(tr("Undo discard"), move |client, path| {
-            client.undo_discard(&undo, path).map(|_| Some(tr_fmt!("Restored your changes to {name}.", name = name)))
-        });
+        self.act(
+            tr("Undo discard"),
+            self.guard_rewrite(move |client, path| {
+                client.undo_discard(&undo, path).map(|_| Some(tr_fmt!("Restored your changes to {name}.", name = name)))
+            }),
+        );
     }
 
     pub fn confirm(&mut self, title: impl Into<String>, message: impl Into<String>, button: impl Into<String>, pending: Pending) {
@@ -2971,6 +3068,7 @@ impl NiceGitApp {
         let idle = self.busy.is_none();
         let image_mode = self.settings.image_diff_mode;
         let editor_unsaved = self.has_unsaved_editor();
+        let keep_days = self.rewrite_keep_days();
         let external = self.active_external_tools();
         let request = self.diff_request();
         let mut requests = Vec::new();
@@ -3009,6 +3107,7 @@ impl NiceGitApp {
                     cx.diff_context = request.context;
                     cx.external = external.clone();
                     cx.editor_unsaved = editor_unsaved;
+                    cx.snapshot_keep_days = keep_days;
                     tool.ui(ui, &mut cx);
                 });
             crate::tools::widgets::name_window_title(ctx, window_id, &title);
@@ -3209,6 +3308,9 @@ impl NiceGitApp {
                 if changes_visible_state(&event) && !only_other_shared_files(&event, &watch.shared) && last_load.elapsed() > WATCH_DEBOUNCE
                 {
                     self.watched_change.get_or_insert_with(Instant::now);
+                    if let Some(repo) = self.repos.get_mut(self.active) {
+                        repo.snapshot_changed_at = Some(Instant::now());
+                    }
                     if touches_git_directory(&event, &watch.path, &watch.canonical) {
                         self.watched_git_change = true;
                     }
@@ -3408,6 +3510,7 @@ impl eframe::App for NiceGitApp {
         self.drop_folders(&ctx);
         self.auto_refresh(&ctx);
         self.auto_fetch(&ctx);
+        self.auto_snapshot(&ctx);
         self.auto_pr_status(&ctx);
         self.auto_open_requests(&ctx);
         self.debug_open(&ctx);
@@ -3514,6 +3617,8 @@ fn changes_visible_state(event: &notify::Event) -> bool {
             let text = path.to_string_lossy().replace('\\', "/");
             !text.contains("/.git/objects/")
                 && !text.contains("/.git/logs/")
+                // NiceGit's own snapshots write these refs, which must not refresh the view.
+                && !text.contains("/refs/nicegit/")
                 && !is_worktree_reflog(path)
                 && !text.ends_with(".lock")
                 && !text.contains("/target/")
