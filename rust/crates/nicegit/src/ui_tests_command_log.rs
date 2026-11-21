@@ -31,6 +31,12 @@ fn command_log_lists_a_staging_command_and_shows_reads_on_request() {
     harness.get_by_label("Show reads").click();
     wait(&mut harness, "the status read", |h| has_label(h, "git status"));
 
+    // With reads shown, the staging row can scroll out of view, and rows out of view are not
+    // drawn, so the list is filtered to it first.
+    harness.get_by_label("Filter commands").click();
+    harness.event(egui::Event::Text("add".into()));
+    wait(&mut harness, "the filtered staging row", |h| h.query_all_by_label_contains("git add").next().is_some());
+
     // A row opens its output and configuration when clicked.
     harness.get_all_by_label_contains("git add").next().expect("the staging row").click();
     settle(&mut harness);
