@@ -175,9 +175,9 @@ records hard-won rules about Git edge cases that changes must respect.
   with any Git remote.
 - Undo steps back through the last 20 recorded actions in this session; changes made outside
   NiceGit stop the chain.
-- NiceGit can download and install a new version itself on macOS and from the Windows
-  installer; otherwise (the Windows zip, Linux packages and AppImage) download it from the
-  Releases page, or upgrade through Homebrew or winget.
+- NiceGit can download and install a new version itself on macOS, from the Windows installer,
+  and as a Linux AppImage; for the Windows zip and the Linux deb, rpm and tarball, download it
+  from the Releases page, or upgrade through Homebrew or winget.
 - The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
   can run code. Only open repositories you trust.
 
