@@ -1,8 +1,9 @@
 //! Branch checks: the CI status of each branch that has an open pull or merge request. A small dot
 //! on the branch's label in the commit graph, and beside it in the sidebar, shows whether its checks
-//! failed, are pending, or passed. The requests are read in the background through `gh` or `glab`,
-//! for the active repository only, and only when its remote is GitHub or GitLab and the CLI is signed
-//! in. Nothing here blocks the interface.
+//! failed, are pending, or passed. The requests are read in the background through `gh`, `glab`, or
+//! the Gitea or Forgejo API, for the active repository only, and only when its remote is GitHub,
+//! GitLab, or Gitea and Forgejo, and the CLI is signed in where one is needed. Nothing here blocks
+//! the interface.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,12 +11,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use egui::{Color32, Pos2, Response, Sense, Ui};
-use nicegit_core::github::{Cancel, Checks, GhProgram, GhStatus, OpenPullRequest};
+use nicegit_core::gitea::BACKGROUND_PAGES;
+use nicegit_core::github::{Cancel, Checks, GhProgram, GhStatus, OpenPullRequest, PrState, PullRequestStatus};
 use nicegit_core::gitlab::{self, GlabProgram, GlabStatus};
+use nicegit_core::hosting::Host;
 use nicegit_core::hosting::ListedHosts;
 use nicegit_core::{Branch, GitClient};
 
 use crate::app::NiceGitApp;
+use crate::forge_tokens;
 use crate::git_ext::{self, Forge};
 use crate::i18n::tr_fmt;
 use crate::theme::Colors;
@@ -39,6 +43,8 @@ pub struct RequestCheck {
     /// The request's own page.
     pub url: String,
     pub checks: Checks,
+    /// Whether the request is a draft, which its status bar shows as one.
+    pub is_draft: bool,
 }
 
 /// The open requests of the active repository's remote, with the forge they were read from. `checks`
@@ -123,8 +129,13 @@ pub fn request_checks(remote: &str, requests: &[OpenPullRequest], branches: &[Br
         .into_iter()
         .filter_map(|(full_ref, head)| {
             let request = by_head.get(head.as_str())?;
-            let check =
-                RequestCheck { number: request.number, title: request.title.clone(), url: request.url.clone(), checks: request.checks };
+            let check = RequestCheck {
+                number: request.number,
+                title: request.title.clone(),
+                url: request.url.clone(),
+                checks: request.checks,
+                is_draft: request.is_draft,
+            };
             Some((full_ref, check))
         })
         .collect()
@@ -163,6 +174,33 @@ impl RequestCheck {
     }
 }
 
+/// The status bar's pull request for `branch`, taken from the open requests read for the branch dots,
+/// when that read finished within the last two minutes and lists the branch's request on `forge`.
+/// Nothing is read again then. `None` means the branch has to be asked for.
+pub fn status_from_listing(
+    read_at: Option<Instant>,
+    read: Option<&OpenRequestsRead>,
+    forge: &Forge,
+    branch: &str,
+) -> Option<PullRequestStatus> {
+    if !read_at.is_some_and(|at| at.elapsed() < INTERVAL) {
+        return None;
+    }
+    let requests = read?.peek().cloned().flatten()?;
+    if requests.forge != *forge {
+        return None;
+    }
+    let check = requests.checks.get(&format!("refs/heads/{branch}"))?;
+    Some(PullRequestStatus {
+        kind: Host::Gitea,
+        number: check.number,
+        title: check.title.clone(),
+        state: if check.is_draft { PrState::Draft } else { PrState::Open },
+        url: check.url.clone(),
+        checks: check.checks,
+    })
+}
+
 /// The colour of a dot: a failure in the danger colour, a pending check in the warning colour, and
 /// all passed in the added colour.
 pub fn dot_color(state: CheckState, c: &Colors) -> Color32 {
@@ -194,7 +232,14 @@ pub fn show_dot(ui: &mut Ui, center: Pos2, id: egui::Id, dot: &Dot, c: &Colors) 
 
 /// The open requests of `repository` read for a remote: the one remote, the forge behind it, and
 /// the requests' checks for each branch. Runs `gh` or `glab`; it is called from a background task.
-fn read_open_requests(remote: &str, forge: &Forge, branches: &[Branch], glab: &GlabProgram, path: &Path) -> Option<Arc<OpenRequests>> {
+fn read_open_requests(
+    remote: &str,
+    forge: &Forge,
+    branches: &[Branch],
+    glab: &GlabProgram,
+    path: &Path,
+    token_file: Option<&Path>,
+) -> Option<Arc<OpenRequests>> {
     let client = GitClient::new();
     let requests: Vec<OpenPullRequest> = match forge {
         Forge::GitHub(repository) => {
@@ -208,6 +253,12 @@ fn read_open_requests(remote: &str, forge: &Forge, branches: &[Branch], glab: &G
                 return None;
             }
             gitlab::gitlab_open_merge_requests(repository, glab, &Cancel::default(), path).ok()?
+        }
+        Forge::Gitea(repository) => {
+            // Public repositories are listed without a token; a saved or environment token is used when there is one.
+            let token = forge_tokens::token_for(token_file, &repository.host);
+            // A background read: at most two pages, so a long list does not hold the refresh.
+            client.gitea_open_pull_requests(repository, token.as_deref(), BACKGROUND_PAGES, &Cancel::default(), path).ok()?
         }
     };
     Some(Arc::new(OpenRequests { forge: forge.clone(), checks: request_checks(remote, &requests, branches) }))
@@ -262,23 +313,27 @@ impl NiceGitApp {
     pub fn refresh_open_requests(&mut self, index: usize) {
         let github_hosts = self.settings.github_enterprise_hosts.clone();
         let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let gitea_hosts = self.settings.gitea_hosts.clone();
         let glab = self.glab.clone();
+        let token_file = self.forge_token_file.clone();
         let context = self.worker.context.clone();
         let Some(repo) = self.repos.get_mut(index) else { return };
         repo.open_requests_at = Some(Instant::now());
         let stale = repo.open_requests.take().and_then(|mut task| task.get().cloned());
         let target = repo.snapshot.as_ref().and_then(|snapshot| {
-            let hosts = ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts };
+            let hosts = ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
             let (remote, forge) = git_ext::listing_forge(snapshot, hosts)?;
             Some((remote, forge, snapshot.branches.clone()))
         });
         let Some((remote, forge, branches)) = target else { return };
         let path = repo.path.clone();
-        repo.open_requests = Some(Task::spawn_with(&context, stale, move || read_open_requests(&remote, &forge, &branches, &glab, &path)));
+        repo.open_requests = Some(Task::spawn_with(&context, stale, move || {
+            read_open_requests(&remote, &forge, &branches, &glab, &path, token_file.as_deref())
+        }));
     }
 
     /// Opens what a request's dot leads to: the pull request's Checks tab on GitHub, and its page on
-    /// GitLab, where the pipeline is.
+    /// GitLab and Gitea, where the pipeline or the statuses are.
     pub fn open_request_checks(&mut self, forge: &Forge, request: &RequestCheck) {
         match forge {
             Forge::GitHub(repository) => {
@@ -286,7 +341,7 @@ impl NiceGitApp {
                     crate::tools::pull_request_detail::PullRequestDetailWindow::new(repository.clone(), request.number).on_checks();
                 self.open_tool(Box::new(window));
             }
-            Forge::GitLab(_) => crate::ui::changes::open_url(&request.url),
+            Forge::GitLab(_) | Forge::Gitea(_) => crate::ui::changes::open_url(&request.url),
         }
     }
 }
@@ -404,7 +459,7 @@ mod tests {
     fn a_dot_names_the_worst_state_and_says_nothing_without_checks() {
         let forge =
             Forge::GitHub(nicegit_core::github::GitHubRepository { host: "github.com".into(), owner: "acme".into(), name: "app".into() });
-        let check = |checks: Checks| RequestCheck { number: 12, title: "Add it".into(), url: String::new(), checks };
+        let check = |checks: Checks| RequestCheck { number: 12, title: "Add it".into(), url: String::new(), checks, is_draft: false };
         let failed = check(Checks { passed: 3, failed: 1, pending: 0 }).dot(&forge).unwrap();
         assert_eq!(failed.state, CheckState::Failed);
         assert_eq!(failed.label, "Checks: 1 failed");
@@ -417,6 +472,41 @@ mod tests {
     }
 
     #[test]
+    fn a_fresh_listing_with_the_branch_answers_the_status_bar_and_a_stale_one_does_not() {
+        let forge = Forge::Gitea(nicegit_core::hosting::HostedRepository {
+            host: "codeberg.org".into(),
+            kind: nicegit_core::hosting::Host::Gitea,
+            owner_path: "acme".into(),
+            name: "app".into(),
+        });
+        let mut checks = HashMap::new();
+        checks.insert(
+            "refs/heads/feature".to_string(),
+            RequestCheck {
+                number: 9,
+                title: "Feature".into(),
+                url: "https://codeberg.org/acme/app/pulls/9".into(),
+                checks: Checks { passed: 2, failed: 0, pending: 0 },
+                is_draft: true,
+            },
+        );
+        let read = Task::ready(Some(Arc::new(OpenRequests { forge: forge.clone(), checks })));
+        let fresh = Some(Instant::now());
+        let status = status_from_listing(fresh, Some(&read), &forge, "feature").expect("the listing has the branch");
+        assert_eq!((status.number, status.state), (9, PrState::Draft));
+        assert!(status_from_listing(fresh, Some(&read), &forge, "other").is_none(), "a branch not listed is asked for");
+        let stale = Some(Instant::now() - Duration::from_secs(300));
+        assert!(status_from_listing(stale, Some(&read), &forge, "feature").is_none(), "an old read is not used");
+        let other = Forge::Gitea(nicegit_core::hosting::HostedRepository {
+            host: "gitea.com".into(),
+            kind: nicegit_core::hosting::Host::Gitea,
+            owner_path: "acme".into(),
+            name: "app".into(),
+        });
+        assert!(status_from_listing(fresh, Some(&read), &other, "feature").is_none(), "another repository's listing is not used");
+    }
+
+    #[test]
     fn a_gitlab_request_is_named_by_its_bang_number() {
         let repository = nicegit_core::hosting::HostedRepository {
             host: "gitlab.com".into(),
@@ -425,8 +515,13 @@ mod tests {
             name: "proj".into(),
         };
         let forge = Forge::GitLab(repository);
-        let check =
-            RequestCheck { number: 7, title: "Merge".into(), url: String::new(), checks: Checks { passed: 1, failed: 0, pending: 0 } };
+        let check = RequestCheck {
+            number: 7,
+            title: "Merge".into(),
+            url: String::new(),
+            checks: Checks { passed: 1, failed: 0, pending: 0 },
+            is_draft: false,
+        };
         assert!(check.dot(&forge).unwrap().hover.starts_with("!7 Merge"));
     }
 }

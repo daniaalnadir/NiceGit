@@ -761,6 +761,9 @@ pub struct NiceGitApp {
     pub drafter: crate::claude::Drafter,
     /// The file that holds the saved Anthropic API key, when there is a settings folder.
     pub key_file: Option<PathBuf>,
+    /// The file that holds the saved access tokens of Gitea and Forgejo hosts, when there is a
+    /// settings folder. Tokens are read from it when a request is made, and never stored in memory.
+    pub forge_token_file: Option<PathBuf>,
     /// A commit message being drafted in the background, if any.
     pub draft_run: Option<crate::ui::ai_draft::DraftRun>,
     /// A finished draft waiting for the person to say whether it replaces the current message.
@@ -860,6 +863,7 @@ impl NiceGitApp {
             installed_update: None,
             drafter: crate::claude::draft_with_claude,
             key_file: crate::claude::key_file(),
+            forge_token_file: crate::forge_tokens::token_file(),
             draft_run: None,
             draft_ready: None,
             draft_status: None,

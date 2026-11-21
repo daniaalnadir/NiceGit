@@ -21,6 +21,7 @@ pub mod external;
 pub mod feedback;
 pub mod file_history;
 pub mod git_config;
+pub mod gitea;
 pub mod gitflow;
 pub mod github;
 pub mod github_review;

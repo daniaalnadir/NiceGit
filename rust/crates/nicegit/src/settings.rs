@@ -398,6 +398,10 @@ pub struct Settings {
     /// links, as gitlab.com remotes do. Stored lower-cased, without repeats.
     #[serde(default)]
     pub gitlab_hosts: Vec<String>,
+    /// Self-hosted Gitea or Forgejo hosts, such as `git.example.com`. Their remotes get pull requests,
+    /// issues, and Open on links. Stored lower-cased, without repeats. Tokens are not kept here.
+    #[serde(default)]
+    pub gitea_hosts: Vec<String>,
     /// Which branches the commit graph shows, in every repository.
     #[serde(default)]
     pub history_scope: HistoryScope,
@@ -546,6 +550,7 @@ impl Default for Settings {
             drafts: BTreeMap::new(),
             github_enterprise_hosts: Vec::new(),
             gitlab_hosts: Vec::new(),
+            gitea_hosts: Vec::new(),
             history_scope: HistoryScope::All,
             show_remote_labels: true,
             show_tag_labels: true,
@@ -582,7 +587,7 @@ impl Default for Settings {
 impl Settings {
     /// The self-hosted hosts listed in Settings, for the links that name a host's pages.
     pub fn listed_hosts(&self) -> nicegit_core::hosting::ListedHosts<'_> {
-        nicegit_core::hosting::ListedHosts { github: &self.github_enterprise_hosts, gitlab: &self.gitlab_hosts }
+        nicegit_core::hosting::ListedHosts { github: &self.github_enterprise_hosts, gitlab: &self.gitlab_hosts, gitea: &self.gitea_hosts }
     }
 }
 
@@ -590,22 +595,28 @@ impl Settings {
 /// trimmed, lower-cased, and without repeats, and the lines that are not valid hostnames. A line
 /// for github.com is left out silently, since github.com is always supported.
 pub fn parse_enterprise_hosts(text: &str) -> (Vec<String>, Vec<String>) {
-    parse_host_lines(text, "github.com")
+    parse_host_lines(text, &["github.com"])
 }
 
 /// Reads the GitLab box, which has one hostname per line, as [`parse_enterprise_hosts`] does. A
 /// line for gitlab.com is left out silently, since gitlab.com is always supported.
 pub fn parse_gitlab_hosts(text: &str) -> (Vec<String>, Vec<String>) {
-    parse_host_lines(text, "gitlab.com")
+    parse_host_lines(text, &["gitlab.com"])
+}
+
+/// Reads the Gitea and Forgejo box, which has one hostname per line, as [`parse_enterprise_hosts`]
+/// does. Lines for codeberg.org and gitea.com are left out silently, since those are always supported.
+pub fn parse_gitea_hosts(text: &str) -> (Vec<String>, Vec<String>) {
+    parse_host_lines(text, &nicegit_core::hosting::ALWAYS_GITEA)
 }
 
 /// The hostnames in a box with one per line: the valid ones, lower-cased and without repeats, and
-/// the lines that are not hostnames. A line for `always_supported` is left out silently.
-fn parse_host_lines(text: &str, always_supported: &str) -> (Vec<String>, Vec<String>) {
+/// the lines that are not hostnames. Lines for the `always_supported` hosts are left out silently.
+fn parse_host_lines(text: &str, always_supported: &[&str]) -> (Vec<String>, Vec<String>) {
     let mut valid: Vec<String> = Vec::new();
     let mut invalid = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        if line.eq_ignore_ascii_case(always_supported) {
+        if always_supported.iter().any(|host| line.eq_ignore_ascii_case(host)) {
             continue;
         }
         if nicegit_core::github::valid_enterprise_host(line) {
@@ -691,7 +702,7 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_enterprise_hosts, parse_gitlab_hosts, Draft, Settings, Workspace, STORAGE_KEY};
+    use super::{parse_enterprise_hosts, parse_gitea_hosts, parse_gitlab_hosts, Draft, Settings, Workspace, STORAGE_KEY};
     use eframe::Storage;
     use std::path::{Path, PathBuf};
 
@@ -902,6 +913,13 @@ mod tests {
         let (valid, invalid) = parse_gitlab_hosts("GitLab.Example.com\ngitlab.com\nnot a host\ngitlab.example.com");
         assert_eq!(valid, vec!["gitlab.example.com"]);
         assert_eq!(invalid, vec!["not a host"]);
+    }
+
+    #[test]
+    fn gitea_hosts_skip_the_public_hosts_and_refuse_ports() {
+        let (valid, invalid) = parse_gitea_hosts("Forge.Example.com\ncodeberg.org\nGitea.com\nforge.example.com:3000\nforge.example.com");
+        assert_eq!(valid, vec!["forge.example.com"]);
+        assert_eq!(invalid, vec!["forge.example.com:3000"], "a port is not a hostname here");
     }
 
     #[test]

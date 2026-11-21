@@ -8,6 +8,7 @@ mod conventional;
 mod custom_actions;
 mod diff_view;
 mod file_dialog;
+mod forge_tokens;
 mod git_ext;
 mod graph_view;
 mod i18n;
@@ -53,6 +54,8 @@ mod ui_tests_drag_cherry_pick;
 mod ui_tests_files;
 #[cfg(test)]
 mod ui_tests_find_repositories;
+#[cfg(test)]
+mod ui_tests_gitea;
 #[cfg(test)]
 mod ui_tests_identity;
 #[cfg(test)]

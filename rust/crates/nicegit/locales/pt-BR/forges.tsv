@@ -1,0 +1,22 @@
+# pt-BR: Gitea e Forgejo nas configurações, tokens e pull requests.
+Remotes on these hosts get pull requests, issues, and Open on links. Public repositories can be read without a token; creating a pull request needs one.	Os remotos desses hosts recebem pull requests, issues e links «Abrir em». Repositórios públicos podem ser lidos sem token; para criar um pull request, você precisa de um.
+One hostname per line, such as git.example.com	Um nome de host por linha, como git.example.com
+Gitea and Forgejo hosts	Hosts Gitea e Forgejo
+Not saved, as these are not hostnames: {hosts}. Use a name such as git.example.com, without https:// or a port.	Não salvo, pois estes não são nomes de host: {hosts}. Use um nome como git.example.com, sem https:// nem porta.
+No settings folder is available, so tokens cannot be saved here.	Não há pasta de configurações disponível, então os tokens não podem ser salvos aqui.
+Using {variable} from the environment for hosts with no saved token.	{variable} do ambiente é usado para hosts sem token salvo.
+A token is saved.	Um token está salvo.
+No token is saved.	Nenhum token está salvo.
+Paste a token	Cole um token
+Token for {host}	Token para {host}
+Delete the saved token	Excluir o token salvo
+That does not look like a token. It must have no spaces.	Isso não parece um token. Ele não pode ter espaços.
+No settings folder is available, so the token cannot be saved here.	Não há pasta de configurações disponível, então o token não pode ser salvo aqui.
+The token for {host} could not be saved: {error}	Não foi possível salvar o token de {host}: {error}
+The token for {host} could not be removed: {error}	Não foi possível remover o token de {host}: {error}
+Gitea and Forgejo are reached through their API, not a command-line tool.	Gitea e Forgejo são acessados pela API, não por uma ferramenta de linha de comando.
+Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.	Para criar um pull request em {host}, você precisa de um token. Adicione um em Configurações, em Gitea e Forgejo, e depois abra esta caixa de diálogo de novo.
+Load from Gitea / Forgejo	Carregar do Gitea / Forgejo
+Gitea and Forgejo	Gitea e Forgejo
+Save the token for {host}	Salvar o token de {host}
+Remove the token for {host}	Remover o token de {host}

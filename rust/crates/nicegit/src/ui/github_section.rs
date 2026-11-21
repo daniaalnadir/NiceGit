@@ -1,14 +1,17 @@
-//! Pull requests and issues listed in the sidebar, loaded on demand from a chosen GitHub remote
-//! (github.com or a GitHub Enterprise host) through the signed-in GitHub CLI, as in the Mac app.
+//! Pull requests and issues listed in the sidebar, loaded on demand from a chosen remote: GitHub (github.com
+//! or a GitHub Enterprise host) through the signed-in GitHub CLI, as in the Mac app, or Gitea and
+//! Forgejo through their API, with the saved token when there is one.
 
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::github::{Cancel, GitHubItem, ItemKind, ItemState, CANCELLED};
+use nicegit_core::hosting::{Host, ListedHosts};
 use nicegit_core::{GitClient, Snapshot};
 
 use std::path::PathBuf;
 
 use crate::app::NiceGitApp;
+use crate::forge_tokens;
 use crate::i18n::{tr, tr_fmt};
 use crate::theme;
 use crate::tools::{self, widgets, CheckOutRequest, Task};
@@ -70,17 +73,36 @@ fn slot(kind: ItemKind) -> usize {
     }
 }
 
+/// The menu label that loads a list: "Load from Gitea / Forgejo" when the first remote on a supported
+/// host is a Gitea or Forgejo one, and "Load from GitHub" otherwise.
+fn load_label(snapshot: &Snapshot, hosts: ListedHosts) -> &'static str {
+    let first = snapshot.remotes.iter().find_map(|remote| crate::git_ext::hosted_repository_for_remote(snapshot, remote, hosts));
+    match first {
+        Some(repository) if repository.kind == Host::Gitea => tr("Load from Gitea / Forgejo"),
+        _ => tr("Load from GitHub"),
+    }
+}
+
 impl NiceGitApp {
     fn load_github(&mut self, kind: ItemKind, remote: String, limit: usize) {
+        let token_file = self.forge_token_file.clone();
+        let hosts = self.settings.github_enterprise_hosts.clone();
+        let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let gitea_hosts = self.settings.gitea_hosts.clone();
         let Some(repo) = self.repos.get_mut(self.active) else { return };
         if let Some(previous) = repo.github[slot(kind)].as_ref() {
             previous.cancel.cancel();
         }
         let cancel = Cancel::default();
         let (path, token, remote_name) = (repo.path.clone(), cancel.clone(), remote.clone());
-        let hosts = self.settings.github_enterprise_hosts.clone();
         let task = Task::spawn(&self.worker.context, move || {
             let client = GitClient::new();
+            let listed = ListedHosts { github: &hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
+            let hosted = client.hosted_remote_repository(&remote_name, &path, listed)?;
+            if hosted.kind == Host::Gitea {
+                let saved = forge_tokens::token_for(token_file.as_deref(), &hosted.host);
+                return client.gitea_items(&hosted, kind, saved.as_deref(), limit, &path);
+            }
             let repository = client.github_repository(&remote_name, &path, &hosts)?;
             client.github_items_cancellable(&repository, kind, ItemState::Open, limit, &token, &path)
         });
@@ -166,16 +188,18 @@ impl NiceGitApp {
     }
 
     /// Opens the detail window of pull request `number`, which the status bar shows for the current
-    /// branch. Nothing opens for a GitLab merge request or a branch with no GitHub upstream.
+    /// branch. Nothing opens for a GitLab merge request, a Gitea pull request, or a branch with no
+    /// GitHub upstream.
     pub fn open_current_pull_request_details(&mut self, number: u64) {
         let github_hosts = self.settings.github_enterprise_hosts.clone();
         let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let gitea_hosts = self.settings.gitea_hosts.clone();
         let repository = self.repos.get(self.active).and_then(|repo| repo.snapshot.as_ref()).and_then(|snapshot| {
             let branch = snapshot.current().filter(|branch| !branch.is_remote)?;
-            let hosts = nicegit_core::hosting::ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts };
+            let hosts = nicegit_core::hosting::ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
             match crate::git_ext::pull_request_target(snapshot, branch, hosts)?.repository {
                 crate::git_ext::Forge::GitHub(repository) => Some(repository),
-                crate::git_ext::Forge::GitLab(_) => None,
+                crate::git_ext::Forge::GitLab(_) | crate::git_ext::Forge::Gitea(_) => None,
             }
         });
         if let Some(repository) = repository {
@@ -203,6 +227,10 @@ impl NiceGitApp {
         // A pull request's "View details…" asks for its detail window, which opens once the list is drawn.
         let mut details: Option<(String, u64)> = None;
         let hosts = self.settings.github_enterprise_hosts.clone();
+        let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let gitea_hosts = self.settings.gitea_hosts.clone();
+        let listed = ListedHosts { github: &hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
+        let load_label = load_label(snapshot, listed);
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
                 ui.label(RichText::new(format!("   {}", tr(tr("Add a GitHub remote to load these")))).small().color(c.muted));
@@ -212,7 +240,7 @@ impl NiceGitApp {
             let Some(list) = repo.github[slot(kind)].as_mut() else {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    ui.menu_button(format!("{}  {} {}", icon::GITHUB_LOGO, tr("Load from GitHub"), icon::CARET_DOWN), |ui| {
+                    ui.menu_button(format!("{}  {} {}", icon::GITHUB_LOGO, load_label, icon::CARET_DOWN), |ui| {
                         for remote in &snapshot.remotes {
                             if ui.button(remote).clicked() {
                                 ui.close();
@@ -224,21 +252,28 @@ impl NiceGitApp {
                 return;
             };
             let loading = list.is_loading();
+            // A Gitea or Forgejo list has no GitHub-only windows, details, or work items.
+            let hosted = crate::git_ext::hosted_repository_for_remote(snapshot, &list.remote, listed);
+            let gitea = hosted.as_ref().is_some_and(|repository| repository.kind == Host::Gitea);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                // A GitHub Enterprise remote names its host, so the list says which server it reads.
-                let header = match crate::git_ext::github_repository_for_remote(snapshot, &list.remote, &hosts) {
-                    Some(repository) if repository.host != "github.com" => {
+                // A GitHub Enterprise or Gitea remote names its host, so the list says which server it reads.
+                let header = match (&hosted, crate::git_ext::github_repository_for_remote(snapshot, &list.remote, &hosts)) {
+                    (Some(repository), _) if gitea => format!("{}  {} · {}", icon::GIT_BRANCH, list.remote, repository.host),
+                    (_, Some(repository)) if repository.host != "github.com" => {
                         format!("{}  {} · {}", icon::GITHUB_LOGO, list.remote, repository.host)
                     }
                     _ => format!("{}  {}", icon::GITHUB_LOGO, list.remote),
                 };
                 ui.label(RichText::new(header).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, tr("Open with filters and closed items"), true);
-                    open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Open GitHub window")));
-                    if open_window.clicked() {
-                        window = Some(list.remote.clone());
+                    // The filtered window reads GitHub only; a Gitea list has no such window.
+                    if !gitea {
+                        let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, tr("Open with filters and closed items"), true);
+                        open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Open GitHub window")));
+                        if open_window.clicked() {
+                            window = Some(list.remote.clone());
+                        }
                     }
                     if loading {
                         if ui.small_button(tr("Cancel")).clicked() {
@@ -280,7 +315,9 @@ impl NiceGitApp {
                         ui.close();
                         ui.ctx().copy_text(item.url.clone());
                     }
-                    if kind == ItemKind::PullRequest && ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("View details…"))).clicked()
+                    if kind == ItemKind::PullRequest
+                        && !gitea
+                        && ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("View details…"))).clicked()
                     {
                         ui.close();
                         details = Some((list.remote.clone(), item.number));
@@ -290,7 +327,7 @@ impl NiceGitApp {
                         ui.close();
                         check_out = Some((list.remote.clone(), item.clone()));
                     }
-                    if kind == ItemKind::Issue && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Start work…"))).clicked() {
+                    if kind == ItemKind::Issue && !gitea && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Start work…"))).clicked() {
                         ui.close();
                         start_work = Some((list.remote.clone(), item.clone()));
                     }
