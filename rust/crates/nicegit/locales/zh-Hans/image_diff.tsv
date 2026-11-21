@@ -1,0 +1,13 @@
+# zh-Hans: how changed images are compared.
+Swipe	滑动
+Onion skin	洋葱皮
+Difference	差异
+Opacity	不透明度
+Swipe divider	比较分隔线
+The images are different sizes	图片尺寸不同
+{percent} % of pixels changed	{percent} % 的像素已更改
+Before {before} · After {after}	修改前 {before} · 修改后 {after}
+Show both versions next to each other	并排显示两个版本
+Drag the divider to compare the two versions	拖动分隔线以比较两个版本
+Fade the new version over the old one	将新版本叠加在旧版本上
+Highlight the pixels that changed	高亮显示已更改的像素

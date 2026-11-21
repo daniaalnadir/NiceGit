@@ -4,8 +4,9 @@
 
 use crate::i18n::{tr, tr_count, tr_fmt};
 use std::path::Path;
+use std::sync::OnceLock;
 
-use egui::{Color32, ColorImage, RichText, TextureHandle, TextureOptions, Ui};
+use egui::{Color32, ColorImage, RichText, Shape, TextureHandle, TextureOptions, Ui};
 use egui_phosphor::regular as icon;
 use nicegit_core::compare::ComparedFile;
 use nicegit_core::diff::{parse_diff, DiffRequest};
@@ -13,6 +14,7 @@ use nicegit_core::{short, GitClient, GitError, Snapshot};
 
 use crate::diff_view::{self, DiffContent};
 use crate::theme;
+use crate::tools::image_diff::{self, Difference, ImageControls, ImageDiffMode};
 use crate::tools::{query, widgets, Ctx, Task, ToolWindow};
 
 /// Extensions shown as images, as in the Mac app. HEIC is decoded through macOS's own image
@@ -32,6 +34,8 @@ pub struct CompareWindow {
     detail_request: DiffRequest,
     /// The textures for the shown image pair, rebuilt when a new detail arrives.
     textures: Option<Textures>,
+    /// The swipe divider and onion skin positions for the shown image.
+    image_controls: ImageControls,
     selected: Option<String>,
     split: bool,
     stale: bool,
@@ -49,24 +53,28 @@ enum Detail {
 pub(crate) struct ImagePair {
     pub before: Option<ImageSide>,
     pub after: Option<ImageSide>,
+    /// The changed pixels, worked out the first time the difference view is shown.
+    pub difference: OnceLock<Option<Difference>>,
 }
 
 pub(crate) struct ImageSide {
-    bytes: usize,
+    pub bytes: usize,
     /// The decoded picture, or `None` when this build cannot decode the format.
-    image: Option<ColorImage>,
+    pub image: Option<ColorImage>,
 }
 
 /// An image pair uploaded for drawing.
 pub(crate) struct Textures {
-    before: Option<TextureHandle>,
-    after: Option<TextureHandle>,
+    pub before: Option<TextureHandle>,
+    pub after: Option<TextureHandle>,
+    /// The difference picture, uploaded the first time it is shown.
+    pub difference: Option<TextureHandle>,
 }
 
 impl ImagePair {
     /// Reads and decodes both versions of an image.
     pub fn read(before: Option<Vec<u8>>, after: Option<Vec<u8>>) -> Self {
-        Self { before: before.map(decode_side), after: after.map(decode_side) }
+        Self { before: before.map(decode_side), after: after.map(decode_side), difference: OnceLock::new() }
     }
 
     /// Uploads both versions for drawing, named after `key`.
@@ -76,11 +84,29 @@ impl ImagePair {
                 .and_then(|side| side.image.as_ref())
                 .map(|image| ctx.load_texture(format!("{key}-{name}"), image.clone(), TextureOptions::LINEAR))
         };
-        Textures { before: load(&self.before, "before"), after: load(&self.after, "after") }
+        Textures { before: load(&self.before, "before"), after: load(&self.after, "after"), difference: None }
+    }
+
+    /// Draws the pair in the chosen comparison mode, with the mode control above it. Returns the
+    /// mode the person picked this frame, if they picked one.
+    pub fn show(
+        &self,
+        ui: &mut Ui,
+        textures: Option<&mut Textures>,
+        controls: &mut ImageControls,
+        mode: ImageDiffMode,
+    ) -> Option<ImageDiffMode> {
+        let current = image_diff::effective_mode(self, mode);
+        let chosen = image_diff::mode_control(ui, self, current);
+        match image_diff::effective_mode(self, chosen.unwrap_or(current)) {
+            ImageDiffMode::SideBySide => self.show_side_by_side(ui, textures.as_deref()),
+            other => image_diff::show_overlay(self, ui, textures, controls, other),
+        }
+        chosen
     }
 
     /// Draws the two versions side by side, each with its dimensions and file size.
-    pub fn show(&self, ui: &mut Ui, textures: Option<&Textures>) {
+    fn show_side_by_side(&self, ui: &mut Ui, textures: Option<&Textures>) {
         let muted = theme::of(ui).muted;
         ui.columns(2, |columns| {
             image_pane(
@@ -114,6 +140,7 @@ impl CompareWindow {
             detail_path: None,
             detail_request: DiffRequest::default(),
             textures: None,
+            image_controls: ImageControls::default(),
             selected: None,
             split: false,
             stale: true,
@@ -183,6 +210,7 @@ impl ToolWindow for CompareWindow {
         if self.detail.settle() {
             self.textures = None;
         }
+        let image_mode = cx.image_diff_mode;
 
         self.header(ui, cx.snapshot);
         ui.separator();
@@ -205,7 +233,11 @@ impl ToolWindow for CompareWindow {
                 if let Some(path) = clicked {
                     self.selected = Some(path);
                 }
-                egui::CentralPanel::default().show(ui, |ui| self.detail_pane(ui, &ctx));
+                let mut image_mode_picked = None;
+                egui::CentralPanel::default().show(ui, |ui| image_mode_picked = self.detail_pane(ui, &ctx, image_mode));
+                if let Some(mode) = image_mode_picked {
+                    cx.set_image_diff_mode(mode);
+                }
             }
         }
     }
@@ -240,10 +272,11 @@ impl CompareWindow {
         });
     }
 
-    fn detail_pane(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+    /// Draws the selected file's change. Returns the image mode the person picked, if any.
+    fn detail_pane(&mut self, ui: &mut Ui, ctx: &egui::Context, image_mode: ImageDiffMode) -> Option<ImageDiffMode> {
         let Some(path) = self.selected.clone() else {
             widgets::empty_state(ui, icon::GIT_DIFF, tr("Select a file to see how it changed"));
-            return;
+            return None;
         };
         ui.horizontal(|ui| {
             ui.label(RichText::new(&path).strong()).on_hover_text(&path);
@@ -260,12 +293,14 @@ impl CompareWindow {
                 self.textures = Some(pair.textures(ctx, &path));
             }
         }
+        let mut picked = None;
         match self.detail.value(&path) {
             None => widgets::loading(ui, tr("Loading the change")),
             Some(Err(error)) => widgets::error(ui, &message(error)),
             Some(Ok(Detail::Diff(content))) => diff_view::show(ui, content, self.split),
-            Some(Ok(Detail::Images(pair))) => pair.show(ui, self.textures.as_ref()),
+            Some(Ok(Detail::Images(pair))) => picked = pair.show(ui, self.textures.as_mut(), &mut self.image_controls, image_mode),
         }
+        picked
     }
 }
 
@@ -306,7 +341,10 @@ fn image_pane(ui: &mut Ui, title: &str, side: Option<&ImageSide>, texture: Optio
             (Some(side), Some(texture)) if side.image.is_some() => {
                 let available = ui.available_size();
                 let image = egui::Image::from_texture(texture).max_size(egui::vec2(available.x.max(40.0), (available.y - 8.0).max(40.0)));
-                ui.add(image).on_hover_text(tr_fmt!("{title} image", title = title));
+                // The checkerboard is painted behind the image once its place is known.
+                let behind = ui.painter().add(Shape::Noop);
+                let response = ui.add(image).on_hover_text(tr_fmt!("{title} image", title = title));
+                ui.painter().set(behind, image_diff::checkerboard_shape(response.rect, ui.visuals().dark_mode));
             }
             (Some(_), _) => {
                 ui.add_space(24.0);

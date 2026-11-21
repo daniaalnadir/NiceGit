@@ -4,6 +4,7 @@
 
 - The interface is available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese; choose the language under Settings, General (System follows your computer).
 - Screen readers (VoiceOver, Narrator, NVDA, Orca) name every control, commit, file, and diff line; Settings has Larger text and Reduce motion options under Accessibility.
+- Changed images compare side by side, swiped with a draggable divider, faded over each other with an opacity slider, or with the changed pixels highlighted and counted; the chosen mode is remembered.
 - Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
 - A dot on each branch with an open pull or merge request shows whether its checks passed, failed, or are pending, on the graph and in the sidebar; click it to see the checks. Turn it off in Settings.
 - Optional Draft button in the commit box writes a commit message from the staged changes with Claude, using your own Anthropic API key. Off by default; set it up under Settings, in Claude.
