@@ -723,7 +723,12 @@ impl NiceGitApp {
                     let label = format!("Take {side} version");
                     let notice = tr_fmt!("Took the {side} version of {path}.", side = side, path = entry.path);
                     let path = entry.path.clone();
-                    self.act(&label, move |client, repo| client.resolve_conflict_side(&path, from_incoming, repo).map(|()| Some(notice)));
+                    self.act(
+                        &label,
+                        self.guard_rewrite(move |client, repo| {
+                            client.resolve_conflict_side(&path, from_incoming, repo).map(|()| Some(notice))
+                        }),
+                    );
                 }
             }
         }

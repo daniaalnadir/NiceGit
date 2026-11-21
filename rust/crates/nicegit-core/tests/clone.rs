@@ -155,7 +155,7 @@ fn defaults_make_the_same_full_clone_as_before() {
     }
     assert_eq!(
         client().repository_shape(&defaulted, Some(&defaulted.join(".git"))),
-        nicegit_core::client::RepositoryShape { shallow: false, sparse: false }
+        nicegit_core::client::RepositoryShape { bare: false, shallow: false, sparse: false }
     );
 }
 

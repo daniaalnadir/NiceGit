@@ -400,10 +400,13 @@ impl ApplyPatchWindow {
         let three_way = self.three_way && preview.three_way_possible;
         let branch = shown.branch;
         let head = shown.head;
-        cx.act("Apply patch", move |client, path| {
-            client.require_checkout(&branch, head.as_deref(), "apply", path)?;
-            client.apply_patch_with(&bytes, mode, three_way, path).map(Some)
-        });
+        cx.act(
+            "Apply patch",
+            cx.guard_rewrite(move |client, path| {
+                client.require_checkout(&branch, head.as_deref(), "apply", path)?;
+                client.apply_patch_with(&bytes, mode, three_way, path).map(Some)
+            }),
+        );
         self.closing = true;
     }
 }

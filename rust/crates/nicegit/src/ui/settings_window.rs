@@ -238,6 +238,27 @@ impl NiceGitApp {
                 .response
                 .on_hover_text(tr("The Clone dialog fills in its destination from this folder. The first clone's parent folder is remembered when none is set."));
                 ui.add_space(10.0);
+                widgets::section(ui, tr("Snapshots"));
+                crate::tools::widgets::checkbox(ui, true, &mut self.settings.snapshots_enabled, tr("Save snapshots of my working files"));
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(tr("Save every"));
+                    for (minutes, label) in [(1, tr("1 min")), (5, tr("5 min")), (15, tr("15 min"))] {
+                        ui.selectable_value(&mut self.settings.snapshot_interval_minutes, minutes, label);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label(tr("Keep for"));
+                    for (days, label) in [(1, tr("1 day")), (7, tr("7 days")), (30, tr("30 days"))] {
+                        ui.selectable_value(&mut self.settings.snapshot_keep_days, days, label);
+                    }
+                });
+                ui.label(
+                    RichText::new(tr("Snapshots stay in this repository under refs/nicegit/snapshots and are never pushed by NiceGit. A git push --mirror would send them. Files over 20 MB are skipped."))
+                        .small()
+                        .color(c.muted),
+                );
+                ui.add_space(10.0);
                 widgets::section(ui, tr("Custom actions"));
                 self.custom_actions_section(ui);
                 ui.add_space(10.0);

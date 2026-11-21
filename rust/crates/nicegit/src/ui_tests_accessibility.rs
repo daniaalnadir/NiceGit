@@ -319,7 +319,7 @@ fn larger_text_and_reduce_motion_are_settings_that_apply_at_once() {
     let mut harness = open(repo.path());
     loaded(&mut harness);
     // The Accessibility section is at the foot of Settings, so the window is made tall enough to show it.
-    harness.set_size(egui::vec2(1440.0, 2600.0));
+    harness.set_size(egui::vec2(1440.0, 3000.0));
     harness.state_mut().show_settings = true;
     settle(&mut harness);
     let zoom = harness.ctx.zoom_factor();

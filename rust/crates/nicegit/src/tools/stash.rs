@@ -326,11 +326,14 @@ impl StashWindow {
                             if action_button(ui, tr("Apply"), tr("Restore the changes and keep the stash"), !blocked).clicked() {
                                 let reference = stash.reference.clone();
                                 let stash = stash.clone();
-                                cx.act(tr_fmt!("Apply {reference}", reference = reference), move |client, directory| {
-                                    client
-                                        .apply_stash(&stash, directory)
-                                        .map(|()| Some(tr_fmt!("Applied {reference}.", reference = reference)))
-                                });
+                                cx.act(
+                                    tr_fmt!("Apply {reference}", reference = reference),
+                                    cx.guard_rewrite(move |client, directory| {
+                                        client
+                                            .apply_stash(&stash, directory)
+                                            .map(|()| Some(tr_fmt!("Applied {reference}.", reference = reference)))
+                                    }),
+                                );
                             }
                             if action_button(ui, tr("Rename"), tr("Give the stash a new name. It moves to the top of the list"), idle)
                                 .clicked()
@@ -385,9 +388,12 @@ impl StashWindow {
             self.pending = None;
             let reference = stash.reference.clone();
             match kind {
-                Confirm::Pop => cx.act(tr_fmt!("Pop {reference}", reference = reference), move |client, directory| {
-                    client.pop_stash(&stash, directory).map(|()| Some(tr_fmt!("Popped {reference}.", reference = reference)))
-                }),
+                Confirm::Pop => cx.act(
+                    tr_fmt!("Pop {reference}", reference = reference),
+                    cx.guard_rewrite(move |client, directory| {
+                        client.pop_stash(&stash, directory).map(|()| Some(tr_fmt!("Popped {reference}.", reference = reference)))
+                    }),
+                ),
                 Confirm::Delete => {
                     let name = stash.message.clone();
                     cx.act_with_record(tr_fmt!("Delete {reference}", reference = reference), move |client, directory| {

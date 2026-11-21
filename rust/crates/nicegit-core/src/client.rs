@@ -67,9 +67,11 @@ pub struct CloneOptions {
     pub sparse_folders: Vec<String>,
 }
 
-/// Whether a checkout is shallow, and whether sparse checkout limits its folders.
+/// Whether a checkout is shallow, whether sparse checkout limits its folders, and whether the
+/// repository is bare (it has no working files, so there is nothing to snapshot).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RepositoryShape {
+    pub bare: bool,
     pub shallow: bool,
     pub sparse: bool,
 }
@@ -497,8 +499,10 @@ impl GitClient {
     /// checkout always has `info/sparse-checkout` in its own Git directory. Only when that file
     /// exists is `core.sparseCheckout` asked, because disabling sparse checkout leaves the file.
     pub fn repository_shape(&self, directory: &Path, git_directory: Option<&Path>) -> RepositoryShape {
+        let bare = self.try_trimmed(&["rev-parse", "--is-bare-repository"], directory).as_deref() == Some("true");
         let Some(git_directory) = git_directory else {
             return RepositoryShape {
+                bare,
                 shallow: self.try_trimmed(&["rev-parse", "--is-shallow-repository"], directory).as_deref() == Some("true"),
                 sparse: self.try_trimmed(&["config", "--bool", "core.sparseCheckout"], directory).as_deref() == Some("true"),
             };
@@ -511,7 +515,7 @@ impl GitClient {
         let shallow = common.join("shallow").is_file();
         let sparse = git_directory.join("info").join("sparse-checkout").is_file()
             && self.try_trimmed(&["config", "--bool", "core.sparseCheckout"], directory).as_deref() == Some("true");
-        RepositoryShape { shallow, sparse }
+        RepositoryShape { bare, shallow, sparse }
     }
 
     /// Downloads the full history of a shallow repository from its remote.
@@ -610,7 +614,8 @@ impl GitClient {
                     .filter(|reference| reference.starts_with("refs/heads/") || reference.starts_with("refs/remotes/"))
                     .map(|reference| format!("--exclude={}", glob_escape(reference)))
                     .collect();
-                revisions.extend(["--exclude=refs/stash".to_string(), "--all".to_string()]);
+                // Snapshot refs are kept out of the graph, so each snapshot is not a commit there.
+                revisions.extend(["--exclude=refs/stash".to_string(), "--exclude=refs/nicegit/*".to_string(), "--all".to_string()]);
                 revisions
             }
             HistoryScope::Local => {

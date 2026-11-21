@@ -39,6 +39,7 @@ pub mod range_diff;
 pub mod reflog;
 pub mod repository_settings;
 pub mod reset;
+pub mod snapshots;
 pub mod split_commit;
 pub mod stash;
 pub mod submodules;
@@ -120,6 +121,9 @@ pub struct Ctx<'a> {
     pub diff_context: DiffContext,
     /// The diff and merge tools the repository's configuration names, as last read.
     pub external: ExternalTools,
+    /// How many days snapshots are kept, when the repository is saved in snapshots; `None` when
+    /// they are off. See `Ctx::guard_rewrite`.
+    pub snapshot_keep_days: Option<u64>,
 }
 
 impl<'a> Ctx<'a> {
@@ -133,6 +137,7 @@ impl<'a> Ctx<'a> {
             requests,
             diff_context: DiffContext::default(),
             external: ExternalTools::default(),
+            snapshot_keep_days: None,
         }
     }
 
@@ -151,6 +156,15 @@ impl<'a> Ctx<'a> {
     /// The diff options the app settings ask for: whitespace and context.
     pub fn diff_request(&self) -> DiffRequest {
         DiffRequest { ignore_whitespace: self.ignore_whitespace, context: self.diff_context }
+    }
+
+    /// Wraps an action that can overwrite or remove working files, so the files are saved as a
+    /// snapshot first. Use it wherever a tool starts such an action, as `act` takes no snapshot.
+    pub fn guard_rewrite<R>(
+        &self,
+        action: impl FnOnce(&GitClient, &Path) -> R + Send + 'static,
+    ) -> impl FnOnce(&GitClient, &Path) -> R + Send + 'static {
+        crate::autosnapshot::before_rewrite(self.snapshot_keep_days, action)
     }
 
     pub fn act(&mut self, label: impl Into<String>, action: impl FnOnce(&GitClient, &Path) -> ActionResult + Send + 'static) {

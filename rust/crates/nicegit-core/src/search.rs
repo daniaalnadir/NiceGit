@@ -86,7 +86,17 @@ impl GitClient {
         };
         let count = limit.max(1).to_string();
         let pretty = format!("--pretty=format:{LOG_FORMAT}");
-        let mut arguments = vec!["log", "--all", "--exclude=refs/stash", "--decorate=short", "--no-color", "-n", &count, &pretty];
+        let mut arguments = vec![
+            "log",
+            "--all",
+            "--exclude=refs/stash",
+            "--exclude=refs/nicegit/*",
+            "--decorate=short",
+            "--no-color",
+            "-n",
+            &count,
+            &pretty,
+        ];
         if matches!(field, CommitSearchField::Message | CommitSearchField::Author) {
             arguments.extend(["--fixed-strings", "--regexp-ignore-case"]);
         }

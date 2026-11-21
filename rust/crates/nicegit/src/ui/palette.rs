@@ -238,6 +238,13 @@ impl NiceGitApp {
                 Run::Tool("reflog"),
             ),
             command(
+                tr("Snapshots…"),
+                tr("Saved copies of your working files, to bring lost files back"),
+                icon::FLOPPY_DISK,
+                has,
+                Run::Tool("snapshots"),
+            ),
+            command(
                 tr("Insights"),
                 tr("Commits over time, authors, and the files and folders that change most"),
                 icon::CHART_BAR,
@@ -521,12 +528,13 @@ impl NiceGitApp {
             ),
             Run::Bisect(mark) => {
                 if let Some(testing) = self.bisect_status().and_then(|s| s.testing) {
-                    self.act(tr("Mark bisect"), move |client, path| client.mark_bisect(mark, &testing, path).map(Some));
+                    self.act(tr("Mark bisect"), self.guard_rewrite(move |client, path| client.mark_bisect(mark, &testing, path).map(Some)));
                 }
             }
-            Run::EndBisect => {
-                self.act(tr("End bisect"), |client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into())))
-            }
+            Run::EndBisect => self.act(
+                tr("End bisect"),
+                self.guard_rewrite(|client, path| client.end_bisect(path).map(|_| Some(tr("Ended the bisect.").into()))),
+            ),
             Run::PruneWorktrees => self.act(tr("Forget missing worktrees"), |client, path| {
                 client.prune_worktrees(path).map(|_| Some(tr("Forgot missing worktrees.").into()))
             }),
@@ -547,6 +555,7 @@ impl NiceGitApp {
                     "search" => Some(Box::new(tools::commit_search::CommitSearchWindow::new())),
                     "grep" => Some(Box::new(tools::content_search::ContentSearchWindow::new(None))),
                     "reflog" => Some(Box::new(tools::reflog::ReflogWindow::new())),
+                    "snapshots" => Some(Box::new(tools::snapshots::SnapshotsWindow::new())),
                     "insights" => Some(Box::new(tools::insights::InsightsWindow::new())),
                     "range_diff" => {
                         // The checkout's branch is compared with its earlier version, when it has one.
