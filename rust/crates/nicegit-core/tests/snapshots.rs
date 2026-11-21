@@ -317,23 +317,28 @@ fn a_linked_worktree_snapshots_its_own_files() {
 #[test]
 fn filenames_with_spaces_newlines_and_glob_characters_are_kept_literally() {
     let repo = Repo::new();
-    let names = ["with space.txt", "new\nline.txt", "star*.txt", "[bracket].txt", "question?.txt"];
-    for name in names {
+    // "[bracket].txt" read as a glob would match "b.txt". Windows refuses newlines, "*" and "?" in
+    // file names, so those are tried only elsewhere.
+    let mut names = vec!["with space.txt", "[bracket].txt", "b.txt"];
+    if !cfg!(windows) {
+        names.extend(["new\nline.txt", "star*.txt", "question?.txt"]);
+    }
+    for name in &names {
         repo.write(name, &format!("content of {name}\n"));
     }
     let snapshot = take(&repo).expect("snapshot");
-    for name in names {
+    for name in &names {
         assert_eq!(in_snapshot(&repo, &snapshot, name), Some(format!("content of {name}\n")), "{name:?} is saved");
     }
     // Only the named file changes; its glob-like neighbours keep their content.
-    for name in names {
+    for name in &names {
         repo.write(name, "changed\n");
     }
-    fs::remove_file(repo.path().join("star*.txt")).unwrap();
-    restore_from_snapshot(&client(), &snapshot, &["star*.txt".into()], repo.path()).expect("restore one");
-    assert_eq!(repo.read("star*.txt"), "content of star*.txt\n");
+    fs::remove_file(repo.path().join("[bracket].txt")).unwrap();
+    restore_from_snapshot(&client(), &snapshot, &["[bracket].txt".into()], repo.path()).expect("restore one");
+    assert_eq!(repo.read("[bracket].txt"), "content of [bracket].txt\n");
+    assert_eq!(repo.read("b.txt"), "changed\n");
     assert_eq!(repo.read("with space.txt"), "changed\n");
-    assert_eq!(repo.read("[bracket].txt"), "changed\n");
 }
 
 #[test]
