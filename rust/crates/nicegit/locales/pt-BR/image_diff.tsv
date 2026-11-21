@@ -1,0 +1,13 @@
+# pt-BR: how changed images are compared.
+Swipe	Deslizar
+Onion skin	Pele de cebola
+Difference	Diferença
+Opacity	Opacidade
+Swipe divider	Divisor de comparação
+The images are different sizes	As imagens têm tamanhos diferentes
+{percent} % of pixels changed	{percent} % dos pixels alterados
+Before {before} · After {after}	Antes {before} · Depois {after}
+Show both versions next to each other	Mostrar as duas versões lado a lado
+Drag the divider to compare the two versions	Arraste o divisor para comparar as duas versões
+Fade the new version over the old one	Sobreponha a nova versão à antiga
+Highlight the pixels that changed	Destaca os pixels alterados
