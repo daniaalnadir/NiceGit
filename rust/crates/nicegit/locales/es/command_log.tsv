@@ -1,0 +1,19 @@
+# es: the command log window, its filters, rows, and menus.
+Command Log	Registro de comandos
+Filter commands	Filtrar comandos
+Show reads	Mostrar lecturas
+Only this repository	Solo este repositorio
+Copy all	Copiar todo
+No Git commands have run yet.	Todavía no se ha ejecutado ningún comando de Git.
+No commands match these filters.	Ningún comando coincide con estos filtros.
+Copy command	Copiar comando
+Copy output	Copiar salida
+No error output.	Sin salida de error.
+Succeeded	Correcto
+Stopped or did not start.	Se detuvo o no se inició.
+Command log	Registro de comandos
+Command log…	Registro de comandos…
+Show in command log	Mostrar en el registro de comandos
+Show the command log	Mostrar el registro de comandos
+{milliseconds} ms	{milliseconds} ms
+Exited with status {code}.	Terminó con el estado {code}.
