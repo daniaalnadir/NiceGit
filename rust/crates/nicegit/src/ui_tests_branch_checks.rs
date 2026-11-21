@@ -20,7 +20,13 @@ fn put_request(harness: &mut egui_kittest::Harness<'static, crate::app::NiceGitA
     let mut by_ref = HashMap::new();
     by_ref.insert(
         format!("refs/heads/{branch}"),
-        RequestCheck { number: 12, title: "Add the status bar".into(), url: "https://github.com/acme/app/pull/12".into(), checks },
+        RequestCheck {
+            number: 12,
+            title: "Add the status bar".into(),
+            url: "https://github.com/acme/app/pull/12".into(),
+            checks,
+            is_draft: false,
+        },
     );
     let requests = Arc::new(OpenRequests { forge: Forge::GitHub(github), checks: by_ref });
     let app = harness.state_mut();

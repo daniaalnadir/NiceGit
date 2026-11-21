@@ -1,0 +1,22 @@
+# ja: 設定の Gitea・Forgejo、トークン、プルリクエスト。
+Remotes on these hosts get pull requests, issues, and Open on links. Public repositories can be read without a token; creating a pull request needs one.	これらのホストのリモートでは、プルリクエスト、Issue、「で開く」リンクが使えます。公開リポジトリはトークンなしで読めますが、プルリクエストの作成にはトークンが必要です。
+One hostname per line, such as git.example.com	1行に1つのホスト名を入力します。例: git.example.com
+Gitea and Forgejo hosts	Gitea・Forgejo のホスト
+Not saved, as these are not hostnames: {hosts}. Use a name such as git.example.com, without https:// or a port.	ホスト名ではないため保存されませんでした: {hosts}。git.example.com のように、https:// やポート番号を含めない名前を使ってください。
+No settings folder is available, so tokens cannot be saved here.	設定フォルダーがないため、トークンをここに保存できません。
+Using {variable} from the environment for hosts with no saved token.	保存されたトークンがないホストでは、環境変数の {variable} を使います。
+A token is saved.	トークンが保存されています。
+No token is saved.	トークンは保存されていません。
+Paste a token	トークンを貼り付け
+Token for {host}	{host} のトークン
+Delete the saved token	保存されたトークンを削除
+That does not look like a token. It must have no spaces.	トークンではないようです。スペースを含めることはできません。
+No settings folder is available, so the token cannot be saved here.	設定フォルダーがないため、このトークンはここに保存できません。
+The token for {host} could not be saved: {error}	{host} のトークンを保存できませんでした: {error}
+The token for {host} could not be removed: {error}	{host} のトークンを削除できませんでした: {error}
+Gitea and Forgejo are reached through their API, not a command-line tool.	Gitea・Forgejo はコマンドラインツールではなく API を通じて利用します。
+Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.	{host} でプルリクエストを作成するにはトークンが必要です。設定の Gitea・Forgejo でトークンを追加してから、このダイアログをもう一度開いてください。
+Load from Gitea / Forgejo	Gitea / Forgejo から読み込む
+Gitea and Forgejo	Gitea・Forgejo
+Save the token for {host}	{host} のトークンを保存
+Remove the token for {host}	{host} のトークンを削除

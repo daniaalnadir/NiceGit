@@ -1,5 +1,6 @@
 //! "Create pull request" for a local branch: a form that creates the pull request through the GitHub
-//! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`). It fills in the
+//! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`), or a Gitea or
+//! Forgejo pull request through its API with a token. It fills in the
 //! base branch from the host, and the title and body from the branch's commits. The browser's compare
 //! page, or GitLab's new merge request form, stays available as tr("Open in browser instead"). Nothing here
 //! blocks the interface; every `gh`, `glab`, and Git read runs in the background.
@@ -15,6 +16,7 @@ use nicegit_core::hosting::{Host, ListedHosts};
 use nicegit_core::{Branch, GitClient, GitError, Snapshot};
 
 use crate::app::{NiceGitApp, Notice, NoticeAction};
+use crate::forge_tokens;
 use crate::git_ext::{self, Forge, PullRequestTarget};
 use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::theme;
@@ -36,11 +38,13 @@ pub enum Outcome {
 }
 
 /// What `gh` said about the repository's default branch. A missing or signed-out `gh` is an answer.
+/// A Gitea or Forgejo repository with no token can be read, but not created in, so it is `NoToken`.
 #[derive(Clone, Debug)]
 enum BaseLookup {
     NotInstalled,
     SignedOut(String),
     Branch(String),
+    NoToken(String),
 }
 
 enum Lookup {
@@ -73,6 +77,8 @@ pub struct PullRequestDialog {
     directory: PathBuf,
     /// The `glab` program that GitLab merge requests run through.
     glab: GlabProgram,
+    /// The file of saved Gitea and Forgejo tokens, read when a request is made.
+    token_file: Option<PathBuf>,
     lookup: Lookup,
     base: String,
     /// Set once the person types in the base field, so a late default branch does not overwrite it.
@@ -95,6 +101,15 @@ impl PullRequestDialog {
     #[cfg(test)]
     pub fn settled(&self) -> bool {
         matches!(self.lookup, Lookup::Done(_)) && self.commits.is_none()
+    }
+
+    /// The browser page for the request. Gitea's compare page names the base the person typed, so
+    /// it is built now; the other services' pages were built when the dialog opened.
+    fn browser_link(&self) -> String {
+        match &self.target.repository {
+            Forge::Gitea(_) => self.target.repository.compare_link_between(self.base.trim(), &self.target.remote_branch),
+            _ => self.compare_link.clone(),
+        }
     }
 }
 
@@ -154,14 +169,20 @@ fn not_installed(forge: &Forge) -> String {
             tr("The GitHub CLI (gh) is not installed. Install it from cli.github.com, then sign in with gh auth login.").to_string()
         }
         Forge::GitLab(repository) => gitlab::not_installed_message(&repository.host),
+        Forge::Gitea(_) => tr("Gitea and Forgejo are reached through their API, not a command-line tool.").to_string(),
     }
 }
 
 /// Asks the forge's command-line tool whether it is signed in to the repository's host, then reads
-/// the default branch.
-fn load_base(forge: &Forge, glab: &GlabProgram, directory: &Path) -> Result<BaseLookup, String> {
+/// the default branch. A Gitea or Forgejo repository is read with its saved or environment token.
+fn load_base(forge: &Forge, glab: &GlabProgram, directory: &Path, token_file: Option<&Path>) -> Result<BaseLookup, String> {
     let client = GitClient::new();
     match forge {
+        Forge::Gitea(repository) => {
+            let token = forge_tokens::token_for(token_file, &repository.host);
+            let branch = client.gitea_default_branch(repository, token.as_deref(), directory).map_err(|error| message(&error))?;
+            Ok(if token.is_some() { BaseLookup::Branch(branch) } else { BaseLookup::NoToken(branch) })
+        }
         Forge::GitHub(repository) => match client.gh_status(&repository.host, directory) {
             GhStatus::NotInstalled => Ok(BaseLookup::NotInstalled),
             GhStatus::SignedOut(explanation) => Ok(BaseLookup::SignedOut(explanation)),
@@ -183,6 +204,8 @@ fn sign_in_command(forge: &Forge) -> String {
         Forge::GitHub(repository) if repository.host == "github.com" => "gh auth login".to_string(),
         Forge::GitHub(repository) => format!("gh auth login --hostname {}", repository.host),
         Forge::GitLab(repository) => gitlab::sign_in_command(&repository.host),
+        // Gitea and Forgejo are never signed in to through a command-line tool, so no command applies.
+        Forge::Gitea(_) => String::new(),
     }
 }
 
@@ -198,6 +221,7 @@ enum Action {
 impl PullRequestDialog {
     /// The dialog for `target`, a local branch named `branch` with `unpushed` commits not on its
     /// upstream, run in `directory`. The default branch lookup starts at once.
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         ctx: &egui::Context,
         target: PullRequestTarget,
@@ -206,17 +230,21 @@ impl PullRequestDialog {
         unpushed: usize,
         directory: PathBuf,
         glab: GlabProgram,
+        token_file: Option<PathBuf>,
     ) -> Self {
         let forge = target.repository.clone();
         let lookup_directory = directory.clone();
         let lookup_glab = glab.clone();
-        let lookup = Lookup::Loading(Task::spawn(ctx, move || load_base(&forge, &lookup_glab, &lookup_directory)));
+        let lookup_tokens = token_file.clone();
+        let lookup =
+            Lookup::Loading(Task::spawn(ctx, move || load_base(&forge, &lookup_glab, &lookup_directory, lookup_tokens.as_deref())));
         Self {
             title: title_from_branch_name(&branch),
             branch,
             unpushed,
             directory,
             glab,
+            token_file,
             target,
             compare_link,
             lookup,
@@ -237,7 +265,7 @@ impl PullRequestDialog {
     fn settle_lookup(&mut self) {
         let Lookup::Loading(task) = &mut self.lookup else { return };
         let Some(result) = task.get().cloned() else { return };
-        if let Ok(BaseLookup::Branch(name)) = &result {
+        if let Ok(BaseLookup::Branch(name) | BaseLookup::NoToken(name)) = &result {
             if !self.base_edited {
                 self.base = name.clone();
             }
@@ -304,9 +332,11 @@ impl PullRequestDialog {
         let base = self.base.trim().to_string();
         let title = self.title.trim().to_string();
         let body = self.body.clone();
-        let draft = self.draft;
+        // Gitea and Forgejo have no draft pull requests, so the draft choice is not offered for them.
+        let draft = self.draft && !matches!(forge, Forge::Gitea(_));
         let directory = self.directory.clone();
         let glab = self.glab.clone();
+        let token_file = self.token_file.clone();
         self.error = None;
         self.creation = Creation::Running(Task::spawn(ctx, move || {
             let client = GitClient::new();
@@ -315,6 +345,10 @@ impl PullRequestDialog {
                 Forge::GitLab(repository) => {
                     let request = NewMergeRequest { source: head, target: base, title, description: body, draft };
                     client.create_merge_request(repository, &glab, &request, &directory)
+                }
+                Forge::Gitea(repository) => {
+                    let token = forge_tokens::token_for(token_file.as_deref(), &repository.host);
+                    client.create_gitea_pull_request(repository, token.as_deref(), &head, &base, &title, &body, &directory)
                 }
             };
             result.map_err(|error| message(&error))
@@ -334,7 +368,9 @@ impl PullRequestDialog {
         let creating = matches!(self.creation, Creation::Running(_));
         let loading = matches!(self.lookup, Lookup::Loading(_));
         // Creation cannot work without gh, so its button waits for a verdict that says gh is usable.
-        let gh_blocked = matches!(self.lookup, Lookup::Done(Ok(BaseLookup::NotInstalled | BaseLookup::SignedOut(_))));
+        // A Gitea or Forgejo repository needs a token to create, which the lookup says when it is missing.
+        let gh_blocked =
+            matches!(self.lookup, Lookup::Done(Ok(BaseLookup::NotInstalled | BaseLookup::SignedOut(_) | BaseLookup::NoToken(_))));
         let can_create = !creating && !gh_blocked && !self.title.trim().is_empty() && !self.base.trim().is_empty();
         let noun = noun_text(self.target.repository.request_noun());
         let create_label = tr_fmt!("Create {noun}", noun = noun);
@@ -380,6 +416,14 @@ impl PullRequestDialog {
             }
             match &self.lookup {
                 Lookup::Loading(_) | Lookup::Done(Ok(BaseLookup::Branch(_))) => {}
+                Lookup::Done(Ok(BaseLookup::NoToken(_))) => widgets::callout(
+                    ui,
+                    &tr_fmt!(
+                        "Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.",
+                        host = self.target.repository.host()
+                    ),
+                    true,
+                ),
                 Lookup::Done(Ok(BaseLookup::NotInstalled)) => widgets::callout(ui, &not_installed(&self.target.repository), true),
                 Lookup::Done(Ok(BaseLookup::SignedOut(explanation))) => {
                     let command = sign_in_command(&self.target.repository);
@@ -417,7 +461,9 @@ impl PullRequestDialog {
             }
             ui.add_space(6.0);
 
-            widgets::checkbox(ui, !creating, &mut self.draft, tr("Create as a draft"));
+            if !matches!(self.target.repository, Forge::Gitea(_)) {
+                widgets::checkbox(ui, !creating, &mut self.draft, tr("Create as a draft"));
+            }
             ui.add_space(10.0);
 
             if let Some(text) = &self.error {
@@ -442,7 +488,7 @@ impl PullRequestDialog {
         });
 
         match action {
-            Action::Browser => return Some(Outcome::OpenInBrowser(self.compare_link.clone())),
+            Action::Browser => return Some(Outcome::OpenInBrowser(self.browser_link())),
             Action::Cancel => return Some(Outcome::Close),
             Action::Create => self.create(ctx, current),
             Action::None => {}
@@ -477,7 +523,9 @@ impl NiceGitApp {
         let unpushed = unpushed_commits(self, snapshot, branch);
         let Some(directory) = self.repo().map(|repo| repo.path.clone()) else { return };
         let glab = self.glab.clone();
-        self.pull_request = Some(PullRequestDialog::open(ctx, target, compare_link, branch.name.clone(), unpushed, directory, glab));
+        let token_file = self.forge_token_file.clone();
+        self.pull_request =
+            Some(PullRequestDialog::open(ctx, target, compare_link, branch.name.clone(), unpushed, directory, glab, token_file));
     }
 
     /// Draws the Create pull request dialog while it is open, and acts on what it reports.
@@ -533,13 +581,15 @@ impl NiceGitApp {
     pub fn refresh_pr_status(&mut self, index: usize) {
         let github_hosts = self.settings.github_enterprise_hosts.clone();
         let gitlab_hosts = self.settings.gitlab_hosts.clone();
+        let gitea_hosts = self.settings.gitea_hosts.clone();
         let glab = self.glab.clone();
+        let token_file = self.forge_token_file.clone();
         let context = self.worker.context.clone();
         let Some(repo) = self.repos.get_mut(index) else { return };
         repo.pr_checked_at = Some(Instant::now());
         let target = repo.snapshot.as_ref().and_then(|snapshot| {
             let branch = snapshot.current().filter(|branch| !branch.is_remote)?;
-            let hosts = ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts };
+            let hosts = ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
             let target = git_ext::pull_request_target(snapshot, branch, hosts)?;
             Some((snapshot.current_branch.clone(), target))
         });
@@ -548,9 +598,22 @@ impl NiceGitApp {
             return;
         };
         let stale = repo.pr_status.take().filter(|(name, _)| *name == branch).and_then(|(_, mut task)| task.get().cloned());
+        // A Gitea or Forgejo request that the branch dots read a moment ago is used instead of asking again.
+        let listed = match &target.repository {
+            Forge::Gitea(_) => crate::ui::branch_checks::status_from_listing(
+                repo.open_requests_at,
+                repo.open_requests.as_ref(),
+                &target.repository,
+                &branch,
+            ),
+            _ => None,
+        };
         let path = repo.path.clone();
         let read_branch = branch.clone();
         let task = Task::spawn_with(&context, stale, move || {
+            if let Some(status) = listed {
+                return Ok(Some(status));
+            }
             let client = GitClient::new();
             match &target.repository {
                 Forge::GitHub(repository) => match client.gh_status(&repository.host, &path) {
@@ -565,6 +628,13 @@ impl NiceGitApp {
                     }
                     GlabStatus::NotInstalled | GlabStatus::SignedOut(_) => Ok(None),
                 },
+                // Public Gitea and Forgejo pull requests are read without a token; a saved one is used when there is one.
+                Forge::Gitea(repository) => {
+                    let token = forge_tokens::token_for(token_file.as_deref(), &repository.host);
+                    client
+                        .gitea_pull_request_for_branch(repository, token.as_deref(), &read_branch, &path)
+                        .map_err(|error| error.to_string())
+                }
             }
         });
         repo.pr_status = Some((branch, task));

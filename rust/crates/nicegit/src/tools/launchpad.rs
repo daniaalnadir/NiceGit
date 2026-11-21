@@ -1,7 +1,8 @@
 //! The Launchpad: open pull requests and merge requests across the repositories open as tabs, and
 //! across a saved workspace's folders when one is chosen, grouped by what they need from you. Each
 //! repository is read with one read-only call: `gh pr list` for GitHub, `glab mr list` for GitLab,
-//! after checking that its `origin` is on that host and that the CLI is signed in to it. The reads
+//! and the pull request API for Gitea and Forgejo, after checking that its `origin` is on that host
+//! and that the CLI is signed in to it where one is needed. The reads
 //! run in the background, a few at a time, and stop when the window closes. Nothing polls: Refresh
 //! reads again.
 
@@ -21,6 +22,7 @@ use nicegit_core::hosting::{Host, HostedRepository, ListedHosts};
 use nicegit_core::{GitClient, GitError};
 
 use crate::app::NiceGitApp;
+use crate::forge_tokens;
 use crate::i18n::{tr, tr_count, tr_fmt};
 use crate::settings::Workspace;
 use crate::theme;
@@ -59,7 +61,7 @@ pub struct Row {
 pub fn number_text(kind: Host, number: u64) -> String {
     match kind {
         Host::GitLab => format!("!{number}"),
-        Host::GitHub | Host::Bitbucket | Host::AzureDevOps => format!("#{number}"),
+        Host::GitHub | Host::Bitbucket | Host::AzureDevOps | Host::Gitea => format!("#{number}"),
     }
 }
 
@@ -74,8 +76,11 @@ pub fn can_check_out(kind: Host) -> bool {
 struct Sources {
     github_hosts: Vec<String>,
     gitlab_hosts: Vec<String>,
+    gitea_hosts: Vec<String>,
     gh: GhProgram,
     glab: GlabProgram,
+    /// The file of saved Gitea and Forgejo tokens.
+    token_file: Option<PathBuf>,
     logins: Arc<Mutex<BTreeMap<String, String>>>,
 }
 
@@ -227,6 +232,10 @@ pub struct LaunchpadWindow {
     workspace: Option<String>,
     hosts: Vec<String>,
     gitlab_hosts: Vec<String>,
+    /// The self-hosted Gitea and Forgejo hosts listed in Settings.
+    gitea_hosts: Vec<String>,
+    /// The file of saved Gitea and Forgejo tokens.
+    token_file: Option<PathBuf>,
     program: GhProgram,
     glab: GlabProgram,
     /// Logins read for each host, kept for the window's life and shared by the reads.
@@ -247,6 +256,8 @@ impl LaunchpadWindow {
             workspace: None,
             hosts,
             gitlab_hosts,
+            gitea_hosts: Vec::new(),
+            token_file: None,
             program: GhProgram::Search,
             glab: GlabProgram::Search,
             logins: Arc::default(),
@@ -259,7 +270,15 @@ impl LaunchpadWindow {
     /// The Launchpad for the repository tabs and saved workspaces of `app`.
     pub fn for_app(app: &NiceGitApp) -> Self {
         let open = app.repos.iter().map(|repo| repo.path.clone()).collect();
-        Self::new(open, app.settings.workspaces.clone(), app.settings.github_enterprise_hosts.clone(), app.settings.gitlab_hosts.clone())
+        let mut window = Self::new(
+            open,
+            app.settings.workspaces.clone(),
+            app.settings.github_enterprise_hosts.clone(),
+            app.settings.gitlab_hosts.clone(),
+        );
+        window.gitea_hosts = app.settings.gitea_hosts.clone();
+        window.token_file = app.forge_token_file.clone();
+        window
     }
 
     /// Reads through `program` instead of the GitHub CLI on the search path. Tests give a missing file.
@@ -303,8 +322,10 @@ impl LaunchpadWindow {
         let sources = Sources {
             github_hosts: self.hosts.clone(),
             gitlab_hosts: self.gitlab_hosts.clone(),
+            gitea_hosts: self.gitea_hosts.clone(),
             gh: self.program.clone(),
             glab: self.glab.clone(),
+            token_file: self.token_file.clone(),
             logins: self.logins.clone(),
         };
         for _ in 0..READERS.min(waiting) {
@@ -503,6 +524,7 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
         Host::GitLab => "GitLab",
         Host::GitHub | Host::Bitbucket => "GitHub",
         Host::AzureDevOps => "Azure DevOps",
+        Host::Gitea => "Gitea / Forgejo",
     };
     egui::Frame::new()
         .fill(c.card_bg)
@@ -602,7 +624,7 @@ fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Can
     }
     let address = client.run(&["remote", "get-url", "--all", REMOTE], path).map_err(|error| message(&error))?;
     let address = address.lines().next().unwrap_or("");
-    let listed = ListedHosts { github: &sources.github_hosts, gitlab: &sources.gitlab_hosts };
+    let listed = ListedHosts { github: &sources.github_hosts, gitlab: &sources.gitlab_hosts, gitea: &sources.gitea_hosts };
     let hosted = HostedRepository::parse(address, listed).map_err(|error| message(&error))?;
     match hosted.kind {
         Host::GitHub => {
@@ -610,6 +632,7 @@ fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Can
             read_github(client, path, &repository, sources, cancel)
         }
         Host::GitLab => read_gitlab(client, path, &hosted, sources, cancel),
+        Host::Gitea => read_gitea(client, path, &hosted, sources, cancel),
         Host::Bitbucket => Err(tr("Bitbucket pull requests are not listed here.").to_string()),
         Host::AzureDevOps => Err(tr("Azure DevOps pull requests are not listed here.").to_string()),
     }
@@ -649,6 +672,28 @@ fn read_gitlab(
     })?;
     let pull_requests = gitlab::gitlab_open_merge_requests(repository, &sources.glab, cancel, path).map_err(|error| message(&error))?;
     Ok(Outcome::Listed { kind: Host::GitLab, slug: repository.slug(), login, pull_requests })
+}
+
+/// Lists a Gitea or Forgejo repository's open pull requests through its API. Public repositories are
+/// listed without a token; the login is read only when a token is saved or set in the environment.
+fn read_gitea(
+    client: &GitClient,
+    path: &Path,
+    repository: &HostedRepository,
+    sources: &Sources,
+    cancel: &Cancel,
+) -> Result<Outcome, String> {
+    let token = forge_tokens::token_for(sources.token_file.as_deref(), &repository.host);
+    let login = match token.as_deref() {
+        Some(token) => cached_login(&sources.logins, &repository.host, || {
+            client.gitea_login(&repository.host, token, path).map_err(|error| message(&error))
+        })?,
+        None => String::new(),
+    };
+    let pull_requests = client
+        .gitea_open_pull_requests(repository, token.as_deref(), nicegit_core::gitea::MAX_PAGES, cancel, path)
+        .map_err(|error| message(&error))?;
+    Ok(Outcome::Listed { kind: Host::Gitea, slug: repository.slug(), login, pull_requests })
 }
 
 /// The signed-in login on `host`, read by `read` once and then kept in `logins`.

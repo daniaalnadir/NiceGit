@@ -50,6 +50,7 @@ impl NiceGitApp {
                 data.remove::<crate::custom_actions::ActionDraft>(egui::Id::unique("custom_action_draft"));
             });
             crate::ui::ai_draft::forget_key_draft(ctx);
+            crate::ui::gitea_settings::forget_drafts(ctx);
             return;
         }
         let mut open = true;
@@ -299,6 +300,8 @@ impl NiceGitApp {
                     ui.label(RichText::new(text).small().color(c.warning));
                 }
                 ui.ctx().data_mut(|data| data.insert_temp(gitlab_draft_id, gitlab_draft));
+                ui.add_space(10.0);
+                self.gitea_section(ui);
                 ui.add_space(10.0);
                 self.issue_links_section(ui);
                 ui.add_space(10.0);

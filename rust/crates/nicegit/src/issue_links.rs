@@ -290,7 +290,7 @@ fn azure_work_item() -> &'static Regex {
 fn host_links(text: &str, repository: &HostedRepository) -> Vec<Found> {
     let home = repository.home_url();
     match repository.kind {
-        Host::GitHub | Host::Bitbucket => numbered(hash_number(), text, |number| format!("{home}/issues/{number}")),
+        Host::GitHub | Host::Bitbucket | Host::Gitea => numbered(hash_number(), text, |number| format!("{home}/issues/{number}")),
         Host::GitLab => {
             let mut links = numbered(hash_number(), text, |number| format!("{home}/-/issues/{number}"));
             links.extend(numbered(bang_number(), text, |number| format!("{home}/-/merge_requests/{number}")));

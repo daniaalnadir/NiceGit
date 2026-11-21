@@ -1,5 +1,5 @@
-//! Web addresses for repositories on GitHub, GitLab, Bitbucket, and Azure DevOps: a repository's
-//! home page, its commits, branches, files, and pull or merge requests. A remote address is read
+//! Web addresses for repositories on GitHub, GitLab, Bitbucket, Azure DevOps, and Gitea or Forgejo:
+//! a repository's home page, its commits, branches, files, and pull or merge requests. A remote address is read
 //! into its parts and every link is built from those parts alone, so a credential or port in the
 //! remote never appears in a link. Nothing here calls the network or uses a token.
 
@@ -12,6 +12,8 @@ pub enum Host {
     GitLab,
     Bitbucket,
     AzureDevOps,
+    /// Gitea and Forgejo, which share one API and one web layout.
+    Gitea,
 }
 
 impl Host {
@@ -22,17 +24,22 @@ impl Host {
             Host::GitLab => "GitLab",
             Host::Bitbucket => "Bitbucket",
             Host::AzureDevOps => "Azure DevOps",
+            Host::Gitea => "Gitea / Forgejo",
         }
     }
 }
 
-/// The self-hosted hosts listed in Settings, for each service. github.com, gitlab.com, and
-/// bitbucket.org are always supported, so they are not listed.
+/// The self-hosted hosts listed in Settings, for each service. github.com, gitlab.com, bitbucket.org,
+/// codeberg.org, and gitea.com are always supported, so they are not listed.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ListedHosts<'a> {
     pub github: &'a [String],
     pub gitlab: &'a [String],
+    pub gitea: &'a [String],
 }
+
+/// The public Gitea and Forgejo hosts that are always supported.
+pub const ALWAYS_GITEA: [&str; 2] = ["codeberg.org", "gitea.com"];
 
 /// A repository on a supported host, read from its remote address.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,11 +100,13 @@ fn classify(host: &str, hosts: ListedHosts) -> Option<Host> {
         "github.com" => Some(Host::GitHub),
         "gitlab.com" => Some(Host::GitLab),
         "bitbucket.org" => Some(Host::Bitbucket),
+        "codeberg.org" | "gitea.com" => Some(Host::Gitea),
         "dev.azure.com" | "ssh.dev.azure.com" | "vs-ssh.visualstudio.com" => Some(Host::AzureDevOps),
         // An organization's own address, such as `contoso.visualstudio.com`.
         _ if host.ends_with(".visualstudio.com") => Some(Host::AzureDevOps),
         _ if listed(hosts.github) => Some(Host::GitHub),
         _ if listed(hosts.gitlab) => Some(Host::GitLab),
+        _ if listed(hosts.gitea) => Some(Host::Gitea),
         _ => None,
     }
 }
@@ -178,16 +187,16 @@ impl HostedRepository {
         Ok(Self { host: host.to_string(), kind: Host::AzureDevOps, owner_path: format!("{organization}/{project}"), name: repository })
     }
 
-    /// Reads the repository from a remote address on GitHub, GitLab, Bitbucket, or Azure DevOps.
-    /// GitHub and Bitbucket repositories are `owner/name`; GitLab repositories may sit in nested
-    /// groups; Azure DevOps repositories are `organization/project` and a repository name.
+    /// Reads the repository from a remote address on GitHub, GitLab, Bitbucket, Azure DevOps, or
+    /// Gitea and Forgejo. GitHub, Bitbucket, and Gitea repositories are `owner/name`; GitLab repositories
+    /// may sit in nested groups; Azure DevOps repositories are `organization/project` and a repository name.
     pub fn parse(address: &str, hosts: ListedHosts) -> Result<Self> {
         let unsupported = || GitError::failed("Hosting", "This remote is not a supported repository address.");
         let (host, path) = split_address(address).ok_or_else(unsupported)?;
         let Some(kind) = classify(&host, hosts) else {
             return Err(GitError::failed(
                 "Hosting",
-                "This remote is not on GitHub, GitLab, Bitbucket, or Azure DevOps, or a GitHub or GitLab host listed in Settings.",
+                "This remote is not on GitHub, GitLab, Bitbucket, Azure DevOps, or Gitea or Forgejo, or a host listed in Settings.",
             ));
         };
         if kind == Host::AzureDevOps {
@@ -200,7 +209,7 @@ impl HostedRepository {
         let name = last.strip_suffix(".git").unwrap_or(*last);
         let owner_ok = match kind {
             Host::GitLab => !owner.is_empty(),
-            Host::GitHub | Host::Bitbucket => owner.len() == 1,
+            Host::GitHub | Host::Bitbucket | Host::Gitea => owner.len() == 1,
             // Azure DevOps addresses are read by `parse_azure`, before this point.
             Host::AzureDevOps => false,
         };
@@ -237,19 +246,19 @@ impl HostedRepository {
 
     /// The repository's pull requests (GitHub, Bitbucket, Azure DevOps) or merge requests (GitLab) list.
     pub fn pull_requests_url(&self) -> String {
-        format!("{}/{}", self.home_url(), self.route("pulls", "-/merge_requests", "pull-requests", "pullrequests"))
+        format!("{}/{}", self.home_url(), self.route("pulls", "-/merge_requests", "pull-requests", "pullrequests", "pulls"))
     }
 
     /// A commit's page. It exists only once the commit is on the remote.
     pub fn commit_url(&self, commit: &str) -> String {
-        format!("{}/{}{}", self.home_url(), self.route("commit/", "-/commit/", "commits/", "commit/"), encode_path(commit))
+        format!("{}/{}{}", self.home_url(), self.route("commit/", "-/commit/", "commits/", "commit/", "commit/"), encode_path(commit))
     }
 
     /// A branch's page, with its slashes kept. Azure DevOps names the branch in a `version` query.
     pub fn branch_url(&self, branch: &str) -> String {
         match self.kind {
             Host::AzureDevOps => format!("{}?version=GB{}", self.home_url(), encode_path(branch)),
-            _ => format!("{}/{}{}", self.home_url(), self.route("tree/", "-/tree/", "branch/", ""), encode_path(branch)),
+            _ => format!("{}/{}{}", self.home_url(), self.route("tree/", "-/tree/", "branch/", "", "src/branch/"), encode_path(branch)),
         }
     }
 
@@ -260,8 +269,20 @@ impl HostedRepository {
             Host::AzureDevOps => {
                 format!("{}?path=/{}&version=GC{}", self.home_url(), encode_path(path), encode_path(commit))
             }
-            _ => format!("{}/{}{}/{}", self.home_url(), self.route("blob/", "-/blob/", "src/", ""), encode_path(commit), encode_path(path)),
+            _ => format!(
+                "{}/{}{}/{}",
+                self.home_url(),
+                self.route("blob/", "-/blob/", "src/", "", "src/commit/"),
+                encode_path(commit),
+                encode_path(path)
+            ),
         }
+    }
+
+    /// The compare page from `base` to `head`, with both branch names encoded. Only Gitea and
+    /// Forgejo name both branches in the address; other hosts give `None`.
+    pub fn compare_url(&self, base: &str, head: &str) -> Option<String> {
+        (self.kind == Host::Gitea).then(|| format!("{}/compare/{}...{}", self.home_url(), encode_path(base), encode_path(head)))
     }
 
     /// Another page of a GitHub repository, such as `issues` or `actions`. Other hosts have no
@@ -271,12 +292,13 @@ impl HostedRepository {
     }
 
     /// The path segment for this host's service, given for each service in turn.
-    fn route<'a>(&self, github: &'a str, gitlab: &'a str, bitbucket: &'a str, azure: &'a str) -> &'a str {
+    fn route<'a>(&self, github: &'a str, gitlab: &'a str, bitbucket: &'a str, azure: &'a str, gitea: &'a str) -> &'a str {
         match self.kind {
             Host::GitHub => github,
             Host::GitLab => gitlab,
             Host::Bitbucket => bitbucket,
             Host::AzureDevOps => azure,
+            Host::Gitea => gitea,
         }
     }
 }
@@ -324,7 +346,7 @@ mod tests {
     #[test]
     fn self_hosted_gitlab_hosts_need_to_be_listed() {
         let listed = hosts(&["Git.Example.com"]);
-        let hosts = ListedHosts { github: &[], gitlab: &listed };
+        let hosts = ListedHosts { github: &[], gitlab: &listed, gitea: &[] };
         let repository = HostedRepository::parse("https://octo@GIT.example.com/acme/tools/app.git", hosts).unwrap();
         assert_eq!((repository.kind, repository.host.as_str()), (Host::GitLab, "git.example.com"));
         assert_eq!(repository.owner_path, "acme/tools");
@@ -335,12 +357,14 @@ mod tests {
     fn a_listed_github_host_is_github_and_fixed_hosts_win() {
         let github = hosts(&["git.example.com"]);
         let gitlab = hosts(&["gitlab.example.com"]);
-        let hosts = ListedHosts { github: &github, gitlab: &gitlab };
+        let hosts = ListedHosts { github: &github, gitlab: &gitlab, gitea: &[] };
         let enterprise = HostedRepository::parse("https://git.example.com/acme/app", hosts).unwrap();
         assert_eq!(enterprise.kind, Host::GitHub);
         let self_hosted = HostedRepository::parse("ssh://git@gitlab.example.com/acme/app.git", hosts).unwrap();
         assert_eq!(self_hosted.kind, Host::GitLab);
-        assert!(HostedRepository::parse("https://gitlab.example.com/a/b/c", ListedHosts { github: &github, gitlab: &[] }).is_err());
+        assert!(
+            HostedRepository::parse("https://gitlab.example.com/a/b/c", ListedHosts { github: &github, gitlab: &[], gitea: &[] }).is_err()
+        );
     }
 
     #[test]
@@ -477,5 +501,60 @@ mod tests {
         ] {
             assert_eq!(parse(address), None, "{address}");
         }
+    }
+
+    fn gitea(address: &str, listed: &[String]) -> Option<HostedRepository> {
+        HostedRepository::parse(address, ListedHosts { github: &[], gitlab: &[], gitea: listed }).ok()
+    }
+
+    #[test]
+    fn codeberg_remotes_are_read_in_every_address_form() {
+        let expected = HostedRepository { host: "codeberg.org".into(), kind: Host::Gitea, owner_path: "acme".into(), name: "app".into() };
+        for address in [
+            "https://codeberg.org/acme/app.git",
+            "https://codeberg.org/acme/app",
+            "https://Codeberg.org/acme/app/",
+            "ssh://git@codeberg.org/acme/app.git",
+            "git@codeberg.org:acme/app.git",
+            "codeberg.org:acme/app",
+        ] {
+            assert_eq!(gitea(address, &[]), Some(expected.clone()), "{address}");
+        }
+        assert_eq!(Host::Gitea.name(), "Gitea / Forgejo");
+    }
+
+    #[test]
+    fn gitea_com_is_always_supported_and_other_hosts_need_listing() {
+        assert_eq!(gitea("https://gitea.com/acme/app", &[]).map(|r| r.kind), Some(Host::Gitea));
+        assert_eq!(parse("https://git.example.com/acme/app"), None, "not listed");
+        let listed = hosts(&["forge.example.com"]);
+        let repository = gitea("https://forge.example.com/acme/app.git", &listed).expect("listed");
+        assert_eq!((repository.kind, repository.host.as_str()), (Host::Gitea, "forge.example.com"));
+        assert_eq!(repository.owner_path, "acme");
+        assert_eq!(gitea("https://forge.example.com/acme/tools/app", &listed), None, "Gitea owners are one name");
+    }
+
+    #[test]
+    fn gitea_hosts_with_a_port_are_refused_like_other_self_hosted_hosts() {
+        let listed = hosts(&["forge.example.com"]);
+        assert_eq!(gitea("https://forge.example.com:3000/acme/app", &listed), None, "a port");
+        assert_eq!(gitea("ssh://git@codeberg.org:2222/acme/app.git", &[]), None, "an SSH port");
+        assert_eq!(HostedRepository::parse("https://codeberg.org:443/acme/app", ListedHosts::default()).ok(), None);
+    }
+
+    #[test]
+    fn gitea_urls_use_the_pulls_compare_and_src_routes() {
+        let repository = gitea("https://codeberg.org/acme/app.git", &[]).unwrap();
+        assert_eq!(repository.pull_requests_url(), "https://codeberg.org/acme/app/pulls");
+        assert_eq!(repository.commit_url("abc123"), "https://codeberg.org/acme/app/commit/abc123");
+        assert_eq!(repository.branch_url("feature/x"), "https://codeberg.org/acme/app/src/branch/feature/x");
+        assert_eq!(repository.file_url("abc123", "dir/a b.txt"), "https://codeberg.org/acme/app/src/commit/abc123/dir/a%20b.txt");
+        assert_eq!(
+            repository.compare_url("main", "feat #1/x").as_deref(),
+            Some("https://codeberg.org/acme/app/compare/main...feat%20%231/x")
+        );
+        assert_eq!(repository.github_page_url("issues"), None);
+        let github = parse("https://github.com/acme/app").unwrap();
+        assert_eq!(github.compare_url("main", "x"), None, "only Gitea names both branches in its compare address");
     }
 }

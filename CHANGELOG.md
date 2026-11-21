@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Gitea and Forgejo repositories (codeberg.org, gitea.com, or a host listed under Settings, in Gitea and Forgejo) show their pull requests and issues in the sidebar, the status bar and branch check dots, the Launchpad, and Create pull request; a token saved under Settings is needed to create one.
 - The interface is available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese; choose the language under Settings, General (System follows your computer).
 - Screen readers (VoiceOver, Narrator, NVDA, Orca) name every control, commit, file, and diff line; Settings has Larger text and Reduce motion options under Accessibility.
 - Words diff layout: show each changed line's words merged into one row, with removed words struck through in red and added words in green, from the Words button in the diff toolbar.
