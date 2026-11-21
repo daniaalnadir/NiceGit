@@ -19,6 +19,7 @@ pub mod repositories;
 pub mod settings_window;
 pub mod shortcuts_window;
 pub mod sidebar;
+pub mod stacks;
 pub mod tips;
 pub mod toolbar;
 pub mod updates;

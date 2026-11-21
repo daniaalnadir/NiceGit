@@ -1,0 +1,21 @@
+# zh-Hans: stacked branches, the restack and push-stack confirmations. Format: English source, a tab, then the translation.
+{count} branch is still based on the old {parent}: {names}.	{count} 个分支仍基于旧的 {parent}: {names}。
+{count} branches are still based on the old {parent}: {names}.	{count} 个分支仍基于旧的 {parent}: {names}。
+Restack	重新堆叠
+Restack branches on {parent}?	要在 {parent} 上重新堆叠分支吗？
+Each branch's own commits are replayed onto the new tip of {parent}. Branches built on them move too. The working tree changes only if the checked-out branch moves.	每个分支自己的提交会重放到 {parent} 的新顶端。基于它们的分支也会移动。只有当前检出的分支移动时，工作区才会改变。
+{name}: {count} commit	{name}：{count} 个提交
+{name}: {count} commits	{name}：{count} 个提交
+Nothing needed restacking.	无需重新堆叠。
+Restacked 1 branch.	已重新堆叠 1 个分支。
+Restacked {count} branches.	已重新堆叠 {count} 个分支。
+Push this branch?	推送此分支吗？
+Push {count} branches?	推送 {count} 个分支吗？
+{branch} to {remote}/{name}, replacing the remote branch	{branch} 推送到 {remote}/{name}，替换远程分支
+{branch} to {remote}/{name}	{branch} 推送到 {remote}/{name}
+None of these branches has a remote branch to push to. Set an upstream first.	这些分支都没有可推送到的远程分支。请先设置上游分支。
+Each branch is pushed to its own remote branch in one atomic push. Tags are not pushed.	每个分支在一次原子推送中推送到各自的远程分支。标签不会被推送。
+Pushed 1 branch.	已推送 1 个分支。
+Pushed {count} branches.	已推送 {count} 个分支。
+Push stack ({count} branches)…	推送堆叠（{count} 个分支）…
+Restack branches on {name}…	在 {name} 上重新堆叠分支…

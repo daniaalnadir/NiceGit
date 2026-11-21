@@ -1,0 +1,21 @@
+# pt-BR: stacked branches, the restack and push-stack confirmations. Format: English source, a tab, then the translation.
+{count} branch is still based on the old {parent}: {names}.	{count} branch ainda se baseia no {parent} antigo: {names}.
+{count} branches are still based on the old {parent}: {names}.	{count} branches ainda se baseiam no {parent} antigo: {names}.
+Restack	Reempilhar
+Restack branches on {parent}?	Reempilhar os branches sobre {parent}?
+Each branch's own commits are replayed onto the new tip of {parent}. Branches built on them move too. The working tree changes only if the checked-out branch moves.	Os commits próprios de cada branch são reaplicados sobre a nova ponta de {parent}. Os branches construídos sobre eles também se movem. A árvore de trabalho só muda se o branch atual se mover.
+{name}: {count} commit	{name}: {count} commit
+{name}: {count} commits	{name}: {count} commits
+Nothing needed restacking.	Nada precisava ser reempilhado.
+Restacked 1 branch.	1 branch reempilhado.
+Restacked {count} branches.	{count} branches reempilhados.
+Push this branch?	Enviar este branch?
+Push {count} branches?	Enviar {count} branches?
+{branch} to {remote}/{name}, replacing the remote branch	{branch} para {remote}/{name}, substituindo o branch remoto
+{branch} to {remote}/{name}	{branch} para {remote}/{name}
+None of these branches has a remote branch to push to. Set an upstream first.	Nenhum destes branches tem um branch remoto para enviar. Defina primeiro um upstream.
+Each branch is pushed to its own remote branch in one atomic push. Tags are not pushed.	Cada branch é enviado para o seu próprio branch remoto num único envio atômico. As tags não são enviadas.
+Pushed 1 branch.	1 branch enviado.
+Pushed {count} branches.	{count} branches enviados.
+Push stack ({count} branches)…	Enviar a pilha ({count} branches)…
+Restack branches on {name}…	Reempilhar os branches sobre {name}…
