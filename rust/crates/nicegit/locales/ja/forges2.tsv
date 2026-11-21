@@ -1,0 +1,24 @@
+# ja: Pull requests on Bitbucket and Azure DevOps (日本語（です・ます調）).
+Add a personal access token in Settings to see pull requests.	設定でパーソナルアクセストークンを追加すると、プルリクエストが表示されます。
+App password or API token	アプリパスワードまたは API トークン
+App password or API token for {host}	{host} のアプリパスワードまたは API トークン
+Azure DevOps	Azure DevOps
+Azure DevOps lists nothing without a personal access token for the organization. Creating a pull request needs one with code read and write access.	Azure DevOps は、組織のパーソナルアクセストークンがないと何も表示できません。プルリクエストを作成するには、コードの読み取りと書き込みの権限を持つトークンが必要です。
+Bitbucket	Bitbucket
+Bitbucket and Azure DevOps are reached through their API, not a command-line tool.	Bitbucket と Azure DevOps は、コマンドラインツールではなく API 経由で利用します。
+Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.	{host} でプルリクエストを作成するには、パーソナルアクセストークンが必要です。設定の Azure DevOps で追加してから、このダイアログをもう一度開いてください。
+Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.	{host} でプルリクエストを作成するには、ユーザー名とアプリパスワードが必要です。設定の Bitbucket で入力してから、このダイアログをもう一度開いてください。
+Load from Azure DevOps	Azure DevOps から読み込む
+Load from Bitbucket	Bitbucket から読み込む
+Organization	組織
+Organization, such as acme	組織名（例: acme）
+Personal access token	パーソナルアクセストークン
+Remotes on bitbucket.org get pull requests and issues. Public repositories can be read without credentials; creating a pull request needs your username and an app password or API token.	bitbucket.org のリモートでは、プルリクエストと Issue が使えます。公開リポジトリは認証情報なしで読めますが、プルリクエストの作成にはユーザー名とアプリパスワードまたは API トークンが必要です。
+Remove the credentials for {host}	{host} の認証情報を削除
+Save the credentials for {host}	{host} の認証情報を保存
+The credentials for {host} could not be saved: {error}	{host} の認証情報を保存できませんでした: {error}
+The organization name must use only letters, digits, and hyphens.	組織名には英字、数字、ハイフンだけを使えます。
+The username must have no spaces, colons, or control characters.	ユーザー名に、空白、コロン、制御文字を含めることはできません。
+This repository has no issue tracker on Bitbucket.	このリポジトリには Bitbucket の Issue トラッカーがありません。
+Username	ユーザー名
+Username for {host}	{host} のユーザー名

@@ -51,6 +51,7 @@ impl NiceGitApp {
             });
             crate::ui::ai_draft::forget_key_draft(ctx);
             crate::ui::gitea_settings::forget_drafts(ctx);
+            crate::ui::forge_settings::forget_drafts(ctx);
             return;
         }
         let mut open = true;
@@ -323,6 +324,8 @@ impl NiceGitApp {
                 ui.ctx().data_mut(|data| data.insert_temp(gitlab_draft_id, gitlab_draft));
                 ui.add_space(10.0);
                 self.gitea_section(ui);
+                ui.add_space(10.0);
+                self.forge_credential_sections(ui);
                 ui.add_space(10.0);
                 self.issue_links_section(ui);
                 ui.add_space(10.0);

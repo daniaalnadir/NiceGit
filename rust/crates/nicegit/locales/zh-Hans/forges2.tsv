@@ -1,0 +1,24 @@
+# zh-Hans: Pull requests on Bitbucket and Azure DevOps (简体中文).
+Add a personal access token in Settings to see pull requests.	在设置中添加个人访问令牌，即可查看拉取请求。
+App password or API token	应用密码或 API 令牌
+App password or API token for {host}	{host} 的应用密码或 API 令牌
+Azure DevOps	Azure DevOps
+Azure DevOps lists nothing without a personal access token for the organization. Creating a pull request needs one with code read and write access.	没有组织的个人访问令牌，Azure DevOps 将无法列出任何内容。创建拉取请求需要一个具有代码读写权限的令牌。
+Bitbucket	Bitbucket
+Bitbucket and Azure DevOps are reached through their API, not a command-line tool.	Bitbucket 和 Azure DevOps 通过其 API 访问，而不是通过命令行工具。
+Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.	要在 {host} 上创建拉取请求，需要个人访问令牌。请在设置的 Azure DevOps 中添加一个，然后重新打开此对话框。
+Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.	要在 {host} 上创建拉取请求，需要您的用户名和应用密码。请在设置的 Bitbucket 中填写，然后重新打开此对话框。
+Load from Azure DevOps	从 Azure DevOps 加载
+Load from Bitbucket	从 Bitbucket 加载
+Organization	组织
+Organization, such as acme	组织，例如 acme
+Personal access token	个人访问令牌
+Remotes on bitbucket.org get pull requests and issues. Public repositories can be read without credentials; creating a pull request needs your username and an app password or API token.	bitbucket.org 上的远程仓库会获得拉取请求和议题。公共仓库无需凭据即可读取；创建拉取请求则需要您的用户名和应用密码或 API 令牌。
+Remove the credentials for {host}	删除 {host} 的凭据
+Save the credentials for {host}	保存 {host} 的凭据
+The credentials for {host} could not be saved: {error}	无法保存 {host} 的凭据：{error}
+The organization name must use only letters, digits, and hyphens.	组织名称只能包含字母、数字和连字符。
+The username must have no spaces, colons, or control characters.	用户名不能包含空格、冒号或控制字符。
+This repository has no issue tracker on Bitbucket.	此仓库在 Bitbucket 上没有议题跟踪器。
+Username	用户名
+Username for {host}	{host} 的用户名

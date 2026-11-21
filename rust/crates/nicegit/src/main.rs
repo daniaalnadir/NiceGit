@@ -39,6 +39,8 @@ mod ui_tests_ai_message;
 #[cfg(test)]
 mod ui_tests_apply_patch;
 #[cfg(test)]
+mod ui_tests_bitbucket_azure;
+#[cfg(test)]
 mod ui_tests_branch_checks;
 #[cfg(test)]
 mod ui_tests_clone;

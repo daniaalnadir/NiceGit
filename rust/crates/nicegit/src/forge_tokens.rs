@@ -1,6 +1,8 @@
-//! Access tokens for Gitea and Forgejo hosts: one token per host, kept in `forge-tokens.ron` in
-//! NiceGit's settings folder, readable only by its owner on Unix. Settings never holds a token, and
-//! nothing here logs one. For a host with no saved token, the `GITEA_TOKEN` variable is used.
+//! Access tokens for the pull request services: one entry per host, kept in `forge-tokens.ron` in
+//! NiceGit's settings folder, readable only by its owner on Unix. Gitea and Forgejo hosts keep a token;
+//! Bitbucket keeps `username:app-password`; Azure DevOps keeps a personal access token per organization.
+//! Settings never holds a token, and nothing here logs one. A host with no saved token falls back to
+//! the `GITEA_TOKEN` variable for Gitea and Forgejo, and `AZURE_DEVOPS_EXT_PAT` for Azure DevOps.
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};
@@ -10,6 +12,12 @@ use nicegit_core::gitea::is_plausible_token;
 
 /// The environment variable that holds a token when a host has none saved.
 pub const ENVIRONMENT: &str = "GITEA_TOKEN";
+/// The environment variable that holds an Azure DevOps personal access token when no organization has one saved.
+pub const AZURE_ENVIRONMENT: &str = "AZURE_DEVOPS_EXT_PAT";
+/// The key Bitbucket credentials are saved under. Bitbucket Cloud is only bitbucket.org.
+pub const BITBUCKET_KEY: &str = "bitbucket.org";
+/// The prefix of an Azure DevOps organization's key, such as `dev.azure.com/acme`.
+const AZURE_PREFIX: &str = "dev.azure.com/";
 /// The file in NiceGit's settings folder that holds the tokens.
 #[cfg(not(test))]
 const TOKEN_FILE: &str = "forge-tokens.ron";
@@ -42,7 +50,42 @@ pub fn load(path: &Path) -> io::Result<Tokens> {
 
 /// The environment's token, when it is set and not blank.
 pub fn environment_token() -> Option<String> {
-    std::env::var(ENVIRONMENT).ok().map(|token| token.trim().to_string()).filter(|token| !token.is_empty())
+    environment_value(ENVIRONMENT)
+}
+
+/// The value of an environment variable, trimmed, when it is set and not blank.
+fn environment_value(name: &str) -> Option<String> {
+    std::env::var(name).ok().map(|token| token.trim().to_string()).filter(|token| !token.is_empty())
+}
+
+/// The key an Azure DevOps organization's token is saved under, such as `dev.azure.com/acme`.
+pub fn azure_key(organization: &str) -> String {
+    format!("{AZURE_PREFIX}{}", organization.to_ascii_lowercase())
+}
+
+/// The token saved for `key` exactly, with no environment fallback.
+pub fn saved_for(path: Option<&Path>, key: &str) -> Option<String> {
+    path.and_then(|path| load(path).ok())
+        .and_then(|tokens| tokens.get(&key.to_ascii_lowercase()).cloned())
+        .filter(|token| !token.is_empty())
+}
+
+/// The Bitbucket credentials saved, as `username:app-password`, when there are some.
+pub fn bitbucket_credentials(path: Option<&Path>) -> Option<String> {
+    saved_for(path, BITBUCKET_KEY)
+}
+
+/// The Azure DevOps token for an organization: the one saved for it, else the environment's.
+pub fn azure_token(path: Option<&Path>, organization: &str) -> Option<String> {
+    saved_for(path, &azure_key(organization)).or_else(|| environment_value(AZURE_ENVIRONMENT))
+}
+
+/// The organizations with a saved Azure DevOps token, in order, each without its prefix.
+pub fn saved_azure_organizations(path: Option<&Path>) -> Vec<String> {
+    let Some(path) = path else { return Vec::new() };
+    load(path)
+        .map(|tokens| tokens.keys().filter_map(|key| key.strip_prefix(AZURE_PREFIX)).map(str::to_string).collect())
+        .unwrap_or_default()
 }
 
 /// The token for `host`: the saved one when there is one, else the environment's.
@@ -159,6 +202,20 @@ mod tests {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         save_token(&path, "codeberg.org", "private-token-2").unwrap();
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600, "a wider file is narrowed");
+    }
+
+    #[test]
+    fn bitbucket_and_azure_credentials_are_kept_under_their_own_keys() {
+        let (_dir, path) = scratch();
+        save_token(&path, BITBUCKET_KEY, "octo:app-password").unwrap();
+        save_token(&path, &azure_key("ACME"), "azure-pat").unwrap();
+        assert_eq!(bitbucket_credentials(Some(&path)).as_deref(), Some("octo:app-password"));
+        assert_eq!(saved_for(Some(&path), "dev.azure.com/acme").as_deref(), Some("azure-pat"), "the organization is lower-cased");
+        assert_eq!(saved_azure_organizations(Some(&path)), vec!["acme".to_string()]);
+        assert_eq!(bitbucket_credentials(None), None, "no settings folder, no credentials");
+        remove_token(&path, &azure_key("acme")).unwrap();
+        assert!(saved_azure_organizations(Some(&path)).is_empty());
+        assert!(bitbucket_credentials(Some(&path)).is_some(), "Bitbucket keeps its own entry");
     }
 
     #[test]

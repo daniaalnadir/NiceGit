@@ -279,10 +279,16 @@ impl HostedRepository {
         }
     }
 
-    /// The compare page from `base` to `head`, with both branch names encoded. Only Gitea and
-    /// Forgejo name both branches in the address; other hosts give `None`.
+    /// The compare page from `base` to `head`, with both branch names encoded. Gitea and Forgejo name both
+    /// branches in the address, as Azure DevOps does for a new pull request; other hosts give `None`.
     pub fn compare_url(&self, base: &str, head: &str) -> Option<String> {
-        (self.kind == Host::Gitea).then(|| format!("{}/compare/{}...{}", self.home_url(), encode_path(base), encode_path(head)))
+        match self.kind {
+            Host::Gitea => Some(format!("{}/compare/{}...{}", self.home_url(), encode_path(base), encode_path(head))),
+            Host::AzureDevOps => {
+                Some(format!("{}/pullrequestcreate?sourceRef={}&targetRef={}", self.home_url(), encode_path(head), encode_path(base)))
+            }
+            Host::GitHub | Host::GitLab | Host::Bitbucket => None,
+        }
     }
 
     /// Another page of a GitHub repository, such as `issues` or `actions`. Other hosts have no
@@ -556,5 +562,26 @@ mod tests {
         assert_eq!(repository.github_page_url("issues"), None);
         let github = parse("https://github.com/acme/app").unwrap();
         assert_eq!(github.compare_url("main", "x"), None, "only Gitea names both branches in its compare address");
+    }
+
+    #[test]
+    fn azure_devops_compare_pages_name_both_branches_and_bitbucket_has_none() {
+        let azure = azure("https://dev.azure.com/acme/Web/_git/shop");
+        assert_eq!(
+            azure.compare_url("main", "feat #1/x").as_deref(),
+            Some("https://dev.azure.com/acme/Web/_git/shop/pullrequestcreate?sourceRef=feat%20%231/x&targetRef=main")
+        );
+        let bitbucket = parse("https://bitbucket.org/team/tool").unwrap();
+        assert_eq!(bitbucket.compare_url("main", "x"), None, "Bitbucket's create page names only the source here");
+    }
+
+    #[test]
+    fn ssh_urls_of_bitbucket_and_azure_devops_are_read() {
+        let bitbucket = parse("ssh://git@bitbucket.org/team/tool.git").unwrap();
+        assert_eq!((bitbucket.kind, bitbucket.slug().as_str()), (Host::Bitbucket, "team/tool"));
+        assert_eq!(bitbucket.pull_requests_url(), "https://bitbucket.org/team/tool/pull-requests");
+        let azure = azure("ssh://git@ssh.dev.azure.com/v3/acme/Web/shop");
+        assert_eq!(azure.home_url(), "https://dev.azure.com/acme/Web/_git/shop");
+        assert_eq!(azure.pull_requests_url(), "https://dev.azure.com/acme/Web/_git/shop/pullrequests");
     }
 }

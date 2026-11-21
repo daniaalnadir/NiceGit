@@ -1,8 +1,8 @@
 //! Branch checks: the CI status of each branch that has an open pull or merge request. A small dot
 //! on the branch's label in the commit graph, and beside it in the sidebar, shows whether its checks
 //! failed, are pending, or passed. The requests are read in the background through `gh`, `glab`, or
-//! the Gitea or Forgejo API, for the active repository only, and only when its remote is GitHub,
-//! GitLab, or Gitea and Forgejo, and the CLI is signed in where one is needed. Nothing here blocks
+//! the Gitea, Forgejo, Bitbucket, or Azure DevOps API, for the active repository only, and only when its
+//! remote is on one of those services, and the CLI is signed in where one is needed. Nothing here blocks
 //! the interface.
 
 use std::collections::HashMap;
@@ -14,9 +14,8 @@ use egui::{Color32, Pos2, Response, Sense, Ui};
 use nicegit_core::gitea::BACKGROUND_PAGES;
 use nicegit_core::github::{Cancel, Checks, GhProgram, GhStatus, OpenPullRequest, PrState, PullRequestStatus};
 use nicegit_core::gitlab::{self, GlabProgram, GlabStatus};
-use nicegit_core::hosting::Host;
 use nicegit_core::hosting::ListedHosts;
-use nicegit_core::{Branch, GitClient};
+use nicegit_core::{azure_devops, bitbucket, Branch, GitClient};
 
 use crate::app::NiceGitApp;
 use crate::forge_tokens;
@@ -192,7 +191,7 @@ pub fn status_from_listing(
     }
     let check = requests.checks.get(&format!("refs/heads/{branch}"))?;
     Some(PullRequestStatus {
-        kind: Host::Gitea,
+        kind: forge.kind(),
         number: check.number,
         title: check.title.clone(),
         state: if check.is_draft { PrState::Draft } else { PrState::Open },
@@ -259,6 +258,19 @@ fn read_open_requests(
             let token = forge_tokens::token_for(token_file, &repository.host);
             // A background read: at most two pages, so a long list does not hold the refresh.
             client.gitea_open_pull_requests(repository, token.as_deref(), BACKGROUND_PAGES, &Cancel::default(), path).ok()?
+        }
+        Forge::Bitbucket(repository) => {
+            let credentials = forge_tokens::bitbucket_credentials(token_file);
+            client
+                .bitbucket_open_pull_requests(repository, credentials.as_deref(), bitbucket::BACKGROUND_PAGES, &Cancel::default(), path)
+                .ok()?
+        }
+        Forge::AzureDevOps(repository) => {
+            // Azure DevOps needs a token to list anything, so without one there are no dots.
+            let token = forge_tokens::azure_token(token_file, azure_devops::organization(repository))?;
+            client
+                .azure_open_pull_requests(repository, Some(token.as_str()), azure_devops::BACKGROUND_PAGES, &Cancel::default(), path)
+                .ok()?
         }
     };
     Some(Arc::new(OpenRequests { forge: forge.clone(), checks: request_checks(remote, &requests, branches) }))
@@ -341,7 +353,7 @@ impl NiceGitApp {
                     crate::tools::pull_request_detail::PullRequestDetailWindow::new(repository.clone(), request.number).on_checks();
                 self.open_tool(Box::new(window));
             }
-            Forge::GitLab(_) | Forge::Gitea(_) => crate::ui::changes::open_url(&request.url),
+            Forge::GitLab(_) | Forge::Gitea(_) | Forge::Bitbucket(_) | Forge::AzureDevOps(_) => crate::ui::changes::open_url(&request.url),
         }
     }
 }

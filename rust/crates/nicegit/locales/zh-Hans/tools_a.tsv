@@ -418,8 +418,6 @@ Not available	不可用
 by a deleted account	由已删除的账户创建
 Check out is available for GitHub pull requests only.	检出仅适用于 GitHub 拉取请求。
 This repository has no {remote} remote, so its pull requests cannot be read.	此仓库没有 {remote} 远程仓库，因此无法读取其拉取请求。
-Bitbucket pull requests are not listed here.	此处不列出 Bitbucket 拉取请求。
-Azure DevOps pull requests are not listed here.	此处不列出 Azure DevOps 拉取请求。
 {count} passing	{count} 项通过
 {count} failing	{count} 项失败
 {count} pending	{count} 项待定

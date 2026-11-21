@@ -418,8 +418,6 @@ Not available	Nicht verfügbar
 by a deleted account	von einem gelöschten Konto
 Check out is available for GitHub pull requests only.	Auschecken ist nur für GitHub-Pull-Requests verfügbar.
 This repository has no {remote} remote, so its pull requests cannot be read.	Dieses Repository hat kein Remote {remote}, daher können seine Pull-Requests nicht gelesen werden.
-Bitbucket pull requests are not listed here.	Bitbucket-Pull-Requests werden hier nicht angezeigt.
-Azure DevOps pull requests are not listed here.	Azure-DevOps-Pull-Requests werden hier nicht angezeigt.
 {count} passing	{count} bestanden
 {count} failing	{count} fehlgeschlagen
 {count} pending	{count} ausstehend

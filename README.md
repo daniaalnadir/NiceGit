@@ -75,7 +75,8 @@ Built with Rust, and released under the [MIT License](LICENSE).
 - Available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese.
 - Pull requests and issues, creating pull requests, Open on GitHub, and cloning from your
   repository list, for github.com and GitHub Enterprise hosts, through your existing GitHub CLI
-  login. A dot on each branch with an open pull request shows its checks.
+  login. GitLab, Gitea and Forgejo, Bitbucket Cloud, and Azure DevOps pull requests too. A dot
+  on each branch with an open pull request shows its checks.
 
 The [feature guide](docs/FEATURES.md) describes each feature's behaviour and safeguards.
 
@@ -169,12 +170,14 @@ records hard-won rules about Git edge cases that changes must respect.
 
 ## Limitations
 
-- Pull requests and issues support github.com and GitHub Enterprise Server, not GitLab or
-  Bitbucket. Pushing and pulling work with any Git remote.
+- Pull requests work with GitHub, GitLab, Gitea and Forgejo, Bitbucket Cloud and Azure DevOps;
+  not Bitbucket Server. Review threads and merging are GitHub-only. Pushing and pulling work
+  with any Git remote.
 - Undo steps back through the last 20 recorded actions in this session; changes made outside
   NiceGit stop the chain.
-- NiceGit tells you when a new version is out, but doesn't install it; download it from the
-  Releases page, or upgrade through Homebrew or winget.
+- NiceGit can download and install a new version itself on macOS, from the Windows installer,
+  and as a Linux AppImage; for the Windows zip and the Linux deb, rpm and tarball, download it
+  from the Releases page, or upgrade through Homebrew or winget.
 - The embedded terminal is a real shell, and Git hooks, filters, and shell startup files
   can run code. Only open repositories you trust.
 

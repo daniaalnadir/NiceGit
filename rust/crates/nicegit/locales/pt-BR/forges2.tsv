@@ -1,0 +1,24 @@
+# pt-BR: Pull requests on Bitbucket and Azure DevOps (Português do Brasil, você).
+Add a personal access token in Settings to see pull requests.	Adicione um token de acesso pessoal em Configurações para ver os pull requests.
+App password or API token	Senha de aplicativo ou token de API
+App password or API token for {host}	Senha de aplicativo ou token de API de {host}
+Azure DevOps	Azure DevOps
+Azure DevOps lists nothing without a personal access token for the organization. Creating a pull request needs one with code read and write access.	O Azure DevOps não lista nada sem um token de acesso pessoal da organização. Para criar um pull request, você precisa de um com acesso de leitura e gravação ao código.
+Bitbucket	Bitbucket
+Bitbucket and Azure DevOps are reached through their API, not a command-line tool.	Bitbucket e Azure DevOps são acessados pela API, não por uma ferramenta de linha de comando.
+Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.	Para criar um pull request em {host}, você precisa de um token de acesso pessoal. Adicione um em Configurações, em Azure DevOps, e depois abra esta caixa de diálogo de novo.
+Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.	Para criar um pull request em {host}, você precisa do seu nome de usuário e de uma senha de aplicativo. Adicione-os em Configurações, em Bitbucket, e depois abra esta caixa de diálogo de novo.
+Load from Azure DevOps	Carregar do Azure DevOps
+Load from Bitbucket	Carregar do Bitbucket
+Organization	Organização
+Organization, such as acme	Organização, como acme
+Personal access token	Token de acesso pessoal
+Remotes on bitbucket.org get pull requests and issues. Public repositories can be read without credentials; creating a pull request needs your username and an app password or API token.	Os remotos em bitbucket.org recebem pull requests e issues. Repositórios públicos podem ser lidos sem credenciais; para criar um pull request, você precisa do seu nome de usuário e de uma senha de aplicativo ou token de API.
+Remove the credentials for {host}	Remover as credenciais de {host}
+Save the credentials for {host}	Salvar as credenciais de {host}
+The credentials for {host} could not be saved: {error}	Não foi possível salvar as credenciais de {host}: {error}
+The organization name must use only letters, digits, and hyphens.	O nome da organização deve usar apenas letras, números e hífens.
+The username must have no spaces, colons, or control characters.	O nome de usuário não pode ter espaços, dois-pontos nem caracteres de controle.
+This repository has no issue tracker on Bitbucket.	Este repositório não tem um rastreador de issues no Bitbucket.
+Username	Nome de usuário
+Username for {host}	Nome de usuário de {host}

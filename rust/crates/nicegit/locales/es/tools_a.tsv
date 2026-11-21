@@ -418,8 +418,6 @@ Not available	No disponible
 by a deleted account	por una cuenta eliminada
 Check out is available for GitHub pull requests only.	Extraer solo está disponible para pull requests de GitHub.
 This repository has no {remote} remote, so its pull requests cannot be read.	Este repositorio no tiene un remoto {remote}, así que sus pull requests no se pueden leer.
-Bitbucket pull requests are not listed here.	Las pull requests de Bitbucket no se muestran aquí.
-Azure DevOps pull requests are not listed here.	Las pull requests de Azure DevOps no se muestran aquí.
 {count} passing	{count} correctas
 {count} failing	{count} fallidas
 {count} pending	{count} pendientes

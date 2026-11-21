@@ -1,8 +1,8 @@
 //! The Launchpad: open pull requests and merge requests across the repositories open as tabs, and
 //! across a saved workspace's folders when one is chosen, grouped by what they need from you. Each
 //! repository is read with one read-only call: `gh pr list` for GitHub, `glab mr list` for GitLab,
-//! and the pull request API for Gitea and Forgejo, after checking that its `origin` is on that host
-//! and that the CLI is signed in to it where one is needed. The reads
+//! and the pull request API for Gitea, Forgejo, Bitbucket, and Azure DevOps, after checking that its
+//! `origin` is on that host and that the CLI is signed in to it where one is needed. The reads
 //! run in the background, a few at a time, and stop when the window closes. Nothing polls: Refresh
 //! reads again.
 
@@ -19,7 +19,7 @@ use nicegit_core::github::{
 };
 use nicegit_core::gitlab::{self, GlabProgram};
 use nicegit_core::hosting::{Host, HostedRepository, ListedHosts};
-use nicegit_core::{GitClient, GitError};
+use nicegit_core::{azure_devops, bitbucket, GitClient, GitError};
 
 use crate::app::NiceGitApp;
 use crate::forge_tokens;
@@ -522,7 +522,8 @@ fn row_card(ui: &mut Ui, row: &Row, now: i64, action: &mut Option<Action>) {
     let pull_request = &row.pull_request;
     let host_name = match row.kind {
         Host::GitLab => "GitLab",
-        Host::GitHub | Host::Bitbucket => "GitHub",
+        Host::GitHub => "GitHub",
+        Host::Bitbucket => "Bitbucket",
         Host::AzureDevOps => "Azure DevOps",
         Host::Gitea => "Gitea / Forgejo",
     };
@@ -633,9 +634,50 @@ fn read_checked(client: &GitClient, path: &Path, sources: &Sources, cancel: &Can
         }
         Host::GitLab => read_gitlab(client, path, &hosted, sources, cancel),
         Host::Gitea => read_gitea(client, path, &hosted, sources, cancel),
-        Host::Bitbucket => Err(tr("Bitbucket pull requests are not listed here.").to_string()),
-        Host::AzureDevOps => Err(tr("Azure DevOps pull requests are not listed here.").to_string()),
+        Host::Bitbucket => read_bitbucket(client, path, &hosted, sources, cancel),
+        Host::AzureDevOps => read_azure(client, path, &hosted, sources, cancel),
     }
+}
+
+/// Lists a Bitbucket repository's open pull requests through the API. Public repositories are listed
+/// without credentials; the login is read only when credentials are saved.
+fn read_bitbucket(
+    client: &GitClient,
+    path: &Path,
+    repository: &HostedRepository,
+    sources: &Sources,
+    cancel: &Cancel,
+) -> Result<Outcome, String> {
+    let credentials = forge_tokens::bitbucket_credentials(sources.token_file.as_deref());
+    let login = match credentials.as_deref() {
+        Some(saved) => {
+            cached_login(&sources.logins, &repository.host, || client.bitbucket_login(saved, path).map_err(|error| message(&error)))?
+        }
+        None => String::new(),
+    };
+    let pull_requests = client
+        .bitbucket_open_pull_requests(repository, credentials.as_deref(), bitbucket::MAX_PAGES, cancel, path)
+        .map_err(|error| message(&error))?;
+    Ok(Outcome::Listed { kind: Host::Bitbucket, slug: repository.slug(), login, pull_requests })
+}
+
+/// Lists an Azure DevOps repository's open pull requests through the API. Azure DevOps lists nothing
+/// without a personal access token, so without one the repository says so instead of failing. Its
+/// logins are not read, so no row is marked as the person's own.
+fn read_azure(
+    client: &GitClient,
+    path: &Path,
+    repository: &HostedRepository,
+    sources: &Sources,
+    cancel: &Cancel,
+) -> Result<Outcome, String> {
+    let Some(token) = forge_tokens::azure_token(sources.token_file.as_deref(), azure_devops::organization(repository)) else {
+        return Err(tr("Add a personal access token in Settings to see pull requests.").to_string());
+    };
+    let pull_requests = client
+        .azure_open_pull_requests(repository, Some(token.as_str()), azure_devops::MAX_PAGES, cancel, path)
+        .map_err(|error| message(&error))?;
+    Ok(Outcome::Listed { kind: Host::AzureDevOps, slug: repository.slug(), login: String::new(), pull_requests })
 }
 
 /// Lists a GitHub repository's open pull requests through `gh`, after `gh` is checked for its host.

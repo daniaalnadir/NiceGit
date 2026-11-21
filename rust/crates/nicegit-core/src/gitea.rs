@@ -7,14 +7,16 @@
 //! needs one. Each answer is decoded strictly, and every text is cleaned before it is shown.
 
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::Path;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use crate::ai_message::{config_quote, json_string};
+use crate::ai_message::json_string;
 use crate::client::GitClient;
+use crate::forge_api::{
+    self, choose_branch_pull, is_commit_id, item_of_pull, login_of, open_request, optional_str, status_of, web_link, whole_number,
+    Exchange, PullEntry,
+};
 use crate::github::{
     self, clean_text, timestamp_seconds, Cancel, Checks, GitHubItem, GitHubLabel, ItemKind, OpenPullRequest, PrState, PullRequestStatus,
     ReviewRequest,
@@ -23,7 +25,6 @@ use crate::gitlab::valid_username;
 use crate::hosting::{Host, HostedRepository, ListedHosts};
 use crate::json::{parse_json, Json};
 use crate::models::{GitError, Result};
-use crate::runner::search_path;
 
 /// The name used in errors for this service.
 const SERVICE: &str = "Gitea / Forgejo";
@@ -40,124 +41,18 @@ pub const MAX_PAGES: usize = 4;
 pub const BACKGROUND_PAGES: usize = 2;
 /// How many commit statuses are read at the same time.
 pub const CONCURRENT_STATUS_READS: usize = 6;
-/// How long curl may spend connecting, in seconds.
-const CONNECT_SECONDS: u32 = 10;
-/// How long curl may take for one request, in seconds.
-const TIMEOUT_SECONDS: u32 = 30;
 /// Longest error message from the server shown to the person.
 const MESSAGE_LIMIT: usize = 300;
-
-/// The curl command for one request. The token and the body are only in `config`, which goes to
-/// curl's standard input; `args` never holds either.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Plan {
-    pub args: Vec<String>,
-    pub config: String,
-}
-
-/// The curl command that makes one request to `url`. A `body` is sent as JSON, and a `token` is
-/// sent as `Authorization: token <token>`. The write-out format ends the output with the status code,
-/// so an error answer's status can be read even though `--fail-with-body` also sets curl's exit code.
-pub fn curl_plan(method: &str, url: &str, token: Option<&str>, body: Option<&str>) -> Plan {
-    let connect = CONNECT_SECONDS.to_string();
-    let timeout = TIMEOUT_SECONDS.to_string();
-    let args = [
-        "--silent",
-        "--show-error",
-        "--fail-with-body",
-        "--proto",
-        "=https",
-        "--proto-redir",
-        "=https",
-        "--connect-timeout",
-        connect.as_str(),
-        "--max-time",
-        timeout.as_str(),
-        "--write-out",
-        "\\n%{http_code}",
-        "--config",
-        "-",
-    ]
-    .map(str::to_string)
-    .to_vec();
-    let mut config = String::new();
-    let mut line = |name: &str, value: &str| {
-        config.push_str(name);
-        config.push_str(" = ");
-        config.push_str(&config_quote(value));
-        config.push('\n');
-    };
-    line("url", url);
-    line("request", method);
-    line("header", "accept: application/json");
-    if let Some(body) = body {
-        line("header", "content-type: application/json");
-        line("data-binary", body);
-    }
-    if let Some(token) = token {
-        line("header", &format!("Authorization: token {token}"));
-    }
-    Plan { args, config }
-}
 
 /// The address of the API for a repository, such as `https://codeberg.org/api/v1/repos/acme/app/pulls`.
 fn repository_api(repository: &HostedRepository, path: &str) -> String {
     format!("{}/api/v1/repos/{}{path}", repository.web_base(), repository.slug())
 }
 
-/// The outcome of one curl run: the status and the body, or why there was none.
-#[derive(Debug, PartialEq, Eq)]
-enum Exchange {
-    /// curl is not installed, so no request was made.
-    NoCurl,
-    /// No status came back: the server could not be reached or did not answer in time.
-    Unreachable,
-    Answer {
-        status: u16,
-        body: String,
-    },
-}
-
-/// Reads curl's output, which ends with the status code written by the write-out format. A missing
-/// or zero status is no answer at all.
-fn parse_exchange(output: &str) -> Exchange {
-    match output.rsplit_once('\n') {
-        Some((body, code)) => match code.trim().parse::<u16>() {
-            Ok(status) if status != 0 => Exchange::Answer { status, body: body.to_string() },
-            _ => Exchange::Unreachable,
-        },
-        None => Exchange::Unreachable,
-    }
-}
-
-/// Runs curl for one request and reads its status and body.
+/// Runs curl for one request with a token, which is sent as `Authorization: token <token>`.
 fn exchange(directory: &Path, method: &str, url: &str, token: Option<&str>, body: Option<&str>) -> Exchange {
-    let Some(curl) = github::find_program("curl") else { return Exchange::NoCurl };
-    let plan = curl_plan(method, url, token, body);
-    let mut command = Command::new(curl);
-    command
-        .args(&plan.args)
-        .current_dir(directory)
-        .env("PATH", search_path())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // Without this, each request flashes a console window on Windows.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    let Ok(mut child) = command.spawn() else { return Exchange::Unreachable };
-    if let Some(mut stdin) = child.stdin.take() {
-        // The config holds the token and the body, so it goes in here and never in the arguments.
-        std::thread::spawn(move || {
-            let _ = stdin.write_all(plan.config.as_bytes());
-        });
-    }
-    let Ok(output) = child.wait_with_output() else { return Exchange::Unreachable };
-    parse_exchange(&String::from_utf8_lossy(&output.stdout))
+    let authorization = token.map(|token| format!("token {token}"));
+    forge_api::exchange(directory, method, url, authorization.as_deref(), body)
 }
 
 /// The error for an answer that is not a success, in words for the person. The server's own message
@@ -193,55 +88,9 @@ fn answer_json(host: &str, status: u16, body: &str) -> Result<Json> {
     parse_json(body).map_err(|_| GitError::failed(SERVICE, format!("{host} returned an answer that was not expected.")))
 }
 
-/// The web address of a pull request or issue. The server's own link is kept only when it is the
-/// repository's page for that number, compared without regard to case; anything else is replaced by
-/// the address built from the parsed repository, so a link to another host is never shown.
-fn web_link(repository: &HostedRepository, segment: &str, number: u64, link: Option<&str>) -> String {
-    let canonical = format!("{}/{}/{segment}/{number}", repository.web_base(), repository.slug());
-    match link {
-        Some(link) if link.eq_ignore_ascii_case(&canonical) => link.to_string(),
-        _ => canonical,
-    }
-}
-
 /// The unexpected-answer error for a list or a single item.
 fn unexpected(what: &str) -> GitError {
     GitError::failed(SERVICE, format!("Gitea or Forgejo returned unexpected {what}."))
-}
-
-/// A whole number, from a JSON number that is at least 1 and fits the range of a number.
-fn whole_number(value: Option<&Json>) -> Option<u64> {
-    value.and_then(Json::as_number).filter(|n| n.fract() == 0.0 && *n >= 1.0 && *n < 9.0e15).map(|n| n as u64)
-}
-
-/// The text of an optional field: absent or `null` is none, and any other type is refused.
-fn optional_str<'a>(entry: &'a Json, key: &str) -> std::result::Result<Option<&'a str>, ()> {
-    match entry.get(key) {
-        None | Some(Json::Null) => Ok(None),
-        Some(value) => value.as_str().map(Some).ok_or(()),
-    }
-}
-
-/// A login from an object's `login` field, when it is a plain username; otherwise none.
-fn login_of(user: Option<&Json>) -> Option<String> {
-    user.and_then(|user| user.get("login")).and_then(Json::as_str).filter(|login| valid_username(login)).map(str::to_string)
-}
-
-/// One pull request from a list, decoded, before its checks are read.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PullEntry {
-    pub number: u64,
-    pub title: String,
-    pub url: String,
-    pub state: PrState,
-    pub author: Option<String>,
-    pub head_branch: String,
-    /// The head commit, whose status gives the checks. Absent when the answer has none.
-    pub head_sha: Option<String>,
-    /// Whether the branch is on a fork, or the fork is gone, so it is not this repository's branch.
-    pub is_cross_repository: bool,
-    pub review_requests: Vec<ReviewRequest>,
-    pub updated_at: i64,
 }
 
 /// Whether a pull request is a draft. The `draft` flag is read when the server sends it; older
@@ -407,58 +256,7 @@ fn is_missing_pull(body: &str) -> bool {
 /// A path segment with every byte outside the unreserved set percent-encoded, so a branch name with
 /// slashes stays one segment.
 fn encode_segment(text: &str) -> String {
-    let mut encoded = String::new();
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => encoded.push(byte as char),
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
-}
-
-/// The pull request for `branch` among the listed pull requests: one whose head is `branch` on this
-/// repository, preferring an open or draft one over a closed one. The list order decides the rest.
-pub(crate) fn choose_branch_pull(entries: Vec<PullEntry>, branch: &str) -> Option<PullEntry> {
-    let mut matching: Vec<PullEntry> =
-        entries.into_iter().filter(|entry| entry.head_branch == branch && !entry.is_cross_repository).collect();
-    matching.sort_by_key(|entry| !matches!(entry.state, PrState::Open | PrState::Draft));
-    matching.into_iter().next()
-}
-
-/// The status of a pull request as the status bar shows it, once its checks are read.
-fn status_of(entry: PullEntry, checks: Checks) -> PullRequestStatus {
-    PullRequestStatus { kind: Host::Gitea, number: entry.number, title: entry.title, state: entry.state, url: entry.url, checks }
-}
-
-/// The open pull request as the Launchpad and branch checks list it.
-fn open_request(entry: PullEntry, checks: Checks) -> OpenPullRequest {
-    OpenPullRequest {
-        number: entry.number,
-        title: entry.title,
-        url: entry.url,
-        author: entry.author,
-        head_branch: entry.head_branch,
-        is_cross_repository: entry.is_cross_repository,
-        is_draft: entry.state == PrState::Draft,
-        review_decision: None,
-        review_requests: entry.review_requests,
-        updated_at: entry.updated_at,
-        checks,
-    }
-}
-
-/// The sidebar's row for a pull request. Its checks are not read for a list of rows.
-fn item_of_pull(entry: PullEntry) -> GitHubItem {
-    GitHubItem {
-        number: entry.number,
-        title: entry.title,
-        url: entry.url,
-        author: entry.author,
-        state: Some("OPEN".to_string()),
-        is_draft: entry.state == PrState::Draft,
-        labels: Vec::new(),
-    }
+    forge_api::encode_component(text)
 }
 
 /// Decodes one issue from a list. Pull requests that the issue list might carry are skipped.
@@ -533,11 +331,6 @@ pub(crate) fn decode_created_url(value: &Json, repository: &HostedRepository) ->
     decode_pull_entry(value, repository).map(|entry| entry.url)
 }
 
-/// Whether a commit's id can be put in a request path: hexadecimal, and no longer than a SHA-256 id.
-fn is_commit_id(text: &str) -> bool {
-    !text.is_empty() && text.len() <= 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
 /// Whether a token can be sent in a header: printable ASCII, no spaces, and not too long.
 pub fn is_plausible_token(text: &str) -> bool {
     !text.is_empty() && text.len() <= 512 && text.bytes().all(|byte| byte.is_ascii_graphic())
@@ -609,7 +402,7 @@ impl GitClient {
         };
         let Some(entry) = entry else { return Ok(None) };
         let checks = self.head_checks(repository, token, entry.head_sha.as_deref(), directory);
-        Ok(Some(status_of(entry, checks)))
+        Ok(Some(status_of(Host::Gitea, entry, checks)))
     }
 
     /// One pull request by base and head, from `GET /pulls/{base}/{head}`. A 404 whose answer is a JSON
@@ -781,6 +574,7 @@ impl GitClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::forge_api::{curl_plan, parse_exchange};
 
     fn repository() -> HostedRepository {
         HostedRepository::parse("https://codeberg.org/acme/app.git", ListedHosts::default()).unwrap()
@@ -807,7 +601,7 @@ mod tests {
     #[test]
     fn the_token_is_never_in_the_arguments() {
         let token = "0123456789abcdef-secret";
-        let plan = curl_plan("GET", "https://codeberg.org/api/v1/repos/acme/app/pulls?state=open", Some(token), None);
+        let plan = curl_plan("GET", "https://codeberg.org/api/v1/repos/acme/app/pulls?state=open", Some(&format!("token {token}")), None);
         assert!(plan.args.iter().all(|arg| !arg.contains(token)), "{:?}", plan.args);
         assert!(plan.config.contains("Authorization: token 0123456789abcdef-secret"), "{}", plan.config);
         assert!(plan.args.contains(&"--config".to_string()) && plan.args.contains(&"-".to_string()));
@@ -828,7 +622,7 @@ mod tests {
     #[test]
     fn a_body_goes_in_the_config_with_its_content_type() {
         let body = r#"{"title":"Say \"hi\""}"#;
-        let plan = curl_plan("POST", "https://codeberg.org/api/v1/repos/acme/app/pulls", Some("t0k"), Some(body));
+        let plan = curl_plan("POST", "https://codeberg.org/api/v1/repos/acme/app/pulls", Some("token t0k"), Some(body));
         assert!(plan.config.contains("request = \"POST\""));
         assert!(plan.config.contains("header = \"content-type: application/json\""));
         assert!(plan.config.contains(r#"data-binary = "{\"title\":\"Say \\\"hi\\\"\"}""#), "{}", plan.config);

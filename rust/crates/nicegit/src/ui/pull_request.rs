@@ -1,6 +1,6 @@
 //! "Create pull request" for a local branch: a form that creates the pull request through the GitHub
-//! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`), or a Gitea or
-//! Forgejo pull request through its API with a token. It fills in the
+//! CLI, or "Create merge request" on a GitLab remote through the GitLab CLI (`glab`), or a Gitea, Forgejo,
+//! Bitbucket, or Azure DevOps pull request through its API with a token or credentials. It fills in the
 //! base branch from the host, and the title and body from the branch's commits. The browser's compare
 //! page, or GitLab's new merge request form, stays available as tr("Open in browser instead"). Nothing here
 //! blocks the interface; every `gh`, `glab`, and Git read runs in the background.
@@ -13,7 +13,7 @@ use egui_phosphor::regular as icon;
 use nicegit_core::github::{GhStatus, PrState, PullRequestStatus};
 use nicegit_core::gitlab::{self, GlabProgram, GlabStatus, NewMergeRequest};
 use nicegit_core::hosting::{Host, ListedHosts};
-use nicegit_core::{Branch, GitClient, GitError, Snapshot};
+use nicegit_core::{azure_devops, Branch, GitClient, GitError, Snapshot};
 
 use crate::app::{NiceGitApp, Notice, NoticeAction};
 use crate::forge_tokens;
@@ -26,6 +26,30 @@ use crate::tools::{widgets, Task};
 const BODY_MIN: usize = 2;
 /// ...and at most this many. Longer lists are left for the person to write.
 const BODY_MAX: usize = 20;
+
+/// The text for a dialog whose creation needs a token or credentials, in the words of the service's settings.
+fn no_token_text(forge: &Forge) -> String {
+    let host = forge.host();
+    match forge {
+        Forge::Bitbucket(_) => tr_fmt!(
+            "Creating a pull request on {host} needs your username and an app password. Add them under Settings, in Bitbucket, then open this dialog again.",
+            host = host
+        ),
+        Forge::AzureDevOps(_) => tr_fmt!(
+            "Creating a pull request on {host} needs a personal access token. Add one under Settings, in Azure DevOps, then open this dialog again.",
+            host = host
+        ),
+        _ => tr_fmt!(
+            "Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.",
+            host = host
+        ),
+    }
+}
+
+/// Whether the forge's requests can be drafts. Gitea and Forgejo have none, and neither has Bitbucket here.
+fn offers_drafts(forge: &Forge) -> bool {
+    !matches!(forge, Forge::Gitea(_) | Forge::Bitbucket(_))
+}
 
 /// What the dialog's form was closed or used for in one frame.
 pub enum Outcome {
@@ -107,7 +131,9 @@ impl PullRequestDialog {
     /// it is built now; the other services' pages were built when the dialog opened.
     fn browser_link(&self) -> String {
         match &self.target.repository {
-            Forge::Gitea(_) => self.target.repository.compare_link_between(self.base.trim(), &self.target.remote_branch),
+            Forge::Gitea(_) | Forge::AzureDevOps(_) => {
+                self.target.repository.compare_link_between(self.base.trim(), &self.target.remote_branch)
+            }
             _ => self.compare_link.clone(),
         }
     }
@@ -170,6 +196,9 @@ fn not_installed(forge: &Forge) -> String {
         }
         Forge::GitLab(repository) => gitlab::not_installed_message(&repository.host),
         Forge::Gitea(_) => tr("Gitea and Forgejo are reached through their API, not a command-line tool.").to_string(),
+        Forge::Bitbucket(_) | Forge::AzureDevOps(_) => {
+            tr("Bitbucket and Azure DevOps are reached through their API, not a command-line tool.").to_string()
+        }
     }
 }
 
@@ -183,6 +212,19 @@ fn load_base(forge: &Forge, glab: &GlabProgram, directory: &Path, token_file: Op
             let branch = client.gitea_default_branch(repository, token.as_deref(), directory).map_err(|error| message(&error))?;
             Ok(if token.is_some() { BaseLookup::Branch(branch) } else { BaseLookup::NoToken(branch) })
         }
+        Forge::Bitbucket(repository) => {
+            let credentials = forge_tokens::bitbucket_credentials(token_file);
+            let branch = client.bitbucket_default_branch(repository, credentials.as_deref(), directory).map_err(|error| message(&error))?;
+            Ok(if credentials.is_some() { BaseLookup::Branch(branch) } else { BaseLookup::NoToken(branch) })
+        }
+        Forge::AzureDevOps(repository) => match forge_tokens::azure_token(token_file, azure_devops::organization(repository)) {
+            // Azure DevOps reads most repositories only with a token, so without one the base is typed in.
+            None => Ok(BaseLookup::NoToken(String::new())),
+            Some(token) => {
+                let branch = client.azure_default_branch(repository, Some(token.as_str()), directory).map_err(|error| message(&error))?;
+                Ok(BaseLookup::Branch(branch))
+            }
+        },
         Forge::GitHub(repository) => match client.gh_status(&repository.host, directory) {
             GhStatus::NotInstalled => Ok(BaseLookup::NotInstalled),
             GhStatus::SignedOut(explanation) => Ok(BaseLookup::SignedOut(explanation)),
@@ -204,8 +246,8 @@ fn sign_in_command(forge: &Forge) -> String {
         Forge::GitHub(repository) if repository.host == "github.com" => "gh auth login".to_string(),
         Forge::GitHub(repository) => format!("gh auth login --hostname {}", repository.host),
         Forge::GitLab(repository) => gitlab::sign_in_command(&repository.host),
-        // Gitea and Forgejo are never signed in to through a command-line tool, so no command applies.
-        Forge::Gitea(_) => String::new(),
+        // Gitea, Forgejo, Bitbucket, and Azure DevOps are never signed in to through a command-line tool, so no command applies.
+        Forge::Gitea(_) | Forge::Bitbucket(_) | Forge::AzureDevOps(_) => String::new(),
     }
 }
 
@@ -332,8 +374,8 @@ impl PullRequestDialog {
         let base = self.base.trim().to_string();
         let title = self.title.trim().to_string();
         let body = self.body.clone();
-        // Gitea and Forgejo have no draft pull requests, so the draft choice is not offered for them.
-        let draft = self.draft && !matches!(forge, Forge::Gitea(_));
+        // Gitea, Forgejo, and Bitbucket have no draft pull requests here, so the draft choice is not offered for them.
+        let draft = self.draft && offers_drafts(&forge);
         let directory = self.directory.clone();
         let glab = self.glab.clone();
         let token_file = self.token_file.clone();
@@ -349,6 +391,14 @@ impl PullRequestDialog {
                 Forge::Gitea(repository) => {
                     let token = forge_tokens::token_for(token_file.as_deref(), &repository.host);
                     client.create_gitea_pull_request(repository, token.as_deref(), &head, &base, &title, &body, &directory)
+                }
+                Forge::Bitbucket(repository) => {
+                    let credentials = forge_tokens::bitbucket_credentials(token_file.as_deref());
+                    client.create_bitbucket_pull_request(repository, credentials.as_deref(), &head, &base, &title, &body, &directory)
+                }
+                Forge::AzureDevOps(repository) => {
+                    let token = forge_tokens::azure_token(token_file.as_deref(), azure_devops::organization(repository));
+                    client.create_azure_pull_request(repository, token.as_deref(), &head, &base, &title, &body, draft, &directory)
                 }
             };
             result.map_err(|error| message(&error))
@@ -416,14 +466,7 @@ impl PullRequestDialog {
             }
             match &self.lookup {
                 Lookup::Loading(_) | Lookup::Done(Ok(BaseLookup::Branch(_))) => {}
-                Lookup::Done(Ok(BaseLookup::NoToken(_))) => widgets::callout(
-                    ui,
-                    &tr_fmt!(
-                        "Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.",
-                        host = self.target.repository.host()
-                    ),
-                    true,
-                ),
+                Lookup::Done(Ok(BaseLookup::NoToken(_))) => widgets::callout(ui, &no_token_text(&self.target.repository), true),
                 Lookup::Done(Ok(BaseLookup::NotInstalled)) => widgets::callout(ui, &not_installed(&self.target.repository), true),
                 Lookup::Done(Ok(BaseLookup::SignedOut(explanation))) => {
                     let command = sign_in_command(&self.target.repository);
@@ -461,7 +504,7 @@ impl PullRequestDialog {
             }
             ui.add_space(6.0);
 
-            if !matches!(self.target.repository, Forge::Gitea(_)) {
+            if offers_drafts(&self.target.repository) {
                 widgets::checkbox(ui, !creating, &mut self.draft, tr("Create as a draft"));
             }
             ui.add_space(10.0);
@@ -600,7 +643,7 @@ impl NiceGitApp {
         let stale = repo.pr_status.take().filter(|(name, _)| *name == branch).and_then(|(_, mut task)| task.get().cloned());
         // A Gitea or Forgejo request that the branch dots read a moment ago is used instead of asking again.
         let listed = match &target.repository {
-            Forge::Gitea(_) => crate::ui::branch_checks::status_from_listing(
+            Forge::Gitea(_) | Forge::Bitbucket(_) | Forge::AzureDevOps(_) => crate::ui::branch_checks::status_from_listing(
                 repo.open_requests_at,
                 repo.open_requests.as_ref(),
                 &target.repository,
@@ -634,6 +677,21 @@ impl NiceGitApp {
                     client
                         .gitea_pull_request_for_branch(repository, token.as_deref(), &read_branch, &path)
                         .map_err(|error| error.to_string())
+                }
+                Forge::Bitbucket(repository) => {
+                    let credentials = forge_tokens::bitbucket_credentials(token_file.as_deref());
+                    client
+                        .bitbucket_pull_request_for_branch(repository, credentials.as_deref(), &read_branch, &path)
+                        .map_err(|error| error.to_string())
+                }
+                // Azure DevOps lists nothing without a token, so without one the branch has no pull request to show.
+                Forge::AzureDevOps(repository) => {
+                    match forge_tokens::azure_token(token_file.as_deref(), azure_devops::organization(repository)) {
+                        None => Ok(None),
+                        Some(token) => client
+                            .azure_pull_request_for_branch(repository, Some(token.as_str()), &read_branch, &path)
+                            .map_err(|error| error.to_string()),
+                    }
                 }
             }
         });

@@ -1,12 +1,13 @@
 //! Pull requests and issues listed in the sidebar, loaded on demand from a chosen remote: GitHub (github.com
-//! or a GitHub Enterprise host) through the signed-in GitHub CLI, as in the Mac app, or Gitea and
-//! Forgejo through their API, with the saved token when there is one.
+//! or a GitHub Enterprise host) through the signed-in GitHub CLI, as in the Mac app, or Gitea, Forgejo,
+//! Bitbucket, and Azure DevOps through their APIs, with the saved token or credentials when there are some.
 
 use egui::{RichText, Ui};
 use egui_phosphor::regular as icon;
+use nicegit_core::forge_api::{NEEDS_TOKEN, NO_ISSUE_TRACKER};
 use nicegit_core::github::{Cancel, GitHubItem, ItemKind, ItemState, CANCELLED};
 use nicegit_core::hosting::{Host, ListedHosts};
-use nicegit_core::{GitClient, Snapshot};
+use nicegit_core::{azure_devops, GitClient, Snapshot};
 
 use std::path::PathBuf;
 
@@ -33,6 +34,8 @@ pub struct GitHubList {
     pub limit: usize,
     pub items: Vec<GitHubItem>,
     pub error: Option<String>,
+    /// A reason the list is empty that is no error, such as a switched-off issue tracker, as its notice word.
+    pub notice: Option<&'static str>,
     cancel: Cancel,
     task: Option<Task<nicegit_core::Result<Vec<GitHubItem>>>>,
 }
@@ -41,7 +44,7 @@ impl GitHubList {
     /// A list that is already loaded with `items`, for tests that do not reach GitHub.
     #[cfg(test)]
     pub(crate) fn loaded(remote: &str, items: Vec<GitHubItem>) -> Self {
-        GitHubList { remote: remote.to_string(), limit: PAGE, items, error: None, cancel: Cancel::default(), task: None }
+        GitHubList { remote: remote.to_string(), limit: PAGE, items, error: None, notice: None, cancel: Cancel::default(), task: None }
     }
 
     fn is_loading(&mut self) -> bool {
@@ -56,14 +59,38 @@ impl GitHubList {
             Ok(items) => {
                 self.items = items.clone();
                 self.error = None;
+                self.notice = None;
             }
             Err(error) => {
+                // A notice is no failure: the list is empty for a reason the person can act on or ignore.
                 let text = error.to_string();
-                self.error = (!text.contains(CANCELLED)).then_some(text);
+                self.notice = [NO_ISSUE_TRACKER, NEEDS_TOKEN].into_iter().find(|notice| text.contains(*notice));
+                self.error = (self.notice.is_none() && !text.contains(CANCELLED)).then_some(text);
             }
         }
         self.task = None;
     }
+}
+
+/// The words for a notice, which the list shows in the muted colour.
+fn notice_text(notice: &str) -> &'static str {
+    if notice == NO_ISSUE_TRACKER {
+        tr("This repository has no issue tracker on Bitbucket.")
+    } else {
+        tr("Add a personal access token in Settings to see pull requests.")
+    }
+}
+
+/// Whether the issues section is left out. Azure DevOps work items are not listed, so an Azure DevOps
+/// remote has no issues here. The section follows the loaded list's remote, or, with no list loaded,
+/// the first remote on a supported host.
+fn issues_hidden(snapshot: &Snapshot, listed: ListedHosts, loaded_remote: Option<&str>) -> bool {
+    let kind_of = |remote: &str| crate::git_ext::hosted_repository_for_remote(snapshot, remote, listed).map(|repository| repository.kind);
+    let azure = match loaded_remote {
+        Some(remote) => kind_of(remote),
+        None => snapshot.remotes.iter().find_map(|remote| kind_of(remote)),
+    };
+    azure == Some(Host::AzureDevOps)
 }
 
 fn slot(kind: ItemKind) -> usize {
@@ -73,12 +100,14 @@ fn slot(kind: ItemKind) -> usize {
     }
 }
 
-/// The menu label that loads a list: "Load from Gitea / Forgejo" when the first remote on a supported
-/// host is a Gitea or Forgejo one, and "Load from GitHub" otherwise.
+/// The menu label that loads a list: the service's name when the first remote on a supported host is
+/// a Gitea, Forgejo, Bitbucket, or Azure DevOps one, and "Load from GitHub" otherwise.
 fn load_label(snapshot: &Snapshot, hosts: ListedHosts) -> &'static str {
     let first = snapshot.remotes.iter().find_map(|remote| crate::git_ext::hosted_repository_for_remote(snapshot, remote, hosts));
     match first {
         Some(repository) if repository.kind == Host::Gitea => tr("Load from Gitea / Forgejo"),
+        Some(repository) if repository.kind == Host::Bitbucket => tr("Load from Bitbucket"),
+        Some(repository) if repository.kind == Host::AzureDevOps => tr("Load from Azure DevOps"),
         _ => tr("Load from GitHub"),
     }
 }
@@ -99,15 +128,26 @@ impl NiceGitApp {
             let client = GitClient::new();
             let listed = ListedHosts { github: &hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
             let hosted = client.hosted_remote_repository(&remote_name, &path, listed)?;
-            if hosted.kind == Host::Gitea {
-                let saved = forge_tokens::token_for(token_file.as_deref(), &hosted.host);
-                return client.gitea_items(&hosted, kind, saved.as_deref(), limit, &path);
+            match hosted.kind {
+                Host::Gitea => {
+                    let saved = forge_tokens::token_for(token_file.as_deref(), &hosted.host);
+                    return client.gitea_items(&hosted, kind, saved.as_deref(), limit, &path);
+                }
+                Host::Bitbucket => {
+                    let credentials = forge_tokens::bitbucket_credentials(token_file.as_deref());
+                    return client.bitbucket_items(&hosted, kind, credentials.as_deref(), limit, &path);
+                }
+                Host::AzureDevOps => {
+                    let token = forge_tokens::azure_token(token_file.as_deref(), azure_devops::organization(&hosted));
+                    return client.azure_items(&hosted, kind, token.as_deref(), limit, &path);
+                }
+                _ => {}
             }
             let repository = client.github_repository(&remote_name, &path, &hosts)?;
             client.github_items_cancellable(&repository, kind, ItemState::Open, limit, &token, &path)
         });
         let items = repo.github[slot(kind)].take().filter(|list| list.remote == remote).map(|list| list.items).unwrap_or_default();
-        repo.github[slot(kind)] = Some(GitHubList { remote, limit, items, error: None, cancel, task: Some(task) });
+        repo.github[slot(kind)] = Some(GitHubList { remote, limit, items, error: None, notice: None, cancel, task: Some(task) });
     }
 
     /// Opens the Check out pull request dialog for pull request `number` on `remote`. Nothing runs
@@ -199,7 +239,10 @@ impl NiceGitApp {
             let hosts = nicegit_core::hosting::ListedHosts { github: &github_hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
             match crate::git_ext::pull_request_target(snapshot, branch, hosts)?.repository {
                 crate::git_ext::Forge::GitHub(repository) => Some(repository),
-                crate::git_ext::Forge::GitLab(_) | crate::git_ext::Forge::Gitea(_) => None,
+                crate::git_ext::Forge::GitLab(_)
+                | crate::git_ext::Forge::Gitea(_)
+                | crate::git_ext::Forge::Bitbucket(_)
+                | crate::git_ext::Forge::AzureDevOps(_) => None,
             }
         });
         if let Some(repository) = repository {
@@ -230,6 +273,10 @@ impl NiceGitApp {
         let gitlab_hosts = self.settings.gitlab_hosts.clone();
         let gitea_hosts = self.settings.gitea_hosts.clone();
         let listed = ListedHosts { github: &hosts, gitlab: &gitlab_hosts, gitea: &gitea_hosts };
+        let loaded_remote = self.repos.get(self.active).and_then(|repo| repo.github[slot(kind)].as_ref()).map(|list| list.remote.clone());
+        if kind == ItemKind::Issue && issues_hidden(snapshot, listed, loaded_remote.as_deref()) {
+            return;
+        }
         let load_label = load_label(snapshot, listed);
         crate::ui::sidebar::section(ui, id, glyph, title, count, false, |ui| {
             if snapshot.remotes.is_empty() {
@@ -252,14 +299,17 @@ impl NiceGitApp {
                 return;
             };
             let loading = list.is_loading();
-            // A Gitea or Forgejo list has no GitHub-only windows, details, or work items.
+            // A list from another service has no GitHub-only windows, details, or work items. Bitbucket and
+            // Azure DevOps pull requests are not checked out here, as their refs are not fetched like GitHub's.
             let hosted = crate::git_ext::hosted_repository_for_remote(snapshot, &list.remote, listed);
-            let gitea = hosted.as_ref().is_some_and(|repository| repository.kind == Host::Gitea);
+            let own_service =
+                hosted.as_ref().is_some_and(|repository| matches!(repository.kind, Host::Gitea | Host::Bitbucket | Host::AzureDevOps));
+            let checkout = !hosted.as_ref().is_some_and(|repository| matches!(repository.kind, Host::Bitbucket | Host::AzureDevOps));
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
                 // A GitHub Enterprise or Gitea remote names its host, so the list says which server it reads.
                 let header = match (&hosted, crate::git_ext::github_repository_for_remote(snapshot, &list.remote, &hosts)) {
-                    (Some(repository), _) if gitea => format!("{}  {} · {}", icon::GIT_BRANCH, list.remote, repository.host),
+                    (Some(repository), _) if own_service => format!("{}  {} · {}", icon::GIT_BRANCH, list.remote, repository.host),
                     (_, Some(repository)) if repository.host != "github.com" => {
                         format!("{}  {} · {}", icon::GITHUB_LOGO, list.remote, repository.host)
                     }
@@ -267,8 +317,8 @@ impl NiceGitApp {
                 };
                 ui.label(RichText::new(header).small().color(c.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // The filtered window reads GitHub only; a Gitea list has no such window.
-                    if !gitea {
+                    // The filtered window reads GitHub only; another service's list has no such window.
+                    if !own_service {
                         let open_window = widgets::icon_button(ui, icon::ARROW_SQUARE_OUT, tr("Open with filters and closed items"), true);
                         open_window.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tr("Open GitHub window")));
                         if open_window.clicked() {
@@ -291,7 +341,13 @@ impl NiceGitApp {
                     ui.add(egui::Label::new(RichText::new(error).small().color(c.danger)).wrap());
                 });
             }
-            if list.items.is_empty() && !loading && list.error.is_none() {
+            if let Some(notice) = list.notice {
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    ui.add(egui::Label::new(RichText::new(notice_text(notice)).small().color(c.muted)).wrap());
+                });
+            }
+            if list.items.is_empty() && !loading && list.error.is_none() && list.notice.is_none() {
                 ui.label(RichText::new(format!("   {}", tr_fmt!("No open {kind}", kind = title.to_lowercase()))).small().color(c.muted));
             }
             for item in &list.items {
@@ -316,18 +372,23 @@ impl NiceGitApp {
                         ui.ctx().copy_text(item.url.clone());
                     }
                     if kind == ItemKind::PullRequest
-                        && !gitea
+                        && !own_service
                         && ui.button(format!("{}  {}", icon::GIT_PULL_REQUEST, tr("View details…"))).clicked()
                     {
                         ui.close();
                         details = Some((list.remote.clone(), item.number));
                     }
-                    if kind == ItemKind::PullRequest && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Check out locally…"))).clicked()
+                    if kind == ItemKind::PullRequest
+                        && checkout
+                        && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Check out locally…"))).clicked()
                     {
                         ui.close();
                         check_out = Some((list.remote.clone(), item.clone()));
                     }
-                    if kind == ItemKind::Issue && !gitea && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Start work…"))).clicked() {
+                    if kind == ItemKind::Issue
+                        && !own_service
+                        && ui.button(format!("{}  {}", icon::GIT_BRANCH, tr("Start work…"))).clicked()
+                    {
                         ui.close();
                         start_work = Some((list.remote.clone(), item.clone()));
                     }
