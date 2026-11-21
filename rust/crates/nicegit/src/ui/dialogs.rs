@@ -109,6 +109,17 @@ pub enum Pending {
         remote: String,
         addresses: std::collections::BTreeMap<String, Vec<String>>,
     },
+    /// Restacking the branches still based on an earlier tip of the checked-out branch. The
+    /// checkout and its tip are those the confirmation showed.
+    Restack {
+        outdated: crate::ui::stacks::Outdated,
+    },
+    /// Pushing the branches of a stack. The plan is what the confirmation listed, with each
+    /// remote tip read for the lease.
+    PushStack {
+        pushes: Vec<nicegit_core::stack::StackPush>,
+        addresses: std::collections::BTreeMap<String, Vec<String>>,
+    },
     /// Replacing the upstream branch with the current one. Everything shown is captured: the
     /// branch and HEAD, the upstream, the remote-tracking tip the user reviewed (the lease), and
     /// the remote's push addresses.
@@ -1417,6 +1428,8 @@ impl NiceGitApp {
 
     pub fn run_pending(&mut self, pending: Pending) {
         match pending {
+            Pending::Restack { outdated } => self.run_restack(outdated),
+            Pending::PushStack { pushes, addresses } => self.run_push_stack(pushes, addresses),
             Pending::InstallUpdate { version } => self.start_install(version),
             Pending::Discard(entry) => {
                 let name = entry.path.clone();

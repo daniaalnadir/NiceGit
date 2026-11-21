@@ -1,0 +1,19 @@
+# fr: the command log window, its filters, rows, and menus.
+Command Log	Journal des commandes
+Filter commands	Filtrer les commandes
+Show reads	Afficher les lectures
+Only this repository	Ce dépôt seulement
+Copy all	Tout copier
+No Git commands have run yet.	Aucune commande Git n'a encore été exécutée.
+No commands match these filters.	Aucune commande ne correspond à ces filtres.
+Copy command	Copier la commande
+Copy output	Copier la sortie
+No error output.	Aucune sortie d'erreur.
+Succeeded	Réussi
+Stopped or did not start.	Interrompue ou jamais démarrée.
+Command log	Journal des commandes
+Command log…	Journal des commandes…
+Show in command log	Afficher dans le journal des commandes
+Show the command log	Afficher le journal des commandes
+{milliseconds} ms	{milliseconds} ms
+Exited with status {code}.	Terminée avec le code {code}.

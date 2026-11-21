@@ -42,6 +42,8 @@ mod ui_tests_branch_checks;
 #[cfg(test)]
 mod ui_tests_clone;
 #[cfg(test)]
+mod ui_tests_command_log;
+#[cfg(test)]
 mod ui_tests_conventional;
 #[cfg(test)]
 mod ui_tests_custom_actions;
@@ -53,6 +55,8 @@ mod ui_tests_files;
 mod ui_tests_find_repositories;
 #[cfg(test)]
 mod ui_tests_identity;
+#[cfg(test)]
+mod ui_tests_image_diff;
 #[cfg(test)]
 mod ui_tests_insights;
 #[cfg(test)]
@@ -91,6 +95,8 @@ mod ui_tests_snapshots;
 mod ui_tests_speed;
 #[cfg(test)]
 mod ui_tests_split;
+#[cfg(test)]
+mod ui_tests_stacks;
 #[cfg(test)]
 mod ui_tests_stash_lines;
 #[cfg(test)]

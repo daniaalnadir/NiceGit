@@ -375,6 +375,14 @@ pub struct Repo {
     pub sent_sign: Option<bool>,
     /// The repository's signing setup, read once per load. `None` until the read arrives.
     pub signing: Option<nicegit_core::client::SigningSetup>,
+    /// The stacks among the local branches, and the branches outdated by the checked-out branch, read
+    /// in the background when the branch tips change (see `ui::stacks`).
+    pub stack_read: Option<Task<crate::ui::stacks::StackRead>>,
+    pub stack_key: Option<crate::ui::stacks::StackKey>,
+    pub stacks: Vec<nicegit_core::stack::Stack>,
+    pub outdated: Option<crate::ui::stacks::Outdated>,
+    /// The outdated branches the person dismissed, by the checked-out branch and its tip.
+    pub outdated_dismissed: Option<(String, String)>,
     /// The signing setup being read in the background.
     pub signing_read: Option<Task<nicegit_core::client::SigningSetup>>,
     /// Whether the checkout is shallow or limited to some folders, as last read. The Repository
@@ -425,6 +433,8 @@ pub struct Repo {
     pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
     /// The open image's versions, uploaded for drawing once read.
     pub image_textures: Option<crate::tools::compare::Textures>,
+    /// The swipe divider and onion skin opacity for the open image.
+    pub image_controls: crate::tools::image_diff::ImageControls,
     /// Each local branch's distance from its upstream, read after each refresh.
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
     /// Lines added and removed in each file of the selected commit, with that commit's hash.
@@ -583,6 +593,11 @@ impl Repo {
             sent_sign: None,
             signing: None,
             signing_read: None,
+            stack_read: None,
+            stack_key: None,
+            stacks: Vec::new(),
+            outdated: None,
+            outdated_dismissed: None,
             shape: None,
             shape_read: None,
             identity: None,
@@ -612,6 +627,7 @@ impl Repo {
             branch_tracking: None,
             image_preview: None,
             image_textures: None,
+            image_controls: Default::default(),
             github: [None, None],
             template_read: None,
             draft_from_template: None,
@@ -2024,6 +2040,7 @@ impl NiceGitApp {
         let tracking = tracking_key(&snapshot);
         self.repos[index].lfs_paths.clear();
         self.repos[index].snapshot = Some(Arc::new(snapshot));
+        self.start_stack_read(index);
         // The pull request is read for a new branch, and whenever a read is due.
         if branch_changed || self.repos[index].pr_checked_at.is_none() {
             self.refresh_pr_status(index);
@@ -3049,6 +3066,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let image_mode = self.settings.image_diff_mode;
         let editor_unsaved = self.has_unsaved_editor();
         let keep_days = self.rewrite_keep_days();
         let external = self.active_external_tools();
@@ -3085,6 +3103,7 @@ impl NiceGitApp {
                 .show(ctx, |ui| {
                     let mut cx = Ctx::new(&path, &snapshot, idle, &mut requests);
                     cx.ignore_whitespace = request.ignore_whitespace;
+                    cx.image_diff_mode = image_mode;
                     cx.diff_context = request.context;
                     cx.external = external.clone();
                     cx.editor_unsaved = editor_unsaved;
@@ -3132,6 +3151,7 @@ impl NiceGitApp {
             }
             Request::CheckOut(request) => self.check_out_from_launchpad(request),
             Request::Refresh => self.load(true),
+            Request::SetImageDiffMode(mode) => self.settings.image_diff_mode = mode,
         }
     }
 
@@ -3475,6 +3495,7 @@ impl eframe::App for NiceGitApp {
         self.poll_merge_tool();
         self.receive_templates();
         self.receive_signing_setups();
+        self.receive_stack_reads();
         self.receive_repository_shapes();
         self.receive_identities();
         self.receive_message_copies(&ctx);

@@ -12,6 +12,7 @@ use crate::conventional::ConventionalCommits;
 use crate::i18n::Locale;
 use crate::issue_links::IssueLinkRule;
 use crate::theme::{Appearance, GraphPalette};
+use crate::tools::image_diff::ImageDiffMode;
 
 pub const STORAGE_KEY: &str = "nicegit.settings";
 
@@ -417,6 +418,10 @@ pub struct Settings {
     /// How many unchanged lines each diff shows around its changes.
     #[serde(default)]
     pub diff_context: DiffContextSetting,
+
+    /// How a changed image's two versions are compared: side by side, swiped, faded, or by difference.
+    #[serde(default)]
+    pub image_diff_mode: ImageDiffMode,
     /// The folder clones go into by default. Set in Settings, or remembered from the parent folder
     /// of the first clone; the Clone dialog fills its destination from it.
     #[serde(default)]
@@ -547,6 +552,7 @@ impl Default for Settings {
             show_branch_checks: true,
             show_stashes: false,
             diff_context: DiffContextSetting::default(),
+            image_diff_mode: ImageDiffMode::default(),
             clone_folder: None,
             stash_keep_index: false,
             stash_include_untracked: true,

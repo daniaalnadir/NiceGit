@@ -384,6 +384,11 @@ impl GitClient {
         runner::run(arguments, directory, &RunOptions { accepted, ..self.options() })
     }
 
+    /// Runs Git with `input` on its standard input (see `runner::run_with_input`).
+    pub(crate) fn run_with_input(&self, arguments: &[&str], directory: &Path, input: &[u8]) -> Result<String> {
+        runner::run_with_input(arguments, directory, &self.options(), input)
+    }
+
     pub(crate) fn run_trimmed(&self, arguments: &[&str], directory: &Path) -> Result<String> {
         Ok(self.run(arguments, directory)?.trim().to_string())
     }

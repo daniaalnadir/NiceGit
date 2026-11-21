@@ -5,6 +5,7 @@ use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use crate::command_log::Run;
 use crate::models::{GitError, Result};
 
 /// Commands that receive user-selected paths. Literal pathspecs stop a filename containing
@@ -141,6 +142,27 @@ pub fn run_bytes(arguments: &[&str], directory: &Path, options: &RunOptions) -> 
     Ok(output.stdout)
 }
 
+/// Runs Git with `input` on its standard input, for commands that read their instructions from it,
+/// such as `update-ref --stdin`. Returns the standard output as text.
+pub fn run_with_input(arguments: &[&str], directory: &Path, options: &RunOptions, input: &[u8]) -> Result<String> {
+    use std::io::Write;
+    let mut command = configured_command(arguments, directory, options)?;
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // Git may stop reading early when it refuses the input; its exit status says why.
+        let _ = stdin.write_all(input);
+    }
+    let output = child.wait_with_output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    let status = output.status.code().unwrap_or(-1);
+    if status != 0 {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if message.is_empty() { format!("Exited with status {status}.") } else { message };
+        return Err(GitError::failed(describe(arguments), message));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 /// Runs Git and returns its standard output followed by its standard error, whatever the exit
 /// status. Unlike `run`, a failing exit is not an error: for commands such as `verify-tag`, whose
 /// result is in the report even when Git exits non-zero.
@@ -149,29 +171,53 @@ pub fn run_reporting(arguments: &[&str], directory: &Path, options: &RunOptions)
     Ok(format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr)))
 }
 
-/// Starts Git with NiceGit's environment and waits for it to finish.
+/// Starts Git with NiceGit's environment and waits for it to finish. The command is recorded in
+/// the command log, whether or not it started.
 fn output_of(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Output> {
-    let mut command = configured_command(arguments, directory, options)?;
+    let run = Run::start(arguments, directory, options.env);
+    let mut command = match configured_command(arguments, directory, options) {
+        Ok(command) => command,
+        Err(error) => {
+            run.finish(None, 0, error.to_string().as_bytes());
+            return Err(error);
+        }
+    };
     // `output` reads both pipes while waiting, so a large output cannot block Git, and it waits
     // on the process itself rather than polling.
-    command.output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+    match command.output() {
+        Ok(output) => {
+            run.finish(output.status.code(), output.stdout.len(), &output.stderr);
+            Ok(output)
+        }
+        Err(error) => {
+            let message = error.to_string();
+            run.finish(None, 0, message.as_bytes());
+            Err(GitError::failed(describe(arguments), message))
+        }
+    }
 }
 
 /// Starts Git with NiceGit's environment without waiting for it, and with no standard streams. The
 /// caller must wait for the child, or it is left unreaped. For tools that open a window, such as
-/// `git difftool`, which must not hold up the caller.
-pub fn spawn(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Child> {
+/// `git difftool`, which must not hold up the caller. The returned run is recorded in the command
+/// log once the caller reports the child's exit with `Run::finish_status`.
+pub fn spawn(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<(Child, Run)> {
+    let run = Run::start(arguments, directory, options.env);
     let mut command = configured_command(arguments, directory, options)?;
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+    let child = command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    Ok((child, run))
 }
 
 /// Starts Git with its standard output and error piped, for output that is read as it arrives. The
-/// caller must read the output to its end and then wait for the child.
-pub fn spawn_piped(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<Child> {
+/// caller must read the output to its end and then wait for the child, and then finish the returned
+/// run with the exit status. Streamed output is not counted in the command log.
+pub fn spawn_piped(arguments: &[&str], directory: &Path, options: &RunOptions) -> Result<(Child, Run)> {
+    let run = Run::start(arguments, directory, options.env);
     let mut command = configured_command(arguments, directory, options)?;
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))
+    let child = command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    Ok((child, run))
 }
 
 /// A Git command with NiceGit's environment: inherited repository variables removed, prompts and

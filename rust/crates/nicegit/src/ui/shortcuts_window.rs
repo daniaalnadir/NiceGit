@@ -24,6 +24,7 @@ fn groups() -> Vec<(&'static str, Vec<(String, &'static str)>)> {
                 (with("Shift-Cmd-L"), tr("Filter the changed files")),
                 (with("Alt-Cmd-F"), tr("Search file contents")),
                 (with("Shift-Cmd-H"), tr("Go to the checked-out commit")),
+                (with("Alt-Cmd-L"), tr("Show the command log")),
                 ("Ctrl-`".to_string(), tr("Show or hide the terminal")),
                 (with("Cmd-,"), tr("Settings")),
                 (with("Cmd-+, Cmd-−"), tr("Make everything larger or smaller")),

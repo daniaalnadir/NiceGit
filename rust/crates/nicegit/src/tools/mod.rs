@@ -18,6 +18,7 @@ pub mod bisect;
 pub mod blame;
 pub mod branch_cleanup;
 pub mod branch_compare;
+pub mod command_log;
 pub mod commit_search;
 pub mod compare;
 pub mod conflict;
@@ -28,6 +29,7 @@ pub mod file_history;
 pub mod git_settings;
 pub mod gitflow;
 pub mod github;
+pub mod image_diff;
 pub mod insights;
 pub mod interactive_rebase;
 pub mod launchpad;
@@ -97,6 +99,8 @@ pub enum Request {
     Dialog(Box<crate::ui::dialogs::Dialog>),
     /// Reload the repository.
     Refresh,
+    /// Remembers how changed images are compared, in the app settings.
+    SetImageDiffMode(image_diff::ImageDiffMode),
     /// Open a conflicted file, by its path, in the configured merge tool.
     OpenMergeTool(String),
     /// Switch to the repository the pull request is in, then open its Check out dialog.
@@ -121,6 +125,8 @@ pub struct Ctx<'a> {
     pub diff_context: DiffContext,
     /// The diff and merge tools the repository's configuration names, as last read.
     pub external: ExternalTools,
+    /// How changed images are compared, following the app setting.
+    pub image_diff_mode: image_diff::ImageDiffMode,
     /// How many days snapshots are kept, when the repository is saved in snapshots; `None` when
     /// they are off. See `Ctx::guard_rewrite`.
     pub snapshot_keep_days: Option<u64>,
@@ -137,8 +143,14 @@ impl<'a> Ctx<'a> {
             requests,
             diff_context: DiffContext::default(),
             external: ExternalTools::default(),
+            image_diff_mode: image_diff::ImageDiffMode::default(),
             snapshot_keep_days: None,
         }
+    }
+
+    /// Remembers how changed images are compared, in the app settings.
+    pub fn set_image_diff_mode(&mut self, mode: image_diff::ImageDiffMode) {
+        self.requests.push(Request::SetImageDiffMode(mode));
     }
 
     /// Opens a conflicted file in the configured merge tool. The app refuses while an action runs

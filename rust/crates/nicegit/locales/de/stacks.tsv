@@ -1,0 +1,21 @@
+# de: stacked branches, the restack and push-stack confirmations. Format: English source, a tab, then the translation.
+{count} branch is still based on the old {parent}: {names}.	{count} Branch basiert noch auf dem alten {parent}: {names}.
+{count} branches are still based on the old {parent}: {names}.	{count} Branches basieren noch auf dem alten {parent}: {names}.
+Restack	Neu stapeln
+Restack branches on {parent}?	Branches auf {parent} neu stapeln?
+Each branch's own commits are replayed onto the new tip of {parent}. Branches built on them move too. The working tree changes only if the checked-out branch moves.	Die eigenen Commits jedes Branches werden auf die neue Spitze von {parent} neu aufgespielt. Darauf aufbauende Branches wandern mit. Der Arbeitsordner ändert sich nur, wenn der ausgecheckte Branch wandert.
+{name}: {count} commit	{name}: {count} Commit
+{name}: {count} commits	{name}: {count} Commits
+Nothing needed restacking.	Nichts musste neu gestapelt werden.
+Restacked 1 branch.	1 Branch neu gestapelt.
+Restacked {count} branches.	{count} Branches neu gestapelt.
+Push this branch?	Diesen Branch pushen?
+Push {count} branches?	{count} Branches pushen?
+{branch} to {remote}/{name}, replacing the remote branch	{branch} nach {remote}/{name}, ersetzt den Remote-Branch
+{branch} to {remote}/{name}	{branch} nach {remote}/{name}
+None of these branches has a remote branch to push to. Set an upstream first.	Keiner dieser Branches hat einen Remote-Branch zum Pushen. Lege zuerst einen Upstream fest.
+Each branch is pushed to its own remote branch in one atomic push. Tags are not pushed.	Jeder Branch wird in einem atomaren Push an seinen eigenen Remote-Branch gepusht. Tags werden nicht gepusht.
+Pushed 1 branch.	1 Branch gepusht.
+Pushed {count} branches.	{count} Branches gepusht.
+Push stack ({count} branches)…	Stack pushen ({count} Branches)…
+Restack branches on {name}…	Branches auf {name} neu stapeln…

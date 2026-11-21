@@ -237,6 +237,7 @@ impl NiceGitApp {
                 has,
                 Run::Tool("reflog"),
             ),
+            command(tr("Command log"), "Alt-Ctrl/Cmd-L", icon::TERMINAL, true, Run::Tool("command_log")),
             command(
                 tr("Snapshots…"),
                 tr("Saved copies of your working files, to bring lost files back"),
@@ -555,6 +556,7 @@ impl NiceGitApp {
                     "search" => Some(Box::new(tools::commit_search::CommitSearchWindow::new())),
                     "grep" => Some(Box::new(tools::content_search::ContentSearchWindow::new(None))),
                     "reflog" => Some(Box::new(tools::reflog::ReflogWindow::new())),
+                    "command_log" => Some(Box::new(tools::command_log::CommandLogWindow::new())),
                     "snapshots" => Some(Box::new(tools::snapshots::SnapshotsWindow::new())),
                     "insights" => Some(Box::new(tools::insights::InsightsWindow::new())),
                     "range_diff" => {
