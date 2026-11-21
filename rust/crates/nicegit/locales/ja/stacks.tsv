@@ -1,0 +1,21 @@
+# ja: stacked branches, the restack and push-stack confirmations. Format: English source, a tab, then the translation.
+{count} branch is still based on the old {parent}: {names}.	{count} 個のブランチがまだ古い{parent}を基にしています: {names}
+{count} branches are still based on the old {parent}: {names}.	{count} 個のブランチがまだ古い{parent}を基にしています: {names}
+Restack	積み直す
+Restack branches on {parent}?	{parent} 上のブランチを積み直しますか？
+Each branch's own commits are replayed onto the new tip of {parent}. Branches built on them move too. The working tree changes only if the checked-out branch moves.	各ブランチ独自のコミットを {parent} の新しい先端に載せ直します。その上に作られたブランチも移動します。作業ツリーが変わるのは、チェックアウト中のブランチが動く場合だけです。
+{name}: {count} commit	{name}: コミット {count} 件
+{name}: {count} commits	{name}: コミット {count} 件
+Nothing needed restacking.	積み直す必要はありませんでした。
+Restacked 1 branch.	1 件のブランチを積み直しました。
+Restacked {count} branches.	{count} 件のブランチを積み直しました。
+Push this branch?	このブランチをプッシュしますか？
+Push {count} branches?	{count} 件のブランチをプッシュしますか？
+{branch} to {remote}/{name}, replacing the remote branch	{branch} を {remote}/{name} へ（リモートのブランチを置き換え）
+{branch} to {remote}/{name}	{branch} を {remote}/{name} へ
+None of these branches has a remote branch to push to. Set an upstream first.	これらのブランチには送信先のリモートブランチがありません。先に上流ブランチを設定してください。
+Each branch is pushed to its own remote branch in one atomic push. Tags are not pushed.	各ブランチは、アトミックな1回のプッシュで対応するリモートブランチへ送信されます。タグは送信されません。
+Pushed 1 branch.	1 件のブランチをプッシュしました。
+Pushed {count} branches.	{count} 件のブランチをプッシュしました。
+Push stack ({count} branches)…	スタックをプッシュ（{count} 件のブランチ）…
+Restack branches on {name}…	{name} 上のブランチを積み直す…

@@ -56,12 +56,22 @@ pub struct StashDeletion {
     pub message: String,
 }
 
+/// A local branch that moved from `before` to `after`, as a stack restack moves it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefMove {
+    pub branch: String,
+    pub before: String,
+    pub after: String,
+}
+
 /// One undoable action. Applying it with [`GitClient::undo_step`] returns the inverse, which
 /// redoes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndoStep {
     /// The branch moved from `before` to `after`.
     BranchMove { branch: String, before: String, after: String, mode: UndoMode },
+    /// Several local branches moved together, as a restack moves a stack. Undoing moves each back.
+    BranchMoves(Vec<RefMove>),
     /// Local branches were deleted. Undoing restores them at their old tips.
     BranchDeletions(Vec<BranchDeletion>),
     /// Branches were restored by an undo. Redoing deletes them again, while they still point to
@@ -116,6 +126,14 @@ impl GitClient {
                 self.move_branch(branch, after, before, *mode, directory)?;
                 Ok(UndoStep::BranchMove { branch: branch.clone(), before: after.clone(), after: before.clone(), mode: *mode })
             }
+            UndoStep::BranchMoves(moves) => {
+                let inverse: Vec<RefMove> = moves
+                    .iter()
+                    .map(|moved| RefMove { branch: moved.branch.clone(), before: moved.after.clone(), after: moved.before.clone() })
+                    .collect();
+                self.move_branch_refs(&inverse, directory)?;
+                Ok(UndoStep::BranchMoves(inverse))
+            }
             UndoStep::BranchDeletions(deletions) => {
                 self.restore_branches(deletions, directory)?;
                 Ok(UndoStep::BranchRestorations(deletions.clone()))
@@ -142,6 +160,64 @@ impl GitClient {
             UndoMode::Mixed => self.reset(to, ResetMode::Mixed, branch, from, directory),
             UndoMode::Keep => self.move_branch_keeping_changes(to, from, branch, directory),
         }
+    }
+
+    /// Moves each branch in `moves` from its `before` tip to its `after` tip, or none of them. The
+    /// branches not checked out move in one atomic update; the checked-out one, if any, moves with
+    /// `reset --keep`, and the others are moved back if that refuses. Every tip is checked first.
+    pub fn move_branch_refs(&self, moves: &[RefMove], directory: &Path) -> Result<()> {
+        const COMMAND: &str = "move branches";
+        let state = self.checkout_state(directory)?;
+        if state.operation.is_some() {
+            return Err(GitError::failed(COMMAND, "Finish or abort the current Git operation first."));
+        }
+        for moved in moves {
+            self.require_branch_tip(&moved.branch, &moved.before, directory)?;
+            let listed = self.branch_checkouts(&moved.branch, directory)?;
+            let allowed = usize::from(moved.branch == state.current_branch);
+            if listed > allowed {
+                return Err(GitError::failed(
+                    COMMAND,
+                    format!("{} is checked out in another worktree, so it was not moved.", moved.branch),
+                ));
+            }
+        }
+        let (checked_out, others): (Vec<&RefMove>, Vec<&RefMove>) = moves.iter().partition(|moved| moved.branch == state.current_branch);
+        self.update_branch_refs(&others, directory)?;
+        for moved in checked_out {
+            if let Err(error) = self.move_branch_keeping_changes(&moved.after, &moved.before, &moved.branch, directory) {
+                let back: Vec<RefMove> = others
+                    .iter()
+                    .map(|other| RefMove { branch: other.branch.clone(), before: other.after.clone(), after: other.before.clone() })
+                    .collect();
+                let back: Vec<&RefMove> = back.iter().collect();
+                let _ = self.update_branch_refs(&back, directory);
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Updates the branches in one transaction: each moves from `before` to `after` only while it
+    /// still points to `before`. Nothing changes if any of them does not.
+    fn update_branch_refs(&self, moves: &[&RefMove], directory: &Path) -> Result<()> {
+        if moves.is_empty() {
+            return Ok(());
+        }
+        let mut input = String::new();
+        for moved in moves {
+            input.push_str(&format!("update refs/heads/{} {} {}\n", moved.branch, moved.after, moved.before));
+        }
+        self.run_with_input(&["update-ref", "-m", "nicegit: move branches", "--stdin"], directory, input.as_bytes())
+            .map(drop)
+            .map_err(|_| GitError::failed("move branches", "A branch moved while it was being updated. Refresh and review it again."))
+    }
+
+    /// How many worktrees have `branch` checked out.
+    pub(crate) fn branch_checkouts(&self, branch: &str, directory: &Path) -> Result<usize> {
+        let target = format!("branch refs/heads/{branch}");
+        let listing = self.run(&["worktree", "list", "--porcelain"], directory)?;
+        Ok(listing.lines().filter(|line| *line == target).count())
     }
 
     /// Moves the current branch to `target` as `git reset --keep` does: working files follow,

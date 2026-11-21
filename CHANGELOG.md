@@ -12,6 +12,7 @@
 - Apply patch opens a preview window: paste a patch or drop a .patch, .diff or .mbox file onto NiceGit, see the files it changes, then apply it unstaged, staged, or as commits from a mailbox patch.
 - Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
 - Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
+- Stacked branches: when a branch in a stack is amended or rebased, a notice offers to restack the branches built on it, and a branch's menu can push its whole stack in one atomic push.
 
 ## 2.2.0 - Reshape your history
 
