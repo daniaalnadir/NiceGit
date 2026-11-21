@@ -995,8 +995,10 @@ impl NiceGitApp {
                 );
             });
         }
+        let image_mode = self.settings.image_diff_mode;
         let repo = &mut self.repos[self.active];
         let mut block_action = None;
+        let mut picked_mode = None;
         // Git only says that a binary file differs; for an image, both versions are shown.
         let binary = repo.diff.as_ref().is_some_and(|diff| diff.is_empty());
         let preview = repo.image_preview.as_mut().and_then(|task| task.get()).and_then(|pair| pair.as_ref().ok()).filter(|_| binary);
@@ -1004,11 +1006,17 @@ impl NiceGitApp {
             if repo.image_textures.is_none() {
                 repo.image_textures = Some(pair.textures(ui.ctx(), &title));
             }
-            egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| pair.show(ui, repo.image_textures.as_ref()));
+            let (textures, controls) = (&mut repo.image_textures, &mut repo.image_controls);
+            egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(14, 10))
+                .show(ui, |ui| picked_mode = pair.show(ui, textures.as_mut(), controls, image_mode));
         } else if let Some(diff) = repo.diff.as_ref() {
             block_action = crate::diff_view::show_with(ui, diff, &mut repo.diff_options).block_action;
         } else {
             ui.take_available_space();
+        }
+        if let Some(mode) = picked_mode {
+            self.settings.image_diff_mode = mode;
         }
         let lines = block_action.as_ref().and_then(|(_, lines)| line_map.as_deref().and_then(|map| in_review(map, lines)));
         if let (Some((action, _)), Some(lines), Some(review)) = (block_action, lines, review) {

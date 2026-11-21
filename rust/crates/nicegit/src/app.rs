@@ -420,6 +420,8 @@ pub struct Repo {
     pub image_preview: Option<Task<Result<crate::tools::compare::ImagePair, String>>>,
     /// The open image's versions, uploaded for drawing once read.
     pub image_textures: Option<crate::tools::compare::Textures>,
+    /// The swipe divider and onion skin opacity for the open image.
+    pub image_controls: crate::tools::image_diff::ImageControls,
     /// Each local branch's distance from its upstream, read after each refresh.
     pub branch_tracking: Option<Task<Option<std::collections::HashMap<String, nicegit_core::parsers::Tracking>>>>,
     /// Lines added and removed in each file of the selected commit, with that commit's hash.
@@ -605,6 +607,7 @@ impl Repo {
             branch_tracking: None,
             image_preview: None,
             image_textures: None,
+            image_controls: Default::default(),
             github: [None, None],
             template_read: None,
             draft_from_template: None,
@@ -2952,6 +2955,7 @@ impl NiceGitApp {
         let Some(repo) = self.repos.get(self.active) else { return };
         let (Some(snapshot), path) = (repo.snapshot.clone(), repo.path.clone()) else { return };
         let idle = self.busy.is_none();
+        let image_mode = self.settings.image_diff_mode;
         let editor_unsaved = self.has_unsaved_editor();
         let external = self.active_external_tools();
         let request = self.diff_request();
@@ -2987,6 +2991,7 @@ impl NiceGitApp {
                 .show(ctx, |ui| {
                     let mut cx = Ctx::new(&path, &snapshot, idle, &mut requests);
                     cx.ignore_whitespace = request.ignore_whitespace;
+                    cx.image_diff_mode = image_mode;
                     cx.diff_context = request.context;
                     cx.external = external.clone();
                     cx.editor_unsaved = editor_unsaved;
@@ -3033,6 +3038,7 @@ impl NiceGitApp {
             }
             Request::CheckOut(request) => self.check_out_from_launchpad(request),
             Request::Refresh => self.load(true),
+            Request::SetImageDiffMode(mode) => self.settings.image_diff_mode = mode,
         }
     }
 
