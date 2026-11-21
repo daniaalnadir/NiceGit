@@ -1,0 +1,22 @@
+# zh-Hans：设置中的 Gitea 和 Forgejo、令牌与拉取请求。
+Remotes on these hosts get pull requests, issues, and Open on links. Public repositories can be read without a token; creating a pull request needs one.	这些主机上的远程仓库会获得拉取请求、议题和“在…中打开”链接。公共仓库无需令牌即可读取；创建拉取请求则需要令牌。
+One hostname per line, such as git.example.com	每行一个主机名，例如 git.example.com
+Gitea and Forgejo hosts	Gitea 和 Forgejo 主机
+Not saved, as these are not hostnames: {hosts}. Use a name such as git.example.com, without https:// or a port.	未保存，因为这些不是主机名：{hosts}。请使用 git.example.com 这样的名称，不要包含 https:// 或端口。
+No settings folder is available, so tokens cannot be saved here.	没有可用的设置文件夹，因此无法在此保存令牌。
+Using {variable} from the environment for hosts with no saved token.	对于没有已保存令牌的主机，将使用环境变量 {variable} 中的令牌。
+A token is saved.	已保存一个令牌。
+No token is saved.	未保存任何令牌。
+Paste a token	粘贴令牌
+Token for {host}	{host} 的令牌
+Delete the saved token	删除已保存的令牌
+That does not look like a token. It must have no spaces.	这看起来不像令牌。令牌不能包含空格。
+No settings folder is available, so the token cannot be saved here.	没有可用的设置文件夹，因此无法在此保存令牌。
+The token for {host} could not be saved: {error}	无法保存 {host} 的令牌：{error}
+The token for {host} could not be removed: {error}	无法移除 {host} 的令牌：{error}
+Gitea and Forgejo are reached through their API, not a command-line tool.	Gitea 和 Forgejo 通过其 API 访问，而不是命令行工具。
+Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.	要在 {host} 上创建拉取请求，需要一个令牌。请在设置的“Gitea 和 Forgejo”中添加令牌，然后重新打开此对话框。
+Load from Gitea / Forgejo	从 Gitea / Forgejo 加载
+Gitea and Forgejo	Gitea 和 Forgejo
+Save the token for {host}	保存 {host} 的令牌
+Remove the token for {host}	移除 {host} 的令牌

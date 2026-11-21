@@ -104,7 +104,7 @@ pub fn request_body(model: &str, system: &str, prompt: &str) -> String {
 
 /// Quotes a value for a curl config file: backslashes and double quotes are escaped, and line
 /// breaks and tabs become their escapes. Other control characters are dropped.
-fn config_quote(value: &str) -> String {
+pub(crate) fn config_quote(value: &str) -> String {
     let mut out = String::from("\"");
     for ch in value.chars() {
         match ch {

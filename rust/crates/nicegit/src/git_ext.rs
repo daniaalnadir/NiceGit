@@ -231,12 +231,13 @@ pub fn ref_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// The repository a pull or merge request goes to: a GitHub repository, for `gh`, or a GitLab
-/// project, for `glab`.
+/// The repository a pull or merge request goes to: a GitHub repository, for `gh`, a GitLab project,
+/// for `glab`, or a Gitea or Forgejo repository, for its API.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Forge {
     GitHub(nicegit_core::github::GitHubRepository),
     GitLab(HostedRepository),
+    Gitea(HostedRepository),
 }
 
 impl Forge {
@@ -245,6 +246,7 @@ impl Forge {
         match self {
             Forge::GitHub(_) => Host::GitHub,
             Forge::GitLab(_) => Host::GitLab,
+            Forge::Gitea(_) => Host::Gitea,
         }
     }
 
@@ -252,7 +254,7 @@ impl Forge {
     pub fn host(&self) -> &str {
         match self {
             Forge::GitHub(repository) => &repository.host,
-            Forge::GitLab(repository) => &repository.host,
+            Forge::GitLab(repository) | Forge::Gitea(repository) => &repository.host,
         }
     }
 
@@ -260,7 +262,7 @@ impl Forge {
     pub fn slug(&self) -> String {
         match self {
             Forge::GitHub(repository) => repository.slug(),
-            Forge::GitLab(repository) => repository.slug(),
+            Forge::GitLab(repository) | Forge::Gitea(repository) => repository.slug(),
         }
     }
 
@@ -268,17 +270,18 @@ impl Forge {
     pub fn request_noun(&self) -> &'static str {
         match self.kind() {
             Host::GitLab => "merge request",
-            Host::GitHub | Host::Bitbucket | Host::AzureDevOps => "pull request",
+            Host::GitHub | Host::Bitbucket | Host::AzureDevOps | Host::Gitea => "pull request",
         }
     }
 
-    /// The command-line tool that creates and reads the requests. A forge is only ever GitHub or
-    /// GitLab here, so the other services have no tool to name.
+    /// The command-line tool that creates and reads the requests. Gitea and Forgejo have none: their
+    /// API is reached directly, with a token.
     pub fn cli_name(&self) -> &'static str {
         match self.kind() {
             Host::GitLab => "GitLab CLI",
             Host::GitHub | Host::Bitbucket => "GitHub CLI",
             Host::AzureDevOps => "Azure DevOps CLI",
+            Host::Gitea => "Gitea / Forgejo API",
         }
     }
 
@@ -287,8 +290,9 @@ impl Forge {
         format!("Create {} on {}", self.request_noun(), self.kind().name())
     }
 
-    /// The browser page for a new request from `branch`: GitHub's compare page, or GitLab's new
-    /// merge request form. Creating nothing, it is the fallback for the Create dialog.
+    /// The browser page for a new request from `branch`: GitHub's compare page, GitLab's new merge
+    /// request form, or Gitea's pull request list. Creating nothing, it is the fallback for the
+    /// Create dialog. Gitea's compare page needs its base branch, see [`Self::compare_link_between`].
     pub fn compare_link(&self, branch: &str) -> String {
         match self {
             Forge::GitHub(repository) => {
@@ -297,6 +301,16 @@ impl Forge {
             Forge::GitLab(repository) => {
                 format!("{}/new?merge_request[source_branch]={}", repository.pull_requests_url(), encode_path(branch))
             }
+            Forge::Gitea(repository) => repository.pull_requests_url(),
+        }
+    }
+
+    /// The browser page that compares `head` with `base` for a new request: Gitea's compare page
+    /// names both branches. Other services name the head only, as [`Self::compare_link`] does.
+    pub fn compare_link_between(&self, base: &str, head: &str) -> String {
+        match self {
+            Forge::Gitea(repository) => repository.compare_url(base, head).unwrap_or_else(|| repository.pull_requests_url()),
+            _ => self.compare_link(head),
         }
     }
 }
@@ -330,11 +344,12 @@ pub fn pull_request_target(
     Some(PullRequestTarget { repository, remote: remote.to_string(), remote_branch: remote_branch.to_string() })
 }
 
-/// The GitHub or GitLab repository behind a remote. Other hosts have no forge here, so they give none.
+/// The GitHub, GitLab, or Gitea repository behind a remote. Other hosts have no forge here, so they give none.
 pub fn forge_for_remote(snapshot: &nicegit_core::Snapshot, remote: &str, hosts: ListedHosts) -> Option<Forge> {
     match hosted_repository_for_remote(snapshot, remote, hosts)? {
         HostedRepository { kind: Host::GitHub, .. } => github_repository_for_remote(snapshot, remote, hosts.github).map(Forge::GitHub),
         hosted if hosted.kind == Host::GitLab => Some(Forge::GitLab(hosted)),
+        hosted if hosted.kind == Host::Gitea => Some(Forge::Gitea(hosted)),
         _ => None,
     }
 }
@@ -382,7 +397,7 @@ pub fn host_glyph(host: Host) -> &'static str {
     match host {
         Host::GitHub => egui_phosphor::regular::GITHUB_LOGO,
         Host::GitLab => egui_phosphor::regular::GITLAB_LOGO,
-        Host::Bitbucket | Host::AzureDevOps => egui_phosphor::regular::GIT_BRANCH,
+        Host::Bitbucket | Host::AzureDevOps | Host::Gitea => egui_phosphor::regular::GIT_BRANCH,
     }
 }
 
@@ -390,7 +405,7 @@ pub fn host_glyph(host: Host) -> &'static str {
 pub fn pull_request_label(host: Host) -> &'static str {
     match host {
         Host::GitLab => "Merge requests",
-        Host::GitHub | Host::Bitbucket | Host::AzureDevOps => "Pull requests",
+        Host::GitHub | Host::Bitbucket | Host::AzureDevOps | Host::Gitea => "Pull requests",
     }
 }
 
@@ -644,7 +659,7 @@ mod tests {
             upstream: Some(upstream.into()),
         };
         let listed = vec!["git.example.com".to_string()];
-        let hosts = ListedHosts { github: &[], gitlab: &listed };
+        let hosts = ListedHosts { github: &[], gitlab: &listed, gitea: &[] };
         let target = super::pull_request_target(&snapshot, &branch("refs/remotes/origin/feature/x"), hosts).expect("gitlab.com");
         assert_eq!(target.repository.create_label(), "Create merge request on GitLab");
         assert_eq!(target.remote_branch, "feature/x");
@@ -660,7 +675,7 @@ mod tests {
         let self_hosted = super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), hosts).expect("listed as GitLab");
         assert_eq!(self_hosted.repository.create_label(), "Create merge request on GitLab");
         assert!(super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), ListedHosts::default()).is_none(), "not listed");
-        let as_github = ListedHosts { github: &listed, gitlab: &[] };
+        let as_github = ListedHosts { github: &listed, gitlab: &[], gitea: &[] };
         let github = super::pull_request_target(&snapshot, &branch("refs/remotes/self/topic"), as_github).expect("listed as GitHub");
         assert_eq!(github.repository.create_label(), "Create pull request on GitHub");
     }
@@ -809,7 +824,7 @@ mod tests {
     #[test]
     fn enterprise_remote_links_use_its_listed_host() {
         let listed = vec!["git.example.com".to_string()];
-        let hosts = ListedHosts { github: &listed, gitlab: &[] };
+        let hosts = ListedHosts { github: &listed, gitlab: &[], gitea: &[] };
         let snapshot = with_remotes(&[("origin", "https://git.example.com/acme/app.git")]);
         assert_eq!(
             urls(super::hosted_commit_links(&snapshot, "abc123", hosts)),
@@ -837,7 +852,7 @@ mod tests {
     #[test]
     fn self_hosted_gitlab_remote_links_once_its_host_is_listed() {
         let listed = vec!["gitlab.example.com".to_string()];
-        let hosts = ListedHosts { github: &[], gitlab: &listed };
+        let hosts = ListedHosts { github: &[], gitlab: &listed, gitea: &[] };
         let snapshot = with_remotes(&[("origin", "ssh://git@gitlab.example.com/acme/tools/app.git")]);
         assert_eq!(
             urls(super::hosted_commit_links(&snapshot, "abc123", hosts)),
@@ -855,7 +870,7 @@ mod tests {
         let branch = local_branch_with_upstream(Some("refs/remotes/origin/main"));
         assert_eq!(super::pull_request_link(&snapshot, &branch, ListedHosts::default()), None);
         let other = vec!["ghe.other.com".to_string()];
-        let hosts = ListedHosts { github: &other, gitlab: &[] };
+        let hosts = ListedHosts { github: &other, gitlab: &[], gitea: &[] };
         assert!(super::hosted_commit_links(&snapshot, "abc123", hosts).is_empty(), "only the listed host counts");
     }
 

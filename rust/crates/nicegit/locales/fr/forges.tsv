@@ -1,0 +1,22 @@
+# fr : Gitea et Forgejo dans les réglages, jetons et demandes de tirage.
+Remotes on these hosts get pull requests, issues, and Open on links. Public repositories can be read without a token; creating a pull request needs one.	Sur ces hôtes, les dépôts distants ont accès aux demandes de tirage, aux tickets et aux liens « Ouvrir sur ». Les dépôts publics se lisent sans jeton ; créer une demande de tirage exige un jeton.
+One hostname per line, such as git.example.com	Un nom d'hôte par ligne, par exemple git.example.com
+Gitea and Forgejo hosts	Hôtes Gitea et Forgejo
+Not saved, as these are not hostnames: {hosts}. Use a name such as git.example.com, without https:// or a port.	Non enregistré, car ce ne sont pas des noms d'hôte : {hosts}. Utilisez un nom comme git.example.com, sans https:// ni port.
+No settings folder is available, so tokens cannot be saved here.	Aucun dossier de réglages n'est disponible, les jetons ne peuvent donc pas être enregistrés ici.
+Using {variable} from the environment for hosts with no saved token.	{variable} de l'environnement est utilisé pour les hôtes sans jeton enregistré.
+A token is saved.	Un jeton est enregistré.
+No token is saved.	Aucun jeton n'est enregistré.
+Paste a token	Collez un jeton
+Token for {host}	Jeton pour {host}
+Delete the saved token	Supprimer le jeton enregistré
+That does not look like a token. It must have no spaces.	Ceci ne ressemble pas à un jeton. Il ne doit pas contenir d'espaces.
+No settings folder is available, so the token cannot be saved here.	Aucun dossier de réglages n'est disponible, le jeton ne peut donc pas être enregistré ici.
+The token for {host} could not be saved: {error}	Le jeton pour {host} n'a pas pu être enregistré : {error}
+The token for {host} could not be removed: {error}	Le jeton pour {host} n'a pas pu être retiré : {error}
+Gitea and Forgejo are reached through their API, not a command-line tool.	Gitea et Forgejo sont interrogés par leur API, et non par un outil en ligne de commande.
+Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.	Pour créer une demande de tirage sur {host}, il faut un jeton. Ajoutez-en un dans les réglages, sous Gitea et Forgejo, puis rouvrez cette boîte de dialogue.
+Load from Gitea / Forgejo	Charger depuis Gitea / Forgejo
+Gitea and Forgejo	Gitea et Forgejo
+Save the token for {host}	Enregistrer le jeton pour {host}
+Remove the token for {host}	Retirer le jeton pour {host}

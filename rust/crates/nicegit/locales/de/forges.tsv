@@ -1,0 +1,22 @@
+# de: Gitea und Forgejo in den Einstellungen, Tokens und Pull Requests.
+Remotes on these hosts get pull requests, issues, and Open on links. Public repositories can be read without a token; creating a pull request needs one.	Remotes auf diesen Hosts erhalten Pull Requests, Issues und „Auf Gitea öffnen“-Links. Öffentliche Repositorys lassen sich ohne Token lesen; zum Erstellen eines Pull Requests braucht es ein Token.
+One hostname per line, such as git.example.com	Ein Hostname pro Zeile, zum Beispiel git.example.com
+Gitea and Forgejo hosts	Gitea- und Forgejo-Hosts
+Not saved, as these are not hostnames: {hosts}. Use a name such as git.example.com, without https:// or a port.	Nicht gespeichert, da dies keine Hostnamen sind: {hosts}. Verwende einen Namen wie git.example.com, ohne https:// oder Port.
+No settings folder is available, so tokens cannot be saved here.	Kein Einstellungsordner verfügbar, daher können keine Tokens gespeichert werden.
+Using {variable} from the environment for hosts with no saved token.	{variable} aus der Umgebung wird für Hosts ohne gespeichertes Token verwendet.
+A token is saved.	Ein Token ist gespeichert.
+No token is saved.	Kein Token ist gespeichert.
+Paste a token	Token einfügen
+Token for {host}	Token für {host}
+Delete the saved token	Gespeichertes Token löschen
+That does not look like a token. It must have no spaces.	Das ist kein Token. Er darf keine Leerzeichen enthalten.
+No settings folder is available, so the token cannot be saved here.	Kein Einstellungsordner verfügbar, daher kann das Token hier nicht gespeichert werden.
+The token for {host} could not be saved: {error}	Das Token für {host} konnte nicht gespeichert werden: {error}
+The token for {host} could not be removed: {error}	Das Token für {host} konnte nicht entfernt werden: {error}
+Gitea and Forgejo are reached through their API, not a command-line tool.	Gitea und Forgejo werden über ihre API angesprochen, nicht über ein Kommandozeilenprogramm.
+Creating a pull request on {host} needs a token. Add one under Settings, in Gitea and Forgejo, then open this dialog again.	Zum Erstellen eines Pull Requests auf {host} brauchst du ein Token. Lege eines unter Einstellungen bei Gitea und Forgejo an und öffne dieses Fenster danach erneut.
+Load from Gitea / Forgejo	Von Gitea / Forgejo laden
+Gitea and Forgejo	Gitea und Forgejo
+Save the token for {host}	Token für {host} speichern
+Remove the token for {host}	Token für {host} entfernen
