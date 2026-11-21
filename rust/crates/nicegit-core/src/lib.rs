@@ -46,6 +46,7 @@ pub mod search;
 pub mod settings;
 pub mod signature;
 pub mod split;
+pub mod stack;
 pub mod staging;
 pub mod submodule;
 pub mod tracked;

@@ -142,6 +142,27 @@ pub fn run_bytes(arguments: &[&str], directory: &Path, options: &RunOptions) -> 
     Ok(output.stdout)
 }
 
+/// Runs Git with `input` on its standard input, for commands that read their instructions from it,
+/// such as `update-ref --stdin`. Returns the standard output as text.
+pub fn run_with_input(arguments: &[&str], directory: &Path, options: &RunOptions, input: &[u8]) -> Result<String> {
+    use std::io::Write;
+    let mut command = configured_command(arguments, directory, options)?;
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // Git may stop reading early when it refuses the input; its exit status says why.
+        let _ = stdin.write_all(input);
+    }
+    let output = child.wait_with_output().map_err(|error| GitError::failed(describe(arguments), error.to_string()))?;
+    let status = output.status.code().unwrap_or(-1);
+    if status != 0 {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if message.is_empty() { format!("Exited with status {status}.") } else { message };
+        return Err(GitError::failed(describe(arguments), message));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 /// Runs Git and returns its standard output followed by its standard error, whatever the exit
 /// status. Unlike `run`, a failing exit is not an error: for commands such as `verify-tag`, whose
 /// result is in the report even when Git exits non-zero.

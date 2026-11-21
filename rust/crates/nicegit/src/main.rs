@@ -55,6 +55,8 @@ mod ui_tests_find_repositories;
 #[cfg(test)]
 mod ui_tests_identity;
 #[cfg(test)]
+mod ui_tests_image_diff;
+#[cfg(test)]
 mod ui_tests_insights;
 #[cfg(test)]
 mod ui_tests_install;
@@ -90,6 +92,8 @@ mod ui_tests_review_threads;
 mod ui_tests_speed;
 #[cfg(test)]
 mod ui_tests_split;
+#[cfg(test)]
+mod ui_tests_stacks;
 #[cfg(test)]
 mod ui_tests_stash_lines;
 #[cfg(test)]
