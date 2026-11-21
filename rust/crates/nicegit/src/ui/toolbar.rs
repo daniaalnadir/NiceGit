@@ -604,6 +604,7 @@ impl NiceGitApp {
         open(ui, self, icon::CHART_BAR, tr("Insights…"), &|_| Box::new(tools::insights::InsightsWindow::new()));
         open(ui, self, icon::BROOM, tr("Clean up branches…"), &|_| Box::new(tools::branch_cleanup::BranchCleanupWindow::new()));
         open(ui, self, icon::BUG, tr("Bisect…"), &|_| Box::new(tools::bisect::BisectWindow::new()));
+        open(ui, self, icon::TERMINAL, tr("Command log…"), &|_| Box::new(tools::command_log::CommandLogWindow::new()));
         ui.separator();
         open(ui, self, icon::FOLDERS, tr("Worktrees…"), &|_| Box::new(tools::worktrees::WorktreesWindow::new()));
         open(ui, self, icon::PACKAGE, tr("Submodules…"), &|_| Box::new(tools::submodules::SubmodulesWindow::new()));

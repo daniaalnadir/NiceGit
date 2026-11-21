@@ -2079,6 +2079,7 @@ dependencies = [
  "egui-phosphor",
  "egui_kittest",
  "image",
+ "libc",
  "nicegit-core",
  "notify",
  "notify-rust",

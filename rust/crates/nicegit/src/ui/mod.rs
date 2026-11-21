@@ -67,6 +67,9 @@ impl NiceGitApp {
         if ctx.input_mut(|i| i.consume_shortcut(&command_alt(Key::F))) && self.snapshot().is_some() {
             self.open_tool(Box::new(crate::tools::content_search::ContentSearchWindow::new(None)));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&command_alt(Key::L))) && self.snapshot().is_some() {
+            self.open_tool(Box::new(crate::tools::command_log::CommandLogWindow::new()));
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&command(Key::R))) {
             self.load(true);
         }
@@ -515,11 +518,16 @@ impl NiceGitApp {
                 // The buttons are laid out from the right first, so a long message is shortened
                 // rather than pushing them out of view; the whole message is in its tooltip.
                 let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
+                let mut show_log = false;
                 let mut open_link: Option<String> = None;
                 let mut retry_commit: Option<crate::app::HookRetry> = None;
                 let mut apply_into: Option<(nicegit_core::Stash, bool)> = None;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     dismiss = ui.add(egui::Button::new(RichText::new(icon::X).small()).frame(false)).on_hover_text(tr("Dismiss")).clicked();
+                    // A failed Git command is listed in the command log, with its output.
+                    if notice.is_error && detail.is_some() {
+                        show_log = ui.link(tr("Show in command log")).clicked();
+                    }
                     if action == Some(crate::app::NoticeAction::Stash) {
                         stash = ui.add_enabled(self.idle(), egui::Button::new(tr("Stash changes…"))).clicked();
                     }
@@ -562,6 +570,9 @@ impl NiceGitApp {
                         ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
                     });
                 });
+                if show_log {
+                    self.open_tool(Box::new(crate::tools::command_log::CommandLogWindow::new()));
+                }
                 let opened = open_link.is_some();
                 if let Some(url) = &open_link {
                     crate::ui::changes::open_url(url);

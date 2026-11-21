@@ -1,0 +1,19 @@
+# ja: the command log window, its filters, rows, and menus.
+Command Log	コマンドログ
+Filter commands	コマンドを絞り込む
+Show reads	読み取りを表示
+Only this repository	このリポジトリのみ
+Copy all	すべてコピー
+No Git commands have run yet.	まだ Git コマンドは実行されていません。
+No commands match these filters.	この絞り込みに合うコマンドはありません。
+Copy command	コマンドをコピー
+Copy output	出力をコピー
+No error output.	エラー出力はありません。
+Succeeded	成功
+Stopped or did not start.	中断されたか、起動しませんでした。
+Command log	コマンドログ
+Command log…	コマンドログ…
+Show in command log	コマンドログで表示
+Show the command log	コマンドログを表示
+{milliseconds} ms	{milliseconds} ミリ秒
+Exited with status {code}.	終了コード {code} で終了しました。

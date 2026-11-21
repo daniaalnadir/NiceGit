@@ -13,6 +13,7 @@
 - Absorb staged changes into the unpushed commits that last changed their lines, from the Changes panel or the command palette.
 - Review a GitHub pull request's diff in its Files tab, with its review threads under their lines: reply, comment on a line, or resolve a thread, each after a confirmation.
 - Stacked branches: when a branch in a stack is amended or rebased, a notice offers to restack the branches built on it, and a branch's menu can push its whole stack in one atomic push.
+- Command log lists every Git command NiceGit has run, newest first, with its time, duration, exit status and error output. Open it from the command palette or the Repository menu; a failed command links to it from the status bar.
 
 ## 2.2.0 - Reshape your history
 
