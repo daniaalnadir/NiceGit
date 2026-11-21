@@ -343,6 +343,7 @@ impl NiceGitApp {
                     }
                 });
             }
+            self.outdated_notice(ui, idle);
             if !applied_filter.is_empty() {
                 ui.horizontal(|ui| {
                     let mut parts = Vec::new();
