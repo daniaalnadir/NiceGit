@@ -137,10 +137,13 @@ fn start_view(ui: &mut Ui, cx: &mut Ctx, snapshot: &Snapshot, idle: bool, good: 
         if widgets::primary_button(ui, tr("Start bisect"), can_start).clicked() {
             if let Some(bad) = head {
                 let branch = snapshot.current_branch.clone();
-                cx.act(tr("Start bisect"), move |client, directory| {
-                    client.start_bisect(&bad, &good_text, &branch, Some(&bad), directory)?;
-                    Ok(Some(tr("Bisect started. Mark the checked-out commit as good or bad.").to_string()))
-                });
+                cx.act(
+                    tr("Start bisect"),
+                    cx.guard_rewrite(move |client, directory| {
+                        client.start_bisect(&bad, &good_text, &branch, Some(&bad), directory)?;
+                        Ok(Some(tr("Bisect started. Mark the checked-out commit as good or bad.").to_string()))
+                    }),
+                );
             }
         }
         ui.label(RichText::new(tr("Checkouts happen during a bisect, so commit or stash changes first.")).small().color(c.muted));
@@ -167,10 +170,13 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
                     cx.select_commit(first_bad.clone());
                 }
                 if ui.add_enabled(idle, egui::Button::new(format!("{}  {}", icon::STOP, tr("End bisect")))).clicked() {
-                    cx.act(tr("End bisect"), |client, directory| {
-                        client.end_bisect(directory)?;
-                        Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
-                    });
+                    cx.act(
+                        tr("End bisect"),
+                        cx.guard_rewrite(|client, directory| {
+                            client.end_bisect(directory)?;
+                            Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
+                        }),
+                    );
                 }
             });
         }
@@ -223,10 +229,13 @@ fn running_view(ui: &mut Ui, cx: &mut Ctx, idle: bool, status: &BisectStatus, lo
                     .on_hover_text(tr_fmt!("Return to {checkout}", checkout = checkout_name(&status.original_checkout)))
                     .clicked()
                 {
-                    cx.act(tr("End bisect"), |client, directory| {
-                        client.end_bisect(directory)?;
-                        Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
-                    });
+                    cx.act(
+                        tr("End bisect"),
+                        cx.guard_rewrite(|client, directory| {
+                            client.end_bisect(directory)?;
+                            Ok(Some(tr("Bisect ended. Returned to the starting checkout.").to_string()))
+                        }),
+                    );
                 }
             });
         }
@@ -251,10 +260,13 @@ fn mark_button(ui: &mut Ui, cx: &mut Ctx, enabled: bool, testing: Option<&str>, 
     if response.on_hover_text(tooltip).on_disabled_hover_text(tr("Wait for the current action to finish")).clicked() {
         if let Some(testing) = testing {
             let testing = testing.to_string();
-            cx.act(tr_fmt!("Mark {label}", label = label), move |client, directory| {
-                let output = client.mark_bisect(mark, &testing, directory)?;
-                Ok(output.lines().next().map(str::to_string).filter(|line| !line.is_empty()))
-            });
+            cx.act(
+                tr_fmt!("Mark {label}", label = label),
+                cx.guard_rewrite(move |client, directory| {
+                    let output = client.mark_bisect(mark, &testing, directory)?;
+                    Ok(output.lines().next().map(str::to_string).filter(|line| !line.is_empty()))
+                }),
+            );
         }
     }
 }

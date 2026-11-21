@@ -538,7 +538,7 @@ impl ToolWindow for InteractiveRebaseWindow {
                     tr("Interactive rebase"),
                     Some(detail),
                     nicegit_core::undo::UndoMode::Keep,
-                    move |client, repo| match client.interactive_rebase(&steps, &plan, &branch, &head, repo)? {
+                    cx.guard_rewrite(move |client, repo| match client.interactive_rebase(&steps, &plan, &branch, &head, repo)? {
                         RebaseOutcome::Finished => Ok(Some(tr_fmt!("Rewrote {count} commits on {branch}.", count = rewritten, branch = branch))),
                         RebaseOutcome::Stopped => {
                             let stopped_at = match stop_subject {
@@ -547,7 +547,7 @@ impl ToolWindow for InteractiveRebaseWindow {
                             };
                             Ok(Some(tr_fmt!("{stopped_at} so you can change it. Edit and stage files, then click Continue to fold them in; Abort undoes the whole rebase.", stopped_at = stopped_at)))
                         }
-                    },
+                    }),
                 );
                 self.closing = true;
             }

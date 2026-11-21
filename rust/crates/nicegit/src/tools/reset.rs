@@ -167,10 +167,10 @@ impl ToolWindow for ResetWindow {
                     tr("Reset"),
                     Some(short_target.clone()),
                     undo,
-                    move |client, repo| {
+                    cx.guard_rewrite(move |client, repo| {
                         client.reset(&target, mode, &branch, &head, repo)?;
                         Ok(Some(tr_fmt!("Reset {branch} to {target}.", branch = branch, target = short_target)))
-                    },
+                    }),
                 );
                 self.closing = true;
             }

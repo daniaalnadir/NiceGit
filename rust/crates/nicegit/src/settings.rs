@@ -485,6 +485,16 @@ pub struct Settings {
     /// Commands the person added to the menus, in the order they were added.
     #[serde(default)]
     pub custom_actions: Vec<CustomAction>,
+    /// Whether NiceGit saves snapshots of the working files in the background, and before actions
+    /// that rewrite them, so files lost to an editor or a command can be brought back.
+    #[serde(default = "default_true")]
+    pub snapshots_enabled: bool,
+    /// The least number of minutes between snapshots of a repository whose files keep changing.
+    #[serde(default = "default_snapshot_minutes")]
+    pub snapshot_interval_minutes: u32,
+    /// How many days snapshots are kept before they are deleted.
+    #[serde(default = "default_snapshot_days")]
+    pub snapshot_keep_days: u32,
 }
 
 /// How many recently opened repositories are remembered.
@@ -492,6 +502,14 @@ pub const RECENT_LIMIT: usize = 30;
 
 fn default_true() -> bool {
     true
+}
+
+fn default_snapshot_minutes() -> u32 {
+    5
+}
+
+fn default_snapshot_days() -> u32 {
+    7
 }
 
 impl Default for Settings {
@@ -548,6 +566,9 @@ impl Default for Settings {
             latest_version: None,
             dismissed_update: None,
             custom_actions: Vec::new(),
+            snapshots_enabled: true,
+            snapshot_interval_minutes: default_snapshot_minutes(),
+            snapshot_keep_days: default_snapshot_days(),
         }
     }
 }
@@ -899,6 +920,33 @@ mod tests {
         assert_eq!(loaded.last_update_check, 1_780_000_000);
         assert_eq!(loaded.latest_version.as_deref(), Some("2.1.0"));
         assert_eq!(loaded.dismissed_update.as_deref(), Some("2.0.5"));
+    }
+
+    #[test]
+    fn snapshot_settings_start_on_and_round_trip() {
+        let defaults = Settings::default();
+        assert!(defaults.snapshots_enabled);
+        assert_eq!((defaults.snapshot_interval_minutes, defaults.snapshot_keep_days), (5, 7));
+
+        let mut storage = MemoryStorage::default();
+        let settings = Settings { snapshots_enabled: false, snapshot_interval_minutes: 15, snapshot_keep_days: 30, ..Settings::default() };
+        eframe::set_value(&mut storage, STORAGE_KEY, &settings);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("settings load");
+        assert!(!loaded.snapshots_enabled);
+        assert_eq!((loaded.snapshot_interval_minutes, loaded.snapshot_keep_days), (15, 30));
+
+        // Settings saved before snapshots existed start with them on, every five minutes, for a week.
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        let older = saved.replacen(",snapshots_enabled:false", "", 1).replacen(",snapshot_interval_minutes:15", "", 1).replacen(
+            ",snapshot_keep_days:30",
+            "",
+            1,
+        );
+        assert_ne!(older, saved, "the fields are in the saved settings");
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings still load");
+        assert!(loaded.snapshots_enabled);
+        assert_eq!((loaded.snapshot_interval_minutes, loaded.snapshot_keep_days), (5, 7));
     }
 
     #[test]

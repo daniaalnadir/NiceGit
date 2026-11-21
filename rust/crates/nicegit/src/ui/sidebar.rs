@@ -505,9 +505,12 @@ impl NiceGitApp {
                         ui.close();
                         let stash = stash.clone();
                         // The label names the stash, so a refusal can offer to apply it into the changes.
-                        self.act(&tr_fmt!("Apply {stash}", stash = stash.reference), move |client, path| {
-                            client.apply_stash(&stash, path).map(|_| Some(tr("Applied the stash.").into()))
-                        });
+                        self.act(
+                            &tr_fmt!("Apply {stash}", stash = stash.reference),
+                            self.guard_rewrite(move |client, path| {
+                                client.apply_stash(&stash, path).map(|_| Some(tr("Applied the stash.").into()))
+                            }),
+                        );
                     }
                     if ui
                         .add_enabled(allowed, egui::Button::new(format!("{}  {}", icon::TRAY_ARROW_UP, tr("Pop (apply and delete)"))))

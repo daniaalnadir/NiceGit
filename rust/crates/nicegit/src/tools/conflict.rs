@@ -418,15 +418,18 @@ fn whole_file(path: String, resolved: Arc<AtomicBool>, choice: WholeFile, cx: &m
         WholeFile::Incoming => tr_fmt!("Take incoming version of {path}", path = path),
         WholeFile::Delete => tr_fmt!("Delete {path}", path = path),
     };
-    cx.act(label, move |client: &GitClient, repo| {
-        let outcome: nicegit_core::Result<()> = match choice {
-            WholeFile::Current => client.resolve_conflict_side(&path, false, repo),
-            WholeFile::Incoming => client.resolve_conflict_side(&path, true, repo),
-            WholeFile::Delete => client.resolve_conflict_deletion(&path, repo),
-        };
-        outcome.map(|()| {
-            resolved.store(true, Ordering::SeqCst);
-            None
-        })
-    });
+    cx.act(
+        label,
+        cx.guard_rewrite(move |client: &GitClient, repo| {
+            let outcome: nicegit_core::Result<()> = match choice {
+                WholeFile::Current => client.resolve_conflict_side(&path, false, repo),
+                WholeFile::Incoming => client.resolve_conflict_side(&path, true, repo),
+                WholeFile::Delete => client.resolve_conflict_deletion(&path, repo),
+            };
+            outcome.map(|()| {
+                resolved.store(true, Ordering::SeqCst);
+                None
+            })
+        }),
+    );
 }

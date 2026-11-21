@@ -601,6 +601,7 @@ impl NiceGitApp {
             Box::new(tools::content_search::ContentSearchWindow::new(None))
         });
         open(ui, self, icon::CLOCK_COUNTER_CLOCKWISE, tr("Recover lost work…"), &|_| Box::new(tools::reflog::ReflogWindow::new()));
+        open(ui, self, icon::FLOPPY_DISK, tr("Snapshots…"), &|_| Box::new(tools::snapshots::SnapshotsWindow::new()));
         open(ui, self, icon::CHART_BAR, tr("Insights…"), &|_| Box::new(tools::insights::InsightsWindow::new()));
         open(ui, self, icon::BROOM, tr("Clean up branches…"), &|_| Box::new(tools::branch_cleanup::BranchCleanupWindow::new()));
         open(ui, self, icon::BUG, tr("Bisect…"), &|_| Box::new(tools::bisect::BisectWindow::new()));
