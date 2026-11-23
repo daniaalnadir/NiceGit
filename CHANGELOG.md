@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 2.3.0 - More places to work
+
+NiceGit 2.3 fixes repositories that would not open on some Windows setups, works with pull
+requests on Gitea, Forgejo, Bitbucket and Azure DevOps, speaks six more languages, and adds
+snapshots of your working files, stacked branches, a command log, and new ways to compare
+changes.
 
 - Fixed: a repository with signed commits failed to open ("invalid value for 'gpg.format'") when Git's settings had `log.showSignature` on and an empty `gpg.format`. NiceGit now ignores `log.showSignature`, and an error caused by an empty `gpg.format` offers to remove it.
 - Error messages can be selected, and copied from a right-click menu.
