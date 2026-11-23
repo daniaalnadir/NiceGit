@@ -152,3 +152,29 @@ fn a_branch_key_with_a_slash_and_a_value_starting_with_a_dash_are_written_as_giv
     let entries = client.config_entries(dir.path()).expect("list config");
     assert!(entries.iter().all(|entry| entry.key != key));
 }
+
+/// `log.showSignature` with a broken signing setting stops `git log` at the first signed commit:
+/// "invalid value for 'gpg.format': ''". NiceGit checks signatures itself and turns the setting
+/// off, so the repository still opens and the commit's details still read.
+#[test]
+fn a_signed_commit_opens_with_show_signature_and_an_empty_gpg_format() {
+    let dir = repository();
+    let path = dir.path();
+    git(path, &["commit", "-q", "--allow-empty", "-m", "First"]);
+    let tree = git(path, &["write-tree"]).trim().to_string();
+    let parent = git(path, &["rev-parse", "HEAD"]).trim().to_string();
+    let body = format!(
+        "tree {tree}\nparent {parent}\nauthor Test <test@example.com> 1700000000 +0000\ncommitter Test <test@example.com> 1700000000 +0000\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n abc\n -----END PGP SIGNATURE-----\n\nSigned\n"
+    );
+    let file = path.join(".git").join("signed-commit");
+    std::fs::write(&file, body).unwrap();
+    let signed = git(path, &["hash-object", "-t", "commit", "-w", file.to_str().unwrap()]).trim().to_string();
+    git(path, &["update-ref", "refs/heads/main", &signed]);
+    git(path, &["config", "log.showSignature", "true"]);
+    git(path, &["config", "gpg.format", ""]);
+    let plain = Command::new("git").args(["log", "-n", "1", "--format=%H"]).current_dir(path).output().unwrap();
+    assert!(!plain.status.success(), "plain git log should refuse, so this test reproduces the problem");
+
+    let snapshot = GitClient::new().load_snapshot(path, 50).expect("the repository opens");
+    assert_eq!(snapshot.commits.first().map(|commit| commit.hash.as_str()), Some(signed.as_str()));
+}

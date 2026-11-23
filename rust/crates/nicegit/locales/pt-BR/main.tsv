@@ -279,3 +279,8 @@ Git merges the branch's commits into your current branch. Conflicts stop the mer
 Delete local tag…	Excluir a tag local…
 Lightweight tag at {commit}	Tag leve em {commit}
 Could not read this tag: {error}	Não foi possível ler esta tag: {error}
+Removed the empty gpg.format setting from {file}.	A configuração gpg.format vazia foi removida de {file}.
+Could not remove the gpg.format setting.	Não foi possível remover a configuração gpg.format.
+Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.	Suas configurações do Git ({file}) têm um gpg.format vazio, que o Git rejeita sempre que assina um commit ou verifica uma assinatura. Removê-lo não muda mais nada: o Git passa a usar seu formato de assinatura padrão.
+Remove the empty setting	Remover a configuração vazia
+Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.	Remover o gpg.format vazio de {file}. O Git o rejeita sempre que assina um commit ou verifica uma assinatura.

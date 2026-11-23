@@ -244,6 +244,15 @@ fn configured_command(arguments: &[&str], directory: &Path, options: &RunOptions
     for (key, value) in options.env {
         command.env(OsStr::new(key), OsStr::new(value));
     }
+    // A `log.showSignature` setting makes `git log` and `git show` print and check every commit's
+    // signature, which NiceGit's parsers do not expect and which stops Git outright when a broken
+    // signing setting, such as an empty `gpg.format`, meets a signed commit. NiceGit checks
+    // signatures itself, so the setting is turned off after any configuration the command passes.
+    let passed = options.env.iter().rev().find(|(key, _)| *key == "GIT_CONFIG_COUNT").and_then(|(_, count)| count.parse::<usize>().ok());
+    let index = passed.unwrap_or(0);
+    command.env(format!("GIT_CONFIG_KEY_{index}"), "log.showSignature");
+    command.env(format!("GIT_CONFIG_VALUE_{index}"), "false");
+    command.env("GIT_CONFIG_COUNT", (index + 1).to_string());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

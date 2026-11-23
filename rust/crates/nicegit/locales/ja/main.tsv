@@ -279,3 +279,8 @@ Git merges the branch's commits into your current branch. Conflicts stop the mer
 Delete local tag…	ローカルのタグを削除…
 Lightweight tag at {commit}	軽量タグ（{commit}）
 Could not read this tag: {error}	このタグを読み取れませんでした: {error}
+Removed the empty gpg.format setting from {file}.	{file} から空の gpg.format 設定を削除しました。
+Could not remove the gpg.format setting.	gpg.format 設定を削除できませんでした。
+Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.	Git の設定（{file}）に空の gpg.format があり、Git はコミットへの署名や署名の確認のたびにこれを拒否します。削除しても他には何も変わらず、Git は既定の署名形式を使います。
+Remove the empty setting	空の設定を削除
+Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.	{file} から空の gpg.format を削除します。Git はコミットへの署名や署名の確認のたびにこれを拒否します。

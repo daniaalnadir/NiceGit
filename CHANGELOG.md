@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: a repository with signed commits failed to open ("invalid value for 'gpg.format'") when Git's settings had `log.showSignature` on and an empty `gpg.format`. NiceGit now ignores `log.showSignature`, and an error caused by an empty `gpg.format` offers to remove it.
+- Error messages can be selected, and copied from a right-click menu.
 - Bitbucket Cloud (bitbucket.org) and Azure DevOps repositories show their pull requests in the sidebar, the status bar, branch check dots, the Launchpad, and Create pull request; Bitbucket takes your username and an app password, and Azure DevOps a personal access token, both under Settings.
 - Gitea and Forgejo repositories (codeberg.org, gitea.com, or a host listed under Settings, in Gitea and Forgejo) show their pull requests and issues in the sidebar, the status bar and branch check dots, the Launchpad, and Create pull request; a token saved under Settings is needed to create one.
 - The interface is available in English, German, French, Spanish, Brazilian Portuguese, Japanese and Simplified Chinese; choose the language under Settings, General (System follows your computer).

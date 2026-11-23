@@ -461,7 +461,25 @@ impl NiceGitApp {
                 return;
             }
             if let Some(error) = error {
-                ui.label(RichText::new(error).color(c.danger));
+                if let Some(file) = nicegit_core::git_config::empty_gpg_format_file(&error) {
+                    let width = 560.0_f32.min(ui.available_width());
+                    ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(RichText::new(tr_fmt!(
+                                "Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.",
+                                file = file
+                            )).color(c.danger));
+                            ui.add_space(6.0);
+                            if widgets::primary_button(ui, tr("Remove the empty setting"), self.busy.is_none()).clicked() {
+                                self.remove_empty_gpg_format(file.clone());
+                            }
+                            ui.add_space(6.0);
+                            copyable_label(ui, RichText::new(&error).small().color(c.muted), &error);
+                        });
+                    });
+                } else {
+                    copyable_label(ui, RichText::new(&error).color(c.danger), &error);
+                }
                 ui.add_space(8.0);
             } else {
                 ui.label(RichText::new(tr("A fast Git client for macOS, Windows, and Linux.")).color(c.muted));
@@ -521,6 +539,7 @@ impl NiceGitApp {
                 // rather than pushing them out of view; the whole message is in its tooltip.
                 let (mut dismiss, mut pull, mut identity, mut stash) = (false, false, false, false);
                 let mut show_log = false;
+                let mut fix_gpg: Option<String> = None;
                 let mut open_link: Option<String> = None;
                 let mut retry_commit: Option<crate::app::HookRetry> = None;
                 let mut apply_into: Option<(nicegit_core::Stash, bool)> = None;
@@ -529,6 +548,15 @@ impl NiceGitApp {
                     // A failed Git command is listed in the command log, with its output.
                     if notice.is_error && detail.is_some() {
                         show_log = ui.link(tr("Show in command log")).clicked();
+                    }
+                    let gpg_file = nicegit_core::git_config::empty_gpg_format_file(detail.as_deref().unwrap_or(&notice.text));
+                    if let Some(file) = gpg_file {
+                        if ui.add_enabled(self.idle(), egui::Button::new(tr("Remove the empty setting"))).on_hover_text(tr_fmt!(
+                            "Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.",
+                            file = file
+                        )).clicked() {
+                            fix_gpg = Some(file);
+                        }
                     }
                     if action == Some(crate::app::NoticeAction::Stash) {
                         stash = ui.add_enabled(self.idle(), egui::Button::new(tr("Stash changes…"))).clicked();
@@ -569,9 +597,14 @@ impl NiceGitApp {
                             Some(detail) => format!("{}\n\n{}\n{detail}", text.text(), tr("Git said:")),
                             None => text.text().to_string(),
                         };
-                        ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
+                        let label = ui.add(egui::Label::new(text).truncate().selectable(true)).on_hover_text(&full);
+                        copy_menu(&label, &full);
                     });
                 });
+                if let Some(file) = fix_gpg {
+                    self.notice = None;
+                    self.remove_empty_gpg_format(file);
+                }
                 if show_log {
                     self.open_tool(Box::new(crate::tools::command_log::CommandLogWindow::new()));
                 }
@@ -1269,4 +1302,22 @@ fn restore_on_double_click(ctx: &egui::Context, edges: &[(&str, PanelEdge)]) {
             ctx.data_mut(|data| data.insert_temp(last_click, now));
         }
     }
+}
+
+/// Adds a right-click menu with Copy to a message, so it can be pasted elsewhere, such as an error
+/// to report.
+pub fn copy_menu(response: &egui::Response, text: &str) {
+    response.context_menu(|ui| {
+        if ui.button(tr("Copy")).clicked() {
+            ui.ctx().copy_text(text.to_string());
+            ui.close();
+        }
+    });
+}
+
+/// A wrapped message whose text can be selected, with a right-click menu that copies all of it.
+pub fn copyable_label(ui: &mut egui::Ui, text: RichText, full: &str) -> egui::Response {
+    let response = ui.add(egui::Label::new(text).wrap().selectable(true));
+    copy_menu(&response, full);
+    response
 }
