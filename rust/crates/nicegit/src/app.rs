@@ -1515,6 +1515,31 @@ impl NiceGitApp {
         });
     }
 
+    /// Removes the empty `gpg.format` Git rejects whenever it signs or checks a signature, from the
+    /// file Git named, then loads the active repository again.
+    pub fn remove_empty_gpg_format(&mut self, file: String) {
+        if self.busy.is_some() {
+            return;
+        }
+        let directory = self.repo().map(|repo| repo.path.clone()).unwrap_or_else(std::env::temp_dir);
+        match nicegit_core::GitClient::new().remove_empty_gpg_format(&file, &directory) {
+            Ok(()) => {
+                self.notify(tr_fmt!("Removed the empty gpg.format setting from {file}.", file = file), false);
+                if let Some(repo) = self.repos.get_mut(self.active) {
+                    repo.error = None;
+                }
+                self.load(true);
+            }
+            Err(error) => {
+                let text = tr("Could not remove the gpg.format setting.").to_string();
+                if let Some(repo) = self.repos.get_mut(self.active).filter(|repo| repo.snapshot.is_none()) {
+                    repo.error = Some(format!("{text}\n{error}"));
+                }
+                self.notice = Some(Notice { text, is_error: true, action: None, detail: Some(error.to_string()) });
+            }
+        }
+    }
+
     pub fn notify(&mut self, text: impl Into<String>, is_error: bool) {
         self.notice = Some(Notice { text: text.into(), is_error, action: None, detail: None });
     }

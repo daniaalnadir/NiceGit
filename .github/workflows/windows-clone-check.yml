@@ -1,11 +1,9 @@
 name: Windows clone check
 
 # Clones through NiceGit's clone dialog on Windows under Git setups that can break signing or SSH,
-# to reproduce a reported clone failure. Run by hand, or by pushing the windows-clone-check branch.
+# to reproduce a reported clone failure. Run it by hand from the Actions tab.
 on:
   workflow_dispatch:
-  push:
-    branches: [windows-clone-check]
 
 permissions:
   contents: read

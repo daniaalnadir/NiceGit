@@ -279,3 +279,8 @@ Git merges the branch's commits into your current branch. Conflicts stop the mer
 Delete local tag…	Supprimer le tag local…
 Lightweight tag at {commit}	Étiquette légère sur {commit}
 Could not read this tag: {error}	Impossible de lire ce tag : {error}
+Removed the empty gpg.format setting from {file}.	Le paramètre gpg.format vide a été supprimé de {file}.
+Could not remove the gpg.format setting.	Impossible de supprimer le paramètre gpg.format.
+Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.	Vos paramètres Git ({file}) contiennent un gpg.format vide, que Git rejette dès qu’il signe un commit ou vérifie une signature. Le supprimer ne change rien d’autre : Git utilise alors son format de signature par défaut.
+Remove the empty setting	Supprimer le paramètre vide
+Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.	Supprimer le gpg.format vide de {file}. Git le rejette dès qu’il signe un commit ou vérifie une signature.

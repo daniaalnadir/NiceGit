@@ -279,3 +279,8 @@ Git merges the branch's commits into your current branch. Conflicts stop the mer
 Delete local tag…	删除本地标签…
 Lightweight tag at {commit}	轻量标签，位于 {commit}
 Could not read this tag: {error}	无法读取此标签：{error}
+Removed the empty gpg.format setting from {file}.	已从 {file} 中删除空的 gpg.format 设置。
+Could not remove the gpg.format setting.	无法删除 gpg.format 设置。
+Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.	你的 Git 设置（{file}）中有一个空的 gpg.format，Git 在签名提交或检查签名时都会拒绝它。删除它不会改变其他任何内容：Git 将使用其默认签名格式。
+Remove the empty setting	删除空设置
+Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.	从 {file} 中删除空的 gpg.format。Git 在签名提交或检查签名时都会拒绝它。

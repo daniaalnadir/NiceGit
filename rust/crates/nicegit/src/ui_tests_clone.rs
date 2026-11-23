@@ -143,3 +143,49 @@ fn a_plain_clone_opens_without_an_error() {
     assert_eq!(failure(&harness), None, "opening the clone showed an error");
     assert!(destination.join(".git").exists(), "the clone exists");
 }
+
+/// Git rejects an empty `gpg.format` whenever it signs or checks a signature. The error offers to remove that setting from the file Git named, and its text can
+/// be copied from a right-click menu.
+#[test]
+fn an_empty_gpg_format_can_be_removed_from_the_error() {
+    let source = folders_repository();
+    let settings = temp_dir();
+    let file = settings.path().join("gitconfig");
+    fs::write(&file, "[user]\n\tname = Someone\n[gpg]\n\tformat =\n").unwrap();
+    let error = format!(
+        "Git could not run `git log`: error: invalid value for 'gpg.format': ''\nfatal: bad config variable 'gpg.format' in file '{}' at line 4",
+        file.display()
+    );
+    let mut harness = open(source.path());
+    loaded(&mut harness);
+    {
+        let state = harness.state_mut();
+        let active = state.active;
+        state.repos[active].snapshot = None;
+        state.repos[active].error = Some(error.clone());
+    }
+    harness.step();
+
+    harness.get_by_label_contains("bad config variable").click_secondary();
+    wait(&mut harness, "the Copy menu", |h| h.query_by_label("Copy").is_some());
+    harness.get_by_label("Copy").click();
+    let mut copied = None;
+    for _ in 0..5 {
+        harness.step();
+        for command in &harness.output().platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = command {
+                copied = Some(text.clone());
+            }
+        }
+        if copied.is_some() {
+            break;
+        }
+    }
+    assert_eq!(copied.as_deref(), Some(error.as_str()));
+
+    wait(&mut harness, "the menu to close", |h| h.query_by_label("Copy").is_none());
+    harness.get_by_label("Remove the empty setting").click();
+    wait(&mut harness, "the repository to load again", |h| h.state().repo().is_some_and(|r| r.snapshot.is_some() && r.error.is_none()));
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains("name = Someone") && !text.contains("format"), "{text}");
+}

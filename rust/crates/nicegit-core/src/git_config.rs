@@ -144,9 +144,73 @@ impl GitClient {
     }
 }
 
+/// The configuration file holding an empty `gpg.format`, when that is what Git's `error` reports.
+/// Git rejects an empty `gpg.format` whenever it signs a commit or checks a signature: "invalid value
+/// for 'gpg.format': ''", then "bad config variable 'gpg.format' in file '…' at line …". `None` for any other error, including a non-empty value
+/// Git does not know, which only the person can correct.
+pub fn empty_gpg_format_file(error: &str) -> Option<String> {
+    if !error.contains("invalid value for 'gpg.format': ''") {
+        return None;
+    }
+    let start = error.find("bad config variable 'gpg.format' in file '")? + "bad config variable 'gpg.format' in file '".len();
+    let rest = &error[start..];
+    let file = &rest[..rest.find("' at line ")?];
+    (!file.is_empty() && !file.contains('\n')).then(|| file.to_string())
+}
+
+impl GitClient {
+    /// Removes an empty `gpg.format` from `file`, as `empty_gpg_format_file` names it; a relative
+    /// file is read from `directory`, where Git reported it. An empty value means the same as no
+    /// value to a Git that accepts it, so nothing about signing changes. Refuses when the file holds
+    /// a value that is not empty; succeeds without writing when the setting is already gone.
+    pub fn remove_empty_gpg_format(&self, file: &str, directory: &Path) -> Result<()> {
+        let path = directory.join(file);
+        let path = path.to_string_lossy();
+        let output = self.run_accepting(&["config", "--file", &path, "-z", "--get-all", "gpg.format"], directory, &[0, 1])?;
+        let values: Vec<&str> = output.split_terminator('\0').collect();
+        if values.is_empty() {
+            return Ok(());
+        }
+        if values.iter().any(|value| !value.trim().is_empty()) {
+            return Err(GitError::failed("remove gpg.format", "gpg.format is no longer empty in that file; it was left as it is."));
+        }
+        self.run(&["config", "--file", &path, "--unset-all", "gpg.format"], directory).map(drop)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_gpg_format_names_its_file() {
+        let windows = "error: invalid value for 'gpg.format': ''\nfatal: bad config variable 'gpg.format' in file 'C:/Users/Daniaal Nadir/.gitconfig' at line 8\n";
+        assert_eq!(empty_gpg_format_file(windows).as_deref(), Some("C:/Users/Daniaal Nadir/.gitconfig"));
+        let quoted = "error: invalid value for 'gpg.format': ''\nfatal: bad config variable 'gpg.format' in file '/home/o'neil/.gitconfig' at line 3";
+        assert_eq!(empty_gpg_format_file(quoted).as_deref(), Some("/home/o'neil/.gitconfig"));
+        let unknown =
+            "error: invalid value for 'gpg.format': 'pgp'\nfatal: bad config variable 'gpg.format' in file '.git/config' at line 3";
+        assert_eq!(empty_gpg_format_file(unknown), None);
+        assert_eq!(empty_gpg_format_file("fatal: not a git repository"), None);
+    }
+
+    #[test]
+    fn removing_an_empty_gpg_format_leaves_other_settings() {
+        let folder = std::env::temp_dir().join(format!("nicegit-gpg-format-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let file = folder.join("config");
+        std::fs::write(&file, "[user]\n\tname = Someone\n[gpg]\n\tformat =\n").unwrap();
+        let client = GitClient::new();
+        client.remove_empty_gpg_format("config", &folder).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.contains("name = Someone"), "{text}");
+        assert!(!text.contains("format"), "{text}");
+        client.remove_empty_gpg_format("config", &folder).unwrap();
+        std::fs::write(&file, "[gpg]\n\tformat = ssh\n").unwrap();
+        assert!(client.remove_empty_gpg_format("config", &folder).is_err());
+        assert!(std::fs::read_to_string(&file).unwrap().contains("format = ssh"));
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
 
     #[test]
     fn keys_must_name_a_section_and_a_name() {

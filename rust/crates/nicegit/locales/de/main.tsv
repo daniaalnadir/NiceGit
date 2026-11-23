@@ -279,3 +279,8 @@ Git merges the branch's commits into your current branch. Conflicts stop the mer
 Delete local tag…	Lokalen Tag löschen …
 Lightweight tag at {commit}	Leichter Tag bei {commit}
 Could not read this tag: {error}	Dieser Tag konnte nicht gelesen werden: {error}
+Removed the empty gpg.format setting from {file}.	Die leere gpg.format-Einstellung wurde aus {file} entfernt.
+Could not remove the gpg.format setting.	Die gpg.format-Einstellung konnte nicht entfernt werden.
+Your Git settings ({file}) have an empty gpg.format, which Git rejects whenever it signs a commit or checks a signature. Removing it changes nothing else: Git then uses its default signing format.	Deine Git-Einstellungen ({file}) enthalten ein leeres gpg.format, das Git ablehnt, sobald es einen Commit signiert oder eine Signatur prüft. Das Entfernen ändert sonst nichts: Git verwendet dann sein Standard-Signaturformat.
+Remove the empty setting	Leere Einstellung entfernen
+Remove the empty gpg.format from {file}. Git rejects it whenever it signs a commit or checks a signature.	Das leere gpg.format aus {file} entfernen. Git lehnt es ab, sobald es einen Commit signiert oder eine Signatur prüft.
