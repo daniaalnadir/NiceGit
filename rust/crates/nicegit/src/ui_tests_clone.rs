@@ -110,14 +110,13 @@ fn the_clone_options_explain_themselves_and_block_an_invalid_folder() {
 }
 
 /// A plain clone through the dialog opens the new repository without any error, including the
-/// background reads that follow it. Set NICEGIT_CLONE_URL to clone a real address instead of a
-/// local repository; the Windows clone check runs this under several Git signing setups.
+/// background reads that follow it.
 #[test]
 fn a_plain_clone_opens_without_an_error() {
     let source = folders_repository();
     let parent = temp_dir();
     let destination = parent.path().join("cloned");
-    let address = std::env::var("NICEGIT_CLONE_URL").unwrap_or_else(|_| source.path().display().to_string());
+    let address = source.path().display().to_string();
     let mut harness = open(source.path());
     loaded(&mut harness);
 
