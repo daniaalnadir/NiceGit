@@ -27,6 +27,8 @@ enum Run {
     /// Opens a web address that is not a page of the repository, such as a feedback form.
     Link(String),
     Shortcuts,
+    /// Starts the first-run welcome and tour again.
+    Tour,
     ShowTip,
     Fetch,
     FetchRemote(String),
@@ -162,6 +164,13 @@ impl NiceGitApp {
             command(tr("Show terminal"), "Ctrl-`", icon::TERMINAL_WINDOW, has, Run::Terminal),
             command(tr("Settings"), tr("Appearance, graph colours, and diffs"), icon::GEAR, true, Run::Settings),
             command(tr("Keyboard shortcuts"), "Ctrl/Cmd-/", icon::KEYBOARD, true, Run::Shortcuts),
+            command(
+                tr("Take the tour"),
+                tr("Meet Sprig and try the basics in a practice repository"),
+                icon::GRADUATION_CAP,
+                true,
+                Run::Tour,
+            ),
             command(tr("Show a tip"), tr("The next tip about NiceGit, as a notice"), icon::LIGHTBULB, true, Run::ShowTip),
             command(
                 tr("Report a problem"),
@@ -506,6 +515,7 @@ impl NiceGitApp {
             }
             Run::OpenHosted(url) | Run::Link(url) => crate::ui::changes::open_url(&url),
             Run::Shortcuts => self.show_shortcuts = true,
+            Run::Tour => self.onboarding = Some(crate::ui::onboarding::Onboarding::Intro),
             Run::ShowTip => self.show_tip(),
             Run::Open => self.choose_folder(),
             Run::FindRepositories => self.choose_folder_to_find(ctx),

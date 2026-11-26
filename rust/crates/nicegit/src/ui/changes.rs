@@ -182,10 +182,11 @@ impl NiceGitApp {
         });
         ui.separator();
 
-        egui::Panel::bottom("commit_box")
+        let commit = egui::Panel::bottom("commit_box")
             .resizable(false)
             .frame(egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 14, top: 10, bottom: 14 }))
             .show(ui, |ui| self.commit_box(ui, &snapshot, all_staged.len()));
+        self.tour_targets.commit_box = Some(commit.response.rect);
 
         if let Some(undo) = self.repo().and_then(|r| r.discard_undo.last().cloned()) {
             let more = self.repo().map(|r| r.discard_undo.len().saturating_sub(1)).unwrap_or(0);

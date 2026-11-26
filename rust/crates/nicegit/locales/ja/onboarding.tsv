@@ -1,0 +1,37 @@
+Hi, I'm Sprig	こんにちは、Sprig です
+I'll show you around NiceGit in about a minute, in a practice repository you can't break.	壊す心配のない練習用リポジトリで、NiceGit の使い方を約1分でご案内します。
+Start the tour	ツアーを始める
+or	または
+Already know your way around?	NiceGit の使い方はわかっていますか？
+Skip for now	今はスキップ
+Confirm your Git details	Git の情報を確認
+Git puts your name and email on every commit you make. They're saved in your own Git settings, so other Git tools use them too.	Git は、作成するすべてのコミットにあなたの名前とメールアドレスを付けます。これらはあなた自身の Git 設定に保存されるので、他の Git ツールでも使われます。
+Git doesn't know who you are yet.	Git にはまだあなたの情報がありません。
+Use these for my commits	これをコミットに使う
+Enter your name and an email address.	名前とメールアドレスを入力してください。
+Back	戻る
+Wait for the current action to finish, then try again.	実行中の操作が終わるまで待ってから、もう一度お試しください。
+The practice repository could not be made: {error}	練習用リポジトリを作成できませんでした: {error}
+Your history	履歴
+Each dot is a commit, newest at the top. The lines show where branches split off and join back.	各点がコミットで、新しいものが上にあります。線は、ブランチが分岐して合流する場所を示します。
+Branches and more	ブランチなど
+Your branches, remotes, tags and stashes are listed here. Double-click a branch to switch to it.	ブランチ、リモート、タグ、スタッシュはここに表示されます。ブランチをダブルクリックすると切り替えられます。
+Stage a change	変更をステージ
+I've changed hello.txt for you. Click it to see the change, then press Stage, or Stage all.	hello.txt を変更しておきました。クリックして変更を確認し、ステージ、またはすべてステージを押してください。
+Commit it	コミットする
+Write a short message saying what you changed, then press Commit.	変更内容を短いメッセージで書いて、コミットを押してください。
+Share your work	作業を共有する
+Pull brings in other people's commits, Push sends yours, and Branch starts a new line of work. Undo takes back most actions.	プルは他の人のコミットを取り込み、プッシュは自分のコミットを送り、ブランチは新しい作業の流れを始めます。取り消しでほとんどの操作を元に戻せます。
+Press Shift-Cmd-P to search every command.	Shift-Cmd-P を押すと、すべてのコマンドを検索できます。
+Press Shift-Ctrl-P to search every command.	Shift-Ctrl-P を押すと、すべてのコマンドを検索できます。
+Find anything	何でも探す
+You're ready	準備完了です
+That's the basics. The practice repository stays open for you to play in.	基本は以上です。練習用リポジトリはそのまま開いておくので、自由に試してください。
+Step {number} of {total}	ステップ {number} / {total}
+Next	次へ
+Skip tour	ツアーをスキップ
+Open my repository…	自分のリポジトリを開く…
+Clone a repository…	リポジトリをクローン…
+Opening the practice repository…	練習用リポジトリを開いています…
+Take the tour	ツアーを見る
+Meet Sprig and try the basics in a practice repository	Sprig に会って、練習用リポジトリで基本を試しましょう

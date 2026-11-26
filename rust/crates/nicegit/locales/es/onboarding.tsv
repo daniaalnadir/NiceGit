@@ -1,0 +1,37 @@
+Hi, I'm Sprig	Hola, soy Sprig
+I'll show you around NiceGit in about a minute, in a practice repository you can't break.	Te enseño NiceGit en un minuto, en un repositorio de práctica que no puedes romper.
+Start the tour	Empezar el recorrido
+or	o
+Already know your way around?	¿Ya conoces NiceGit?
+Skip for now	Omitir por ahora
+Confirm your Git details	Confirma tus datos de Git
+Git puts your name and email on every commit you make. They're saved in your own Git settings, so other Git tools use them too.	Git guarda tu nombre y tu correo en cada confirmación que hagas. Se guardan en tu configuración de Git, así que otras herramientas de Git también los usan.
+Git doesn't know who you are yet.	Git todavía no sabe quién eres.
+Use these for my commits	Usar estos para mis confirmaciones
+Enter your name and an email address.	Escribe tu nombre y una dirección de correo.
+Back	Atrás
+Wait for the current action to finish, then try again.	Espera a que termine la acción actual y vuelve a intentarlo.
+The practice repository could not be made: {error}	No se pudo crear el repositorio de práctica: {error}
+Your history	Tu historial
+Each dot is a commit, newest at the top. The lines show where branches split off and join back.	Cada punto es una confirmación, la más reciente arriba. Las líneas muestran dónde se separan las ramas y dónde se vuelven a unir.
+Branches and more	Ramas y más
+Your branches, remotes, tags and stashes are listed here. Double-click a branch to switch to it.	Aquí aparecen tus ramas, remotos, etiquetas y stashes. Haz doble clic en una rama para cambiar a ella.
+Stage a change	Preparar un cambio
+I've changed hello.txt for you. Click it to see the change, then press Stage, or Stage all.	He cambiado hello.txt por ti. Haz clic para ver el cambio y luego pulsa Preparar, o Preparar todo.
+Commit it	Confírmalo
+Write a short message saying what you changed, then press Commit.	Escribe un mensaje breve que describa tu cambio y luego pulsa Confirmar.
+Share your work	Comparte tu trabajo
+Pull brings in other people's commits, Push sends yours, and Branch starts a new line of work. Undo takes back most actions.	Traer trae las confirmaciones de otras personas, Enviar envía las tuyas, y Rama empieza una nueva línea de trabajo. Deshacer revierte la mayoría de las acciones.
+Press Shift-Cmd-P to search every command.	Pulsa Mayús-Cmd-P para buscar entre todos los comandos.
+Press Shift-Ctrl-P to search every command.	Pulsa Mayús-Ctrl-P para buscar entre todos los comandos.
+Find anything	Encuentra cualquier cosa
+You're ready	Ya estás listo
+That's the basics. The practice repository stays open for you to play in.	Eso es lo básico. El repositorio de práctica se queda abierto para que juegues con él.
+Step {number} of {total}	Paso {number} de {total}
+Next	Siguiente
+Skip tour	Omitir recorrido
+Open my repository…	Abrir mi repositorio…
+Clone a repository…	Clonar un repositorio…
+Opening the practice repository…	Abriendo el repositorio de práctica…
+Take the tour	Hacer el recorrido
+Meet Sprig and try the basics in a practice repository	Conoce a Sprig y prueba lo básico en un repositorio de práctica

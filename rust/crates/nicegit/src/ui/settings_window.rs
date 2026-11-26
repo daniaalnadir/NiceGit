@@ -61,6 +61,7 @@ impl NiceGitApp {
         }
         let mut reload_diff = false;
         let mut show_shortcuts = false;
+        let mut take_tour = false;
         // The window never grows past the app's window: its title bar, with the close button, stays
         // on screen and the settings scroll beneath it.
         let max_height = (ctx.content_rect().height() - 190.0).max(200.0);
@@ -388,6 +389,9 @@ impl NiceGitApp {
                         if ui.link(tr("Keyboard shortcuts")).clicked() {
                             show_shortcuts = true;
                         }
+                        if ui.link(tr("Take the tour")).clicked() {
+                            take_tour = true;
+                        }
                         if ui.link(tr("Request a feature")).clicked() {
                             crate::ui::changes::open_url(nicegit_core::feedback::FEATURE_REQUEST_URL);
                         }
@@ -403,6 +407,10 @@ impl NiceGitApp {
         }
         self.show_settings = open;
         self.show_shortcuts |= show_shortcuts;
+        if take_tour {
+            self.show_settings = false;
+            self.onboarding = Some(crate::ui::onboarding::Onboarding::Intro);
+        }
     }
 
     /// The Issue links section: whether `#123` links to the host, and the custom rules with their

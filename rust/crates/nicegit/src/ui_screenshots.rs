@@ -679,3 +679,45 @@ fn language_screenshots() {
         harness.state_mut().set_language(&ctx, Language::English);
     }
 }
+
+/// The first-run welcome, the identity page, and the tour's steps, for design review.
+#[test]
+#[ignore = "renders design-review screenshots; run on request"]
+fn onboarding_screenshots() {
+    let Some(folder) = std::env::var_os("NICEGIT_SCREENSHOTS").map(PathBuf::from) else {
+        eprintln!("Set NICEGIT_SCREENSHOTS to a folder to render screenshots.");
+        return;
+    };
+    std::fs::create_dir_all(&folder).unwrap();
+    let settings = temp_dir();
+    let identity = settings.path().join("gitconfig");
+    std::fs::write(&identity, "[user]\n\tname = Alex Example\n\temail = alex@example.com\n").unwrap();
+    let parent = temp_dir();
+    let parent_path = parent.path().to_path_buf();
+    let mut harness = Harness::builder().with_size(egui::vec2(1440.0, 900.0)).wgpu().build_eframe(move |cc| {
+        let mut app = NiceGitApp::new(cc, None);
+        app.settings.appearance = Appearance::Dark;
+        app.settings.onboarding_done = false;
+        app.onboarding = Some(crate::ui::onboarding::Onboarding::intro());
+        app.identity_file = Some(identity.clone());
+        app.practice_parent = Some(parent_path.clone());
+        app
+    });
+    save(&mut harness, &folder, "onboarding-1-intro");
+    harness.get_by_label("Start the tour").click();
+    save(&mut harness, &folder, "onboarding-2-identity");
+    harness.get_by_label("Use these for my commits").click();
+    wait(&mut harness, "the practice repository", |h| h.state().snapshot().is_some());
+    save(&mut harness, &folder, "onboarding-3-history");
+    for (name, _) in [
+        ("onboarding-4-sidebar", ()),
+        ("onboarding-5-changes", ()),
+        ("onboarding-6-commit", ()),
+        ("onboarding-7-toolbar", ()),
+        ("onboarding-8-palette", ()),
+        ("onboarding-9-done", ()),
+    ] {
+        harness.get_by_label("Next").click();
+        save(&mut harness, &folder, name);
+    }
+}

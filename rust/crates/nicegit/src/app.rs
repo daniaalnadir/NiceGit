@@ -770,6 +770,18 @@ pub struct NiceGitApp {
     pub draft_ready: Option<crate::ui::ai_draft::ReadyDraft>,
     /// What the last draft reported, shown under the commit box.
     pub draft_status: Option<crate::ui::ai_draft::DraftStatus>,
+    /// The first-run welcome and tour, while it is running.
+    pub onboarding: Option<crate::ui::onboarding::Onboarding>,
+    /// The parts of the window the tour points at, recorded by the layout each frame.
+    pub tour_targets: crate::ui::onboarding::TourTargets,
+    /// Sprig's pictures, decoded on first use.
+    pub(crate) sprig: crate::ui::onboarding::SprigImages,
+    /// Where the onboarding reads and saves the commit identity instead of ~/.gitconfig, in tests.
+    #[cfg(test)]
+    pub identity_file: Option<PathBuf>,
+    /// The folder the practice repository is made in, in tests.
+    #[cfg(test)]
+    pub practice_parent: Option<PathBuf>,
 }
 
 /// A read of the tags one remote lacks. The repository and the remote's push addresses are
@@ -806,6 +818,7 @@ impl NiceGitApp {
         let locale = settings.language.resolve();
         crate::i18n::set_locale(locale);
         let font_load = start_font_load(locale);
+        let settings_done = settings.onboarding_done;
         let mut app = Self {
             worker: Worker::new(creation.egui_ctx.clone()),
             repos: Vec::new(),
@@ -867,6 +880,13 @@ impl NiceGitApp {
             draft_run: None,
             draft_ready: None,
             draft_status: None,
+            onboarding: crate::ui::onboarding::at_start(settings_done, initial.is_none()),
+            tour_targets: Default::default(),
+            sprig: Default::default(),
+            #[cfg(test)]
+            identity_file: None,
+            #[cfg(test)]
+            practice_parent: None,
             timings: crate::timing::Timings::default(),
         };
         let open: Vec<PathBuf> = app.settings.open.iter().filter(|p| p.exists()).cloned().collect();
@@ -3550,6 +3570,8 @@ impl eframe::App for NiceGitApp {
         if first {
             crate::timing::report("first frame: after layout", crate::timing::since_start());
         }
+        // Drawn after the window so the tour's marks and the welcome pages paint on top.
+        self.onboarding_ui(&ctx);
         self.finish_pending_check_out();
         self.tool_windows(&ctx);
         self.dialogs(&ctx);

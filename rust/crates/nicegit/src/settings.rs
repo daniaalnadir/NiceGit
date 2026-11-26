@@ -504,6 +504,10 @@ pub struct Settings {
     /// How many days snapshots are kept before they are deleted.
     #[serde(default = "default_snapshot_days")]
     pub snapshot_keep_days: u32,
+    /// Whether the first-run welcome and tour have been finished or skipped. Settings saved before the
+    /// tour existed read as finished, so people who already use NiceGit never see it unasked.
+    #[serde(default = "default_true")]
+    pub onboarding_done: bool,
 }
 
 /// How many recently opened repositories are remembered.
@@ -580,6 +584,8 @@ impl Default for Settings {
             snapshots_enabled: true,
             snapshot_interval_minutes: default_snapshot_minutes(),
             snapshot_keep_days: default_snapshot_days(),
+            // Interface tests start with the tour finished; onboarding tests turn it back on.
+            onboarding_done: cfg!(test),
         }
     }
 }
@@ -724,6 +730,19 @@ mod tests {
         }
 
         fn flush(&mut self) {}
+    }
+
+    #[test]
+    fn settings_saved_before_the_tour_read_as_finished() {
+        // The tour field is the last one written, so an older save is the same text without it.
+        let mut storage = MemoryStorage::default();
+        eframe::set_value(&mut storage, STORAGE_KEY, &Settings::default());
+        let saved = storage.get_string(STORAGE_KEY).expect("saved settings");
+        assert!(saved.contains(",onboarding_done:true"), "the tour field is written: {saved}");
+        let older = saved.replacen(",onboarding_done:true", "", 1);
+        storage.set_string(STORAGE_KEY, older);
+        let loaded: Settings = eframe::get_value(&storage, STORAGE_KEY).expect("older settings");
+        assert!(loaded.onboarding_done);
     }
 
     #[test]
