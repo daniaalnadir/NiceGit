@@ -15,6 +15,7 @@ pub mod go_to_file;
 pub mod history;
 pub mod history_columns;
 pub mod inspector;
+pub mod onboarding;
 pub mod palette;
 pub mod pull_request;
 pub mod repositories;
@@ -270,6 +271,8 @@ impl NiceGitApp {
         self.update_notice(ui);
         // Side panels scale with the window so the history keeps a usable width on small screens.
         let width = ui.ctx().content_rect().width();
+        // The parts of the window the first-run tour points at, recorded again each frame.
+        self.tour_targets = onboarding::TourTargets::default();
         // Each panel's draggable edge; double-clicking one restores that panel's default size.
         let mut edges: Vec<(&str, PanelEdge)> = Vec::new();
         if self.settings.show_repositories {
@@ -288,6 +291,7 @@ impl NiceGitApp {
                 .size_range(180.0..=440.0_f32.min(width * 0.3).max(180.0))
                 .frame(panel)
                 .show(ui, |ui| self.sidebar(ui));
+            self.tour_targets.sidebar = Some(shown.response.rect);
             edges.push(("sidebar", PanelEdge::Right(shown.response.rect)));
             let shown = egui::Panel::right("changes")
                 .resizable(true)
@@ -304,6 +308,7 @@ impl NiceGitApp {
                         self.changes_panel(ui);
                     }
                 });
+            self.tour_targets.changes = Some(shown.response.rect);
             edges.push(("changes", PanelEdge::Left(shown.response.rect)));
         }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(ui.visuals().window_fill)).show(ui, |ui| {
@@ -311,9 +316,10 @@ impl NiceGitApp {
                 self.empty_window(ui);
                 return;
             }
-            egui::Panel::top("toolbar")
+            let toolbar = egui::Panel::top("toolbar")
                 .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 8)))
                 .show(ui, |ui| self.toolbar(ui));
+            self.tour_targets.toolbar = Some(toolbar.response.rect);
             egui::Panel::bottom("statusbar")
                 .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(14, 5)))
                 .show(ui, |ui| self.status_bar(ui));
@@ -332,6 +338,7 @@ impl NiceGitApp {
                     }
                 });
             } else {
+                self.tour_targets.history = Some(ui.available_rect_before_wrap());
                 self.history(ui);
             }
         });

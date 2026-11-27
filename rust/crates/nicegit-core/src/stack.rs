@@ -146,7 +146,12 @@ fn build_stacks(tips: &BTreeMap<String, String>, parents: &BTreeMap<String, Opti
 pub fn outdated_children(client: &GitClient, branch: &str, directory: &Path) -> Result<Vec<OutdatedChild>> {
     let reference = format!("refs/heads/{branch}");
     let tip = client.run_trimmed(&["rev-parse", "--verify", "--end-of-options", &reference], directory)?;
-    let previous = earlier_tips(client, &reference, &tip, directory)?;
+    // Only a tip the branch has since left behind (an amend, rebase or reset) can leave a branch
+    // on an old base; an earlier tip still in the branch's history only means it gained commits.
+    let previous: Vec<String> = earlier_tips(client, &reference, &tip, directory)?
+        .into_iter()
+        .filter(|old| client.run(&["merge-base", "--is-ancestor", old, &tip], directory).is_err())
+        .collect();
     if previous.is_empty() {
         return Ok(Vec::new());
     }

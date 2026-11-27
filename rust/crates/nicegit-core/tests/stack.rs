@@ -156,6 +156,24 @@ fn a_branch_with_no_earlier_tip_has_no_outdated_children() {
 
 // MARK: Restacking
 
+/// A base that only gained commits was not rewritten, so a branch made from an older commit of it
+/// is simply behind, not on an old base.
+#[test]
+fn a_base_that_gained_commits_has_no_outdated_children() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q", "-b", "main"]);
+    configure(root);
+    commit_as(root, &[("a.txt", "one\n")], "First", "Test");
+    git(root, &["branch", "idea"]);
+    git(root, &["checkout", "-q", "idea"]);
+    commit_as(root, &[("b.txt", "idea\n")], "Idea", "Test");
+    git(root, &["checkout", "-q", "main"]);
+    commit_as(root, &[("c.txt", "more\n")], "More", "Test");
+    let children = nicegit_core::stack::outdated_children(&GitClient::new(), "main", root).unwrap();
+    assert!(children.is_empty(), "{children:?}");
+}
+
 #[test]
 fn restack_moves_each_branch_and_keeps_its_commits() {
     let dir = stack_repository();

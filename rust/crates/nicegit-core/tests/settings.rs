@@ -1459,3 +1459,28 @@ fn commit_template_ignores_a_huge_file() {
     set_commit_template(&repo, "message.txt", &format!("{}\n", "a".repeat(64 * 1024)));
     assert_eq!(client().commit_template(repo.path()).expect("read template"), None);
 }
+
+// MARK: Global identity
+
+#[test]
+fn global_identity_reads_and_writes_a_given_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let file = dir.path().join("gitconfig");
+    let client = client();
+    assert_eq!(client.global_identity(Some(&file), dir.path()), (String::new(), String::new()));
+
+    client.set_global_identity("  Ada Lovelace ", " ada@example.com ", Some(&file), dir.path()).expect("saved");
+
+    assert_eq!(client.global_identity(Some(&file), dir.path()), ("Ada Lovelace".to_string(), "ada@example.com".to_string()));
+}
+
+#[test]
+fn set_global_identity_requires_a_name_and_an_email_with_at_sign() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let file = dir.path().join("gitconfig");
+    let client = client();
+    assert!(client.set_global_identity("  ", "ada@example.com", Some(&file), dir.path()).is_err());
+    assert!(client.set_global_identity("Ada", "", Some(&file), dir.path()).is_err());
+    assert!(client.set_global_identity("Ada", "ada.example.com", Some(&file), dir.path()).is_err());
+    assert_eq!(client.global_identity(Some(&file), dir.path()), (String::new(), String::new()));
+}

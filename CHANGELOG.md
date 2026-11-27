@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the stacked-branches notice no longer says a branch is "still based on the old" one when that branch only gained commits; it now appears only after an amend, rebase or reset.
+- A short first-run tour with Sprig, NiceGit's mascot: confirm the name and email Git puts on your commits, then try staging, committing and branching in a practice repository. Skip it at any step, or take it again from the command palette or Settings.
+
 ## 2.3.0 - More places to work
 
 NiceGit 2.3 fixes repositories that would not open on some Windows setups, works with pull

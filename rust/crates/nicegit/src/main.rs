@@ -75,6 +75,8 @@ mod ui_tests_more;
 #[cfg(test)]
 mod ui_tests_notifications;
 #[cfg(test)]
+mod ui_tests_onboarding;
+#[cfg(test)]
 mod ui_tests_parity_a;
 #[cfg(test)]
 mod ui_tests_parity_b;

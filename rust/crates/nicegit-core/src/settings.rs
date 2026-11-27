@@ -184,6 +184,47 @@ impl GitClient {
         Ok(())
     }
 
+    /// The commit name and email from the person's own Git settings (`~/.gitconfig`), or from `file`
+    /// instead when given (tests). Empty when unset.
+    pub fn global_identity(&self, file: Option<&Path>, directory: &Path) -> (String, String) {
+        let read = |key: &str| -> String {
+            let output = match file {
+                Some(file) => {
+                    let path = file.to_string_lossy();
+                    self.run_accepting(&["config", "--file", &path, "--get", "--", key], directory, &[0, 1])
+                }
+                None => self.run_accepting(&["config", "--global", "--get", "--", key], directory, &[0, 1]),
+            };
+            output.map(runner::strip_line_terminator).unwrap_or_default()
+        };
+        (read("user.name"), read("user.email"))
+    }
+
+    /// Saves the commit name and email in the person's own Git settings, or in `file` when given.
+    /// Both are trimmed and required; the email must contain `@`.
+    pub fn set_global_identity(&self, name: &str, email: &str, file: Option<&Path>, directory: &Path) -> Result<()> {
+        let name = name.trim();
+        let email = email.trim();
+        if name.is_empty() {
+            return Err(GitError::failed("config", "Enter your name."));
+        }
+        if email.is_empty() || !email.contains('@') {
+            return Err(GitError::failed("config", "Enter an email address that contains @."));
+        }
+        match file {
+            Some(file) => {
+                let path = file.to_string_lossy();
+                self.run(&["config", "--file", &path, "--", "user.name", name], directory)?;
+                self.run(&["config", "--file", &path, "--", "user.email", email], directory)?;
+            }
+            None => {
+                self.run(&["config", "--global", "--", "user.name", name], directory)?;
+                self.run(&["config", "--global", "--", "user.email", email], directory)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Applies a commit identity to this repository only. With a signing key, commits are also
     /// signed with it; without one, the repository's signing settings are left unchanged.
     pub fn apply_identity(&self, name: &str, email: &str, signing_key: Option<&str>, directory: &Path) -> Result<()> {

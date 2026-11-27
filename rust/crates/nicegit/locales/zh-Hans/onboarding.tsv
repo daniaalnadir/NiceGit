@@ -1,0 +1,37 @@
+Hi, I'm Sprig	你好，我是 Sprig
+I'll show you around NiceGit in about a minute, in a practice repository you can't break.	我会用大约一分钟带你认识 NiceGit，在练习仓库里操作不会弄坏任何东西。
+Start the tour	开始导览
+or	或
+Already know your way around?	已经熟悉 NiceGit 了？
+Skip for now	暂时跳过
+Confirm your Git details	确认你的 Git 信息
+Git puts your name and email on every commit you make. They're saved in your own Git settings, so other Git tools use them too.	Git 会在你的每次提交上记录你的名字和邮箱。它们保存在你自己的 Git 设置中，其他 Git 工具也会使用它们。
+Git doesn't know who you are yet.	Git 还不知道你是谁。
+Use these for my commits	用于我的提交
+Enter your name and an email address.	请输入你的名字和电子邮件地址。
+Back	返回
+Wait for the current action to finish, then try again.	请等待当前操作完成后再试。
+The practice repository could not be made: {error}	无法创建练习仓库：{error}
+Your history	你的历史记录
+Each dot is a commit, newest at the top. The lines show where branches split off and join back.	每个圆点是一次提交，最新的在顶部。线条显示分支从哪里分出、在哪里汇合。
+Branches and more	分支等更多内容
+Your branches, remotes, tags and stashes are listed here. Double-click a branch to switch to it.	这里列出你的分支、远程、标签和暂存。双击分支即可切换到它。
+Stage a change	暂存一个更改
+I've changed hello.txt for you. Click it to see the change, then press Stage, or Stage all.	我已经为你修改了 hello.txt。点击它查看更改，然后按“暂存”或“全部暂存”。
+Commit it	提交它
+Write a short message saying what you changed, then press Commit.	写一条简短的说明你做了什么的信息，然后按“提交”。
+Share your work	分享你的工作
+Pull brings in other people's commits, Push sends yours, and Branch starts a new line of work. Undo takes back most actions.	拉取会获取别人的提交，推送会发送你的提交，分支会开始一条新的工作线。撤销可以撤回大多数操作。
+Press Shift-Cmd-P to search every command.	按 Shift-Cmd-P 搜索所有命令。
+Press Shift-Ctrl-P to search every command.	按 Shift-Ctrl-P 搜索所有命令。
+Find anything	查找任何内容
+You're ready	你已经准备好了
+That's the basics. The practice repository stays open for you to play in.	这些就是基础。练习仓库会保持打开，供你随意尝试。
+Step {number} of {total}	第 {number} 步，共 {total} 步
+Next	下一步
+Skip tour	跳过导览
+Open my repository…	打开我的仓库…
+Clone a repository…	克隆一个仓库…
+Opening the practice repository…	正在打开练习仓库…
+Take the tour	开始导览
+Meet Sprig and try the basics in a practice repository	认识 Sprig，在练习仓库中试试基础操作

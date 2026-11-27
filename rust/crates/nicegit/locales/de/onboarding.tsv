@@ -1,0 +1,37 @@
+Hi, I'm Sprig	Hallo, ich bin Sprig
+I'll show you around NiceGit in about a minute, in a practice repository you can't break.	Ich zeige dir NiceGit in etwa einer Minute, in einem Übungsrepository, das du nicht kaputt machen kannst.
+Start the tour	Tour starten
+or	oder
+Already know your way around?	Kennst du dich schon aus?
+Skip for now	Vorerst überspringen
+Confirm your Git details	Bestätige deine Git-Angaben
+Git puts your name and email on every commit you make. They're saved in your own Git settings, so other Git tools use them too.	Git speichert deinen Namen und deine E-Mail-Adresse bei jedem Commit, den du machst. Sie werden in deinen eigenen Git-Einstellungen gespeichert, damit auch andere Git-Werkzeuge sie nutzen.
+Git doesn't know who you are yet.	Git weiß noch nicht, wer du bist.
+Use these for my commits	Diese für meine Commits verwenden
+Enter your name and an email address.	Gib deinen Namen und eine E-Mail-Adresse ein.
+Back	Zurück
+Wait for the current action to finish, then try again.	Warte, bis die laufende Aktion fertig ist, und versuche es dann erneut.
+The practice repository could not be made: {error}	Das Übungsrepository konnte nicht erstellt werden: {error}
+Your history	Dein Verlauf
+Each dot is a commit, newest at the top. The lines show where branches split off and join back.	Jeder Punkt ist ein Commit, der neueste oben. Die Linien zeigen, wo Branches abzweigen und wieder zusammenkommen.
+Branches and more	Branches und mehr
+Your branches, remotes, tags and stashes are listed here. Double-click a branch to switch to it.	Hier sind deine Branches, Remotes, Tags und Stashes aufgelistet. Doppelklicke auf einen Branch, um zu ihm zu wechseln.
+Stage a change	Eine Änderung bereitstellen
+I've changed hello.txt for you. Click it to see the change, then press Stage, or Stage all.	Ich habe hello.txt für dich geändert. Klick darauf, um die Änderung zu sehen, und drück dann Bereitstellen oder Alle bereitstellen.
+Commit it	Jetzt committen
+Write a short message saying what you changed, then press Commit.	Schreib eine kurze Nachricht, was du geändert hast, und drück dann Commit.
+Share your work	Teile deine Arbeit
+Pull brings in other people's commits, Push sends yours, and Branch starts a new line of work. Undo takes back most actions.	Pull holt die Commits anderer, Push sendet deine, und Branch startet eine neue Linie der Arbeit. Mit Rückgängig nimmst du die meisten Aktionen zurück.
+Press Shift-Cmd-P to search every command.	Drück Shift-Cmd-P, um alle Befehle zu durchsuchen.
+Press Shift-Ctrl-P to search every command.	Drück Shift-Ctrl-P, um alle Befehle zu durchsuchen.
+Find anything	Alles finden
+You're ready	Du bist bereit
+That's the basics. The practice repository stays open for you to play in.	Das waren die Grundlagen. Das Übungsrepository bleibt offen, damit du damit spielen kannst.
+Step {number} of {total}	Schritt {number} von {total}
+Next	Weiter
+Skip tour	Tour überspringen
+Open my repository…	Mein Repository öffnen…
+Clone a repository…	Ein Repository klonen…
+Opening the practice repository…	Das Übungsrepository wird geöffnet…
+Take the tour	Tour starten
+Meet Sprig and try the basics in a practice repository	Lerne Sprig kennen und probiere die Grundlagen in einem Übungsrepository aus

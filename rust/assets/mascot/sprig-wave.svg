@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Sprig, the NiceGit sprout</title>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9AF3C2"/><stop offset="1" stop-color="#3DBE7E"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0.35" cy="0.25" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="256" cy="480" rx="140" ry="14" fill="#000" opacity="0.18"/>
+  <!-- The stem splits like the branch in NiceGit's icon; its buds are commits. -->
+  <path d="M256 168 L256 84" stroke="#36B474" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M256 136 C256 112 286 104 316 96" stroke="#36B474" stroke-width="13" stroke-linecap="round" fill="none"/>
+  <path d="M256 118 C230 112 214 96 208 76 C232 78 250 92 256 118 Z" fill="#6ADB9C"/>
+  <circle cx="256" cy="70" r="17" fill="#EFFFF5" stroke="#36B474" stroke-width="11"/>
+  <circle cx="330" cy="92" r="17" fill="#EFFFF5" stroke="#36B474" stroke-width="11"/>
+  <ellipse cx="206" cy="460" rx="42" ry="20" fill="#2FA86A"/>
+  <ellipse cx="306" cy="460" rx="42" ry="20" fill="#2FA86A"/>
+  <g transform="rotate(40 416 238)"><ellipse cx="416" cy="238" rx="25" ry="44" fill="url(#body)"/></g>
+  <g transform="rotate(30 110 362)"><ellipse cx="110" cy="362" rx="23" ry="38" fill="url(#body)"/></g>
+  <path d="M256 160 C364 160 414 250 414 334 C414 424 344 464 256 464 C168 464 98 424 98 334 C98 250 148 160 256 160 Z" fill="url(#body)"/>
+  <path d="M256 160 C364 160 414 250 414 334 C414 424 344 464 256 464 C168 464 98 424 98 334 C98 250 148 160 256 160 Z" fill="url(#shine)"/>
+  <ellipse cx="256" cy="418" rx="86" ry="38" fill="#D6FBE5" opacity="0.5"/>
+  <ellipse cx="204" cy="300" rx="27" ry="33" fill="#1F2B27"/>
+  <ellipse cx="308" cy="300" rx="27" ry="33" fill="#1F2B27"/>
+  <circle cx="213" cy="288" r="10" fill="#fff"/><circle cx="196" cy="311" r="4.5" fill="#fff"/>
+  <circle cx="317" cy="288" r="10" fill="#fff"/><circle cx="300" cy="311" r="4.5" fill="#fff"/>
+  <ellipse cx="160" cy="346" rx="23" ry="13" fill="#FF8FA3" opacity="0.75"/>
+  <ellipse cx="352" cy="346" rx="23" ry="13" fill="#FF8FA3" opacity="0.75"/>
+  <path d="M228 344 Q256 384 284 344 Z" fill="#1F2B27"/><path d="M242 362 Q256 376 270 362 Q256 354 242 362 Z" fill="#FF7E93"/>
+  <path d="M462 132 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6 z" fill="#FFD66B"/><circle cx="482" cy="196" r="6" fill="#9BE7FF"/>
+</svg>

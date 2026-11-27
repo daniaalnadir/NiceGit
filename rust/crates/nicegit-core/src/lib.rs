@@ -41,6 +41,7 @@ pub mod merge_preview;
 pub mod models;
 pub mod parsers;
 pub mod patch_apply;
+pub mod practice;
 pub mod range_diff;
 pub mod rebase;
 pub mod reflog;

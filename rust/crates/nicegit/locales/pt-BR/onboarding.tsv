@@ -1,0 +1,37 @@
+Hi, I'm Sprig	Oi, eu sou o Sprig
+I'll show you around NiceGit in about a minute, in a practice repository you can't break.	Vou te mostrar o NiceGit em cerca de um minuto, em um repositório de prática que você não tem como quebrar.
+Start the tour	Começar o tour
+or	ou
+Already know your way around?	Já conhece o NiceGit?
+Skip for now	Pular por enquanto
+Confirm your Git details	Confirme seus dados do Git
+Git puts your name and email on every commit you make. They're saved in your own Git settings, so other Git tools use them too.	O Git registra seu nome e seu e-mail em cada commit que você faz. Eles ficam salvos nas suas próprias configurações do Git, então outras ferramentas Git também os usam.
+Git doesn't know who you are yet.	O Git ainda não sabe quem você é.
+Use these for my commits	Usar estes nos meus commits
+Enter your name and an email address.	Informe seu nome e um endereço de e-mail.
+Back	Voltar
+Wait for the current action to finish, then try again.	Aguarde a ação atual terminar e tente de novo.
+The practice repository could not be made: {error}	Não foi possível criar o repositório de prática: {error}
+Your history	Seu histórico
+Each dot is a commit, newest at the top. The lines show where branches split off and join back.	Cada ponto é um commit, o mais recente no topo. As linhas mostram onde os branches se separam e se juntam de novo.
+Branches and more	Branches e mais
+Your branches, remotes, tags and stashes are listed here. Double-click a branch to switch to it.	Seus branches, remotos, tags e stashes ficam listados aqui. Clique duas vezes em um branch para trocar para ele.
+Stage a change	Preparar uma alteração
+I've changed hello.txt for you. Click it to see the change, then press Stage, or Stage all.	Eu alterei o hello.txt para você. Clique nele para ver a alteração e depois aperte Preparar, ou Preparar tudo.
+Commit it	Faça o commit
+Write a short message saying what you changed, then press Commit.	Escreva uma mensagem curta dizendo o que mudou e depois aperte Commit.
+Share your work	Compartilhe seu trabalho
+Pull brings in other people's commits, Push sends yours, and Branch starts a new line of work. Undo takes back most actions.	Puxar traz os commits das outras pessoas, Enviar manda os seus, e Branch começa uma nova linha de trabalho. Desfazer volta a maioria das ações.
+Press Shift-Cmd-P to search every command.	Aperte Shift-Cmd-P para pesquisar em todos os comandos.
+Press Shift-Ctrl-P to search every command.	Aperte Shift-Ctrl-P para pesquisar em todos os comandos.
+Find anything	Encontre qualquer coisa
+You're ready	Você está pronto
+That's the basics. The practice repository stays open for you to play in.	Isso é o básico. O repositório de prática continua aberto para você brincar.
+Step {number} of {total}	Passo {number} de {total}
+Next	Próximo
+Skip tour	Pular tour
+Open my repository…	Abrir meu repositório…
+Clone a repository…	Clonar um repositório…
+Opening the practice repository…	Abrindo o repositório de prática…
+Take the tour	Fazer o tour
+Meet Sprig and try the basics in a practice repository	Conheça o Sprig e experimente o básico em um repositório de prática
