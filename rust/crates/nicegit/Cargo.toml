@@ -20,7 +20,7 @@ egui-phosphor = "0.14.0"
 serde = { version = "1.0.229", features = ["derive"] }
 # The start-up hint file (see preload.rs), in the format eframe already uses for settings.
 ron = "0.12"
-notify = "8.2.0"
+notify = "9.0.0"
 alacritty_terminal = "0.26.0"
 # Issue links in commit messages and the custom rules Settings holds.
 regex = "1"
