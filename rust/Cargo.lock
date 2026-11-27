@@ -2076,7 +2076,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "alacritty_terminal",
  "eframe",
@@ -2100,7 +2100,7 @@ dependencies = [
 
 [[package]]
 name = "nicegit-core"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "sha2",
  "tempfile",
